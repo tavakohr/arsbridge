@@ -57,7 +57,7 @@
 <!-- badges: start -->
 
 <p>Convert an annotated TLF shells Word document and an ADaM specification into a CDISC Analysis Results Standard (ARS) v1.0 ARM-TS JSON file, ready for consumption by <a href="https://pharmaverse.github.io/siera/" class="external-link"><code>siera::readARS()</code></a>.</p>
-<p>The package is designed for the real CRO workflow: a <strong>lead programmer annotates the shell</strong> with the ADaM variables that drive each row, then <code>arsbridge</code> mechanically extracts and structures those annotations as CDISC ARS without ever inventing a variable name.</p>
+<p>The package is designed for the real clinical reporting workflow: a <strong>lead programmer annotates the shell</strong> with the ADaM variables that drive each row, then <code>arsbridge</code> mechanically extracts and structures those annotations as CDISC ARS without ever inventing a variable name.</p>
 <div class="section level2">
 <h2 id="key-design-ideas">Key design ideas<a class="anchor" aria-label="anchor" href="#key-design-ideas"></a>
 </h2>
@@ -65,7 +65,7 @@
 <li>
 <strong>Extracts, never invents.</strong> The lead programmer’s annotations are authoritative. <code>arsbridge</code> will never substitute an LLM guess for a variable name the programmer wrote.</li>
 <li>
-<strong>Style-agnostic annotation detection.</strong> Four detection layers: red <code>C00000</code> font → bold/italic/underline → plain-text ADaM regex → LLM fallback. Works on shells that follow your CRO’s house style, whatever it is.</li>
+<strong>Style-agnostic annotation detection.</strong> Four detection layers: red <code>C00000</code> font → bold/italic/underline → plain-text ADaM regex → LLM fallback. Works on shells that follow your team’s house style, whatever it is.</li>
 <li>
 <strong>LLM used only for semantic enrichment</strong> — analysis type, method name, row role — never for variable name resolution. One Claude call per TLF section.</li>
 <li>
