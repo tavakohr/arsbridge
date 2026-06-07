@@ -1,0 +1,155 @@
+# Getting started with arsbridge
+
+## What `arsbridge` does
+
+`arsbridge` reads a lead programmer’s already-annotated TLF shell Word
+document plus the study’s ADaM specification, and produces a CDISC
+Analysis Results Standard (ARS) v1.0 ARM-TS JSON file. That JSON is
+consumed downstream by
+[`siera::readARS()`](https://pharmaverse.github.io/siera/) to generate
+the R analysis code that produces the actual TLFs.
+
+**Core principle:** the parser extracts and converts – it does not
+invent. Every variable in the ARS output traces back to an annotation
+the lead programmer wrote in the shell. No blank shells, no LLM-inferred
+variable names.
+
+## Prerequisites
+
+``` r
+
+install.packages("arsbridge")            # or devtools::install_github(...)
+
+# One-time API key setup (interactive prompt)
+arsbridge::set_anthropic_key()
+arsbridge::check_anthropic_key()         # confirm
+```
+
+`arsbridge` calls Claude once per TLF section for light semantic
+enrichment (analysis type, method name, row role). All variable names
+come from the shell annotations – never the LLM.
+
+## The fastest path: `spec_to_ars_example()`
+
+The package ships with a small bundled training example, so you can run
+the entire pipeline before you own a study:
+
+``` r
+
+library(arsbridge)
+
+res <- spec_to_ars_example()
+# ARS JSON and validation report land in tempdir(); paths are in res.
+res$n_tlfs        # 40
+res$n_analyses    # ~226
+res$n_warnings    # ~29
+```
+
+Takes about six minutes (40 LLM calls).
+
+## Inspecting the result
+
+``` r
+
+# Top-level shape of the ARS ReportingEvent
+str(res$reporting_event, max.level = 1)
+
+# Validation findings -- one row per annotation
+table(res$validation$status)
+subset(res$validation, status %in% c("WARN", "FAIL"))
+
+# One output, end to end
+out <- Filter(function(o) o$name == "T-14-1-2",
+              res$reporting_event$outputs)[[1]]
+length(out$referencedAnalysisIds)
+```
+
+## Using your own files
+
+``` r
+
+res <- spec_to_ars(
+  shell_path     = "inputs/annotated_shell.docx",
+  adam_spec_path = "inputs/adam_spec.xlsx",        # or define.xml
+  output_path    = "outputs/reporting_event.json",
+  report_path    = "outputs/spec_validation_report.xlsx",
+  study_id       = "ABC-123",
+  study_name     = "ABC-123 Phase 3"
+)
+```
+
+`adam_spec_path` accepts either `.xml` (ADaM define.xml – preferred when
+available) or `.xlsx`/`.xls` (ADaM spec Excel – used during development
+before define.xml exists). The SDTM spec is NOT a valid input – TLF
+annotations reference ADaM variables.
+
+## The bundled example, file by file
+
+``` r
+
+arsbridge_example()                              # list bundle contents
+arsbridge_example("annotated_shell.docx")        # absolute path
+arsbridge_example("adam_spec.xlsx")
+arsbridge_example("ADaM.zip")                    # for downstream siera
+```
+
+| File | Purpose |
+|----|----|
+| `annotated_shell.docx` | The TLF shells with red ADaM annotations |
+| `adam_spec.xlsx` | The ADaM variable spec |
+| `ADaM.zip` | 60-subject simulated ADaM data – not consumed by arsbridge, but used by the downstream siera runner |
+
+## What the parser actually detects
+
+`arsbridge` uses a four-layer detection hierarchy and stops at the
+highest-confidence layer that produces a result:
+
+1.  **Colour-based** – red `#C00000` runs that match an ADaM pattern.
+    HIGH confidence.
+2.  **Formatting-based** – bold / italic / underline runs that match.
+    MEDIUM confidence.
+3.  **Plain-text pattern** – `DATASET.VARIABLE` strings recognised by
+    regex alone, no formatting needed. HIGH confidence (the structure is
+    unique).
+4.  **LLM fallback** – only for cells where 1-3 produce nothing and
+    context implies an annotation should exist. LOW confidence.
+
+In practice, the bundled `annotated_shell.docx` triggers Layer 1 for all
+130 stub-row annotations – the convention is consistent.
+
+## Listing column-header detection
+
+Listings differ from tables: the variable lives in the column header,
+not the stub. Cells like
+
+    Subject ID
+    USUBJID
+
+get split – “Subject ID” is the label, `USUBJID` becomes the annotation.
+The dataset prefix is resolved by combining a universal ADSL list
+(USUBJID, ARM, TRT01A, etc. always live in ADSL) with the TLF’s source
+dataset from the `Source: ADAE` line below the table.
+
+## Closing the loop – downstream siera
+
+The package ships with a standalone runner at `siera_workflow/` in the
+project repository (not bundled in the package itself). It takes the ARS
+JSON arsbridge produces, runs it through `siera::readARS()` to generate
+R analysis code, and executes that code against the simulated
+`ADaM.zip`. See `siera_workflow/README.md` for the full chain.
+
+## What arsbridge will NOT do
+
+- Invent variable names from shell row labels or titles
+- Read or process ADaM data files (XPT, sas7bdat, CSV) – siera’s job
+- Write Word documents (no shell annotation – arsbridge only reads)
+- Generate analysis R code – siera’s job
+
+## Where to look when something goes wrong
+
+- `res$validation` and `outputs/spec_validation_report.xlsx` –
+  per-annotation PASS/WARN/FAIL
+- [`cli::cli_alert_warning`](https://cli.r-lib.org/reference/cli_alert.html)
+  lines during the run – usually a TLF with an unexpected structure
+- Bundled test fixtures at `tests/testthat/fixtures/` – minimal
+  known-good shells to compare against
