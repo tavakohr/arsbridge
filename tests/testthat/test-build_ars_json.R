@@ -30,7 +30,8 @@
 test_that("build_ars_json produces a structured ReportingEvent", {
   re <- build_ars_json(list(.demo_section()), study_id = "STUDY-001",
                        study_name = "Demo")
-  expect_named(re, c("id", "name", "version", "listOfPlannedAnalyses",
+  expect_named(re, c("id", "name", "version",
+                     "otherListsOfContents", "mainListOfContents",
                      "analysisSets", "dataSubsets", "analysisGroupings",
                      "methods", "analyses", "outputs", "_meta"))
   expect_equal(re$id, "STUDY-001")
@@ -46,6 +47,13 @@ test_that("AnalysisSet condition encodes the population flag", {
   expect_equal(cond$variable,   "SAFFL")
   expect_equal(cond$comparator, "EQ")
   expect_equal(cond$value[[1]], "Y")
+})
+
+test_that("AnalysisSet has level + order fields (siera requirement)", {
+  re <- build_ars_json(list(.demo_section()))
+  as_obj <- re$analysisSets[[1]]
+  expect_equal(as_obj$level, 1L)
+  expect_equal(as_obj$order, 1L)
 })
 
 test_that("IDs follow the deterministic convention", {
@@ -64,11 +72,73 @@ test_that("AnalysisSets de-duplicate across TLFs with same population", {
   expect_length(re$outputs,      2)
 })
 
-test_that("AnalysisMethod uses standard catalogue with operations populated", {
+test_that("AnalysisGrouping has FLAT groupingDataset/groupingVariable (siera requirement)", {
+  re <- build_ars_json(list(.demo_section()))
+  gf <- re$analysisGroupings[[1]]
+  expect_equal(gf$groupingDataset,  "ADSL")
+  expect_equal(gf$groupingVariable, "TRT01A")   # flat string, not list
+  expect_true(is.character(gf$groupingVariable))
+  expect_false(is.list(gf$groupingVariable))
+  expect_true(is.list(gf$groups))               # empty array, not NULL
+})
+
+test_that("Analysis emits both flat dataset/variable AND nested analysisVariable", {
+  re <- build_ars_json(list(.demo_section()))
+  an <- re$analyses[[1]]
+  expect_equal(an$dataset,  "ADSL")             # flat (siera reads this)
+  expect_equal(an$variable, "AGE")
+  expect_equal(an$analysisVariable$dataset,  "ADSL")  # nested (ARS spec)
+  expect_equal(an$analysisVariable$variable, "AGE")
+  expect_equal(an$version, "1")
+  expect_true(is.list(an$categoryIds))
+})
+
+test_that("AnalysisMethod has codeTemplate with code + parameters (siera requirement)", {
   re <- build_ars_json(list(.demo_section()))
   mth <- re$methods[[1]]
-  expect_equal(mth$name, "Summary Statistics - Continuous")
-  expect_gte(length(mth$operations), 5)
+  expect_true(!is.null(mth$codeTemplate))
+  expect_true(nzchar(mth$codeTemplate$code))
+  expect_match(mth$codeTemplate$code, "df3_analysisidhere")
+  expect_match(mth$codeTemplate$context, "siera")
+  expect_true(is.list(mth$codeTemplate$parameters))
+  expect_true(!is.null(mth$label))              # siera reads label
+})
+
+test_that("Every standard method has a non-empty codeTemplate", {
+  for (name in names(arsbridge:::.STANDARD_METHODS)) {
+    mth <- arsbridge:::.STANDARD_METHODS[[name]]
+    expect_true(!is.null(mth$codeTemplate),     info = name)
+    expect_true(nzchar(mth$codeTemplate$code),  info = name)
+    expect_match(mth$codeTemplate$code, "df3_analysisidhere", info = name)
+  }
+})
+
+test_that("otherListsOfContents (LOPO) is shaped like siera's exampleARS_*.json", {
+  re <- build_ars_json(list(.demo_section("T-14-1-1"),
+                            .demo_section("T-14-3-1", "AE Summary")))
+  expect_true(is.list(re$otherListsOfContents))
+  expect_length(re$otherListsOfContents, 1)
+  lopo <- re$otherListsOfContents[[1]]
+  expect_equal(lopo$label, "LOPO")
+  expect_length(lopo$contentsList$listItems, 2)  # one per Output
+  item <- lopo$contentsList$listItems[[1]]
+  expect_named(item, c("name", "level", "order", "outputId"),
+               ignore.order = TRUE)
+  expect_equal(item$outputId, "T_14_1_1")
+})
+
+test_that("mainListOfContents (LOPA) carries sublist with analysisIds", {
+  re <- build_ars_json(list(.demo_section()))
+  lopa <- re$mainListOfContents
+  expect_equal(lopa$label, "LOPA")
+  items <- lopa$contentsList$listItems
+  expect_length(items, 1)
+  sub <- items[[1]]$sublist$listItems
+  ## We pad sublists to >= 3 entries to work around siera's hard-coded
+  ## anas[3, ] access (AnalysisSet.R:141). The first entry must be the
+  ## real analysis; duplicates after it are harmless.
+  expect_gte(length(sub), 3L)
+  expect_equal(sub[[1]]$analysisId, "AN_T_14_1_1_001")
 })
 
 test_that("JSON serialises and round-trips cleanly", {
@@ -79,4 +149,51 @@ test_that("JSON serialises and round-trips cleanly", {
   rt <- jsonlite::fromJSON(tmp, simplifyVector = FALSE)
   expect_equal(rt$id, re$id)
   expect_length(rt$outputs, length(re$outputs))
+})
+
+test_that("Required siera sections are all present (sanity gate)", {
+  ## Mirrors siera::.read_ars_json_metadata() line 45-53
+  re <- build_ars_json(list(.demo_section()))
+  required <- c("otherListsOfContents", "mainListOfContents",
+                "dataSubsets", "analysisSets", "analysisGroupings",
+                "analyses", "methods")
+  for (s in required) expect_true(s %in% names(re), info = s)
+})
+
+test_that("Round-trip through siera::readARS produces non-empty ARD scripts", {
+  skip_if_not_installed("siera")
+
+  re   <- build_ars_json(list(.demo_section()))
+  json <- tempfile(fileext = ".json")
+  writeLines(jsonlite::toJSON(re, auto_unbox = TRUE, pretty = TRUE,
+                              null = "null"), json)
+
+  out_dir  <- tempfile("ard_scripts_")
+  adam_dir <- tempfile("adam_csvs_")
+  dir.create(out_dir);  dir.create(adam_dir)
+
+  ## Stub ADaM CSVs siera will look for. Minimal viable.
+  utils::write.csv(
+    data.frame(USUBJID = c("S1", "S2", "S3"),
+               TRT01A  = c("A",  "A",  "B"),
+               SAFFL   = c("Y",  "Y",  "Y"),
+               AGE     = c(60L,  65L,  70L)),
+    file.path(adam_dir, "ADSL.csv"), row.names = FALSE
+  )
+
+  ## Capture cli warnings -- siera warns rather than errors on issues.
+  res <- withCallingHandlers(
+    suppressWarnings(suppressMessages(
+      siera::readARS(json, output_path = out_dir, adam_path = adam_dir)
+    )),
+    error = function(e) e
+  )
+
+  scripts <- list.files(out_dir, pattern = "ARD_.*\\.R$", full.names = TRUE)
+  expect_gte(length(scripts), 1L)
+  if (length(scripts) > 0) {
+    content <- paste(readLines(scripts[1]), collapse = "\n")
+    expect_gt(nchar(content), 200L)
+    expect_match(content, "df3_")   # confirms the method template expanded
+  }
 })

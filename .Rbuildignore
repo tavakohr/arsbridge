@@ -13,6 +13,7 @@
 ^scratch_.*\.R$
 ^\.env$
 ^run_.*\.R$
+^\.siera_ref$
 ^cran-comments\.md$
 ^CRAN-RELEASE$
 ^revdep$

@@ -20,4 +20,5 @@ inputs/
 outputs/
 scratch_*.R
 run_*.R
+.siera_ref/
 docs
