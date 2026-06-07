@@ -3,9 +3,11 @@
 arsbridge reads a lead programmer's already-annotated TLF shell Word
 document and the study's ADaM specification Excel, and produces a valid
 CDISC Analysis Results Standard (ARS) v1.0 ARM-TS JSON file consumable
-by `siera::readARS()`. Annotation extraction is style-agnostic: detects
-ADaM variable references whether marked by font colour, character
-formatting, brackets, or plain text appended after the stub label.
+by
+[`siera::readARS()`](https://clymbclinical.github.io/siera/reference/readARS.html).
+Annotation extraction is style-agnostic: detects ADaM variable
+references whether marked by font colour, character formatting,
+brackets, or plain text appended after the stub label.
 
 ## Details
 

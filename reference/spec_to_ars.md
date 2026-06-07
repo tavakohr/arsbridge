@@ -3,7 +3,7 @@
 Reads a lead programmer's already-annotated TLF shells Word document and
 the study's ADaM specification Excel, and produces a valid CDISC
 Analysis Results Standard (ARS) v1.0 ARM-TS JSON file consumable by
-`siera::readARS()`.
+[`siera::readARS()`](https://clymbclinical.github.io/siera/reference/readARS.html).
 
 ## Usage
 

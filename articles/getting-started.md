@@ -134,9 +134,10 @@ dataset from the `Source: ADAE` line below the table.
 
 The package ships with a standalone runner at `siera_workflow/` in the
 project repository (not bundled in the package itself). It takes the ARS
-JSON arsbridge produces, runs it through `siera::readARS()` to generate
-R analysis code, and executes that code against the simulated
-`ADaM.zip`. See `siera_workflow/README.md` for the full chain.
+JSON arsbridge produces, runs it through
+[`siera::readARS()`](https://clymbclinical.github.io/siera/reference/readARS.html)
+to generate R analysis code, and executes that code against the
+simulated `ADaM.zip`. See `siera_workflow/README.md` for the full chain.
 
 ## What arsbridge will NOT do
 

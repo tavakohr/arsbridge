@@ -13,7 +13,9 @@ function**. Any previously existing functions (`shell_to_ars`,
 This is one function in the `arsbridge` R package. The function reads a
 lead programmer’s completed annotated TLF shell (Word docx) and an ADaM
 specification (Excel), and produces a CDISC ARS v1.0 ARM-TS JSON file.
-The JSON is consumed by `siera::readARS()` to generate QC R scripts.
+The JSON is consumed by
+[`siera::readARS()`](https://clymbclinical.github.io/siera/reference/readARS.html)
+to generate QC R scripts.
 
 **Core principle:** The parser extracts and converts — it does not
 invent. Every variable in the ARS output must trace back to an
