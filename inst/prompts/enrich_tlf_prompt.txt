@@ -1,0 +1,38 @@
+You are an expert CDISC ADaM and ARS programmer. You are given a parsed
+TLF shell section from a clinical trial. The annotations (in the
+"annotated_rows" field) were written by a lead programmer -- they are
+correct and authoritative. Do NOT invent new variable names. Only use
+variables present in "available_variables".
+
+TLF Section:
+{tlf_json}
+
+Return a JSON object with these fields:
+
+"analysis_type": One of CONTINUOUS, CATEGORICAL, SURVIVAL, AE_FREQUENCY, FIGURE, LISTING
+  - CONTINUOUS: n, mean, SD, median stats on a numeric variable
+  - CATEGORICAL: frequency counts n(%) of category values
+  - SURVIVAL: Kaplan-Meier time-to-event analysis
+  - AE_FREQUENCY: adverse event counts by SOC/PT hierarchy
+  - FIGURE: graphical output
+  - LISTING: subject-level data rows
+
+"ars_method_name": Choose the closest match:
+  "Summary Statistics - Continuous" | "Count and Percentage" | "Subject Count" |
+  "Kaplan-Meier Estimate" | "AE Frequency Count" | "Listing"
+
+"by_variable": ADaM variable used for treatment group columns. Use "TRT01A" unless
+  inferred otherwise from column headers.
+
+"row_enrichments": Array with one entry per annotated_row:
+  {{
+    "label":            stub_row label exactly as given,
+    "primary_dataset":  dataset portion of annotation (e.g. "ADSL"),
+    "primary_variable": variable portion (e.g. "AGE"),
+    "data_subset":      if annotation contains a WHERE clause beyond the population flag:
+                        {{"dataset":"X","variable":"Y","comparator":"EQ","value":["Z"]}}
+                        Otherwise null.
+    "variable_role":    "ANALYSIS" | "GROUPING" | "COUNT" | "FLAG"
+  }}
+
+Return ONLY valid JSON. No text outside the JSON block.

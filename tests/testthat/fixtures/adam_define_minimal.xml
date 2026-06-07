@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ODM xmlns="http://www.cdisc.org/ns/odm/v1.3"
+     xmlns:def="http://www.cdisc.org/ns/def/v2.0">
+  <Study OID="STUDY-001">
+    <MetaDataVersion OID="MDV.1" Name="ADaM Metadata">
+
+      <def:ItemGroupDef OID="IG.ADSL" Name="ADSL" SASDatasetName="ADSL">
+        <ItemRef ItemOID="IT.ADSL.USUBJID"/>
+        <ItemRef ItemOID="IT.ADSL.AGE"/>
+        <ItemRef ItemOID="IT.ADSL.SEX"/>
+        <ItemRef ItemOID="IT.ADSL.RACE"/>
+        <ItemRef ItemOID="IT.ADSL.SAFFL"/>
+        <ItemRef ItemOID="IT.ADSL.TRT01A"/>
+      </def:ItemGroupDef>
+
+      <def:ItemGroupDef OID="IG.ADAE" Name="ADAE" SASDatasetName="ADAE">
+        <ItemRef ItemOID="IT.ADAE.USUBJID"/>
+        <ItemRef ItemOID="IT.ADAE.AEDECOD"/>
+        <ItemRef ItemOID="IT.ADAE.AEBODSYS"/>
+        <ItemRef ItemOID="IT.ADAE.TRTEMFL"/>
+      </def:ItemGroupDef>
+
+      <ItemDef OID="IT.ADSL.USUBJID" Name="USUBJID" DataType="text" Length="40" Origin="Assigned">
+        <Description><TranslatedText xml:lang="en">Unique Subject Identifier</TranslatedText></Description>
+      </ItemDef>
+      <ItemDef OID="IT.ADSL.AGE" Name="AGE" DataType="integer" Length="8" Origin="CRF">
+        <Description><TranslatedText xml:lang="en">Age</TranslatedText></Description>
+      </ItemDef>
+      <ItemDef OID="IT.ADSL.SEX" Name="SEX" DataType="text" Length="1" Origin="CRF">
+        <Description><TranslatedText xml:lang="en">Sex</TranslatedText></Description>
+      </ItemDef>
+      <ItemDef OID="IT.ADSL.RACE" Name="RACE" DataType="text" Length="40" Origin="CRF">
+        <Description><TranslatedText xml:lang="en">Race</TranslatedText></Description>
+      </ItemDef>
+      <ItemDef OID="IT.ADSL.SAFFL" Name="SAFFL" DataType="text" Length="1" Origin="Derived">
+        <Description><TranslatedText xml:lang="en">Safety Population Flag</TranslatedText></Description>
+      </ItemDef>
+      <ItemDef OID="IT.ADSL.TRT01A" Name="TRT01A" DataType="text" Length="40" Origin="Assigned">
+        <Description><TranslatedText xml:lang="en">Actual Treatment for Period 01</TranslatedText></Description>
+      </ItemDef>
+
+      <ItemDef OID="IT.ADAE.USUBJID" Name="USUBJID" DataType="text" Length="40" Origin="Assigned">
+        <Description><TranslatedText xml:lang="en">Unique Subject Identifier</TranslatedText></Description>
+      </ItemDef>
+      <ItemDef OID="IT.ADAE.AEDECOD" Name="AEDECOD" DataType="text" Length="200" Origin="CRF">
+        <Description><TranslatedText xml:lang="en">Dictionary-Derived Term</TranslatedText></Description>
+      </ItemDef>
+      <ItemDef OID="IT.ADAE.AEBODSYS" Name="AEBODSYS" DataType="text" Length="200" Origin="CRF">
+        <Description><TranslatedText xml:lang="en">Body System or Organ Class</TranslatedText></Description>
+      </ItemDef>
+      <ItemDef OID="IT.ADAE.TRTEMFL" Name="TRTEMFL" DataType="text" Length="1" Origin="Derived">
+        <Description><TranslatedText xml:lang="en">Treatment Emergent Analysis Flag</TranslatedText></Description>
+      </ItemDef>
+
+    </MetaDataVersion>
+  </Study>
+</ODM>

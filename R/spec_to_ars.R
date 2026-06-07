@@ -1,0 +1,162 @@
+## arsbridge -- spec_to_ars.R
+## ---------------------------------------------------------------------------
+## The single exported function. Reads the annotated TLF shell + ADaM spec,
+## extracts and validates annotations, calls the LLM once per TLF for
+## semantic enrichment, and writes a CDISC ARS v1.0 JSON file.
+
+#' Convert annotated TLF shell and ADaM spec to CDISC ARS JSON
+#'
+#' Reads a lead programmer's already-annotated TLF shells Word document and
+#' the study's ADaM specification Excel, and produces a valid CDISC Analysis
+#' Results Standard (ARS) v1.0 ARM-TS JSON file consumable by
+#' \code{siera::readARS()}.
+#'
+#' @param shell_path     Path to annotated TLF shells `.docx`.
+#' @param adam_spec_path Path to the ADaM specification. Accepts either:
+#'   * `.xml` -- ADaM `define.xml` (preferred when available)
+#'   * `.xlsx` / `.xls` -- ADaM specification Excel (fallback used during
+#'     development before `define.xml` is produced)
+#'
+#'   One of the two is required. The SDTM spec is NOT a valid input --
+#'   TLF annotations reference ADaM variables, so the grounding source
+#'   must be the ADaM spec.
+#' @param output_path    Path for the ARS JSON. Default `"reporting_event.json"`.
+#' @param study_id       Study identifier. Default `"STUDY-001"`.
+#' @param study_name     Human-readable study name. Defaults to `study_id`.
+#' @param model          Anthropic model. Default `"claude-sonnet-4-6"`.
+#' @param api_key        Anthropic API key. Defaults to env `ANTHROPIC_API_KEY`.
+#' @param validate       If `TRUE` (default), cross-reference annotations
+#'   against the ADaM spec and write a validation report.
+#' @param report_path    Path for the validation report `.xlsx`.
+#'   Default `"spec_validation_report.xlsx"`.
+#' @param verbose        Print progress messages. Default `TRUE`.
+#'
+#' @return Invisibly returns a named list:
+#'   \describe{
+#'     \item{`ars_path`}{Path to the generated ARS JSON file.}
+#'     \item{`report_path`}{Path to the validation report (if validate=TRUE).}
+#'     \item{`n_tlfs`}{Number of TLF sections processed.}
+#'     \item{`n_analyses`}{Number of ARS Analysis objects created.}
+#'     \item{`n_warnings`}{Number of spec validation warnings.}
+#'     \item{`reporting_event`}{The full ARS ReportingEvent as a nested R
+#'       list -- the same content that was serialised to `ars_path`. Inspect
+#'       interactively with e.g. `str(res$reporting_event, max.level = 2)`.}
+#'     \item{`validation`}{Data frame of per-annotation validation results
+#'       (`tlf_number`, `stub_label`, `annotation`, `variable_ref`, `status`,
+#'       `message`). `NULL` when `validate = FALSE`.}
+#'   }
+#'
+#' @section Human review:
+#' The generated ARS JSON is a draft. A qualified clinical programmer MUST
+#' review it before downstream use. The JSON includes a
+#' `_meta.requires_human_review = TRUE` field that consumers can key on.
+#'
+#' @examples
+#' \dontrun{
+#' spec_to_ars(
+#'   shell_path     = "inputs/annotated_shells.docx",
+#'   adam_spec_path = "inputs/adam_spec.xlsx",
+#'   output_path    = "outputs/reporting_event.json",
+#'   report_path    = "outputs/spec_validation_report.xlsx"
+#' )
+#' }
+#' @export
+spec_to_ars <- function(shell_path,
+                        adam_spec_path,
+                        output_path  = "reporting_event.json",
+                        study_id     = "STUDY-001",
+                        study_name   = NULL,
+                        model        = "claude-sonnet-4-6",
+                        api_key      = Sys.getenv("ANTHROPIC_API_KEY"),
+                        validate     = TRUE,
+                        report_path  = "spec_validation_report.xlsx",
+                        verbose      = TRUE) {
+
+  if (!file.exists(shell_path)) {
+    cli::cli_abort("Shell file not found: {.path {shell_path}}")
+  }
+  if (!file.exists(adam_spec_path)) {
+    cli::cli_abort("ADaM spec file not found: {.path {adam_spec_path}}")
+  }
+  if (!grepl("\\.docx?$", shell_path, ignore.case = TRUE)) {
+    cli::cli_abort("Shell file must have a {.val .docx} extension: {.path {shell_path}}")
+  }
+  if (!grepl("\\.(xml|xlsx?)$", adam_spec_path, ignore.case = TRUE)) {
+    cli::cli_abort(c(
+      "ADaM spec must be {.val .xml} (define.xml) or {.val .xlsx} / {.val .xls} (Excel).",
+      "x" = "Got: {.path {adam_spec_path}}",
+      "i" = "The SDTM spec is not a valid input -- TLF annotations reference ADaM variables."
+    ))
+  }
+  if (!nzchar(api_key)) {
+    cli::cli_abort(c(
+      "ANTHROPIC_API_KEY is not set.",
+      "i" = "Easiest fix: run {.code arsbridge::set_anthropic_key()} (interactive prompt).",
+      " " = "Or paste it once: {.code arsbridge::set_anthropic_key('sk-ant-...')}",
+      " " = "Confirm setup with {.code arsbridge::check_anthropic_key()}.",
+      " " = "Get a key at {.url https://console.anthropic.com/settings/keys}."
+    ))
+  }
+
+  if (verbose) cli::cli_h1("arsbridge::spec_to_ars")
+
+  ## --- Parse inputs --------------------------------------------------
+  if (verbose) cli::cli_alert_info("Parsing annotated shell {.path {basename(shell_path)}}...")
+  sections <- parse_shell_docx(shell_path)
+  if (length(sections) == 0) {
+    cli::cli_abort("No TLF sections found in {.path {shell_path}}.")
+  }
+
+  if (verbose) cli::cli_alert_info("Parsing ADaM spec {.path {basename(adam_spec_path)}}...")
+  spec <- parse_adam_spec(adam_spec_path)
+
+  ## --- Validation ----------------------------------------------------
+  validation <- NULL
+  if (isTRUE(validate)) {
+    if (verbose) cli::cli_alert_info("Cross-referencing annotations against ADaM spec...")
+    validation <- validate_annotations_spec(sections, spec$lookup)
+    n_warn <- sum(validation$status %in% c("WARN", "FAIL"))
+    if (n_warn > 0) {
+      cli::cli_alert_warning("{n_warn} validation finding{?s} -- see {.path {report_path}}")
+    } else if (verbose) {
+      cli::cli_alert_success("All annotations validated cleanly.")
+    }
+    write_validation_report(validation, report_path)
+  }
+
+  ## --- LLM enrichment, one call per TLF -----------------------------
+  if (verbose) cli::cli_alert_info("Enriching {length(sections)} TLF section{?s} with Claude ({model})...")
+  enriched <- vector("list", length(sections))
+  for (i in seq_along(sections)) {
+    sec <- sections[[i]]
+    if (verbose) {
+      cli::cli_alert("  [{i}/{length(sections)}] {.val {sec$tlf_number}}: {substr(sec$title, 1, 60)}")
+    }
+    enriched[[i]] <- enrich_with_llm(sec, spec_lookup = spec$lookup,
+                                     model = model, api_key = api_key)
+  }
+
+  ## --- Build and write ARS JSON --------------------------------------
+  if (verbose) cli::cli_alert_info("Building CDISC ARS v1.0 ReportingEvent...")
+  re <- build_ars_json(enriched, study_id = study_id,
+                       study_name = study_name %||% study_id)
+
+  json_text <- jsonlite::toJSON(re, auto_unbox = TRUE, pretty = TRUE, null = "null")
+  writeLines(json_text, output_path, useBytes = TRUE)
+
+  if (verbose) {
+    cli::cli_alert_success("Wrote ARS JSON to {.path {output_path}}")
+  }
+
+  result <- list(
+    ars_path        = output_path,
+    report_path     = if (isTRUE(validate)) report_path else NULL,
+    n_tlfs          = length(enriched),
+    n_analyses      = length(re$analyses),
+    n_warnings      = if (!is.null(validation))
+                        sum(validation$status %in% c("WARN", "FAIL")) else 0L,
+    reporting_event = re,
+    validation      = validation
+  )
+  invisible(result)
+}

@@ -1,0 +1,23 @@
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+
+# Local-only sensitive
+.Renviron
+.env
+.claude/
+
+# Build artifacts
+inst/doc/
+docs/
+/*.tar.gz
+/*.tgz
+/*.Rcheck/
+
+# Study-specific working dirs (NEVER commit client data)
+inputs/
+outputs/
+scratch_*.R
+run_*.R
+docs
