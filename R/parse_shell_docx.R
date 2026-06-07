@@ -463,7 +463,7 @@ split_label_annotation <- function(cell_text) {
 ## ---------------------------------------------------------------------------
 ## Listing column-header annotation detection
 ##
-## CRO listing shells annotate variables in the COLUMN HEADERS rather than
+## Listing shells annotate variables in the COLUMN HEADERS rather than
 ## the stub column, with a different convention than table stubs:
 ##
 ##   Cell text:     "Subject ID\nUSUBJID"

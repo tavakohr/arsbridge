@@ -17,10 +17,10 @@ into a CDISC Analysis Results Standard (ARS) v1.0 ARM-TS JSON file,
 ready for consumption by
 [`siera::readARS()`](https://pharmaverse.github.io/siera/).
 
-The package is designed for the real CRO workflow: a **lead programmer
-annotates the shell** with the ADaM variables that drive each row, then
-`arsbridge` mechanically extracts and structures those annotations as
-CDISC ARS without ever inventing a variable name.
+The package is designed for the real clinical reporting workflow: a
+**lead programmer annotates the shell** with the ADaM variables that
+drive each row, then `arsbridge` mechanically extracts and structures
+those annotations as CDISC ARS without ever inventing a variable name.
 
 ## Key design ideas
 
@@ -29,8 +29,8 @@ CDISC ARS without ever inventing a variable name.
   variable name the programmer wrote.
 - **Style-agnostic annotation detection.** Four detection layers: red
   `C00000` font → bold/italic/underline → plain-text ADaM regex → LLM
-  fallback. Works on shells that follow your CRO’s house style, whatever
-  it is.
+  fallback. Works on shells that follow your team’s house style,
+  whatever it is.
 - **LLM used only for semantic enrichment** — analysis type, method
   name, row role — never for variable name resolution. One Claude call
   per TLF section.
