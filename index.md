@@ -1,31 +1,42 @@
 # arsbridge
 
-Convert an annotated TLF shells Word document and an ADaM specification
-into a CDISC Analysis Results Standard (ARS) v1.0 ARM-TS JSON file,
-ready for consumption by
-[`siera::readARS()`](https://pharmaverse.github.io/siera/).
+[arsbridge](https://github.com/tavakohr/arsbridge) is an R package
+designed to natively parse, validate, and execute CDISC **Analysis
+Results Standard (ARS)** specifications into tidy **Analysis Results
+Data (ARD)** objects using
+[cards](https://github.com/insightsengineering/cards).
 
-The package is designed for the real clinical reporting workflow: a
-**lead programmer annotates the shell** with the ADaM variables that
-drive each row, then `arsbridge` mechanically extracts and structures
-those annotations as CDISC ARS without ever inventing a variable name.
+The package is built for real clinical workflows: it extracts
+authoritative variable-to-row mappings directly from annotated TLF
+shells, cross-references them against your study’s ADaM specification
+(`define.xml` or Excel), enriches the metadata using LLM assistance
+(Anthropic Claude, OpenAI, or Gemini), and natively runs the
+calculations against ADaM datasets.
 
-## Key design ideas
+------------------------------------------------------------------------
 
-- **Extracts, never invents.** The lead programmer’s annotations are
-  authoritative. `arsbridge` will never substitute an LLM guess for a
-  variable name the programmer wrote.
-- **Style-agnostic annotation detection.** Four detection layers: red
-  `C00000` font → bold/italic/underline → plain-text ADaM regex → LLM
-  fallback. Works on shells that follow your team’s house style,
-  whatever it is.
-- **LLM used only for semantic enrichment** — analysis type, method
-  name, row role — never for variable name resolution. One Claude call
-  per TLF section.
-- **Bundled training example** so you can run the full pipeline before
-  you own a study.
+## Key Features
+
+1.  **Multi-Provider LLM Integration**: Natively configure and use
+    Anthropic, OpenAI, or Gemini API keys to automate metadata
+    enrichment.
+2.  **Authoritative Parsing**: Extract annotations without guessing. It
+    relies on the lead programmer’s annotations in the Word shells as
+    the ground truth.
+3.  **Spec Validation**: Checks every annotation against your ADaM spec
+    (`define.xml` or Excel) and produces an interactive Excel validation
+    report showing gaps or typos.
+4.  **Native ARD Execution**: Runs the generated ARS JSON directly using
+    [cards](https://github.com/insightsengineering/cards) against `.xpt`
+    or `.csv` datasets, recursively applying population (`analysisSets`)
+    and data subsetting (`dataSubsets`) filters.
+
+------------------------------------------------------------------------
 
 ## Installation
+
+You can install [arsbridge](https://github.com/tavakohr/arsbridge) from
+GitHub:
 
 ``` r
 
@@ -33,89 +44,241 @@ those annotations as CDISC ARS without ever inventing a variable name.
 devtools::install_github("tavakohr/arsbridge")
 ```
 
-CRAN release pending pharmaverse community review.
+------------------------------------------------------------------------
 
-## Quick start
+## Step-by-Step Workflow & Function Guide
+
+Here is the step-by-step use of the functions in
+[arsbridge](https://github.com/tavakohr/arsbridge):
+
+``` mermaid
+graph TD
+    A[Configure LLM API Keys] --> B[Generate ARS JSON & Validate Spec]
+    B --> C[Execute ARS to get Tidy ARD]
+```
+
+### Step 1: Set Up and Check API Keys
+
+[arsbridge](https://github.com/tavakohr/arsbridge) supports multiple LLM
+providers. You can store your API keys in your user `.Renviron` file so
+they load automatically in future sessions.
 
 ``` r
 
 library(arsbridge)
 
-# One-time API key setup (interactive prompt; key written to ~/.Renviron)
-set_anthropic_key()
-check_anthropic_key()
+# Set up your preferred API key
+# (Interactive prompts hide input when the 'askpass' package is installed)
+set_anthropic_key()  # Writes ANTHROPIC_API_KEY to ~/.Renviron
+set_openai_key()     # Writes OPENAI_API_KEY to ~/.Renviron
+set_gemini_key()     # Writes GEMINI_API_KEY to ~/.Renviron
 
-# Zero-arg demo against the bundled APX-DRM-301 training example
-res <- spec_to_ars_example()
-
-res$n_tlfs       #  40
-res$n_analyses   #  ~226
-res$n_warnings   #  ~29  (these are real signal -- spec gaps the lead
-                 #        programmer flagged for ADaM team review)
-
-# Inspect the structured output without re-reading the JSON
-str(res$reporting_event, max.level = 1)
-table(res$validation$status)
+# Show what API keys are configured and which provider is currently active
+show_active_llm()
 ```
 
-Run takes about six minutes (forty LLM calls).
+#### How Provider Selection Works:
 
-## Using your own files
+By default, if multiple API keys are set,
+[arsbridge](https://github.com/tavakohr/arsbridge) searches in the
+priority order: **Anthropic** $`\rightarrow`$**OpenAI**
+$`\rightarrow`$**Gemini**. To override this default order and choose a
+specific active provider, set the `ARS_LLM_PROVIDER` environment
+variable (e.g., in your `.Renviron` or `.env` file):
+
+``` env
+ARS_LLM_PROVIDER=openai
+```
+
+Or configure it in R using global options:
+
+``` r
+
+options(ars.llm.provider = "gemini")
+```
+
+------------------------------------------------------------------------
+
+### Step 2: Generating ARS JSON from Annotated Shells
+
+The primary orchestration function is
+[`spec_to_ars()`](reference/spec_to_ars.md). It extracts annotations
+from a Word TLF shell, cross-references them against an ADaM spec, calls
+the active LLM once per TLF section for semantic enrichment, and writes
+the CDISC ARS JSON.
 
 ``` r
 
 res <- spec_to_ars(
-  shell_path     = "inputs/annotated_shell.docx",
-  adam_spec_path = "inputs/adam_spec.xlsx",      # or define.xml
+  shell_path     = "inputs/APX-DRM-301_TLF_Shells_v1.0_sample_annotated.docx",
+  adam_spec_path = "inputs/adam_spec_APX-DRM-301.xlsx", # Can also be define.xml
   output_path    = "outputs/reporting_event.json",
   report_path    = "outputs/spec_validation_report.xlsx",
-  study_id       = "ABC-123",
-  study_name     = "ABC-123 Phase 3"
+  study_id       = "APX-DRM-301",
+  study_name     = "PROSVALIN Phase 3 Study",
+  verbose        = TRUE
 )
 ```
 
-`adam_spec_path` accepts either `.xml` (ADaM define.xml, preferred when
-available) or `.xlsx` / `.xls` (ADaM spec Excel, used during development
-before define.xml exists). The SDTM spec is **not** a valid input – TLF
-annotations reference ADaM variables, so the grounding source has to be
-the ADaM spec.
+#### Understanding the Arguments:
 
-## What the validation report tells you
+- `shell_path`: Path to the annotated Microsoft Word `.docx` file.
+- `adam_spec_path`: Grounding specification. Accepts either `.xml` (ADaM
+  `define.xml`, preferred) or `.xlsx` / `.xls` (ADaM spec Excel sheet).
+- `output_path`: Path where the structured CDISC ARS JSON draft will be
+  saved.
+- `report_path`: Path for the generated Excel validation sheet showing
+  errors.
 
-`outputs/spec_validation_report.xlsx` has one row per annotation with
-PASS / WARN / FAIL status, status-tinted. WARN and FAIL findings are the
-testable surface for the lead programmer and the ADaM team: every
-“variable X not in spec but dataset Y exists” line is either a typo in
-the shell or a real spec gap to fill. The JSON itself is written
-regardless of validation outcome – WARN/FAIL findings are signal, not
-blockers.
+------------------------------------------------------------------------
 
-## Bundled example
+### Step 3: Inspecting Spec Validation Results
+
+The validation report (`outputs/spec_validation_report.xlsx`) is an
+Excel workbook that cross-references all shell annotations with the ADaM
+spec, assigning a status of **PASS**, **WARN**, or **FAIL**. This allows
+programmers to catch typos and identify missing variables in the ADaM
+spec prior to writing R code.
 
 ``` r
 
-arsbridge_example()                        # list bundled files
-arsbridge_example("annotated_shell.docx")  # absolute path
-arsbridge_example("adam_spec.xlsx")
-arsbridge_example("ADaM.zip")              # 60-subject simulated ADaM
-                                           # data for downstream testing
+# Retrieve validation summary programmatically
+table(res$validation$status)
 ```
 
-The bundle is a small, anonymised slice of a Phase 3 atopic dermatitis
-study (`APX-DRM-301`): 40 TLFs (24 tables + 10 listings + 6 figures), 8
-ADaM domains, 60 subjects stratified by treatment arm. The synthetic
-ADaM data is not consumed by `arsbridge` itself – it is for testing the
-downstream consumer (`siera`) end-to-end.
+------------------------------------------------------------------------
+
+### Step 4: Native Execution to Tidy ARD using `{cards}`
+
+Once the ARS JSON has been generated, you can execute it natively using
+[`ars_to_ard()`](reference/ars_to_ard.md). It dynamically loads the
+necessary ADaM datasets and runs calculations using the
+[cards](https://github.com/insightsengineering/cards) package.
+
+``` r
+
+ard <- ars_to_ard(
+  ars_path = "outputs/reporting_event.json",
+  adam_dir = "inputs/ADaM"
+)
+
+# Inspect the resulting tidy ARD
+print(ard)
+```
+
+#### Selective Execution:
+
+To run only a specific subset of outputs or analyses (e.g. for debugging
+or incremental builds), pass character vectors to `output_ids` or
+`analysis_ids`:
+
+``` r
+
+# Run only the demographics table output
+ard_demog <- ars_to_ard(
+  ars_path   = "outputs/reporting_event.json",
+  adam_dir   = "inputs/ADaM",
+  output_ids = "T_DEMOG"
+)
+
+# Run only a specific analysis ID
+ard_age_only <- ars_to_ard(
+  ars_path     = "outputs/reporting_event.json",
+  adam_dir     = "inputs/ADaM",
+  analysis_ids = "AN_DEMOG_AGE"
+)
+```
+
+------------------------------------------------------------------------
+
+## Configuring ARS Outputs & ADaM Data Filters
+
+### 1. Shell Annotation Format
+
+For [arsbridge](https://github.com/tavakohr/arsbridge) to extract
+annotations, the lead programmer inserts annotations into the Word
+document shell.
+
+- **Primary variable assignment**: Enclose variables in square brackets,
+  prefixed by the dataset name (e.g., `[ADSL.AGE]`, `[ADAE.AEDECOD]`).
+- **Data Subsets**: Specify where-conditions inside the square brackets
+  (e.g., `[ADAE.AEDECOD WHERE AEREL == "RELATED"]`).
+- **Population filter**: Flags like `[SAFFL == "Y"]` in the column
+  headers determine the active population (`analysisSets`).
+
+### 2. Dataset Auto-Loading
+
+When [`ars_to_ard()`](reference/ars_to_ard.md) executes: 1. It scans the
+`adam_dir` for files named `<DATASET_NAME>.xpt` (read using
+[haven](https://haven.tidyverse.org)) or `<DATASET_NAME>.csv` (read
+using `read.csv`). 2. It caches the loaded datasets in memory to ensure
+fast subsequent execution.
+
+### 3. Subsetting & Filtering Logic
+
+- **Analysis Sets (Populations)**: Evaluated at the subject level (via
+  `USUBJID`). The active subset of subjects is intersected with the
+  primary analysis dataset.
+- **Data Subsets (Data Filters)**: Evaluated within the primary analysis
+  dataset itself (e.g., filtering `ADAE` for treatment-emergent adverse
+  events where `TRTEMFL == "Y"`).
+- **Compound Expressions**:
+  [arsbridge](https://github.com/tavakohr/arsbridge) supports recursive
+  parsing of nested expressions containing logical operators (`AND` and
+  `OR`).
+
+### 4. Calculation Mapping to `{cards}`
+
+[`ars_to_ard()`](reference/ars_to_ard.md) maps standard ARS method
+identifiers to [cards](https://github.com/insightsengineering/cards)
+function calls: - `MTH_SUMMARY_STATISTICS_CONTINUOUS`
+$`\rightarrow`$[`cards::ard_continuous()`](https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html) -
+`MTH_COUNT_AND_PERCENTAGE`
+$`\rightarrow`$[`cards::ard_categorical()`](https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html) -
+`MTH_AE_FREQUENCY_COUNT` $`\rightarrow`$ Evaluates distinct subject
+counts (`dplyr::distinct(USUBJID, variable)`) before calling
+[`cards::ard_categorical()`](https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html). -
+`MTH_SUBJECT_COUNT`
+$`\rightarrow`$[`cards::ard_total_n()`](https://insightsengineering.github.io/cards/latest-tag/reference/ard_total_n.html)
+or
+[`cards::ard_categorical()`](https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html).
+
+Each computed row is injected with traceability metadata: `analysis_id`,
+`method_id`, and `output_id`.
+
+------------------------------------------------------------------------
+
+## Demonstration with Bundled Training Example
+
+You can run the full end-to-end pipeline using the bundled `APX-DRM-301`
+dataset without needing any external files:
+
+``` r
+
+library(arsbridge)
+
+# 1. Inspect bundled files
+arsbridge_example()
+
+# 2. Run the conversion pipeline
+res <- spec_to_ars_example()
+
+# 3. Extract the unzipped ADaM directory
+adam_dir <- file.path(tempdir(), "ADaM")
+unzip(arsbridge_example("ADaM.zip"), exdir = adam_dir)
+
+# 4. Execute the resulting ARS JSON into a tidy ARD
+ard <- ars_to_ard(
+  ars_path = res$ars_path,
+  adam_dir = adam_dir
+)
+
+# 5. Look at the dimensions of the final ARD object
+dim(ard)
+```
+
+------------------------------------------------------------------------
 
 ## License
 
-MIT (c) Hamid Tavakoli. See [LICENSE.md](LICENSE.md).
-
-## Acknowledgements
-
-Built on the CDISC Analysis Results Standard v1.0. Prompt conventions
-derived from the public ADaM Implementation Guide and PHUSE community
-papers. The lead-programmer-first design philosophy is borrowed from the
-[pharmaverse](https://pharmaverse.org/) community consensus that human
-clinical judgment must own the variable-to-row mapping; automation
-operationalises that judgment, never replaces it.
+MIT © Hamid Tavakoli. See [LICENSE.md](LICENSE.md).

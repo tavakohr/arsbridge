@@ -14,8 +14,9 @@ spec_to_ars(
   output_path = "reporting_event.json",
   study_id = "STUDY-001",
   study_name = NULL,
-  model = "claude-sonnet-4-6",
-  api_key = Sys.getenv("ANTHROPIC_API_KEY"),
+  model = NULL,
+  api_key = NULL,
+  provider = NULL,
   validate = TRUE,
   report_path = "spec_validation_report.xlsx",
   verbose = TRUE

@@ -11,8 +11,12 @@
 <url><loc>/reference/arsbridge-package.html</loc></url>
 <url><loc>/reference/arsbridge_example.html</loc></url>
 <url><loc>/reference/check_anthropic_key.html</loc></url>
+<url><loc>/reference/get_active_llm.html</loc></url>
 <url><loc>/reference/index.html</loc></url>
 <url><loc>/reference/set_anthropic_key.html</loc></url>
+<url><loc>/reference/set_gemini_key.html</loc></url>
+<url><loc>/reference/set_openai_key.html</loc></url>
+<url><loc>/reference/show_active_llm.html</loc></url>
 <url><loc>/reference/spec_to_ars.html</loc></url>
 <url><loc>/reference/spec_to_ars_example.html</loc></url>
 <url><loc>/siera_cards_integration_plan.html</loc></url>
