@@ -145,7 +145,7 @@ enrich_with_llm <- function(section,
       model         = model,
       params        = ellmer::params(max_tokens = 4096L)
     ),
-    gemini = ellmer::chat_gemini(
+    gemini = ellmer::chat_google_gemini(
       system_prompt = system_prompt,
       model         = model,
       params        = ellmer::params(max_tokens = 8192L)
