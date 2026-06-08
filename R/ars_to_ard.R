@@ -18,6 +18,7 @@
 #'   those specific analyses.
 #'
 #' @return A tidy ARD data frame of class `"card"`.
+#' @importFrom tidyselect all_of
 #' @export
 #' @examples
 #' \dontrun{
