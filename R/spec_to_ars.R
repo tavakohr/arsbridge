@@ -66,8 +66,9 @@ spec_to_ars <- function(shell_path,
                         output_path  = "reporting_event.json",
                         study_id     = "STUDY-001",
                         study_name   = NULL,
-                        model        = "claude-sonnet-4-6",
-                        api_key      = Sys.getenv("ANTHROPIC_API_KEY"),
+                        model        = NULL,
+                        api_key      = NULL,
+                        provider     = NULL,
                         validate     = TRUE,
                         report_path  = "spec_validation_report.xlsx",
                         verbose      = TRUE) {
@@ -88,13 +89,35 @@ spec_to_ars <- function(shell_path,
       "i" = "The SDTM spec is not a valid input -- TLF annotations reference ADaM variables."
     ))
   }
-  if (!nzchar(api_key)) {
+
+  active <- get_active_llm()
+  if (is.null(provider)) {
+    provider <- active$provider
+  }
+  if (is.null(provider)) {
     cli::cli_abort(c(
-      "ANTHROPIC_API_KEY is not set.",
-      "i" = "Easiest fix: run {.code arsbridge::set_anthropic_key()} (interactive prompt).",
-      " " = "Or paste it once: {.code arsbridge::set_anthropic_key('sk-ant-...')}",
-      " " = "Confirm setup with {.code arsbridge::check_anthropic_key()}.",
-      " " = "Get a key at {.url https://console.anthropic.com/settings/keys}."
+      "No active LLM API key found.",
+      "i" = "Please set up an API key for Anthropic, OpenAI, or Gemini.",
+      " " = "You can run {.code arsbridge::set_anthropic_key()}, {.code arsbridge::set_openai_key()}, or {.code arsbridge::set_gemini_key()}."
+    ))
+  }
+
+  if (is.null(model)) {
+    model <- active$model
+  }
+  if (is.null(api_key)) {
+    env_var <- switch(provider,
+      anthropic = "ANTHROPIC_API_KEY",
+      openai    = "OPENAI_API_KEY",
+      gemini    = "GEMINI_API_KEY"
+    )
+    api_key <- Sys.getenv(env_var)
+  }
+
+  if (is.null(api_key) || !nzchar(api_key)) {
+    cli::cli_abort(c(
+      "API key for {.val {provider}} is not set.",
+      "i" = "Please configure your API key using the appropriate set function (e.g. {.code set_openai_key()})."
     ))
   }
 
@@ -125,7 +148,7 @@ spec_to_ars <- function(shell_path,
   }
 
   ## --- LLM enrichment, one call per TLF -----------------------------
-  if (verbose) cli::cli_alert_info("Enriching {length(sections)} TLF section{?s} with Claude ({model})...")
+  if (verbose) cli::cli_alert_info("Enriching {length(sections)} TLF section{?s} with {toupper(provider)} ({model})...")
   enriched <- vector("list", length(sections))
   for (i in seq_along(sections)) {
     sec <- sections[[i]]
@@ -133,7 +156,7 @@ spec_to_ars <- function(shell_path,
       cli::cli_alert("  [{i}/{length(sections)}] {.val {sec$tlf_number}}: {substr(sec$title, 1, 60)}")
     }
     enriched[[i]] <- enrich_with_llm(sec, spec_lookup = spec$lookup,
-                                     model = model, api_key = api_key)
+                                     model = model, api_key = api_key, provider = provider)
   }
 
   ## --- Build and write ARS JSON --------------------------------------

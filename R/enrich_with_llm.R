@@ -25,13 +25,36 @@
 #' @noRd
 enrich_with_llm <- function(section,
                             spec_lookup = NULL,
-                            model       = "claude-sonnet-4-6",
-                            api_key     = Sys.getenv("ANTHROPIC_API_KEY")) {
-  if (!nzchar(api_key)) {
+                            model       = NULL,
+                            api_key     = NULL,
+                            provider    = NULL) {
+  active <- get_active_llm()
+  if (is.null(provider)) {
+    provider <- active$provider
+  }
+  if (is.null(provider)) {
     cli::cli_abort(c(
-      "ANTHROPIC_API_KEY is not set.",
-      "i" = "Easiest fix: run {.code arsbridge::set_anthropic_key()} (interactive prompt).",
-      " " = "Or paste it once: {.code arsbridge::set_anthropic_key('sk-ant-...')}"
+      "No active LLM API key found.",
+      "i" = "Please set up an API key for Anthropic, OpenAI, or Gemini."
+    ))
+  }
+
+  if (is.null(model)) {
+    model <- active$model
+  }
+  if (is.null(api_key)) {
+    env_var <- switch(provider,
+      anthropic = "ANTHROPIC_API_KEY",
+      openai    = "OPENAI_API_KEY",
+      gemini    = "GEMINI_API_KEY"
+    )
+    api_key <- Sys.getenv(env_var)
+  }
+
+  if (is.null(api_key) || !nzchar(api_key)) {
+    cli::cli_abort(c(
+      "API key for {.val {provider}} is not set.",
+      "i" = "Please configure your API key."
     ))
   }
 
@@ -52,7 +75,7 @@ enrich_with_llm <- function(section,
   )
 
   prompt <- .render_enrich_prompt(tlf_payload)
-  raw    <- .invoke_claude(prompt, model = model, api_key = api_key)
+  raw    <- .invoke_llm(prompt, provider = provider, model = model, api_key = api_key)
   parsed <- .parse_llm_json(raw)
 
   section$analysis_type   <- parsed$analysis_type   %||% .infer_analysis_type(section)
@@ -83,37 +106,57 @@ enrich_with_llm <- function(section,
   glue::glue(tmpl, tlf_json = tlf_json, .open = "{", .close = "}")
 }
 
-#' Call Claude via ellmer and return the raw response text.
-#'
-#' ellmer >= 0.4 deprecated the `api_key` argument in favour of reading the
-#' key from the `ANTHROPIC_API_KEY` environment variable (or a `credentials`
-#' callback). We honour that: if the caller passes an explicit `api_key`
-#' that differs from the env var, set it for the duration of the call and
-#' restore the prior value on exit.
-#'
+#' Call LLM via ellmer and return the raw response text.
 #' @noRd
-.invoke_claude <- function(prompt, model, api_key,
-                           system_prompt = paste(
-                             "You are an expert CDISC clinical statistical programmer.",
-                             "Reply with valid JSON only, no surrounding prose.")) {
-  if (nzchar(api_key) &&
-      !identical(Sys.getenv("ANTHROPIC_API_KEY"), api_key)) {
-    prior <- Sys.getenv("ANTHROPIC_API_KEY", unset = NA_character_)
-    Sys.setenv(ANTHROPIC_API_KEY = api_key)
+.invoke_llm <- function(prompt, provider, model, api_key,
+                        system_prompt = paste(
+                          "You are an expert CDISC clinical statistical programmer.",
+                          "Reply with valid JSON only, no surrounding prose.")) {
+  env_var <- switch(provider,
+    anthropic = "ANTHROPIC_API_KEY",
+    openai    = "OPENAI_API_KEY",
+    gemini    = "GEMINI_API_KEY"
+  )
+
+  if (nzchar(api_key) && !identical(Sys.getenv(env_var), api_key)) {
+    prior <- Sys.getenv(env_var, unset = NA_character_)
+    args <- list(api_key)
+    names(args) <- env_var
+    do.call(Sys.setenv, args)
     on.exit({
-      if (is.na(prior)) Sys.unsetenv("ANTHROPIC_API_KEY")
-      else Sys.setenv(ANTHROPIC_API_KEY = prior)
+      if (is.na(prior)) {
+        Sys.unsetenv(env_var)
+      } else {
+        restore_args <- list(prior)
+        names(restore_args) <- env_var
+        do.call(Sys.setenv, restore_args)
+      }
     }, add = TRUE)
   }
-  chat <- ellmer::chat_anthropic(
-    system_prompt = system_prompt,
-    model         = model,
-    params        = ellmer::params(max_tokens = 8192L)
+
+  chat <- switch(provider,
+    anthropic = ellmer::chat_anthropic(
+      system_prompt = system_prompt,
+      model         = model,
+      params        = ellmer::params(max_tokens = 8192L)
+    ),
+    openai = ellmer::chat_openai(
+      system_prompt = system_prompt,
+      model         = model,
+      params        = ellmer::params(max_tokens = 4096L)
+    ),
+    gemini = ellmer::chat_gemini(
+      system_prompt = system_prompt,
+      model         = model,
+      params        = ellmer::params(max_tokens = 8192L)
+    ),
+    cli::cli_abort("Unsupported LLM provider: {.val {provider}}")
   )
+
   tryCatch(
     chat$chat(prompt, echo = "none"),
     error = function(e) {
-      cli::cli_warn(c("Claude API call failed:", "x" = conditionMessage(e)))
+      cli::cli_warn(c("LLM API call failed:", "x" = conditionMessage(e)))
       ""
     }
   )

@@ -24,5 +24,5 @@ test_that("arsbridge_example(unknown_file) errors with the available list", {
 })
 
 test_that("spec_to_ars_example errors clearly when API key missing", {
-  expect_error(spec_to_ars_example(api_key = ""), "ANTHROPIC_API_KEY")
+  expect_error(spec_to_ars_example(api_key = ""), "active LLM API key|API key.*not set")
 })
