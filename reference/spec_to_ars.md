@@ -56,11 +56,16 @@ spec_to_ars(
 
 - model:
 
-  Anthropic model. Default `"claude-sonnet-4-6"`.
+  LLM model. Defaults to the active provider's default model.
 
 - api_key:
 
-  Anthropic API key. Defaults to env `ANTHROPIC_API_KEY`.
+  LLM API key. Defaults to the active provider's key.
+
+- provider:
+
+  LLM provider: `"anthropic"`, `"openai"`, or `"gemini"`. Defaults to
+  the active provider.
 
 - validate:
 
