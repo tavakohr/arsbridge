@@ -23,8 +23,10 @@
 #' @param output_path    Path for the ARS JSON. Default `"reporting_event.json"`.
 #' @param study_id       Study identifier. Default `"STUDY-001"`.
 #' @param study_name     Human-readable study name. Defaults to `study_id`.
-#' @param model          Anthropic model. Default `"claude-sonnet-4-6"`.
-#' @param api_key        Anthropic API key. Defaults to env `ANTHROPIC_API_KEY`.
+#' @param model          LLM model. Defaults to the active provider's default model.
+#' @param api_key        LLM API key. Defaults to the active provider's key.
+#' @param provider       LLM provider: `"anthropic"`, `"openai"`, or `"gemini"`.
+#'   Defaults to the active provider.
 #' @param validate       If `TRUE` (default), cross-reference annotations
 #'   against the ADaM spec and write a validation report.
 #' @param report_path    Path for the validation report `.xlsx`.

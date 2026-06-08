@@ -38,9 +38,12 @@ must be the ADaM spec.}
 
 \item{study_name}{Human-readable study name. Defaults to \code{study_id}.}
 
-\item{model}{Anthropic model. Default \code{"claude-sonnet-4-6"}.}
+\item{model}{LLM model. Defaults to the active provider's default model.}
 
-\item{api_key}{Anthropic API key. Defaults to env \code{ANTHROPIC_API_KEY}.}
+\item{api_key}{LLM API key. Defaults to the active provider's key.}
+
+\item{provider}{LLM provider: \code{"anthropic"}, \code{"openai"}, or \code{"gemini"}.
+Defaults to the active provider.}
 
 \item{validate}{If \code{TRUE} (default), cross-reference annotations
 against the ADaM spec and write a validation report.}
