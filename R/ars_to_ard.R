@@ -1,0 +1,450 @@
+## arsbridge -- ars_to_ard.R
+## ---------------------------------------------------------------------------
+## Executes CDISC ARS JSON specifications directly using the {cards} package.
+## Dynamically loads ADaM datasets and binds results into a single tidy ARD.
+
+#' Execute ARS JSON and return an ARD object using {cards}
+#'
+#' Reads a CDISC ARS JSON specification and executes the analyses defined within
+#' it directly using the `{cards}` package, dynamically loading the ADaM datasets
+#' (.csv or .xpt) and combining individual ARD tables into a single tidy ARD object.
+#'
+#' @param ars_path   Path to the CDISC ARS JSON file.
+#' @param adam_dir   Directory containing the ADaM datasets (.csv or .xpt).
+#' @param output_ids Optional character vector of Output IDs to run only analyses
+#'   referenced by those outputs. Matching is case-insensitive and checks both
+#'   Output ID and Output Name (e.g. "T-14-1-1" or "T_14_1_1").
+#' @param analysis_ids Optional character vector of Analysis IDs to run only
+#'   those specific analyses.
+#'
+#' @return A tidy ARD data frame of class `"card"`.
+#' @export
+#' @examples
+#' \dontrun{
+#'   ard <- ars_to_ard("outputs/reporting_event.json", "inputs/ADaM")
+#' }
+ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL, analysis_ids = NULL) {
+  if (!file.exists(ars_path)) {
+    cli::cli_abort("ARS JSON file not found: {.path {ars_path}}")
+  }
+  if (!dir.exists(adam_dir)) {
+    cli::cli_abort("ADaM directory not found: {.path {adam_dir}}")
+  }
+
+  spec <- jsonlite::fromJSON(ars_path, simplifyVector = FALSE)
+
+  # Cache list for loaded datasets
+  dfs <- list()
+  get_df <- function(name) {
+    if (is.null(name) || !nzchar(name)) return(NULL)
+    name_upper <- toupper(name)
+    if (!name_upper %in% names(dfs)) {
+      files <- list.files(adam_dir, full.names = TRUE)
+      basenames <- tolower(basename(files))
+      csv_file <- files[basenames == tolower(paste0(name_upper, ".csv"))]
+      xpt_file <- files[basenames == tolower(paste0(name_upper, ".xpt"))]
+
+      if (length(xpt_file) > 0) {
+        if (requireNamespace("haven", quietly = TRUE)) {
+          dfs[[name_upper]] <<- haven::read_xpt(xpt_file[1])
+        } else {
+          cli::cli_abort("Package {.pkg haven} is required to read .xpt files.")
+        }
+      } else if (length(csv_file) > 0) {
+        dfs[[name_upper]] <<- utils::read.csv(csv_file[1], stringsAsFactors = FALSE, check.names = FALSE)
+      } else {
+        cli::cli_warn("Dataset {.val {name_upper}} not found in {.path {adam_dir}}.")
+        dfs[[name_upper]] <<- NULL
+      }
+    }
+    dfs[[name_upper]]
+  }
+
+  # Scalar character helper to prevent list-column issues when simplifyVector = FALSE
+  as_scalar_char <- function(x) {
+    if (is.null(x)) return(NULL)
+    val <- unlist(x)
+    if (length(val) == 0) return(NULL)
+    as.character(val[1])
+  }
+
+  # Build mapping from analysisId to outputId
+  analysis_to_output <- list()
+  for (out in spec[["outputs"]]) {
+    out_id <- as_scalar_char(out[["id"]])
+    if (is.null(out_id)) next
+    for (an_id in unlist(out[["referencedAnalysisIds"]])) {
+      an_id_str <- as_scalar_char(an_id)
+      if (!is.null(an_id_str)) {
+        analysis_to_output[[an_id_str]] <- out_id
+      }
+    }
+  }
+
+  # Build lookup map for groupings
+  grouping_map <- list()
+  for (gf in spec[["analysisGroupings"]]) {
+    gf_id <- as_scalar_char(gf[["id"]])
+    if (is.null(gf_id)) next
+    gf_var <- NULL
+    if (is.list(gf[["groupingVariable"]])) {
+      gf_var <- gf[["groupingVariable"]][["variable"]]
+    } else {
+      gf_var <- gf[["groupingVariable"]]
+    }
+    if (is.null(gf_var) || !nzchar(gf_var)) {
+      gf_var <- gf[["name"]]
+    }
+    gf_var_str <- as_scalar_char(gf_var)
+    if (!is.null(gf_var_str)) {
+      grouping_map[[gf_id]] <- gf_var_str
+    }
+  }
+
+  # Helper functions to clean and evaluate filters
+  clean_var_name <- function(var_name, df_names) {
+    if (is.null(var_name) || !nzchar(var_name)) return(var_name)
+    if (var_name %in% df_names) return(var_name)
+    if (grepl(".", var_name, fixed = TRUE)) {
+      parts <- strsplit(var_name, ".", fixed = TRUE)[[1]]
+      short_var <- parts[length(parts)]
+      if (short_var %in% df_names) return(short_var)
+    }
+    var_name
+  }
+
+  eval_condition <- function(df, cond_obj) {
+    var_name <- cond_obj[["variable"]]
+    comp <- cond_obj[["comparator"]]
+    val_list <- cond_obj[["value"]]
+
+    if (is.null(var_name) || !nzchar(var_name)) {
+      return(rep(TRUE, nrow(df)))
+    }
+
+    var_name <- clean_var_name(var_name, names(df))
+
+    if (!var_name %in% names(df)) {
+      return(rep(FALSE, nrow(df)))
+    }
+
+    col_val <- df[[var_name]]
+    val <- unlist(val_list)
+
+    if (comp %in% c("EQ", "IN")) {
+      if (length(val) == 0) {
+        is.na(col_val) | col_val == ""
+      } else {
+        col_val %in% val
+      }
+    } else if (comp %in% c("NE", "NOTIN")) {
+      if (length(val) == 0) {
+        !is.na(col_val) & col_val != ""
+      } else {
+        !(col_val %in% val)
+      }
+    } else if (comp == "LT") {
+      col_val < as.numeric(val)
+    } else if (comp == "LE") {
+      col_val <= as.numeric(val)
+    } else if (comp == "GT") {
+      col_val > as.numeric(val)
+    } else if (comp == "GE") {
+      col_val >= as.numeric(val)
+    } else {
+      rep(TRUE, nrow(df))
+    }
+  }
+
+  eval_where_clause <- function(df, where_clause) {
+    if (is.null(where_clause)) {
+      return(rep(TRUE, nrow(df)))
+    }
+    if (!is.null(where_clause[["condition"]])) {
+      return(eval_condition(df, where_clause[["condition"]]))
+    }
+    if (!is.null(where_clause[["compoundExpression"]])) {
+      comp_expr <- where_clause[["compoundExpression"]]
+      op <- comp_expr[["logicalOperator"]]
+      clauses <- comp_expr[["whereClauses"]]
+
+      if (length(clauses) == 0) {
+        return(rep(TRUE, nrow(df)))
+      }
+
+      results <- lapply(clauses, function(clause) eval_where_clause(df, clause))
+
+      if (identical(op, "AND")) {
+        Reduce(`&`, results)
+      } else if (identical(op, "OR")) {
+        Reduce(`|`, results)
+      } else {
+        rep(TRUE, nrow(df))
+      }
+    } else {
+      if (!is.null(where_clause[["variable"]])) {
+        return(eval_condition(df, where_clause))
+      }
+      rep(TRUE, nrow(df))
+    }
+  }
+
+  get_referenced_datasets <- function(where_clause) {
+    if (is.null(where_clause)) {
+      return(character(0))
+    }
+    if (!is.null(where_clause[["condition"]])) {
+      cond <- where_clause[["condition"]]
+      return(cond[["dataset"]] %||% character(0))
+    }
+    if (!is.null(where_clause[["compoundExpression"]])) {
+      comp_expr <- where_clause[["compoundExpression"]]
+      clauses <- comp_expr[["whereClauses"]]
+      return(unique(unlist(lapply(clauses, get_referenced_datasets))))
+    }
+    if (!is.null(where_clause[["dataset"]])) {
+      return(where_clause[["dataset"]])
+    }
+    character(0)
+  }
+
+  apply_where_clause <- function(target_ds_name, where_clause) {
+    df <- get_df(target_ds_name)
+    if (is.null(df) || is.null(where_clause)) {
+      return(df)
+    }
+
+    ref_datasets <- get_referenced_datasets(where_clause)
+    if (length(ref_datasets) == 0) {
+      return(df)
+    }
+
+    if (length(ref_datasets) == 1 && ref_datasets == target_ds_name) {
+      keep <- eval_where_clause(df, where_clause)
+      return(df[keep, , drop = FALSE])
+    }
+
+    valid_usubjids <- NULL
+    for (ref_ds in ref_datasets) {
+      ref_df <- get_df(ref_ds)
+      if (is.null(ref_df)) next
+      keep <- eval_where_clause(ref_df, where_clause)
+      ref_df_filtered <- ref_df[keep, , drop = FALSE]
+
+      if ("USUBJID" %in% names(ref_df_filtered)) {
+        ds_subjs <- unique(ref_df_filtered[["USUBJID"]])
+        if (is.null(valid_usubjids)) {
+          valid_usubjids <- ds_subjs
+        } else {
+          valid_usubjids <- intersect(valid_usubjids, ds_subjs)
+        }
+      }
+    }
+
+    if (!is.null(valid_usubjids) && "USUBJID" %in% names(df)) {
+      df <- df[df[["USUBJID"]] %in% valid_usubjids, , drop = FALSE]
+    }
+
+    return(df)
+  }
+
+  # Walk analyses and execute
+  ard_list <- list()
+  for (ana in spec[["analyses"]]) {
+    analysis_id <- as_scalar_char(ana[["id"]])
+    if (is.null(analysis_id)) next
+    out_id <- if (!is.null(analysis_id)) analysis_to_output[[analysis_id]] else NULL
+
+    # Filter by user-selected output_ids and analysis_ids
+    if (!is.null(output_ids) || !is.null(analysis_ids)) {
+      matched <- FALSE
+      if (!is.null(analysis_ids) && tolower(analysis_id) %in% tolower(analysis_ids)) {
+        matched <- TRUE
+      }
+      if (!is.null(output_ids) && !is.null(out_id)) {
+        # Match output ID or output name
+        out_obj <- Filter(function(o) identical(as_scalar_char(o[["id"]]), out_id), spec[["outputs"]])
+        out_name <- if (length(out_obj) > 0) as_scalar_char(out_obj[[1]][["name"]]) else NULL
+        if (tolower(out_id) %in% tolower(output_ids) || (!is.null(out_name) && tolower(out_name) %in% tolower(output_ids))) {
+          matched <- TRUE
+        }
+      }
+      if (!matched) next
+    }
+
+    method_id <- as_scalar_char(ana[["methodId"]])
+    analysis_var <- as_scalar_char(ana[["analysisVariable"]][["variable"]] %||% ana[["variable"]])
+    analysis_ds <- as_scalar_char(ana[["analysisVariable"]][["dataset"]] %||% ana[["dataset"]])
+    pop_id <- as_scalar_char(ana[["analysisSetId"]])
+    subset_id <- as_scalar_char(ana[["dataSubsetId"]])
+
+    if (is.null(analysis_ds) || !nzchar(analysis_ds)) {
+      cli::cli_warn("Skipping analysis {.val {analysis_id}}: primary dataset not specified.")
+      next
+    }
+    if (is.null(analysis_var) || !nzchar(analysis_var)) {
+      cli::cli_warn("Skipping analysis {.val {analysis_id}}: analysis variable not specified.")
+      next
+    }
+
+    df_base <- get_df(analysis_ds)
+    if (is.null(df_base)) {
+      cli::cli_warn("Skipping analysis {.val {analysis_id}}: dataset {.val {analysis_ds}} not loaded.")
+      next
+    }
+
+    pop_where <- NULL
+    if (!is.null(pop_id) && nzchar(pop_id)) {
+      for (aset in spec[["analysisSets"]]) {
+        if (identical(as_scalar_char(aset[["id"]]), pop_id)) {
+          pop_where <- aset
+          break
+        }
+      }
+    }
+
+    subset_where <- NULL
+    if (!is.null(subset_id) && nzchar(subset_id)) {
+      for (dsub in spec[["dataSubsets"]]) {
+        if (identical(as_scalar_char(dsub[["id"]]), subset_id)) {
+          subset_where <- dsub
+          break
+        }
+      }
+    }
+
+    # Apply filters
+    df_filtered <- df_base
+    if (!is.null(pop_where)) {
+      df_filtered <- apply_where_clause(analysis_ds, pop_where)
+    }
+
+    df_population <- NULL
+    adsl_df <- get_df("ADSL")
+    if (!is.null(adsl_df)) {
+      df_population <- apply_where_clause("ADSL", pop_where)
+    }
+    if (is.null(df_population)) {
+      df_population <- df_filtered
+    }
+
+    if (!is.null(subset_where)) {
+      df_filtered <- apply_where_clause(analysis_ds, subset_where)
+    }
+
+    analysis_var <- unname(clean_var_name(analysis_var, names(df_filtered)))
+    if (!analysis_var %in% names(df_filtered)) {
+      cli::cli_warn("Skipping analysis {.val {analysis_id}}: variable {.val {analysis_var}} not in dataset {.val {analysis_ds}}.")
+      next
+    }
+
+    # Resolve groupings
+    grouping_vars <- character(0)
+    if (!is.null(ana[["orderedGroupings"]])) {
+      for (grp in ana[["orderedGroupings"]]) {
+        gf_id <- as_scalar_char(grp[["groupingId"]])
+        if (!is.null(gf_id)) {
+          gf_var <- grouping_map[[gf_id]]
+          if (!is.null(gf_var) && nzchar(gf_var)) {
+            grouping_vars <- c(grouping_vars, gf_var)
+          }
+        }
+      }
+    }
+
+    grouping_vars <- unname(sapply(grouping_vars, clean_var_name, df_names = names(df_filtered)))
+    grouping_vars <- grouping_vars[grouping_vars %in% names(df_filtered)]
+    by_arg <- if (length(grouping_vars) > 0) grouping_vars else NULL
+
+    # Handle listings
+    if (identical(method_id, "MTH_LISTING")) {
+      cli::cli_inform("Skipping listing analysis {.val {analysis_id}} (listings are not summarized in ARD).")
+      next
+    }
+
+    ard <- NULL
+
+    # Execute {cards}
+    ard <- tryCatch({
+      if (identical(method_id, "MTH_SUMMARY_STATISTICS_CONTINUOUS")) {
+        if (!is.numeric(df_filtered[[analysis_var]])) {
+          df_filtered[[analysis_var]] <- as.numeric(df_filtered[[analysis_var]])
+        }
+        cards::ard_continuous(
+          data = df_filtered,
+          variables = all_of(analysis_var),
+          by = all_of(by_arg)
+        )
+      } else if (identical(method_id, "MTH_COUNT_AND_PERCENTAGE")) {
+        cards::ard_categorical(
+          data = df_filtered,
+          variables = all_of(analysis_var),
+          by = all_of(by_arg),
+          denominator = df_population
+        )
+      } else if (identical(method_id, "MTH_AE_FREQUENCY_COUNT")) {
+        df_unique <- df_filtered |> dplyr::distinct(USUBJID, !!rlang::sym(analysis_var), .keep_all = TRUE)
+        cards::ard_categorical(
+          data = df_unique,
+          variables = all_of(analysis_var),
+          by = all_of(by_arg),
+          denominator = df_population
+        )
+      } else if (identical(method_id, "MTH_SUBJECT_COUNT")) {
+        df_unique <- df_filtered |> dplyr::distinct(USUBJID, .keep_all = TRUE)
+        if (analysis_var == "USUBJID" && !is.null(by_arg)) {
+          cards::ard_categorical(
+            data = df_unique,
+            variables = all_of(by_arg)
+          )
+        } else if (analysis_var == "USUBJID") {
+          cards::ard_total_n(df_unique)
+        } else {
+          cards::ard_categorical(
+            data = df_unique,
+            variables = all_of(analysis_var),
+            by = all_of(by_arg),
+            denominator = df_population
+          )
+        }
+      } else {
+        # Fallback summarizer
+        cli::cli_warn("Method {.val {method_id}} for analysis {.val {analysis_id}} not natively supported. Using fallback summarizer.")
+        if (is.numeric(df_filtered[[analysis_var]])) {
+          cards::ard_continuous(
+            data = df_filtered,
+            variables = all_of(analysis_var),
+            by = all_of(by_arg)
+          )
+        } else {
+          cards::ard_categorical(
+            data = df_filtered,
+            variables = all_of(analysis_var),
+            by = all_of(by_arg),
+            denominator = df_population
+          )
+        }
+      }
+    }, error = function(e) {
+      cli::cli_warn("Analysis {.val {analysis_id}} failed during {.pkg cards} calculation: {e$message}")
+      NULL
+    })
+
+    if (!is.null(ard)) {
+      # Add traceability metadata
+      ard[["analysis_id"]] <- analysis_id
+      ard[["method_id"]] <- method_id
+      ard[["output_id"]] <- out_id %||% NA_character_
+
+      ard_list[[length(ard_list) + 1L]] <- ard
+    }
+  }
+
+  if (length(ard_list) == 0) {
+    return(NULL)
+  }
+
+  # Combine all analyses
+  final_ard <- cards::bind_ard(!!!ard_list)
+  return(final_ard)
+}
