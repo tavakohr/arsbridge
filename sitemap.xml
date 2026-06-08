@@ -7,6 +7,7 @@
 <url><loc>/articles/index.html</loc></url>
 <url><loc>/authors.html</loc></url>
 <url><loc>/index.html</loc></url>
+<url><loc>/reference/ars_to_ard.html</loc></url>
 <url><loc>/reference/arsbridge-package.html</loc></url>
 <url><loc>/reference/arsbridge_example.html</loc></url>
 <url><loc>/reference/check_anthropic_key.html</loc></url>
@@ -14,5 +15,6 @@
 <url><loc>/reference/set_anthropic_key.html</loc></url>
 <url><loc>/reference/spec_to_ars.html</loc></url>
 <url><loc>/reference/spec_to_ars_example.html</loc></url>
+<url><loc>/siera_cards_integration_plan.html</loc></url>
 </urlset>
 

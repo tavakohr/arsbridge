@@ -2,6 +2,8 @@
 
 ## All functions
 
+- [`ars_to_ard()`](ars_to_ard.md) : Execute ARS JSON and return an ARD
+  object using cards
 - [`arsbridge_example()`](arsbridge_example.md) : Bundled training files
   shipped with arsbridge
 - [`check_anthropic_key()`](check_anthropic_key.md) : Check whether the
