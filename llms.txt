@@ -287,6 +287,8 @@ MIT © Hamid Tavakoli. See [LICENSE.md](LICENSE.md).
 
 ## All functions
 
+- [`ars_diagnostics()`](ars_diagnostics.md) : Retrieve pipeline
+  diagnostics from the most recent run
 - [`ars_to_ard()`](ars_to_ard.md) : Execute ARS JSON and return an ARD
   object using cards
 - [`arsbridge_example()`](arsbridge_example.md) : Bundled training files

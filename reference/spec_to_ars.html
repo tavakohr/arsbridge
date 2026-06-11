@@ -149,6 +149,14 @@ interactively with e.g. <code>str(res$reporting_event, max.level = 2)</code>.</p
 (<code>tlf_number</code>, <code>stub_label</code>, <code>annotation</code>, <code>variable_ref</code>, <code>status</code>,
 <code>message</code>). <code>NULL</code> when <code>validate = FALSE</code>.</p></dd>
 
+<dt><code>diagnostics</code></dt>
+<dd><p>Data frame of pipeline diagnostics – every
+fallback, parsing miss, skipped sheet, LLM failure, unknown method,
+and dropped where-clause condition recorded during the run
+(<code>stage</code>, <code>severity</code>, <code>tlf_number</code>, <code>location</code>, <code>problem</code>,
+<code>action</code>). Also written to the "Diagnostics" sheet of the
+validation report and retrievable via <code><a href="ars_diagnostics.html">ars_diagnostics()</a></code>.</p></dd>
+
 
 </dl></div>
     <div class="section level2">

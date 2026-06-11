@@ -117,6 +117,15 @@ Invisibly returns a named list:
   `stub_label`, `annotation`, `variable_ref`, `status`, `message`).
   `NULL` when `validate = FALSE`.
 
+- `diagnostics`:
+
+  Data frame of pipeline diagnostics – every fallback, parsing miss,
+  skipped sheet, LLM failure, unknown method, and dropped where-clause
+  condition recorded during the run (`stage`, `severity`, `tlf_number`,
+  `location`, `problem`, `action`). Also written to the "Diagnostics"
+  sheet of the validation report and retrievable via
+  [`ars_diagnostics()`](ars_diagnostics.md).
+
 ## Human review
 
 The generated ARS JSON is a draft. A qualified clinical programmer MUST
