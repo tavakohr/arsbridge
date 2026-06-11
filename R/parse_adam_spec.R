@@ -80,7 +80,15 @@ parse_adam_spec <- function(path) {
     df <- tryCatch(
       suppressMessages(readxl::read_excel(excel_path, sheet = sh,
                                           col_types = "text", .name_repair = "minimal")),
-      error = function(e) NULL
+      error = function(e) {
+        diag_add(
+          stage = "parse_spec", severity = "WARN",
+          problem = paste0("Sheet could not be read: ", conditionMessage(e)),
+          location = sh,
+          action = "Sheet skipped"
+        )
+        NULL
+      }
     )
     if (is.null(df) || nrow(df) == 0 || ncol(df) == 0) next
 
@@ -89,9 +97,26 @@ parse_adam_spec <- function(path) {
     ## dataset column (one sheet per domain).
     has_var <- !is.null(mapping$variable)
     has_ds  <- !is.null(mapping$dataset)
-    if (!has_var) next
+    if (!has_var) {
+      diag_add(
+        stage = "parse_spec", severity = "INFO",
+        problem = "Sheet has no recognisable Variable column",
+        location = sh,
+        action = paste0("Sheet skipped (columns seen: ",
+                        paste(utils::head(names(df), 8), collapse = ", "), ")")
+      )
+      next
+    }
 
     fallback_ds <- if (has_ds) NULL else toupper(sh)
+    if (!is.null(fallback_ds) && !grepl("^AD[A-Z0-9]+$", fallback_ds)) {
+      diag_add(
+        stage = "parse_spec", severity = "WARN",
+        problem = sprintf("No Dataset column; sheet name '%s' used as dataset but does not look like an ADaM dataset name", sh),
+        location = sh,
+        action = "Rows keyed under this dataset name -- verify against shell annotations"
+      )
+    }
     rows <- .normalise_spec_rows(df, mapping, fallback_ds)
     if (nrow(rows) > 0) {
       variable_rows[[length(variable_rows) + 1]] <- rows
@@ -229,6 +254,7 @@ parse_adam_spec <- function(path) {
 
   ## Walk each ItemGroupDef to associate variables with their dataset.
   rows <- list()
+  unresolved_oids <- character()
   for (g in igroups) {
     dataset <- xml2::xml_attr(g, "Name")
     if (is.na(dataset) || !nzchar(dataset)) next
@@ -236,7 +262,10 @@ parse_adam_spec <- function(path) {
     for (ref in refs) {
       oid <- xml2::xml_attr(ref, "ItemOID")
       idx <- which(idef$oid == oid)[1]
-      if (is.na(idx)) next
+      if (is.na(idx)) {
+        unresolved_oids <- c(unresolved_oids, paste0(dataset, ":", oid))
+        next
+      }
       rows[[length(rows) + 1L]] <- data.frame(
         dataset   = toupper(dataset),
         variable  = toupper(idef$variable[idx] %||% ""),
@@ -249,6 +278,15 @@ parse_adam_spec <- function(path) {
         stringsAsFactors = FALSE
       )
     }
+  }
+
+  if (length(unresolved_oids) > 0) {
+    diag_add(
+      stage = "parse_spec", severity = "WARN",
+      problem = sprintf("%d ItemRef(s) in define.xml point to missing ItemDefs", length(unresolved_oids)),
+      location = paste(utils::head(unresolved_oids, 5), collapse = "; "),
+      action = "Variables dropped from spec lookup -- annotations referencing them will FAIL validation"
+    )
   }
 
   if (length(rows) == 0) {

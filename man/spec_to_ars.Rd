@@ -67,6 +67,12 @@ interactively with e.g. \code{str(res$reporting_event, max.level = 2)}.}
 \item{\code{validation}}{Data frame of per-annotation validation results
 (\code{tlf_number}, \code{stub_label}, \code{annotation}, \code{variable_ref}, \code{status},
 \code{message}). \code{NULL} when \code{validate = FALSE}.}
+\item{\code{diagnostics}}{Data frame of pipeline diagnostics -- every
+fallback, parsing miss, skipped sheet, LLM failure, unknown method,
+and dropped where-clause condition recorded during the run
+(\code{stage}, \code{severity}, \code{tlf_number}, \code{location}, \code{problem},
+\code{action}). Also written to the "Diagnostics" sheet of the
+validation report and retrievable via \code{\link[=ars_diagnostics]{ars_diagnostics()}}.}
 }
 }
 \description{

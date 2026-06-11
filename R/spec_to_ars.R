@@ -46,6 +46,12 @@
 #'     \item{`validation`}{Data frame of per-annotation validation results
 #'       (`tlf_number`, `stub_label`, `annotation`, `variable_ref`, `status`,
 #'       `message`). `NULL` when `validate = FALSE`.}
+#'     \item{`diagnostics`}{Data frame of pipeline diagnostics -- every
+#'       fallback, parsing miss, skipped sheet, LLM failure, unknown method,
+#'       and dropped where-clause condition recorded during the run
+#'       (`stage`, `severity`, `tlf_number`, `location`, `problem`,
+#'       `action`). Also written to the "Diagnostics" sheet of the
+#'       validation report and retrievable via [ars_diagnostics()].}
 #'   }
 #'
 #' @section Human review:
@@ -125,6 +131,10 @@ spec_to_ars <- function(shell_path,
 
   if (verbose) cli::cli_h1("arsbridge::spec_to_ars")
 
+  ## Fresh diagnostics for this run -- every parser/LLM/builder fallback is
+  ## recorded and lands on the "Diagnostics" sheet of the validation report.
+  diag_reset()
+
   ## --- Parse inputs --------------------------------------------------
   if (verbose) cli::cli_alert_info("Parsing annotated shell {.path {basename(shell_path)}}...")
   sections <- parse_shell_docx(shell_path)
@@ -136,6 +146,8 @@ spec_to_ars <- function(shell_path,
   spec <- parse_adam_spec(adam_spec_path)
 
   ## --- Validation ----------------------------------------------------
+  ## The report itself is written AFTER the build, so its Diagnostics sheet
+  ## also captures enrichment- and build-stage findings.
   validation <- NULL
   if (isTRUE(validate)) {
     if (verbose) cli::cli_alert_info("Cross-referencing annotations against ADaM spec...")
@@ -146,7 +158,6 @@ spec_to_ars <- function(shell_path,
     } else if (verbose) {
       cli::cli_alert_success("All annotations validated cleanly.")
     }
-    write_validation_report(validation, report_path)
   }
 
   ## --- LLM enrichment, one call per TLF -----------------------------
@@ -173,6 +184,22 @@ spec_to_ars <- function(shell_path,
     cli::cli_alert_success("Wrote ARS JSON to {.path {output_path}}")
   }
 
+  ## --- Diagnostics summary + report ----------------------------------
+  diagnostics <- diag_records()
+  if (nrow(diagnostics) > 0) {
+    n_fail <- sum(diagnostics$severity == "FAIL")
+    n_warn_diag <- sum(diagnostics$severity == "WARN")
+    cli::cli_alert_warning(
+      paste0("{nrow(diagnostics)} pipeline diagnostic{?s} ",
+             "({n_fail} FAIL, {n_warn_diag} WARN)",
+             if (isTRUE(validate)) " -- see the Diagnostics sheet of {.path {report_path}}"
+             else " -- inspect with {.code ars_diagnostics()}")
+    )
+  }
+  if (isTRUE(validate)) {
+    write_validation_report(validation, report_path, diagnostics = diagnostics)
+  }
+
   result <- list(
     ars_path        = output_path,
     report_path     = if (isTRUE(validate)) report_path else NULL,
@@ -181,7 +208,8 @@ spec_to_ars <- function(shell_path,
     n_warnings      = if (!is.null(validation))
                         sum(validation$status %in% c("WARN", "FAIL")) else 0L,
     reporting_event = re,
-    validation      = validation
+    validation      = validation,
+    diagnostics     = diagnostics
   )
   invisible(result)
 }

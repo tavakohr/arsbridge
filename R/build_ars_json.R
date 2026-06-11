@@ -334,9 +334,19 @@ build_ars_json <- function(sections,
   ## list is empty so siera doesn't crash on `nrow(NULL)`.
   if (length(data_subsets) == 0L) {
     data_subsets <- list(.default_data_subset())
+    diag_add(
+      stage = "build_ars", severity = "INFO",
+      problem = "No DataSubsets derived from any annotation",
+      action = "Emitted a placeholder no-op DataSubset for siera compatibility"
+    )
   }
   if (length(grouping_factors) == 0L) {
     grouping_factors <- list(.default_grouping())
+    diag_add(
+      stage = "build_ars", severity = "WARN",
+      problem = "No grouping variable was derived for any TLF",
+      action = "Emitted placeholder TRT01A grouping -- verify the study's treatment/grouping variable"
+    )
   }
 
   list(
@@ -401,6 +411,12 @@ build_ars_json <- function(sections,
   name <- sec$ars_method_name %||% "Count and Percentage"
   std  <- .STANDARD_METHODS[[name]]
   if (is.null(std)) {
+    diag_add(
+      stage = "build_ars", severity = "WARN",
+      problem = sprintf("Analysis method '%s' is not in the standard catalogue", name),
+      tlf_number = sec$tlf_number,
+      action = "Emitted a placeholder no-op method -- this TLF's results will not compute until the method is implemented"
+    )
     ## Unknown method name -- still emit a minimal codeTemplate so siera
     ## generates a runnable (no-op) ARD_*.R rather than failing at metadata.
     fallback <- list(

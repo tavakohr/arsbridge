@@ -61,7 +61,24 @@ parse_where_clause <- function(expr) {
   parts <- parts[nzchar(parts)]
 
   conditions <- lapply(parts, .one_condition)
+  unparsed   <- parts[vapply(conditions, is.null, logical(1))]
   conditions <- Filter(Negate(is.null), conditions)
+
+  ## Anything that survived boilerplate-stripping but didn't parse into a
+  ## condition is silently weaker filtering downstream -- record it. Skip
+  ## parts with no DATASET.VARIABLE shape at all (plain prose like
+  ## "Safety Population" is not a condition attempt).
+  for (u in unparsed) {
+    if (grepl(paste0(.ADAM_DS, "\\.", .ADAM_VAR), u, perl = TRUE)) {
+      diag_add(
+        stage = "where_clause", severity = "WARN",
+        problem = "Condition could not be parsed into an ARS WhereClause",
+        location = u,
+        action = "Condition dropped -- filtering will be weaker than the annotation intends (supported: =, EQ/NE/IN/NOTIN/GT/GE/LT/LE, 'not null/missing')"
+      )
+    }
+  }
+
   if (length(conditions) == 0) return(NULL)
   if (length(conditions) == 1) return(conditions[[1]])
 

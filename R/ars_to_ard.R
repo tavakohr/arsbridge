@@ -32,6 +32,9 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL, analysis_ids = NUL
     cli::cli_abort("ADaM directory not found: {.path {adam_dir}}")
   }
 
+  ## Fresh diagnostics for this execution run (inspect via ars_diagnostics()).
+  diag_reset()
+
   spec <- jsonlite::fromJSON(ars_path, simplifyVector = FALSE)
 
   # Cache list for loaded datasets
@@ -55,6 +58,12 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL, analysis_ids = NUL
         dfs[[name_upper]] <<- utils::read.csv(csv_file[1], stringsAsFactors = FALSE, check.names = FALSE)
       } else {
         cli::cli_warn("Dataset {.val {name_upper}} not found in {.path {adam_dir}}.")
+        diag_add(
+          stage = "execute_ard", severity = "FAIL",
+          problem = sprintf("Dataset %s not found in ADaM directory", name_upper),
+          location = adam_dir,
+          action = "All analyses against this dataset were skipped"
+        )
         dfs[[name_upper]] <<- NULL
       }
     }
@@ -336,6 +345,12 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL, analysis_ids = NUL
     analysis_var <- unname(clean_var_name(analysis_var, names(df_filtered)))
     if (!analysis_var %in% names(df_filtered)) {
       cli::cli_warn("Skipping analysis {.val {analysis_id}}: variable {.val {analysis_var}} not in dataset {.val {analysis_ds}}.")
+      diag_add(
+        stage = "execute_ard", severity = "FAIL",
+        problem = sprintf("Variable %s not found in dataset %s", analysis_var, analysis_ds),
+        location = analysis_id,
+        action = "Analysis skipped -- no results in ARD"
+      )
       next
     }
 
@@ -354,6 +369,16 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL, analysis_ids = NUL
     }
 
     grouping_vars <- unname(sapply(grouping_vars, clean_var_name, df_names = names(df_filtered)))
+    dropped_groupings <- grouping_vars[!grouping_vars %in% names(df_filtered)]
+    if (length(dropped_groupings) > 0) {
+      diag_add(
+        stage = "execute_ard", severity = "WARN",
+        problem = sprintf("Grouping variable(s) %s not present in dataset %s",
+                          paste(dropped_groupings, collapse = ", "), analysis_ds),
+        location = analysis_id,
+        action = "Analysis ran UNGROUPED -- results are totals, not by-group"
+      )
+    }
     grouping_vars <- grouping_vars[grouping_vars %in% names(df_filtered)]
     by_arg <- if (length(grouping_vars) > 0) grouping_vars else NULL
 
@@ -411,6 +436,13 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL, analysis_ids = NUL
       } else {
         # Fallback summarizer
         cli::cli_warn("Method {.val {method_id}} for analysis {.val {analysis_id}} not natively supported. Using fallback summarizer.")
+        diag_add(
+          stage = "execute_ard", severity = "WARN",
+          problem = sprintf("Method %s not natively supported by the executor", method_id),
+          location = analysis_id,
+          action = sprintf("Generic %s summary used instead -- verify the statistics match the shell",
+                           if (is.numeric(df_filtered[[analysis_var]])) "continuous" else "categorical")
+        )
         if (is.numeric(df_filtered[[analysis_var]])) {
           cards::ard_continuous(
             data = df_filtered,
@@ -428,6 +460,12 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL, analysis_ids = NUL
       }
     }, error = function(e) {
       cli::cli_warn("Analysis {.val {analysis_id}} failed during {.pkg cards} calculation: {e$message}")
+      diag_add(
+        stage = "execute_ard", severity = "FAIL",
+        problem = paste0("cards calculation error: ", conditionMessage(e)),
+        location = analysis_id,
+        action = "Analysis skipped -- no results in ARD"
+      )
       NULL
     })
 
@@ -439,6 +477,17 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL, analysis_ids = NUL
 
       ard_list[[length(ard_list) + 1L]] <- ard
     }
+  }
+
+  ## Surface a one-line execution-quality summary; full records via
+  ## ars_diagnostics().
+  diags <- diag_records()
+  if (nrow(diags) > 0) {
+    n_fail <- sum(diags$severity == "FAIL")
+    n_warn <- sum(diags$severity == "WARN")
+    cli::cli_alert_warning(
+      "{nrow(diags)} execution diagnostic{?s} ({n_fail} FAIL, {n_warn} WARN) -- inspect with {.code ars_diagnostics()}"
+    )
   }
 
   if (length(ard_list) == 0) {

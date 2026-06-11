@@ -78,10 +78,75 @@ enrich_with_llm <- function(section,
   raw    <- .invoke_llm(prompt, provider = provider, model = model, api_key = api_key)
   parsed <- .parse_llm_json(raw)
 
+  ## Record degraded-enrichment diagnostics: whole-response failures first,
+  ## then per-field fallbacks. These feed the validation report so a study
+  ## team can see exactly which TLFs ran on heuristics instead of the LLM.
+  if (!nzchar(trimws(raw %||% ""))) {
+    diag_add(
+      stage = "enrich_llm", severity = "FAIL",
+      problem = sprintf("LLM call failed or returned empty response (provider %s, model %s)",
+                        provider %||% "?", model %||% "default"),
+      tlf_number = section$tlf_number,
+      location = section$title %||% "",
+      action = "All enrichment fields fell back to keyword heuristics -- review this TLF's analysis type, method, and grouping"
+    )
+  } else if (length(parsed) == 0) {
+    diag_add(
+      stage = "enrich_llm", severity = "FAIL",
+      problem = "LLM response could not be parsed as JSON",
+      tlf_number = section$tlf_number,
+      location = section$title %||% "",
+      action = "All enrichment fields fell back to keyword heuristics -- review this TLF"
+    )
+  } else {
+    if (is.null(parsed$analysis_type)) {
+      diag_add(
+        stage = "enrich_llm", severity = "WARN",
+        problem = "LLM response missing 'analysis_type'",
+        tlf_number = section$tlf_number,
+        action = "Inferred from title/stub keywords"
+      )
+    }
+    if (is.null(parsed$by_variable)) {
+      diag_add(
+        stage = "enrich_llm", severity = "WARN",
+        problem = "LLM response missing 'by_variable'",
+        tlf_number = section$tlf_number,
+        action = "Defaulted grouping to TRT01A -- verify against the shell's column headers"
+      )
+    }
+    if (is.null(parsed$row_enrichments)) {
+      diag_add(
+        stage = "enrich_llm", severity = "WARN",
+        problem = "LLM response missing 'row_enrichments'",
+        tlf_number = section$tlf_number,
+        action = "Per-row metadata regex-derived from annotations only (no roles/subsets)"
+      )
+    }
+  }
+
   section$analysis_type   <- parsed$analysis_type   %||% .infer_analysis_type(section)
   section$ars_method_name <- parsed$ars_method_name %||% .infer_method_name(section$analysis_type)
   section$by_variable     <- parsed$by_variable     %||% "TRT01A"
   section$enriched_rows   <- parsed$row_enrichments %||% .fallback_enrichments(annotated_rows)
+
+  ## Ground the LLM-chosen grouping variable against the spec: hallucinated
+  ## or out-of-spec variables are the main silent-wrong-output risk here.
+  if (!is.null(spec_lookup) && length(spec_lookup) > 0 &&
+      nzchar(section$by_variable %||% "")) {
+    bare <- sub("^[A-Z0-9]+\\.", "", toupper(section$by_variable))
+    in_spec <- any(grepl(paste0("\\.", bare, "$"),
+                         toupper(names(spec_lookup))))
+    if (!in_spec) {
+      diag_add(
+        stage = "enrich_llm", severity = "WARN",
+        problem = sprintf("Grouping variable '%s' not found in the ADaM spec", section$by_variable),
+        tlf_number = section$tlf_number,
+        action = "Kept as-is -- verify the treatment/grouping variable for this TLF"
+      )
+    }
+  }
+
   section
 }
 

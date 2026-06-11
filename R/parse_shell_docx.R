@@ -172,8 +172,49 @@ parse_shell_docx <- function(docx_path) {
       "No TLF sections found in {.path {docx_path}}.",
       "i" = "Expected paragraphs matching {.val Table X.X.X}, {.val Figure X.X.X}, or {.val Listing X.X.X}."
     ))
+    diag_add(
+      stage = "parse_shell", severity = "FAIL",
+      problem = "No TLF sections found in shell document",
+      location = basename(docx_path),
+      action = "Nothing parsed -- check heading format (expected 'Table X.X.X' / 'Figure X.X.X' / 'Listing X.X.X')"
+    )
   } else {
     cli::cli_inform("Parsed {length(sections)} TLF section{?s} from {.path {basename(docx_path)}}")
+  }
+
+  ## Per-section parse-quality diagnostics: a section with stub rows but
+  ## zero detected annotations is the classic symptom of an annotation
+  ## convention the 4-layer detector does not recognise.
+  for (sec in sections) {
+    n_rows  <- length(sec$stub_rows)
+    n_annot <- sum(vapply(sec$stub_rows, function(r) isTRUE(r$has_annot), logical(1)))
+    if (n_rows > 0 && n_annot == 0) {
+      diag_add(
+        stage = "parse_shell", severity = "WARN",
+        problem = sprintf("Section has %d stub row(s) but no annotations were detected", n_rows),
+        tlf_number = sec$tlf_number,
+        location = sec$title %||% "",
+        action = "Section will rely entirely on LLM/fallback inference -- review annotation convention"
+      )
+    }
+    if (n_rows == 0 && !identical(sec$tlf_type, "FIGURE")) {
+      diag_add(
+        stage = "parse_shell", severity = "WARN",
+        problem = "No table rows captured for this section",
+        tlf_number = sec$tlf_number,
+        location = sec$title %||% "",
+        action = "Check that the shell table directly follows the TLF heading"
+      )
+    }
+    if (length(sec$source_datasets) == 0) {
+      diag_add(
+        stage = "parse_shell", severity = "INFO",
+        problem = "No 'Source: ...' line found for this section",
+        tlf_number = sec$tlf_number,
+        location = sec$title %||% "",
+        action = "Source datasets unknown; listing header dataset resolution falls back to ADSL"
+      )
+    }
   }
 
   sections
@@ -253,7 +294,16 @@ parse_shell_docx <- function(docx_path) {
   ## e.g. "ADAE (TRTEMFL='Y')" -> "ADAE".
   source_ds <- if (length(sec$source_datasets) > 0) sec$source_datasets[1] else ""
   source_ds <- trimws(sub("\\s*\\(.*$", "", source_ds))
-  if (!nzchar(source_ds)) source_ds <- "ADSL"
+  if (!nzchar(source_ds)) {
+    diag_add(
+      stage = "parse_shell", severity = "WARN",
+      problem = "Listing has no source dataset; header variables defaulted to ADSL",
+      tlf_number = sec$tlf_number,
+      location = sec$title %||% "",
+      action = "Defaulted dataset prefix to ADSL -- verify each listing variable's dataset"
+    )
+    source_ds <- "ADSL"
+  }
 
   hdr_rows <- vector("list", length(pending))
   for (j in seq_along(pending)) {
@@ -266,6 +316,18 @@ parse_shell_docx <- function(docx_path) {
       detection_method     = d$method,
       detection_confidence = d$confidence
     )
+    ## A multi-line header cell that yielded no variable token usually means
+    ## the variable-name convention differs from "ALL-CAPS on line 2+".
+    if (!nzchar(d$annotation) &&
+        length(strsplit(as.character(p$text %||% ""), "\n", fixed = TRUE)[[1]]) >= 2) {
+      diag_add(
+        stage = "parse_shell", severity = "INFO",
+        problem = "Multi-line listing header cell yielded no variable annotation",
+        tlf_number = sec$tlf_number,
+        location = substr(gsub("\n", " | ", p$text), 1, 80),
+        action = "Header skipped -- variable may use a convention the token extractor does not recognise"
+      )
+    }
   }
   sec$header_rows <- hdr_rows
 
