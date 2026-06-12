@@ -4,7 +4,13 @@
 \alias{ars_to_ard}
 \title{Execute ARS JSON and return an ARD object using {cards}}
 \usage{
-ars_to_ard(ars_path, adam_dir, output_ids = NULL, analysis_ids = NULL)
+ars_to_ard(
+  ars_path,
+  adam_dir,
+  output_ids = NULL,
+  analysis_ids = NULL,
+  subject_key = "USUBJID"
+)
 }
 \arguments{
 \item{ars_path}{Path to the CDISC ARS JSON file.}
@@ -17,9 +23,17 @@ Output ID and Output Name (e.g. "T-14-1-1" or "T_14_1_1").}
 
 \item{analysis_ids}{Optional character vector of Analysis IDs to run only
 those specific analyses.}
+
+\item{subject_key}{Subject-level identifier variable used for
+distinct-subject counting and cross-dataset population joins.
+Default \code{"USUBJID"}; set e.g. \code{"SUBJID"} or \code{"PATID"} for studies with
+a non-standard subject key.}
 }
 \value{
-A tidy ARD data frame of class \code{"card"}.
+A tidy ARD data frame of class \code{"card"}, with traceability
+columns \code{analysis_id}, \code{method_id}, \code{output_id}, \code{method_intended},
+and \code{method_actual} (differs from \code{method_intended} when the generic
+fallback summarizer was used).
 }
 \description{
 Reads a CDISC ARS JSON specification and executes the analyses defined within

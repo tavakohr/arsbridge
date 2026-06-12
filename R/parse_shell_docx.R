@@ -18,8 +18,13 @@
 .GREY_HEX <- "808080"   ## ignored as annotation -- source / disclaimer
 .BLACK_HEXES <- c("000000", "FFFFFF", "AUTO", "NONE")
 
-.TLF_HEADING_RE <- "^(Table|Figure|Listing)\\s+(\\d{1,3}\\.\\d+(?:\\.\\d+)*)\\s*$"
-.SOURCE_LINE_RE <- "^\\s*Source\\s*:\\s*(.+?)\\.?\\s*$"
+## Case-insensitive ("TABLE 14.1.1"), tolerates a trailing suffix letter
+## ("Listing 16.2.1a"), single-number designators ("Figure 3"), and an
+## optional trailing colon.
+.TLF_HEADING_RE <- "^(?i)(Table|Figure|Listing)\\s+(\\d{1,3}(?:\\.\\d+)*[a-z]?)\\s*:?\\s*$"
+## Accepts "Source:", "Sources:", "Data Source:", "Source datasets:", and
+## "=" in place of ":".
+.SOURCE_LINE_RE <- "^\\s*(?:Data\\s+)?Sources?(?:\\s+datasets?)?\\s*[:=]\\s*(.+?)\\.?\\s*$"
 .TOC_FIRST_CELL_HINTS <- c("number", "table number", "tlf number", "tlf #")
 
 ## Multi-pattern union for annotation detection (Layer 3 + validation gate
@@ -61,12 +66,17 @@
 #' to the LLM enrichment step.
 #'
 #' @param docx_path Path to the annotated TLF shells `.docx`.
+#' @param spec_lookup Optional `"DATASET.VARIABLE"`-keyed lookup (the
+#'   `lookup` element of [parse_adam_spec()]). When supplied, listing
+#'   column-header variable candidates are validated against the spec
+#'   (tolerating mixed-case names) instead of relying on the ALL-CAPS
+#'   token heuristic and its blocklist.
 #'
 #' @return List of TLF section objects (see top of file for full schema).
 #'
 #' @keywords internal
 #' @noRd
-parse_shell_docx <- function(docx_path) {
+parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
   if (!file.exists(docx_path)) {
     cli::cli_abort("Shell file not found: {.path {docx_path}}")
   }
@@ -101,7 +111,9 @@ parse_shell_docx <- function(docx_path) {
       ## TLF heading begins a new section.
       m <- regmatches(stripped, regexec(.TLF_HEADING_RE, stripped, perl = TRUE))[[1]]
       if (length(m) == 3) {
-        if (!is.null(current)) sections[[length(sections) + 1]] <- .finalize_section(current)
+        if (!is.null(current)) {
+          sections[[length(sections) + 1]] <- .finalize_section(current, spec_lookup)
+        }
         word   <- tools::toTitleCase(tolower(m[2]))
         number <- m[3]
         prefix <- substr(toupper(word), 1, 1)
@@ -165,7 +177,9 @@ parse_shell_docx <- function(docx_path) {
     }
   }
 
-  if (!is.null(current)) sections[[length(sections) + 1]] <- .finalize_section(current)
+  if (!is.null(current)) {
+    sections[[length(sections) + 1]] <- .finalize_section(current, spec_lookup)
+  }
 
   if (length(sections) == 0) {
     cli::cli_warn(c(
@@ -282,7 +296,7 @@ parse_shell_docx <- function(docx_path) {
 #' headers to `stub_rows` for uniform downstream processing.
 #'
 #' @noRd
-.finalize_section <- function(sec) {
+.finalize_section <- function(sec, spec_lookup = NULL) {
   pending <- sec$.pending_header_cells
   if (length(pending %||% list()) == 0) return(sec)
   if (!identical(sec$tlf_type, "LISTING")) {
@@ -308,7 +322,8 @@ parse_shell_docx <- function(docx_path) {
   hdr_rows <- vector("list", length(pending))
   for (j in seq_along(pending)) {
     p <- pending[[j]]
-    d <- .detect_listing_header_annotation(p$text, p$runs, source_ds)
+    d <- .detect_listing_header_annotation(p$text, p$runs, source_ds,
+                                           spec_lookup = spec_lookup)
     hdr_rows[[j]] <- list(
       label                = d$label,
       annotation           = d$annotation,
@@ -550,11 +565,16 @@ split_label_annotation <- function(cell_text) {
 #' @param runs_meta    Per-run metadata for the cell (from `.runs_metadata`).
 #' @param source_ds    The TLF's primary source dataset (used as the default
 #'   prefix for variables not in `.UNIVERSAL_ADSL_VARS`).
+#' @param spec_lookup  Optional `"DATASET.VARIABLE"`-keyed spec lookup. When
+#'   present, candidate tokens are matched case-insensitively against the
+#'   spec's variable names (catching mixed-case headers like "AeDecod") and
+#'   the dataset is resolved from the spec rather than guessed.
 #'
 #' @return list(label, annotation, method, confidence).
 #'
 #' @noRd
-.detect_listing_header_annotation <- function(cell_text, runs_meta, source_ds) {
+.detect_listing_header_annotation <- function(cell_text, runs_meta, source_ds,
+                                              spec_lookup = NULL) {
   cell_text <- as.character(cell_text %||% "")
   no_match <- list(label = trimws(cell_text), annotation = "",
                    method = NA_character_, confidence = NA_character_)
@@ -585,16 +605,38 @@ split_label_annotation <- function(cell_text) {
   }
   if (!nzchar(trimws(candidate_text))) return(no_match)
 
-  ## Extract uppercase variable tokens. Require >=3 chars + a digit OR be
-  ## at least 4 chars to avoid English noise ("ID", "PT", "SOC" excluded).
-  tokens <- regmatches(
-    candidate_text,
-    gregexpr("\\b[A-Z][A-Z0-9]{2,7}\\b", candidate_text, perl = TRUE)
-  )[[1]]
-  tokens <- unique(tokens[!tokens %in% .HEADER_TOKEN_BLOCKLIST])
+  ## Candidate variable tokens. With a spec available, scan
+  ## case-insensitively and keep only tokens that are real spec variables
+  ## (catches mixed-case conventions like "AeDecod"; no blocklist needed --
+  ## English noise simply fails the spec membership test). Without a spec,
+  ## fall back to the ALL-CAPS heuristic + blocklist.
+  spec_keys <- if (!is.null(spec_lookup)) toupper(names(spec_lookup)) else character()
+  spec_vars <- unique(sub("^.*\\.", "", spec_keys))
+  if (length(spec_vars) > 0) {
+    tokens <- regmatches(
+      candidate_text,
+      gregexpr("\\b[A-Za-z][A-Za-z0-9]{2,7}\\b", candidate_text, perl = TRUE)
+    )[[1]]
+    tokens <- unique(toupper(tokens))
+    tokens <- tokens[tokens %in% spec_vars]
+  } else {
+    tokens <- regmatches(
+      candidate_text,
+      gregexpr("\\b[A-Z][A-Z0-9]{2,7}\\b", candidate_text, perl = TRUE)
+    )[[1]]
+    tokens <- unique(tokens[!tokens %in% .HEADER_TOKEN_BLOCKLIST])
+  }
   if (length(tokens) == 0) return(no_match)
 
   resolve_ds <- function(v) {
+    if (length(spec_keys) > 0) {
+      ## Spec-grounded resolution: source dataset first, ADSL second, then
+      ## whichever spec dataset carries the variable.
+      ds_hits <- unique(sub("\\..*$", "", spec_keys[sub("^.*\\.", "", spec_keys) == v]))
+      if (toupper(source_ds) %in% ds_hits) return(toupper(source_ds))
+      if ("ADSL" %in% ds_hits) return("ADSL")
+      if (length(ds_hits) > 0) return(ds_hits[1])
+    }
     if (v %in% .UNIVERSAL_ADSL_VARS) "ADSL" else source_ds
   }
   qualified <- vapply(tokens, function(v) paste0(resolve_ds(v), ".", v),

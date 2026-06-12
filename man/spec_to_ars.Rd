@@ -13,6 +13,7 @@ spec_to_ars(
   model = NULL,
   api_key = NULL,
   provider = NULL,
+  spec_column_aliases = NULL,
   validate = TRUE,
   report_path = "spec_validation_report.xlsx",
   verbose = TRUE
@@ -44,6 +45,11 @@ must be the ADaM spec.}
 
 \item{provider}{LLM provider: \code{"anthropic"}, \code{"openai"}, or \code{"gemini"}.
 Defaults to the active provider.}
+
+\item{spec_column_aliases}{Optional named list of extra column-name
+aliases for the ADaM spec Excel (see \code{\link[=parse_adam_spec]{parse_adam_spec()}}); useful when
+a workbook uses non-standard or non-English headers. Example:
+\code{list(variable = "nom de variable", dataset = "domaine")}.}
 
 \item{validate}{If \code{TRUE} (default), cross-reference annotations
 against the ADaM spec and write a validation report.}

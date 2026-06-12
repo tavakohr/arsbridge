@@ -32,6 +32,13 @@
 #' @param path Path to the ADaM spec file. Either:
 #'   * `.xml` -- ADaM `define.xml` (preferred when available)
 #'   * `.xlsx` / `.xls` -- ADaM specification Excel
+#' @param column_aliases Optional named list of EXTRA column-name aliases
+#'   for the Excel form, merged over the built-in `.SPEC_COLUMN_ALIASES`.
+#'   Names are canonical fields (`dataset`, `variable`, `label`, `type`,
+#'   `origin`, `codelist`, `length`, `mandatory`); values are character
+#'   vectors of additional header spellings (case-insensitive). Example:
+#'   `list(variable = "nom de variable", dataset = "domaine")`. Ignored
+#'   for define.xml input.
 #'
 #' @return A list with two elements:
 #'   \describe{
@@ -43,7 +50,7 @@
 #'
 #' @keywords internal
 #' @noRd
-parse_adam_spec <- function(path) {
+parse_adam_spec <- function(path, column_aliases = NULL) {
   if (!file.exists(path)) {
     cli::cli_abort("ADaM spec file not found: {.path {path}}")
   }
@@ -52,7 +59,7 @@ parse_adam_spec <- function(path) {
     return(.parse_adam_define_xml(path))
   }
   if (ext %in% c("xlsx", "xls")) {
-    return(.parse_adam_excel(path))
+    return(.parse_adam_excel(path, column_aliases = column_aliases))
   }
   cli::cli_abort(c(
     "Unsupported ADaM spec extension: {.val .{ext}}",
@@ -63,7 +70,9 @@ parse_adam_spec <- function(path) {
 
 ## --- Excel branch ----------------------------------------------------------
 
-.parse_adam_excel <- function(excel_path) {
+.parse_adam_excel <- function(excel_path, column_aliases = NULL) {
+
+  aliases <- .merge_column_aliases(column_aliases)
 
   sheets <- tryCatch(readxl::excel_sheets(excel_path),
                      error = function(e) {
@@ -76,6 +85,7 @@ parse_adam_spec <- function(path) {
   ## Try each sheet; keep ones that look like a variable-level sheet
   ## (have both a Dataset/Domain column AND a Variable column).
   variable_rows <- list()
+  sheet_notes   <- character()   ## per-sheet skip reasons for the abort path
   for (sh in sheets) {
     df <- tryCatch(
       suppressMessages(readxl::read_excel(excel_path, sheet = sh,
@@ -87,12 +97,18 @@ parse_adam_spec <- function(path) {
           location = sh,
           action = "Sheet skipped"
         )
+        sheet_notes <<- c(sheet_notes, sprintf("'%s': unreadable", sh))
         NULL
       }
     )
-    if (is.null(df) || nrow(df) == 0 || ncol(df) == 0) next
+    if (is.null(df) || nrow(df) == 0 || ncol(df) == 0) {
+      if (!is.null(df)) {
+        sheet_notes <- c(sheet_notes, sprintf("'%s': empty", sh))
+      }
+      next
+    }
 
-    mapping <- .map_spec_columns(names(df))
+    mapping <- .map_spec_columns(names(df), aliases = aliases)
     ## Some workbooks use the sheet name as the dataset when there is no
     ## dataset column (one sheet per domain).
     has_var <- !is.null(mapping$variable)
@@ -105,6 +121,10 @@ parse_adam_spec <- function(path) {
         action = paste0("Sheet skipped (columns seen: ",
                         paste(utils::head(names(df), 8), collapse = ", "), ")")
       )
+      sheet_notes <- c(sheet_notes, sprintf(
+        "'%s': no Variable column (saw: %s)",
+        sh, paste(utils::head(names(df), 6), collapse = ", ")
+      ))
       next
     }
 
@@ -124,9 +144,17 @@ parse_adam_spec <- function(path) {
   }
 
   if (length(variable_rows) == 0) {
+    notes <- if (length(sheet_notes) > 0) {
+      stats::setNames(sheet_notes, rep("x", length(sheet_notes)))
+    } else {
+      NULL
+    }
+    var_aliases <- aliases$variable
     cli::cli_abort(c(
       "No variable-level sheet found in {.path {excel_path}}.",
-      "i" = "Expected a sheet with both a {.field Dataset} (or Domain) and {.field Variable} column."
+      "i" = "Expected a sheet with a {.field Variable} column (and ideally a {.field Dataset} / {.field Domain} column).",
+      "i" = "Recognised Variable column aliases: {.val {var_aliases}}.",
+      notes
     ))
   }
 
@@ -145,15 +173,37 @@ parse_adam_spec <- function(path) {
 
 ## --- Internal helpers ------------------------------------------------------
 
+#' Merge user-supplied extra aliases over the built-in alias list.
+#' Unknown canonical names are rejected loudly (a typo here would
+#' otherwise silently change nothing).
+#' @noRd
+.merge_column_aliases <- function(column_aliases) {
+  if (is.null(column_aliases) || length(column_aliases) == 0) {
+    return(.SPEC_COLUMN_ALIASES)
+  }
+  unknown <- setdiff(names(column_aliases), names(.SPEC_COLUMN_ALIASES))
+  if (length(unknown) > 0) {
+    cli::cli_abort(c(
+      "Unknown canonical column name{?s} in {.arg column_aliases}: {.val {unknown}}.",
+      "i" = "Valid names: {.val {names(.SPEC_COLUMN_ALIASES)}}."
+    ))
+  }
+  merged <- .SPEC_COLUMN_ALIASES
+  for (canon in names(column_aliases)) {
+    merged[[canon]] <- unique(c(merged[[canon]],
+                                tolower(trimws(as.character(column_aliases[[canon]])))))
+  }
+  merged
+}
+
 #' For a vector of column names, return a list mapping canonical names to the
 #' actual column name found in the sheet (or NULL when not present).
 #' @noRd
-.map_spec_columns <- function(cols) {
+.map_spec_columns <- function(cols, aliases = .SPEC_COLUMN_ALIASES) {
   norm <- tolower(trimws(cols))
   out <- list()
-  for (canon in names(.SPEC_COLUMN_ALIASES)) {
-    aliases <- .SPEC_COLUMN_ALIASES[[canon]]
-    hit_idx <- which(norm %in% aliases)
+  for (canon in names(aliases)) {
+    hit_idx <- which(norm %in% aliases[[canon]])
     out[[canon]] <- if (length(hit_idx) > 0) cols[hit_idx[1]] else NULL
   }
   out

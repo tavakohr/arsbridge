@@ -27,6 +27,10 @@
 #' @param api_key        LLM API key. Defaults to the active provider's key.
 #' @param provider       LLM provider: `"anthropic"`, `"openai"`, or `"gemini"`.
 #'   Defaults to the active provider.
+#' @param spec_column_aliases Optional named list of extra column-name
+#'   aliases for the ADaM spec Excel (see [parse_adam_spec()]); useful when
+#'   a workbook uses non-standard or non-English headers. Example:
+#'   `list(variable = "nom de variable", dataset = "domaine")`.
 #' @param validate       If `TRUE` (default), cross-reference annotations
 #'   against the ADaM spec and write a validation report.
 #' @param report_path    Path for the validation report `.xlsx`.
@@ -77,6 +81,7 @@ spec_to_ars <- function(shell_path,
                         model        = NULL,
                         api_key      = NULL,
                         provider     = NULL,
+                        spec_column_aliases = NULL,
                         validate     = TRUE,
                         report_path  = "spec_validation_report.xlsx",
                         verbose      = TRUE) {
@@ -136,14 +141,16 @@ spec_to_ars <- function(shell_path,
   diag_reset()
 
   ## --- Parse inputs --------------------------------------------------
+  ## Spec first: the shell parser uses the spec lookup to validate listing
+  ## column-header variable candidates.
+  if (verbose) cli::cli_alert_info("Parsing ADaM spec {.path {basename(adam_spec_path)}}...")
+  spec <- parse_adam_spec(adam_spec_path, column_aliases = spec_column_aliases)
+
   if (verbose) cli::cli_alert_info("Parsing annotated shell {.path {basename(shell_path)}}...")
-  sections <- parse_shell_docx(shell_path)
+  sections <- parse_shell_docx(shell_path, spec_lookup = spec$lookup)
   if (length(sections) == 0) {
     cli::cli_abort("No TLF sections found in {.path {shell_path}}.")
   }
-
-  if (verbose) cli::cli_alert_info("Parsing ADaM spec {.path {basename(adam_spec_path)}}...")
-  spec <- parse_adam_spec(adam_spec_path)
 
   ## --- Validation ----------------------------------------------------
   ## The report itself is written AFTER the build, so its Diagnostics sheet
