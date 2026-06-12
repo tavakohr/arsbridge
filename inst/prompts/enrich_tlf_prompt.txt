@@ -5,17 +5,20 @@ correct and authoritative. Do NOT invent new variable names. Only use
 variables present in "available_variables".
 
 TLF Section:
-{tlf_json}
+<<tlf_json>>
 
-Return a JSON object with these fields:
+Populate the requested fields:
 
-"analysis_type": One of CONTINUOUS, CATEGORICAL, SURVIVAL, AE_FREQUENCY, FIGURE, LISTING
+"analysis_type": One of CONTINUOUS, CATEGORICAL, SURVIVAL, AE_FREQUENCY,
+  FIGURE, LISTING, OTHER
   - CONTINUOUS: n, mean, SD, median stats on a numeric variable
   - CATEGORICAL: frequency counts n(%) of category values
   - SURVIVAL: Kaplan-Meier time-to-event analysis
   - AE_FREQUENCY: adverse event counts by SOC/PT hierarchy
   - FIGURE: graphical output
   - LISTING: subject-level data rows
+  - OTHER: only when none of the above fits (e.g. PK parameter summary,
+    shift table, logistic / Cox regression). Do not force-fit a poor match.
 
 "ars_method_name": Choose the closest match:
   "Summary Statistics - Continuous" | "Count and Percentage" | "Subject Count" |
@@ -24,18 +27,14 @@ Return a JSON object with these fields:
 "by_variable": The ADaM variable whose values form the output's result
   columns (treatment arm, dose group, sex, age group, visit, ...). Infer it
   from the column headers and the title. It MUST be a bare variable name
-  (no dataset prefix) present in "available_variables". Use null when the
-  output has no grouping columns (single-column tables, listings).
+  (no dataset prefix) present in "available_variables". Use an empty string
+  when the output has no grouping columns (single-column tables, listings).
 
-"row_enrichments": Array with one entry per annotated_row:
-  {{
-    "label":            stub_row label exactly as given,
-    "primary_dataset":  dataset portion of annotation (e.g. "ADSL"),
-    "primary_variable": variable portion (e.g. "AGE"),
-    "data_subset":      if annotation contains a WHERE clause beyond the population flag:
-                        {{"dataset":"X","variable":"Y","comparator":"EQ","value":["Z"]}}
-                        Otherwise null.
-    "variable_role":    "ANALYSIS" | "GROUPING" | "COUNT" | "FLAG"
-  }}
-
-Return ONLY valid JSON. No text outside the JSON block.
+"row_enrichments": One entry per annotated_row:
+  - "label": stub_row label exactly as given
+  - "primary_dataset": dataset portion of annotation (e.g. "ADSL")
+  - "primary_variable": variable portion (e.g. "AGE")
+  - "data_subset": if the annotation contains a WHERE clause beyond the
+    population flag, give dataset / variable / comparator / value; otherwise
+    omit it
+  - "variable_role": "ANALYSIS" | "GROUPING" | "COUNT" | "FLAG"

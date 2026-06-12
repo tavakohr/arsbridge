@@ -77,31 +77,23 @@ enrich_with_llm <- function(section,
   )
 
   prompt <- .render_enrich_prompt(tlf_payload)
-  raw    <- .invoke_llm(prompt, provider = provider, model = model, api_key = api_key)
-  parsed <- .parse_llm_json(raw)
+  parsed <- .enrich_structured(prompt, .enrich_type(), provider = provider,
+                               model = model, api_key = api_key) %||% list()
 
-  ## Record degraded-enrichment diagnostics: whole-response failures first,
+  ## Record degraded-enrichment diagnostics: whole-response failure first,
   ## then per-field fallbacks. These feed the validation report so a study
   ## team can see exactly which TLFs ran on heuristics instead of the LLM.
-  if (!nzchar(trimws(raw %||% ""))) {
+  if (length(parsed) == 0) {
     diag_add(
       stage = "enrich_llm", severity = "FAIL",
-      problem = sprintf("LLM call failed or returned empty response (provider %s, model %s)",
+      problem = sprintf("LLM call failed (provider %s, model %s)",
                         provider %||% "?", model %||% "default"),
       tlf_number = section$tlf_number,
       location = section$title %||% "",
       action = "All enrichment fields fell back to keyword heuristics -- review this TLF's analysis type, method, and grouping"
     )
-  } else if (length(parsed) == 0) {
-    diag_add(
-      stage = "enrich_llm", severity = "FAIL",
-      problem = "LLM response could not be parsed as JSON",
-      tlf_number = section$tlf_number,
-      location = section$title %||% "",
-      action = "All enrichment fields fell back to keyword heuristics -- review this TLF"
-    )
   } else {
-    if (is.null(parsed$analysis_type)) {
+    if (is.null(parsed$analysis_type) || !nzchar(parsed$analysis_type %||% "")) {
       diag_add(
         stage = "enrich_llm", severity = "WARN",
         problem = "LLM response missing 'analysis_type'",
@@ -109,7 +101,7 @@ enrich_with_llm <- function(section,
         action = "Inferred from title/stub keywords"
       )
     }
-    if (is.null(parsed$row_enrichments)) {
+    if (is.null(parsed$row_enrichments) || length(parsed$row_enrichments) == 0) {
       diag_add(
         stage = "enrich_llm", severity = "WARN",
         problem = "LLM response missing 'row_enrichments'",
@@ -119,9 +111,29 @@ enrich_with_llm <- function(section,
     }
   }
 
-  section$analysis_type   <- parsed$analysis_type   %||% .infer_analysis_type(section)
-  section$ars_method_name <- parsed$ars_method_name %||% .infer_method_name(section$analysis_type)
-  section$enriched_rows   <- parsed$row_enrichments %||% .fallback_enrichments(annotated_rows)
+  ## Normalise empty strings (schema may return "" for optional fields) to
+  ## NULL so the %||% fallbacks fire.
+  nz <- function(x) if (is.null(x) || !nzchar(as.character(x)[1])) NULL else x
+  atype <- nz(parsed$analysis_type)
+
+  ## OTHER = the model could not map this output to a known analysis type.
+  ## Flag for human review and infer a concrete type for method/grouping.
+  if (identical(atype, "OTHER")) {
+    section$needs_review <- TRUE
+    inferred <- .infer_analysis_type(section)
+    diag_add(
+      stage = "enrich_llm", severity = "WARN",
+      problem = "LLM classified analysis_type as OTHER (novel / unmapped table type)",
+      tlf_number = section$tlf_number,
+      location = section$title %||% "",
+      action = sprintf("Flagged in _meta.sections_needing_review; treated as %s for method selection", inferred)
+    )
+    atype <- inferred
+  }
+
+  section$analysis_type   <- atype %||% .infer_analysis_type(section)
+  section$ars_method_name <- nz(parsed$ars_method_name) %||% .infer_method_name(section$analysis_type)
+  section$enriched_rows   <- nz(parsed$row_enrichments) %||% .fallback_enrichments(annotated_rows)
 
   ## --- Grouping variable resolution -----------------------------------
   ## 1. LLM answer, grounded against the spec (also resolves the dataset
@@ -171,9 +183,10 @@ enrich_with_llm <- function(section,
 
 ## --- Internal helpers ------------------------------------------------------
 
-#' Read the prompt template from inst/prompts/ and substitute one placeholder.
-#' Uses glue with .open="{" / .close="}"; the template already escapes literal
-#' JSON braces as {{ ... }} for glue's benefit.
+#' Read the prompt template from inst/prompts/ and substitute the payload.
+#' Uses `<<` / `>>` glue delimiters so literal `{` / `}` characters in the
+#' serialised payload (e.g. inside an annotation string) are never parsed
+#' as interpolation -- those braces previously corrupted the prompt.
 #' @noRd
 .render_enrich_prompt <- function(tlf_payload) {
   path <- system.file("prompts", "enrich_tlf_prompt.txt", package = "arsbridge")
@@ -186,89 +199,156 @@ enrich_with_llm <- function(section,
   }
   tmpl <- paste(readLines(path, warn = FALSE, encoding = "UTF-8"), collapse = "\n")
   tlf_json <- jsonlite::toJSON(tlf_payload, auto_unbox = TRUE, pretty = TRUE)
-  glue::glue(tmpl, tlf_json = tlf_json, .open = "{", .close = "}")
+  glue::glue(tmpl, tlf_json = tlf_json, .open = "<<", .close = ">>")
 }
 
-#' Call LLM via ellmer and return the raw response text.
+#' ellmer type schema for the enrichment response.
+#'
+#' Using a schema forces the model (via tool calling) to return exactly
+#' this shape -- eliminating the markdown-fence / stray-prose parsing that
+#' a free-text JSON response required. All fields except the row label are
+#' optional so a partial answer still validates; missing fields fall back
+#' to heuristics in `enrich_with_llm()`.
 #' @noRd
-.invoke_llm <- function(prompt, provider, model, api_key,
-                        system_prompt = paste(
-                          "You are an expert CDISC clinical statistical programmer.",
-                          "Reply with valid JSON only, no surrounding prose.")) {
+.enrich_type <- function() {
+  ellmer::type_object(
+    .description = "Semantic metadata for one TLF shell section.",
+    analysis_type = ellmer::type_enum(
+      values = c("CONTINUOUS", "CATEGORICAL", "SURVIVAL", "AE_FREQUENCY",
+                 "FIGURE", "LISTING", "OTHER"),
+      description = paste(
+        "Analysis kind. Use OTHER only when none of the named types fits",
+        "(e.g. PK parameter summary, shift table, logistic regression)."
+      )
+    ),
+    ars_method_name = ellmer::type_string(
+      "Closest standard ARS method name, or a short descriptive name.",
+      required = FALSE
+    ),
+    by_variable = ellmer::type_string(
+      paste("Bare ADaM variable (no dataset prefix) present in",
+            "available_variables whose values form the result columns;",
+            "empty string when the output has no grouping columns."),
+      required = FALSE
+    ),
+    row_enrichments = ellmer::type_array(
+      items = ellmer::type_object(
+        label = ellmer::type_string("Stub row label exactly as given."),
+        primary_dataset = ellmer::type_string(
+          "Dataset portion of the annotation (e.g. ADSL).", required = FALSE),
+        primary_variable = ellmer::type_string(
+          "Variable portion of the annotation (e.g. AGE).", required = FALSE),
+        variable_role = ellmer::type_enum(
+          values = c("ANALYSIS", "GROUPING", "COUNT", "FLAG"),
+          description = "Role this row's variable plays.", required = FALSE),
+        data_subset = ellmer::type_object(
+          .description = paste(
+            "Row-specific WHERE condition beyond the population flag;",
+            "omit when none."),
+          .required = FALSE,
+          dataset = ellmer::type_string(required = FALSE),
+          variable = ellmer::type_string(required = FALSE),
+          comparator = ellmer::type_enum(
+            values = c("EQ", "NE", "IN", "NOTIN", "GT", "GE", "LT", "LE"),
+            required = FALSE),
+          value = ellmer::type_array(items = ellmer::type_string(),
+                                     required = FALSE)
+        )
+      ),
+      description = "One entry per annotated row.",
+      required = FALSE
+    )
+  )
+}
+
+#' TRUE if an error looks transient (rate limit, overload, 5xx, timeout,
+#' connection reset) and therefore worth retrying. Auth/validation errors
+#' (e.g. HTTP 401/400) are NOT retryable -- fail fast.
+#' @noRd
+.is_retryable <- function(e) {
+  msg <- tolower(conditionMessage(e))
+  grepl(paste0("429|rate.?limit|overloaded|529|503|502|500|",
+               "timeout|timed out|connection|temporarily|unavailable"),
+        msg)
+}
+
+#' Run `fn` with exponential backoff on retryable errors. Re-raises the
+#' last error if all attempts fail or the error is non-retryable. `sleep`
+#' is injectable so the backoff is unit-testable without real waiting.
+#' @noRd
+.with_retry <- function(fn, max_tries = 3L, base_delay = 1,
+                        sleep = base::Sys.sleep) {
+  last_err <- NULL
+  for (attempt in seq_len(max_tries)) {
+    res <- tryCatch(list(ok = TRUE, value = fn()),
+                    error = function(e) list(ok = FALSE, error = e))
+    if (isTRUE(res$ok)) return(res$value)
+    last_err <- res$error
+    if (attempt < max_tries && .is_retryable(last_err)) {
+      sleep(base_delay * (2^(attempt - 1L)))
+    } else {
+      break
+    }
+  }
+  stop(last_err)
+}
+
+#' Build an ellmer chat for `provider` while `api_key` is in scope, then
+#' call `chat_structured()` against `schema` with retry. Returns the parsed
+#' named list, or NULL on terminal failure (caller falls back to
+#' heuristics).
+#' @noRd
+.enrich_structured <- function(prompt, schema, provider, model, api_key,
+                               max_tries = 3L, sleep = base::Sys.sleep,
+                               system_prompt = paste(
+                                 "You are an expert CDISC clinical",
+                                 "statistical programmer.")) {
   env_var <- switch(provider,
     anthropic = "ANTHROPIC_API_KEY",
     openai    = "OPENAI_API_KEY",
-    gemini    = "GEMINI_API_KEY"
+    gemini    = "GEMINI_API_KEY",
+    cli::cli_abort("Unsupported LLM provider: {.val {provider}}")
   )
 
-  if (nzchar(api_key) && !identical(Sys.getenv(env_var), api_key)) {
+  ## Keep the key in the environment for the WHOLE call -- the Anthropic /
+  ## OpenAI / Gemini providers read it at request time, not construction.
+  if (nzchar(api_key %||% "") && !identical(Sys.getenv(env_var), api_key)) {
     prior <- Sys.getenv(env_var, unset = NA_character_)
-    args <- list(api_key)
-    names(args) <- env_var
+    args <- list(api_key); names(args) <- env_var
     do.call(Sys.setenv, args)
     on.exit({
       if (is.na(prior)) {
         Sys.unsetenv(env_var)
       } else {
-        restore_args <- list(prior)
-        names(restore_args) <- env_var
+        restore_args <- list(prior); names(restore_args) <- env_var
         do.call(Sys.setenv, restore_args)
       }
     }, add = TRUE)
   }
 
+  max_tokens <- if (identical(provider, "openai")) 4096L else 8192L
   chat <- switch(provider,
-    anthropic = ellmer::chat_anthropic(
-      system_prompt = system_prompt,
-      model         = model,
-      params        = ellmer::params(max_tokens = 8192L)
-    ),
-    openai = ellmer::chat_openai(
-      system_prompt = system_prompt,
-      model         = model,
-      params        = ellmer::params(max_tokens = 4096L)
-    ),
-    gemini = ellmer::chat_google_gemini(
-      system_prompt = system_prompt,
-      model         = model,
-      params        = ellmer::params(max_tokens = 8192L)
-    ),
-    cli::cli_abort("Unsupported LLM provider: {.val {provider}}")
+    anthropic = ellmer::chat_anthropic(system_prompt = system_prompt,
+      model = model, params = ellmer::params(max_tokens = max_tokens)),
+    openai = ellmer::chat_openai(system_prompt = system_prompt,
+      model = model, params = ellmer::params(max_tokens = max_tokens)),
+    gemini = ellmer::chat_google_gemini(system_prompt = system_prompt,
+      model = model, params = ellmer::params(max_tokens = max_tokens))
   )
 
+  ## convert = FALSE keeps the raw list-of-lists shape (row_enrichments as
+  ## a list, not a data.frame) that build_ars_json() iterates over.
   tryCatch(
-    chat$chat(prompt, echo = "none"),
+    .with_retry(
+      function() chat$chat_structured(prompt, type = schema, echo = "none",
+                                      convert = FALSE),
+      max_tries = max_tries, sleep = sleep
+    ),
     error = function(e) {
-      cli::cli_warn(c("LLM API call failed:", "x" = conditionMessage(e)))
-      ""
+      cli::cli_warn(c("LLM structured call failed:", "x" = conditionMessage(e)))
+      NULL
     }
   )
-}
-
-#' Parse JSON response. Tolerates markdown fences and stray prose around
-#' the JSON object. Returns an empty list on parse failure.
-#' @noRd
-.parse_llm_json <- function(text) {
-  text <- trimws(text %||% "")
-  if (!nzchar(text)) return(list())
-  if (startsWith(text, "```")) {
-    lines <- strsplit(text, "\n", fixed = TRUE)[[1]][-1]
-    if (length(lines) > 0 && trimws(lines[length(lines)]) == "```") {
-      lines <- lines[-length(lines)]
-    }
-    text <- paste(lines, collapse = "\n")
-  }
-  if (!startsWith(trimws(text), "{") && !startsWith(trimws(text), "[")) {
-    first <- regexpr("[{\\[]", text)
-    last  <- max(gregexpr("[}\\]]", text)[[1]])
-    if (first > 0 && last > first) text <- substr(text, first, last)
-  }
-  tryCatch(jsonlite::fromJSON(text, simplifyVector = FALSE),
-           error = function(e) {
-             cli::cli_warn(c("Failed to parse LLM JSON response:",
-                             "x" = conditionMessage(e)))
-             list()
-           })
 }
 
 #' Deterministic fallback when the LLM is unavailable / parsing fails.
