@@ -16,6 +16,8 @@ Description: Reads a lead programmer's already-annotated TLF shell Word
     name, row roles), never for variable invention.
 License: MIT + file LICENSE
 Encoding: UTF-8
+Depends:
+    R (>= 4.1.0)
 Roxygen: list(markdown = TRUE)
 Imports:
     cards (>= 0.2.0),
@@ -37,7 +39,8 @@ Suggests:
     pkgdown,
     rmarkdown,
     siera (>= 0.5.0),
-    testthat (>= 3.0.0)
+    testthat (>= 3.0.0),
+    withr
 URL: https://github.com/tavakohr/arsbridge
 BugReports: https://github.com/tavakohr/arsbridge/issues
 Config/testthat/edition: 3

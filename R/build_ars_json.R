@@ -248,7 +248,7 @@
 #' two disagree (flat vs nested fields), we emit both forms.
 #'
 #' @param sections   List of enriched TLF sections (output of
-#'   [enrich_with_llm()] applied to each section).
+#'   `enrich_with_llm()` applied to each section).
 #' @param study_id   Study identifier.
 #' @param study_name Human-readable study name.
 #'

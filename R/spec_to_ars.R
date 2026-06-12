@@ -28,7 +28,7 @@
 #' @param provider       LLM provider: `"anthropic"`, `"openai"`, or `"gemini"`.
 #'   Defaults to the active provider.
 #' @param spec_column_aliases Optional named list of extra column-name
-#'   aliases for the ADaM spec Excel (see [parse_adam_spec()]); useful when
+#'   aliases for the ADaM spec Excel (see `parse_adam_spec()`); useful when
 #'   a workbook uses non-standard or non-English headers. Example:
 #'   `list(variable = "nom de variable", dataset = "domaine")`.
 #' @param validate       If `TRUE` (default), cross-reference annotations

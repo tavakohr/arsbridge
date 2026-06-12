@@ -62,7 +62,7 @@ diag_add <- function(stage,
   invisible(NULL)
 }
 
-#' All diagnostics recorded since the last [diag_reset()], as a data frame.
+#' All diagnostics recorded since the last `diag_reset()`, as a data frame.
 #' Zero-row (with the full column set) when nothing was recorded.
 #' @noRd
 diag_records <- function() {

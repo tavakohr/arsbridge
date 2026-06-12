@@ -10,8 +10,8 @@
 
 #' Enrich one TLF section with LLM-derived semantic metadata
 #'
-#' @param section     A single TLF section list (output of [parse_shell_docx()]).
-#' @param spec_lookup The `lookup` element of [parse_adam_spec()] (or NULL).
+#' @param section     A single TLF section list (output of `parse_shell_docx()`).
+#' @param spec_lookup The `lookup` element of `parse_adam_spec()` (or NULL).
 #' @param model       Anthropic model id (default `"claude-sonnet-4-6"`).
 #' @param api_key     API key (default reads `ANTHROPIC_API_KEY`).
 #'

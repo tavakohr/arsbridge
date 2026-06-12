@@ -5,9 +5,9 @@
 
 #' Cross-reference extracted annotations against the ADaM spec.
 #'
-#' @param tlf_sections List of TLF sections (output of [parse_shell_docx()]).
+#' @param tlf_sections List of TLF sections (output of `parse_shell_docx()`).
 #' @param spec_lookup  Named list keyed by `"DATASET.VARIABLE"` (the `lookup`
-#'   element of [parse_adam_spec()]).
+#'   element of `parse_adam_spec()`).
 #'
 #' @return Data frame with columns: tlf_number, stub_label, annotation,
 #'   variable_ref, status (PASS | WARN | FAIL), message.

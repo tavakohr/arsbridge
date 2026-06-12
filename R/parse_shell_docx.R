@@ -67,7 +67,7 @@
 #'
 #' @param docx_path Path to the annotated TLF shells `.docx`.
 #' @param spec_lookup Optional `"DATASET.VARIABLE"`-keyed lookup (the
-#'   `lookup` element of [parse_adam_spec()]). When supplied, listing
+#'   `lookup` element of `parse_adam_spec()`). When supplied, listing
 #'   column-header variable candidates are validated against the spec
 #'   (tolerating mixed-case names) instead of relying on the ALL-CAPS
 #'   token heuristic and its blocklist.

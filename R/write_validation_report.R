@@ -9,9 +9,9 @@
 
 #' Write a validation report data frame to a styled Excel file.
 #'
-#' @param report_df Data frame from [validate_annotations_spec()].
+#' @param report_df Data frame from `validate_annotations_spec()`.
 #' @param output_path Path to the `.xlsx` to write.
-#' @param diagnostics Optional data frame from [diag_records()] -- written to
+#' @param diagnostics Optional data frame from `diag_records()` -- written to
 #'   a second "Diagnostics" worksheet when it has rows.
 #'
 #' @return Invisibly returns `output_path`.
