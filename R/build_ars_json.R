@@ -366,7 +366,13 @@ build_ars_json <- function(sections,
       generator             = paste0("arsbridge ", utils::packageVersion("arsbridge")),
       generated_at_utc      = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
       ars_model_version     = "1.0",
-      requires_human_review = TRUE
+      requires_human_review = TRUE,
+      ## TLFs where no grouping variable could be resolved (built
+      ## ungrouped) -- start the human review here.
+      sections_needing_review = as.list(vapply(
+        Filter(function(s) isTRUE(s$needs_review), sections),
+        function(s) s$tlf_number %||% "", character(1)
+      ))
     )
   )
 }
@@ -397,8 +403,10 @@ build_ars_json <- function(sections,
     id               = make_grouping_id(by_var),
     name             = by_var,
     label            = paste0("Grouping by ", by_var),
-    ## siera reads these as FLAT strings (metadata.R lines 188-189)
-    groupingDataset  = "ADSL",
+    ## siera reads these as FLAT strings (metadata.R lines 188-189).
+    ## Dataset comes from the spec-resolved enrichment field -- grouping
+    ## variables are not always ADSL (e.g. AVISIT in a BDS dataset).
+    groupingDataset  = sec$by_variable_dataset %||% "ADSL",
     groupingVariable = by_var,
     dataDriven       = FALSE,
     ## siera iterates JSON_AnalysisGroupings$groups[[e]]; emit empty array

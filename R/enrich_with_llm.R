@@ -17,9 +17,11 @@
 #'
 #' @return The input section with these fields added:
 #'   `analysis_type`, `ars_method_name`, `by_variable`,
-#'   and an `enriched_rows` list (one per annotated row) with fields
-#'   `label`, `primary_dataset`, `primary_variable`, `data_subset`,
-#'   `variable_role`.
+#'   `by_variable_dataset` (the spec-resolved dataset the grouping variable
+#'   lives in), `needs_review` (TRUE when no grouping could be resolved for
+#'   a grouped output type), and an `enriched_rows` list (one per annotated
+#'   row) with fields `label`, `primary_dataset`, `primary_variable`,
+#'   `data_subset`, `variable_role`.
 #'
 #' @keywords internal
 #' @noRd
@@ -107,14 +109,6 @@ enrich_with_llm <- function(section,
         action = "Inferred from title/stub keywords"
       )
     }
-    if (is.null(parsed$by_variable)) {
-      diag_add(
-        stage = "enrich_llm", severity = "WARN",
-        problem = "LLM response missing 'by_variable'",
-        tlf_number = section$tlf_number,
-        action = "Defaulted grouping to TRT01A -- verify against the shell's column headers"
-      )
-    }
     if (is.null(parsed$row_enrichments)) {
       diag_add(
         stage = "enrich_llm", severity = "WARN",
@@ -127,25 +121,49 @@ enrich_with_llm <- function(section,
 
   section$analysis_type   <- parsed$analysis_type   %||% .infer_analysis_type(section)
   section$ars_method_name <- parsed$ars_method_name %||% .infer_method_name(section$analysis_type)
-  section$by_variable     <- parsed$by_variable     %||% "TRT01A"
   section$enriched_rows   <- parsed$row_enrichments %||% .fallback_enrichments(annotated_rows)
 
-  ## Ground the LLM-chosen grouping variable against the spec: hallucinated
-  ## or out-of-spec variables are the main silent-wrong-output risk here.
-  if (!is.null(spec_lookup) && length(spec_lookup) > 0 &&
-      nzchar(section$by_variable %||% "")) {
-    bare <- sub("^[A-Z0-9]+\\.", "", toupper(section$by_variable))
-    in_spec <- any(grepl(paste0("\\.", bare, "$"),
-                         toupper(names(spec_lookup))))
-    if (!in_spec) {
+  ## --- Grouping variable resolution -----------------------------------
+  ## 1. LLM answer, grounded against the spec (also resolves the dataset
+  ##    the variable lives in -- groupings are NOT always ADSL).
+  ## 2. Spec-detected treatment variable (TRTxxA/TRTxxP, then ACTARM/ARM).
+  ## 3. Ungrouped + needs_review -- never silently inject a guess.
+  ## Listings and figures legitimately have no grouping; skip the fallback
+  ## chain for them.
+  grouping <- .resolve_grouping_from_spec(parsed$by_variable, spec_lookup)
+  if (!is.null(grouping) && isFALSE(grouping$in_spec)) {
+    diag_add(
+      stage = "enrich_llm", severity = "WARN",
+      problem = sprintf("Grouping variable '%s' not found in the ADaM spec",
+                        grouping$variable),
+      tlf_number = section$tlf_number,
+      action = "Kept as-is -- verify the grouping variable for this TLF"
+    )
+  }
+  if (is.null(grouping) &&
+      !section$analysis_type %in% c("LISTING", "FIGURE")) {
+    fallback_var <- .default_treatment_var(spec_lookup)
+    if (!is.null(fallback_var)) {
+      grouping <- list(variable = fallback_var, dataset = "ADSL",
+                       in_spec = TRUE)
       diag_add(
         stage = "enrich_llm", severity = "WARN",
-        problem = sprintf("Grouping variable '%s' not found in the ADaM spec", section$by_variable),
+        problem = "No grouping variable identified for this TLF",
         tlf_number = section$tlf_number,
-        action = "Kept as-is -- verify the treatment/grouping variable for this TLF"
+        action = sprintf("Defaulted to spec-detected treatment variable %s -- verify against the shell's column headers", fallback_var)
+      )
+    } else {
+      section$needs_review <- TRUE
+      diag_add(
+        stage = "enrich_llm", severity = "WARN",
+        problem = "No grouping variable identified and no treatment variable found in the ADaM spec",
+        tlf_number = section$tlf_number,
+        action = "Section built UNGROUPED and flagged in _meta.sections_needing_review"
       )
     }
   }
+  section$by_variable         <- grouping$variable %||% ""
+  section$by_variable_dataset <- grouping$dataset  %||% "ADSL"
 
   section
 }
@@ -276,6 +294,69 @@ enrich_with_llm <- function(section,
          LISTING      = "Listing",
          FIGURE       = "Listing",
          "Count and Percentage")
+}
+
+#' Resolve a grouping variable name against the ADaM spec.
+#'
+#' Accepts a bare variable ("TRT01A", "SEX") or a dataset-qualified form
+#' ("ADSL.TRT01A"); returns `list(variable, dataset, in_spec)` or NULL when
+#' no variable was provided. Dataset resolution order: explicit qualifier
+#' (when confirmed by the spec), then ADSL, then the first spec dataset
+#' carrying the variable. With no spec available, the qualifier or ADSL is
+#' used and `in_spec` is NA.
+#' @noRd
+.resolve_grouping_from_spec <- function(by_var, spec_lookup) {
+  by_var <- toupper(trimws(as.character(by_var %||% "")))
+  if (length(by_var) == 0 || !nzchar(by_var)) return(NULL)
+
+  ds_hint <- NULL
+  if (grepl(".", by_var, fixed = TRUE)) {
+    pieces  <- strsplit(by_var, ".", fixed = TRUE)[[1]]
+    ds_hint <- pieces[1]
+    by_var  <- pieces[length(pieces)]
+  }
+
+  if (is.null(spec_lookup) || length(spec_lookup) == 0) {
+    return(list(variable = by_var, dataset = ds_hint %||% "ADSL",
+                in_spec = NA))
+  }
+
+  keys   <- toupper(names(spec_lookup))
+  ds_all <- sub("\\..*$", "", keys)
+  vars   <- sub("^.*\\.", "", keys)
+  hits   <- unique(ds_all[vars == by_var])
+
+  if (length(hits) == 0) {
+    return(list(variable = by_var, dataset = ds_hint %||% "ADSL",
+                in_spec = FALSE))
+  }
+  dataset <- if (!is.null(ds_hint) && ds_hint %in% hits) {
+    ds_hint
+  } else if ("ADSL" %in% hits) {
+    "ADSL"
+  } else {
+    hits[1]
+  }
+  list(variable = by_var, dataset = dataset, in_spec = TRUE)
+}
+
+#' Detect the study's treatment variable from the ADaM spec (ADSL only).
+#' Preference: TRT01A, TRT01P, any TRTxxA/TRTxxP, ACTARM, ARM.
+#' Returns NULL when the spec is absent or carries none of these.
+#' @noRd
+.default_treatment_var <- function(spec_lookup) {
+  if (is.null(spec_lookup) || length(spec_lookup) == 0) return(NULL)
+  keys      <- toupper(names(spec_lookup))
+  adsl_vars <- sub("^ADSL\\.", "", keys[startsWith(keys, "ADSL.")])
+  for (cand in c("TRT01A", "TRT01P")) {
+    if (cand %in% adsl_vars) return(cand)
+  }
+  trt <- adsl_vars[grepl("^TRT\\d{2}[AP]$", adsl_vars)]
+  if (length(trt) > 0) return(sort(trt)[1])
+  for (cand in c("ACTARM", "ARM")) {
+    if (cand %in% adsl_vars) return(cand)
+  }
+  NULL
 }
 
 .fallback_enrichments <- function(annotated_rows) {

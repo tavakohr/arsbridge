@@ -21,8 +21,11 @@ Return a JSON object with these fields:
   "Summary Statistics - Continuous" | "Count and Percentage" | "Subject Count" |
   "Kaplan-Meier Estimate" | "AE Frequency Count" | "Listing"
 
-"by_variable": ADaM variable used for treatment group columns. Use "TRT01A" unless
-  inferred otherwise from column headers.
+"by_variable": The ADaM variable whose values form the output's result
+  columns (treatment arm, dose group, sex, age group, visit, ...). Infer it
+  from the column headers and the title. It MUST be a bare variable name
+  (no dataset prefix) present in "available_variables". Use null when the
+  output has no grouping columns (single-column tables, listings).
 
 "row_enrichments": Array with one entry per annotated_row:
   {{
