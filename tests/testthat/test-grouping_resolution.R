@@ -101,8 +101,8 @@ test_that("enrichment prompt no longer anchors to TRT01A", {
   tmpl <- paste(readLines(path, warn = FALSE), collapse = "\n")
   expect_false(grepl("Use \"TRT01A\"", tmpl, fixed = TRUE))
   expect_true(grepl("available_variables", tmpl, fixed = TRUE))
-  ## Ungrouped outputs are signalled by an empty string in the schema.
-  expect_true(grepl("empty string", tmpl, fixed = TRUE))
+  ## Ungrouped outputs are signalled by an empty by_variables array.
+  expect_true(grepl("empty array", tmpl, fixed = TRUE))
 })
 
 ## --- _meta.sections_needing_review -------------------------------------------

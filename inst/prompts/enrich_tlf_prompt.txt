@@ -24,11 +24,18 @@ Populate the requested fields:
   "Summary Statistics - Continuous" | "Count and Percentage" | "Subject Count" |
   "Kaplan-Meier Estimate" | "AE Frequency Count" | "Listing"
 
-"by_variable": The ADaM variable whose values form the output's result
-  columns (treatment arm, dose group, sex, age group, visit, ...). Infer it
-  from the column headers and the title. It MUST be a bare variable name
-  (no dataset prefix) present in "available_variables". Use an empty string
-  when the output has no grouping columns (single-column tables, listings).
+"by_variables": Ordered array of the ADaM variables whose values form the
+  output's result columns, outermost first (treatment arm, dose group, sex,
+  age group, visit, ...). Infer them from the column headers and the title:
+  a plain treatment-column table is ["TRT01A"]-style with ONE variable; a
+  table with sex nested within treatment is two, e.g. ["TRT01A","SEX"].
+  Each MUST be a bare variable name (no dataset prefix) present in
+  "available_variables". Use an empty array when the output has no grouping
+  columns (single-column tables, listings). NEVER invent a variable for a
+  Total column -- report that via "include_total".
+
+"include_total": true when the column headers include an overall/Total
+  column in addition to the per-group columns; false otherwise.
 
 "row_enrichments": One entry per annotated_row:
   - "label": stub_row label exactly as given

@@ -516,6 +516,27 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       }
     )
 
+    ## Shell carries an overall/Total column: add an ungrouped pass so the
+    ## ARD holds both the by-group and the total statistics.
+    include_total <- isTRUE(as.logical(unlist(ana[["includeTotal"]])[1] %||% FALSE))
+    if (!is.null(ard) && include_total && !is.null(by_arg)) {
+      ard_total <- tryCatch(
+        executor(df_filtered, analysis_var, NULL, df_population, subject_key),
+        error = function(e) {
+          diag_add(
+            stage = "execute_ard", severity = "WARN",
+            problem = paste0("Total-column pass failed: ", conditionMessage(e)),
+            location = analysis_id,
+            action = "ARD contains by-group results only"
+          )
+          NULL
+        }
+      )
+      if (!is.null(ard_total)) {
+        ard <- cards::bind_ard(ard, ard_total)
+      }
+    }
+
     if (!is.null(ard)) {
       # Add traceability metadata
       ard[["analysis_id"]]     <- analysis_id

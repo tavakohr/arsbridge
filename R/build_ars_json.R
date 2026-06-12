@@ -281,12 +281,15 @@ build_ars_json <- function(sections,
       seen_as <- c(seen_as, as_obj$id)
     }
 
-    ## --- GroupingFactor from by_variable ---
-    gf_obj <- .build_grouping(sec)
-    if (!is.null(gf_obj) && !gf_obj$id %in% seen_gf) {
-      grouping_factors[[length(grouping_factors) + 1L]] <- gf_obj
-      seen_gf <- c(seen_gf, gf_obj$id)
+    ## --- GroupingFactors from the (ordered) grouping list ---
+    gf_objs <- .build_groupings(sec)
+    for (gf_obj in gf_objs) {
+      if (!gf_obj$id %in% seen_gf) {
+        grouping_factors[[length(grouping_factors) + 1L]] <- gf_obj
+        seen_gf <- c(seen_gf, gf_obj$id)
+      }
     }
+    gf_ids <- vapply(gf_objs, function(g) g$id, character(1))
 
     ## --- AnalysisMethod (standard catalogue) ---
     mth_obj <- .build_method(sec)
@@ -317,7 +320,7 @@ build_ars_json <- function(sections,
       an_obj <- .build_analysis(
         section = sec, row = row, enrichment = er,
         index = idx, as_id = as_obj$id,
-        gf_id = if (!is.null(gf_obj)) gf_obj$id else NULL,
+        gf_ids = gf_ids,
         method_id = mth_obj$id,
         ds_id = if (!is.null(ds_obj)) ds_obj$id else NULL
       )
@@ -396,18 +399,42 @@ build_ars_json <- function(sections,
   obj
 }
 
+#' All GroupingFactors for a section, ordered outermost first. Prefers the
+#' multi-level `sec$groupings` list (P8); falls back to the legacy single
+#' `by_variable` / `by_variable_dataset` pair.
+#' @noRd
+.build_groupings <- function(sec) {
+  groupings <- sec$groupings
+  if (is.null(groupings) || length(groupings) == 0) {
+    single <- .build_grouping(sec)
+    return(if (is.null(single)) list() else list(single))
+  }
+  out <- lapply(groupings, function(g) {
+    if (!nzchar(g$variable %||% "")) return(NULL)
+    .build_grouping_one(g$variable, g$dataset %||% "ADSL")
+  })
+  Filter(Negate(is.null), out)
+}
+
+#' Legacy single-grouping builder (kept for sections enriched before the
+#' multi-level model and for direct unit tests).
+#' @noRd
 .build_grouping <- function(sec) {
   by_var <- sec$by_variable %||% ""
   if (!nzchar(by_var)) return(NULL)
+  .build_grouping_one(by_var, sec$by_variable_dataset %||% "ADSL")
+}
+
+.build_grouping_one <- function(variable, dataset) {
   list(
-    id               = make_grouping_id(by_var),
-    name             = by_var,
-    label            = paste0("Grouping by ", by_var),
+    id               = make_grouping_id(variable),
+    name             = variable,
+    label            = paste0("Grouping by ", variable),
     ## siera reads these as FLAT strings (metadata.R lines 188-189).
     ## Dataset comes from the spec-resolved enrichment field -- grouping
     ## variables are not always ADSL (e.g. AVISIT in a BDS dataset).
-    groupingDataset  = sec$by_variable_dataset %||% "ADSL",
-    groupingVariable = by_var,
+    groupingDataset  = dataset,
+    groupingVariable = variable,
     dataDriven       = FALSE,
     ## siera iterates JSON_AnalysisGroupings$groups[[e]]; emit empty array
     ## so the iteration succeeds when no per-level groups are specified.
@@ -475,12 +502,11 @@ build_ars_json <- function(sections,
 }
 
 .build_analysis <- function(section, row, enrichment, index,
-                            as_id, gf_id, method_id, ds_id) {
-  groupings <- if (is.null(gf_id)) {
-    list()
-  } else {
-    list(list(order = 1L, groupingId = gf_id, resultsByGroup = TRUE))
-  }
+                            as_id, gf_ids, method_id, ds_id) {
+  gf_ids <- gf_ids[nzchar(gf_ids %||% character())]
+  groupings <- lapply(seq_along(gf_ids), function(i) {
+    list(order = i, groupingId = gf_ids[[i]], resultsByGroup = TRUE)
+  })
 
   dataset_str  <- enrichment$primary_dataset  %||% ""
   variable_str <- enrichment$primary_variable %||% ""
@@ -526,7 +552,11 @@ build_ars_json <- function(sections,
     referencedAnalysisOperations = ref_ops,
     methodId                     = method_id,
     annotation                   = row$annotation,
-    variableRole                 = enrichment$variable_role %||% "ANALYSIS"
+    variableRole                 = enrichment$variable_role %||% "ANALYSIS",
+    ## Extension field: TRUE when the shell carries an overall/Total column
+    ## in addition to the per-group columns. The executor then also
+    ## computes an ungrouped pass and binds it into the ARD.
+    includeTotal                 = isTRUE(section$include_total)
   )
 }
 

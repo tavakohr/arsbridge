@@ -136,28 +136,37 @@ enrich_with_llm <- function(section,
   section$enriched_rows   <- nz(parsed$row_enrichments) %||% .fallback_enrichments(annotated_rows)
 
   ## --- Grouping variable resolution -----------------------------------
-  ## 1. LLM answer, grounded against the spec (also resolves the dataset
-  ##    the variable lives in -- groupings are NOT always ADSL).
-  ## 2. Spec-detected treatment variable (TRTxxA/TRTxxP, then ACTARM/ARM).
-  ## 3. Ungrouped + needs_review -- never silently inject a guess.
+  ## Multi-level: the LLM returns an ORDERED by_variables array (outermost
+  ## first) plus an include_total flag. Each variable is grounded against
+  ## the spec (resolving the dataset it lives in -- groupings are NOT
+  ## always ADSL). Fallback chain when none resolve:
+  ## 1. Spec-detected treatment variable (TRTxxA/TRTxxP, then ACTARM/ARM).
+  ## 2. Ungrouped + needs_review -- never silently inject a guess.
   ## Listings and figures legitimately have no grouping; skip the fallback
   ## chain for them.
-  grouping <- .resolve_grouping_from_spec(parsed$by_variable, spec_lookup)
-  if (!is.null(grouping) && isFALSE(grouping$in_spec)) {
-    diag_add(
-      stage = "enrich_llm", severity = "WARN",
-      problem = sprintf("Grouping variable '%s' not found in the ADaM spec",
-                        grouping$variable),
-      tlf_number = section$tlf_number,
-      action = "Kept as-is -- verify the grouping variable for this TLF"
-    )
+  raw_by <- parsed$by_variables %||%
+    (if (!is.null(nz(parsed$by_variable))) list(parsed$by_variable) else list())
+  groupings <- Filter(
+    Negate(is.null),
+    lapply(raw_by, .resolve_grouping_from_spec, spec_lookup = spec_lookup)
+  )
+  for (g in groupings) {
+    if (isFALSE(g$in_spec)) {
+      diag_add(
+        stage = "enrich_llm", severity = "WARN",
+        problem = sprintf("Grouping variable '%s' not found in the ADaM spec",
+                          g$variable),
+        tlf_number = section$tlf_number,
+        action = "Kept as-is -- verify the grouping variable for this TLF"
+      )
+    }
   }
-  if (is.null(grouping) &&
+  if (length(groupings) == 0 &&
       !section$analysis_type %in% c("LISTING", "FIGURE")) {
     fallback_var <- .default_treatment_var(spec_lookup)
     if (!is.null(fallback_var)) {
-      grouping <- list(variable = fallback_var, dataset = "ADSL",
-                       in_spec = TRUE)
+      groupings <- list(list(variable = fallback_var, dataset = "ADSL",
+                             in_spec = TRUE))
       diag_add(
         stage = "enrich_llm", severity = "WARN",
         problem = "No grouping variable identified for this TLF",
@@ -174,8 +183,12 @@ enrich_with_llm <- function(section,
       )
     }
   }
-  section$by_variable         <- grouping$variable %||% ""
-  section$by_variable_dataset <- grouping$dataset  %||% "ADSL"
+  section$groupings     <- groupings
+  section$include_total <- isTRUE(as.logical(parsed$include_total %||% FALSE))
+  ## Back-compat single-grouping fields = outermost grouping.
+  first <- if (length(groupings) > 0) groupings[[1]] else NULL
+  section$by_variable         <- first$variable %||% ""
+  section$by_variable_dataset <- first$dataset  %||% "ADSL"
 
   section
 }
@@ -225,10 +238,21 @@ enrich_with_llm <- function(section,
       "Closest standard ARS method name, or a short descriptive name.",
       required = FALSE
     ),
-    by_variable = ellmer::type_string(
-      paste("Bare ADaM variable (no dataset prefix) present in",
-            "available_variables whose values form the result columns;",
-            "empty string when the output has no grouping columns."),
+    by_variables = ellmer::type_array(
+      items = ellmer::type_string(),
+      description = paste(
+        "Ordered grouping variables (outermost first) whose values form",
+        "the result columns -- e.g. [\"TRT01A\"] for treatment columns, or",
+        "[\"TRT01A\",\"SEX\"] when sex is nested within treatment. Bare",
+        "ADaM variable names (no dataset prefix) present in",
+        "available_variables. Empty array when the output has no grouping",
+        "columns. Do NOT include a pseudo-variable for a Total column --",
+        "use include_total instead."),
+      required = FALSE
+    ),
+    include_total = ellmer::type_boolean(
+      paste("TRUE when the output carries an overall/Total column in",
+            "addition to the per-group columns."),
       required = FALSE
     ),
     row_enrichments = ellmer::type_array(
