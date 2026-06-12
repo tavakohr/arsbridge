@@ -226,6 +226,16 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       col_val > as.numeric(val)
     } else if (comp == "GE") {
       col_val >= as.numeric(val)
+    } else if (comp == "CONTAINS") {
+      ## arsbridge extension comparator: case-insensitive substring match
+      ## against any of the supplied values.
+      if (length(val) == 0) {
+        rep(FALSE, nrow(df))
+      } else {
+        Reduce(`|`, lapply(val, function(v) {
+          grepl(tolower(v), tolower(as.character(col_val)), fixed = TRUE)
+        }))
+      }
     } else {
       rep(TRUE, nrow(df))
     }

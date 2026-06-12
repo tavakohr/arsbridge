@@ -33,12 +33,12 @@ test_that("ars_diagnostics() exposes the same records", {
 
 test_that("unparsed where-clause condition is recorded as a diagnostic", {
   diag_reset()
-  ## BETWEEN is not a supported comparator -- the part contains a
+  ## "like" is not a supported comparator -- the part contains a
   ## DATASET.VARIABLE shape, so it must be logged when dropped.
-  wc <- parse_where_clause("ADSL.AGE between 18 and 65")
+  wc <- parse_where_clause("ADSL.AETERM like 'rash%'")
   recs <- diag_records()
   expect_true(any(recs$stage == "where_clause" & recs$severity == "WARN"))
-  expect_true(any(grepl("ADSL.AGE", recs$location, fixed = TRUE)))
+  expect_true(any(grepl("ADSL.AETERM", recs$location, fixed = TRUE)))
 })
 
 test_that("plain prose (no DATASET.VARIABLE shape) is not logged", {
