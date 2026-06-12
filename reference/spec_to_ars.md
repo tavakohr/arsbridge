@@ -17,6 +17,7 @@ spec_to_ars(
   model = NULL,
   api_key = NULL,
   provider = NULL,
+  spec_column_aliases = NULL,
   validate = TRUE,
   report_path = "spec_validation_report.xlsx",
   verbose = TRUE
@@ -66,6 +67,13 @@ spec_to_ars(
 
   LLM provider: `"anthropic"`, `"openai"`, or `"gemini"`. Defaults to
   the active provider.
+
+- spec_column_aliases:
+
+  Optional named list of extra column-name aliases for the ADaM spec
+  Excel (see `parse_adam_spec()`); useful when a workbook uses
+  non-standard or non-English headers. Example:
+  `list(variable = "nom de variable", dataset = "domaine")`.
 
 - validate:
 

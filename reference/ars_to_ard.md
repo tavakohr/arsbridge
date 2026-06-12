@@ -8,7 +8,13 @@ single tidy ARD object.
 ## Usage
 
 ``` r
-ars_to_ard(ars_path, adam_dir, output_ids = NULL, analysis_ids = NULL)
+ars_to_ard(
+  ars_path,
+  adam_dir,
+  output_ids = NULL,
+  analysis_ids = NULL,
+  subject_key = "USUBJID"
+)
 ```
 
 ## Arguments
@@ -32,9 +38,18 @@ ars_to_ard(ars_path, adam_dir, output_ids = NULL, analysis_ids = NULL)
   Optional character vector of Analysis IDs to run only those specific
   analyses.
 
+- subject_key:
+
+  Subject-level identifier variable used for distinct-subject counting
+  and cross-dataset population joins. Default `"USUBJID"`; set e.g.
+  `"SUBJID"` or `"PATID"` for studies with a non-standard subject key.
+
 ## Value
 
-A tidy ARD data frame of class `"card"`.
+A tidy ARD data frame of class `"card"`, with traceability columns
+`analysis_id`, `method_id`, `output_id`, `method_intended`, and
+`method_actual` (differs from `method_intended` when the generic
+fallback summarizer was used).
 
 ## Examples
 

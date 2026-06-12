@@ -60,6 +60,7 @@ Results Standard (ARS) v1.0 ARM-TS JSON file consumable by
 <span>  model <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  api_key <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  provider <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  spec_column_aliases <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  validate <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  report_path <span class="op">=</span> <span class="st">"spec_validation_report.xlsx"</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">TRUE</span></span>
@@ -106,6 +107,13 @@ must be the ADaM spec.</p></dd>
 <dt id="arg-provider">provider<a class="anchor" aria-label="anchor" href="#arg-provider"></a></dt>
 <dd><p>LLM provider: <code>"anthropic"</code>, <code>"openai"</code>, or <code>"gemini"</code>.
 Defaults to the active provider.</p></dd>
+
+
+<dt id="arg-spec-column-aliases">spec_column_aliases<a class="anchor" aria-label="anchor" href="#arg-spec-column-aliases"></a></dt>
+<dd><p>Optional named list of extra column-name
+aliases for the ADaM spec Excel (see <code>parse_adam_spec()</code>); useful when
+a workbook uses non-standard or non-English headers. Example:
+<code>list(variable = "nom de variable", dataset = "domaine")</code>.</p></dd>
 
 
 <dt id="arg-validate">validate<a class="anchor" aria-label="anchor" href="#arg-validate"></a></dt>
