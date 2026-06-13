@@ -25,12 +25,14 @@ Imports:
     dplyr (>= 1.1.0),
     ellmer (>= 0.1.0),
     glue (>= 1.7.0),
+    gt (>= 0.10.0),
     haven (>= 2.5.0),
     jsonlite (>= 1.8.0),
     officer (>= 0.6.0),
     openxlsx2 (>= 1.0.0),
     readxl (>= 1.4.0),
     rlang (>= 1.1.0),
+    tfrmt (>= 0.3.0),
     tidyselect (>= 1.2.0),
     xml2 (>= 1.3.0)
 Suggests:

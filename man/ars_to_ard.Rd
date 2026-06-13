@@ -2,7 +2,7 @@
 % Please edit documentation in R/ars_to_ard.R
 \name{ars_to_ard}
 \alias{ars_to_ard}
-\title{Execute ARS JSON and return an ARD object using {cards}}
+\title{Execute ARS JSON and return an ARD object using 'cards'}
 \usage{
 ars_to_ard(
   ars_path,

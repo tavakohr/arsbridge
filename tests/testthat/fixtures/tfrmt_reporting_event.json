@@ -1,0 +1,84 @@
+{
+  "id": "APX-DRM-301",
+  "name": "PROSVALIN Phase 3 in DRM",
+  "version": "1",
+  "analysisGroupings": [
+    {
+      "id": "GF_TRT01A",
+      "name": "TRT01A",
+      "label": "Grouping by TRT01A",
+      "groupingVariable": {
+        "dataset": "ADSL",
+        "variable": "TRT01A"
+      },
+      "dataDriven": false
+    },
+    {
+      "id": "GF_ADCM_TRTP",
+      "name": "ADCM.TRTP",
+      "label": "Grouping by ADCM.TRTP",
+      "groupingVariable": {
+        "dataset": "ADSL",
+        "variable": "ADCM.TRTP"
+      },
+      "dataDriven": false
+    },
+    {
+      "id": "GF_ADEFF_TRTP",
+      "name": "ADEFF.TRTP",
+      "label": "Grouping by ADEFF.TRTP",
+      "groupingVariable": {
+        "dataset": "ADSL",
+        "variable": "ADEFF.TRTP"
+      },
+      "dataDriven": false
+    },
+    {
+      "id": "GF_TRT01AN",
+      "name": "TRT01AN",
+      "label": "Grouping by TRT01AN",
+      "groupingVariable": {
+        "dataset": "ADSL",
+        "variable": "TRT01AN"
+      },
+      "dataDriven": false
+    }
+  ],
+  "outputs": [
+    {
+      "id": "T_14_1_1",
+      "name": "T-14-1-1",
+      "label": "Subject Disposition Through Week 140",
+      "version": "1",
+      "outputType": "TABLE",
+      "displays": [
+        {
+          "order": 1,
+          "displayTitle": "Subject Disposition Through Week 140",
+          "displaySections": [
+            {
+              "sectionType": "Footnote",
+              "subSections": [
+                {
+                  "text": "Percentages are based on the number of randomized subjects in each treatment group. The placebo arm includes subjects through Week 16 only; from Week 16 onward, placebo subjects were re-randomized 1:1 to UPADALIMIB 15 mg or 30 mg."
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "fileSpecifications": [
+        {
+          "name": "T-14-1-1.rtf",
+          "fileType": "rtf"
+        }
+      ],
+      "referencedAnalysisIds": [
+        "AN_T_14_1_1_001",
+        "AN_T_14_1_1_002",
+        "AN_T_14_1_1_003",
+        "AN_T_14_1_1_004"
+      ]
+    }
+  ]
+}

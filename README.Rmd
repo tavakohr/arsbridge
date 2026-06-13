@@ -21,7 +21,7 @@ knitr::opts_chunk$set(
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 <!-- badges: end -->
 
-`{arsbridge}` is an R package designed to natively parse, validate, and execute CDISC **Analysis Results Standard (ARS)** specifications into tidy **Analysis Results Data (ARD)** objects using `{cards}`. 
+`{arsbridge}` is the only R package that takes an annotated Word TLF shell all the way to a publication-ready formatted clinical table -- no manual formatting step required. It natively parses, validates, and executes CDISC **Analysis Results Standard (ARS)** specifications into tidy **Analysis Results Data (ARD)** objects using `{cards}`, then renders them to formatted GT tables via `{tfrmt}`.
 
 The package is built for real clinical workflows: it extracts authoritative variable-to-row mappings directly from annotated TLF shells, cross-references them against your study's ADaM specification (`define.xml` or Excel), enriches the metadata using LLM assistance (Anthropic Claude, OpenAI, or Gemini), and natively runs the calculations against ADaM datasets.
 
@@ -33,6 +33,7 @@ The package is built for real clinical workflows: it extracts authoritative vari
 2. **Authoritative Parsing**: Extract annotations without guessing. It relies on the lead programmer's annotations in the Word shells as the ground truth.
 3. **Spec Validation**: Checks every annotation against your ADaM spec (`define.xml` or Excel) and produces an interactive Excel validation report showing gaps or typos.
 4. **Native ARD Execution**: Runs the generated ARS JSON directly using `{cards}` against `.xpt` or `.csv` datasets, recursively applying population (`analysisSets`) and data subsetting (`dataSubsets`) filters.
+5. **Publication-Ready Tables**: Renders any ARS output to a formatted GT table via `{tfrmt}` with `ars_render_tlf()` -- auto-detecting treatment columns, row groups, and labels; rescaling percentages; and carrying titles and footnotes through. Closes the loop from annotated shell to final TLF.
 
 ---
 
@@ -55,6 +56,7 @@ Here is the step-by-step use of the functions in `{arsbridge}`:
 graph TD
     A[Configure LLM API Keys] --> B[Generate ARS JSON & Validate Spec]
     B --> C[Execute ARS to get Tidy ARD]
+    C --> D[Render Formatted TLF Table]
 ```
 
 ### Step 1: Set Up and Check API Keys
@@ -190,6 +192,33 @@ Each computed row is injected with traceability metadata: `analysis_id`, `method
 
 ---
 
+### Step 4: Rendering a Formatted TLF Table
+
+With the ARD in hand, `ars_render_tlf()` formats any ARS output into a publication-ready GT table -- the final step of the closed-loop pipeline.
+
+```r
+# Render the Subject Disposition table straight to a GT table
+gt_table <- ars_render_tlf(
+  ars_path  = "outputs/reporting_event.json",
+  ard       = ard,
+  output_id = "T_14_1_1"
+)
+gt_table
+```
+
+It auto-detects the treatment column, row groups, and row labels from the ARD; rescales `{cards}` proportions to percentages; lays continuous summaries out as `Mean (SD)` / `Median` / `(Min, Max)` rows; and carries ARS titles and footnotes through to the GT output.
+
+- `ars_to_tfrmt()` returns the underlying `{tfrmt}` spec if you want to customise it before printing.
+- `ars_to_tfrmt_list()` returns one spec per output in a named list.
+
+```r
+specs <- ars_to_tfrmt_list("outputs/reporting_event.json", ard)
+all_tables <- lapply(names(specs), function(oid)
+  ars_render_tlf("outputs/reporting_event.json", ard, oid))
+```
+
+---
+
 ## Demonstration with Bundled Training Example
 
 You can run the full end-to-end pipeline using the bundled `APX-DRM-301` dataset without needing any external files:
@@ -215,6 +244,9 @@ ard <- ars_to_ard(
 
 # 5. Look at the dimensions of the final ARD object
 dim(ard)
+
+# 6. Render a formatted clinical table (Subject Disposition)
+ars_render_tlf(res$ars_path, ard, "T_14_1_1")
 ```
 
 ---
