@@ -1,10 +1,14 @@
 # arsbridge
 
-[arsbridge](https://github.com/tavakohr/arsbridge) is an R package
-designed to natively parse, validate, and execute CDISC **Analysis
+[arsbridge](https://github.com/tavakohr/arsbridge) is the only R package
+that takes an annotated Word TLF shell all the way to a
+publication-ready formatted clinical table – no manual formatting step
+required. It natively parses, validates, and executes CDISC **Analysis
 Results Standard (ARS)** specifications into tidy **Analysis Results
 Data (ARD)** objects using
-[cards](https://github.com/insightsengineering/cards).
+[cards](https://github.com/insightsengineering/cards), then renders them
+to formatted GT tables via
+[tfrmt](https://GSK-Biostatistics.github.io/tfrmt/).
 
 The package is built for real clinical workflows: it extracts
 authoritative variable-to-row mappings directly from annotated TLF
@@ -30,6 +34,12 @@ calculations against ADaM datasets.
     [cards](https://github.com/insightsengineering/cards) against `.xpt`
     or `.csv` datasets, recursively applying population (`analysisSets`)
     and data subsetting (`dataSubsets`) filters.
+5.  **Publication-Ready Tables**: Renders any ARS output to a formatted
+    GT table via [tfrmt](https://GSK-Biostatistics.github.io/tfrmt/)
+    with [`ars_render_tlf()`](reference/ars_render_tlf.md) –
+    auto-detecting treatment columns, row groups, and labels; rescaling
+    percentages; and carrying titles and footnotes through. Closes the
+    loop from annotated shell to final TLF.
 
 ------------------------------------------------------------------------
 
@@ -55,6 +65,7 @@ Here is the step-by-step use of the functions in
 graph TD
     A[Configure LLM API Keys] --> B[Generate ARS JSON & Validate Spec]
     B --> C[Execute ARS to get Tidy ARD]
+    C --> D[Render Formatted TLF Table]
 ```
 
 ### Step 1: Set Up and Check API Keys
@@ -248,6 +259,44 @@ Each computed row is injected with traceability metadata: `analysis_id`,
 
 ------------------------------------------------------------------------
 
+### Step 4: Rendering a Formatted TLF Table
+
+With the ARD in hand, [`ars_render_tlf()`](reference/ars_render_tlf.md)
+formats any ARS output into a publication-ready GT table – the final
+step of the closed-loop pipeline.
+
+``` r
+
+# Render the Subject Disposition table straight to a GT table
+gt_table <- ars_render_tlf(
+  ars_path  = "outputs/reporting_event.json",
+  ard       = ard,
+  output_id = "T_14_1_1"
+)
+gt_table
+```
+
+It auto-detects the treatment column, row groups, and row labels from
+the ARD; rescales [cards](https://github.com/insightsengineering/cards)
+proportions to percentages; lays continuous summaries out as `Mean (SD)`
+/ `Median` / `(Min, Max)` rows; and carries ARS titles and footnotes
+through to the GT output.
+
+- [`ars_to_tfrmt()`](reference/ars_to_tfrmt.md) returns the underlying
+  [tfrmt](https://GSK-Biostatistics.github.io/tfrmt/) spec if you want
+  to customise it before printing.
+- [`ars_to_tfrmt_list()`](reference/ars_to_tfrmt_list.md) returns one
+  spec per output in a named list.
+
+``` r
+
+specs <- ars_to_tfrmt_list("outputs/reporting_event.json", ard)
+all_tables <- lapply(names(specs), function(oid)
+  ars_render_tlf("outputs/reporting_event.json", ard, oid))
+```
+
+------------------------------------------------------------------------
+
 ## Demonstration with Bundled Training Example
 
 You can run the full end-to-end pipeline using the bundled `APX-DRM-301`
@@ -275,6 +324,9 @@ ard <- ars_to_ard(
 
 # 5. Look at the dimensions of the final ARD object
 dim(ard)
+
+# 6. Render a formatted clinical table (Subject Disposition)
+ars_render_tlf(res$ars_path, ard, "T_14_1_1")
 ```
 
 ------------------------------------------------------------------------

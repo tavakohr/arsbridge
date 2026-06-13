@@ -4,8 +4,14 @@
 
 - [`ars_diagnostics()`](ars_diagnostics.md) : Retrieve pipeline
   diagnostics from the most recent run
+- [`ars_render_tlf()`](ars_render_tlf.md) : Render an ARS output to a
+  formatted clinical table
 - [`ars_to_ard()`](ars_to_ard.md) : Execute ARS JSON and return an ARD
-  object using cards
+  object using 'cards'
+- [`ars_to_tfrmt()`](ars_to_tfrmt.md) : Build a tfrmt specification for
+  one ARS output
+- [`ars_to_tfrmt_list()`](ars_to_tfrmt_list.md) : Build tfrmt specs for
+  every renderable ARS output
 - [`arsbridge_example()`](arsbridge_example.md) : Bundled training files
   shipped with arsbridge
 - [`check_anthropic_key()`](check_anthropic_key.md) : Check whether the

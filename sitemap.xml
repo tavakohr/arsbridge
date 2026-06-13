@@ -8,7 +8,10 @@
 <url><loc>/authors.html</loc></url>
 <url><loc>/index.html</loc></url>
 <url><loc>/reference/ars_diagnostics.html</loc></url>
+<url><loc>/reference/ars_render_tlf.html</loc></url>
 <url><loc>/reference/ars_to_ard.html</loc></url>
+<url><loc>/reference/ars_to_tfrmt.html</loc></url>
+<url><loc>/reference/ars_to_tfrmt_list.html</loc></url>
 <url><loc>/reference/arsbridge-package.html</loc></url>
 <url><loc>/reference/arsbridge_example.html</loc></url>
 <url><loc>/reference/check_anthropic_key.html</loc></url>

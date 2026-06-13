@@ -1,4 +1,4 @@
-# Execute ARS JSON and return an ARD object using cards
+# Execute ARS JSON and return an ARD object using 'cards'
 
 Reads a CDISC ARS JSON specification and executes the analyses defined
 within it directly using the `{cards}` package, dynamically loading the

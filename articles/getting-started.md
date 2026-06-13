@@ -64,6 +64,59 @@ out <- Filter(function(o) o$name == "T-14-1-2",
 length(out$referencedAnalysisIds)
 ```
 
+## From ARS to a formatted clinical table
+
+The ARS JSON plus the study ADaM data closes the loop:
+[`ars_to_ard()`](../reference/ars_to_ard.md) executes the analyses into
+a tidy ARD ([cards](https://github.com/insightsengineering/cards)
+format), and [`ars_render_tlf()`](../reference/ars_render_tlf.md)
+formats any output into a publication-ready GT table – no manual
+formatting step.
+
+``` r
+
+# Unzip the bundled simulated ADaM data
+adam_dir <- file.path(tempdir(), "ADaM")
+unzip(arsbridge_example("ADaM.zip"), exdir = adam_dir)
+
+# Execute the ARS specification into a tidy ARD
+ard <- ars_to_ard(
+  ars_path = "outputs/reporting_event.json",
+  adam_dir = adam_dir
+)
+
+# Render one output straight to a formatted GT clinical table
+gt_table <- ars_render_tlf(
+  ars_path  = "outputs/reporting_event.json",
+  ard       = ard,
+  output_id = "T_14_1_1"      # Subject Disposition
+)
+
+gt_table
+```
+
+[`ars_render_tlf()`](../reference/ars_render_tlf.md) auto-detects the
+treatment column, row groups, and row labels from the ARD; rescales
+[cards](https://github.com/insightsengineering/cards) proportions to
+percentages; lays continuous summaries out as `Mean (SD)` / `Median` /
+`(Min, Max)` rows; and carries ARS footnotes through as GT source notes.
+
+To build the `tfrmt` spec without rendering – so you can tweak it before
+printing – use [`ars_to_tfrmt()`](../reference/ars_to_tfrmt.md). To get
+one spec per output at once, use
+[`ars_to_tfrmt_list()`](../reference/ars_to_tfrmt_list.md):
+
+``` r
+
+specs <- ars_to_tfrmt_list("outputs/reporting_event.json", ard)
+names(specs)
+
+all_tables <- lapply(
+  names(specs),
+  function(oid) ars_render_tlf("outputs/reporting_event.json", ard, oid)
+)
+```
+
 ## Using your own files
 
 ``` r
