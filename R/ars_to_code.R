@@ -148,113 +148,79 @@
   data_e <- .data_expr(res)
   denom  <- .denom_expr(res)
   method <- res$method_id %||% ""
+  qvar   <- encodeString(var, quote = "\"")
 
   ## Leading comma so a missing `by` never leaves a trailing comma before ")".
   by_line <- function(b) if (length(b)) {
     sprintf(",\n  by = all_of(%s)", .r_chr_vec(b))
   } else ""
 
-  comment <- .block_comment(res)
-
-  ## --- disposition / bare-flag subject count -------------------------------
-  if (.is_bare_flag(res) &&
-      method %in% c("MTH_SUBJECT_COUNT", "MTH_COUNT_AND_PERCENTAGE")) {
-    lab <- res$label %||% res$description %||% var
-    code <- sprintf(paste0(
-      "%s\n%s <- cards::ard_categorical(\n",
-      "  data = %s |>\n",
-      "    dplyr::distinct(%s, .keep_all = TRUE) |>\n",
-      "    dplyr::mutate(%s = %s),\n",
-      "  variables = all_of(%s)%s,\n",
-      "  denominator = %s\n)"),
-      comment, obj, data_e, sk, .bt(lab),
-      encodeString(lab, quote = "\""),
-      encodeString(lab, quote = "\""), by_line(by), denom)
-    return(list(code = code, objs = obj))
-  }
-
-  ## --- continuous summary ---------------------------------------------------
-  if (identical(method, "MTH_SUMMARY_STATISTICS_CONTINUOUS")) {
-    code <- sprintf(paste0(
-      "%s\n%s <- cards::ard_continuous(\n",
-      "  data = %s |>\n    dplyr::mutate(%s = as.numeric(%s)),\n",
-      "  variables = all_of(%s)%s\n)"),
-      comment, obj, data_e, .bt(var), .bt(var),
-      encodeString(var, quote = "\""), by_line(by))
-    objs <- obj
-    if (isTRUE(res$include_total) && length(by)) {
-      obj_t <- paste0(obj, "_total")
-      code  <- paste0(code, "\n", sprintf(paste0(
-        "%s <- cards::ard_continuous(\n",
+  ## The cards CALL (no object assignment) for a given `by` vector. Selecting
+  ## the idiom by method here -- once -- lets the include_total total pass reuse
+  ## the exact same idiom with `by = character(0)`.
+  mk_call <- function(b) {
+    if (.is_bare_flag(res) &&
+        method %in% c("MTH_SUBJECT_COUNT", "MTH_COUNT_AND_PERCENTAGE")) {
+      lab <- res$label %||% res$description %||% var
+      sprintf(paste0(
+        "cards::ard_categorical(\n",
+        "  data = %s |>\n    dplyr::distinct(%s, .keep_all = TRUE) |>\n",
+        "    dplyr::mutate(%s = %s),\n",
+        "  variables = all_of(%s)%s,\n  denominator = %s\n)"),
+        data_e, sk, .bt(lab), encodeString(lab, quote = "\""),
+        encodeString(lab, quote = "\""), by_line(b), denom)
+    } else if (identical(method, "MTH_SUMMARY_STATISTICS_CONTINUOUS")) {
+      sprintf(paste0(
+        "cards::ard_continuous(\n",
         "  data = %s |>\n    dplyr::mutate(%s = as.numeric(%s)),\n",
-        "  variables = all_of(%s)\n)"),
-        obj_t, data_e, .bt(var), .bt(var),
-        encodeString(var, quote = "\"")))
-      objs <- c(objs, obj_t)
-    }
-    return(list(code = code, objs = objs))
-  }
-
-  ## --- subject count: distinct-subject totals / by-group --------------------
-  if (identical(method, "MTH_SUBJECT_COUNT")) {
-    distinct_e <- sprintf("%s |>\n    dplyr::distinct(%s, .keep_all = TRUE)",
-                          data_e, sk)
-    if (identical(var, sk) && length(by)) {
-      code <- sprintf(paste0(
-        "%s\n%s <- cards::ard_categorical(\n",
-        "  data = %s,\n  variables = all_of(%s)\n)"),
-        comment, obj, distinct_e, .r_chr_vec(by))
-    } else if (identical(var, sk)) {
-      code <- sprintf("%s\n%s <- cards::ard_total_n(\n  %s\n)",
-                      comment, obj, distinct_e)
-    } else {
-      code <- sprintf(paste0(
-        "%s\n%s <- cards::ard_categorical(\n",
+        "  variables = all_of(%s)%s\n)"),
+        data_e, .bt(var), .bt(var), qvar, by_line(b))
+    } else if (identical(method, "MTH_SUBJECT_COUNT")) {
+      distinct_e <- sprintf("%s |>\n    dplyr::distinct(%s, .keep_all = TRUE)",
+                            data_e, sk)
+      if (identical(var, sk) && length(b)) {
+        sprintf(paste0("cards::ard_categorical(\n",
+                       "  data = %s,\n  variables = all_of(%s)\n)"),
+                distinct_e, .r_chr_vec(b))
+      } else if (identical(var, sk)) {
+        sprintf("cards::ard_total_n(\n  %s\n)", distinct_e)
+      } else {
+        sprintf(paste0("cards::ard_categorical(\n",
+                       "  data = %s,\n  variables = all_of(%s)%s,\n",
+                       "  denominator = %s\n)"),
+                distinct_e, qvar, by_line(b), denom)
+      }
+    } else if (identical(method, "MTH_AE_FREQUENCY_COUNT")) {
+      sprintf(paste0(
+        "cards::ard_categorical(\n",
+        "  data = %s |>\n    dplyr::distinct(%s, %s, .keep_all = TRUE),\n",
+        "  variables = all_of(%s)%s,\n  denominator = %s\n)"),
+        data_e, sk, .bt(var), qvar, by_line(b), denom)
+    } else if (identical(method, "MTH_COUNT_AND_PERCENTAGE")) {
+      sprintf(paste0(
+        "cards::ard_categorical(\n",
         "  data = %s,\n  variables = all_of(%s)%s,\n  denominator = %s\n)"),
-        comment, obj, distinct_e, encodeString(var, quote = "\""),
-        by_line(by), denom)
+        data_e, qvar, by_line(b), denom)
+    } else {
+      sprintf(paste0(
+        "# Fallback: no dedicated idiom for this method; categorical n(%%) used.\n",
+        "cards::ard_categorical(\n",
+        "  data = %s,\n  variables = all_of(%s)%s,\n  denominator = %s\n)"),
+        data_e, qvar, by_line(b), denom)
     }
-    return(list(code = code, objs = obj))
   }
 
-  ## --- AE frequency: distinct subject-term then n(%) ------------------------
-  if (identical(method, "MTH_AE_FREQUENCY_COUNT")) {
-    code <- sprintf(paste0(
-      "%s\n%s <- cards::ard_categorical(\n",
-      "  data = %s |>\n    dplyr::distinct(%s, %s, .keep_all = TRUE),\n",
-      "  variables = all_of(%s)%s,\n  denominator = %s\n)"),
-      comment, obj, data_e, sk, .bt(var),
-      encodeString(var, quote = "\""), by_line(by), denom)
-    return(list(code = code, objs = obj))
-  }
+  comment <- .block_comment(res)
+  code <- sprintf("%s\n%s <- %s", comment, obj, mk_call(by))
+  objs <- obj
 
-  ## --- count and percentage (and categorical fallback) ----------------------
-  if (identical(method, "MTH_COUNT_AND_PERCENTAGE")) {
-    code <- sprintf(paste0(
-      "%s\n%s <- cards::ard_categorical(\n",
-      "  data = %s,\n  variables = all_of(%s)%s,\n  denominator = %s\n)"),
-      comment, obj, data_e, encodeString(var, quote = "\""),
-      by_line(by), denom)
-    objs <- obj
-    if (isTRUE(res$include_total) && length(by)) {
-      obj_t <- paste0(obj, "_total")
-      code  <- paste0(code, "\n", sprintf(paste0(
-        "%s <- cards::ard_categorical(\n",
-        "  data = %s,\n  variables = all_of(%s),\n  denominator = %s\n)"),
-        obj_t, data_e, encodeString(var, quote = "\""), denom))
-      objs <- c(objs, obj_t)
-    }
-    return(list(code = code, objs = objs))
+  ## include_total: an extra ungrouped pass (shell carries an overall column).
+  if (isTRUE(res$include_total) && length(by)) {
+    obj_t <- paste0(obj, "_total")
+    code  <- paste0(code, "\n", sprintf("%s <- %s", obj_t, mk_call(character(0))))
+    objs  <- c(objs, obj_t)
   }
-
-  ## --- unknown method: type-appropriate fallback ----------------------------
-  code <- sprintf(paste0(
-    "%s\n# Fallback: no dedicated idiom for this method; categorical n(%%) used.\n",
-    "%s <- cards::ard_categorical(\n",
-    "  data = %s,\n  variables = all_of(%s)%s,\n  denominator = %s\n)"),
-    comment, obj, data_e,
-    encodeString(var, quote = "\""), by_line(by), denom)
-  list(code = code, objs = obj)
+  list(code = code, objs = objs)
 }
 
 ## ---- whole-TLF script -----------------------------------------------------
@@ -353,6 +319,46 @@
           if (length(pop_defs)) c("", pop_defs),
           blocks, bind_line),
         collapse = "\n")
+}
+
+## ---- single-analysis execution (the emitter IS the engine) ----------------
+
+## Emit a one-analysis script (header + loaders + pop frame + block + bind).
+## ars_to_ard() sources this so it executes through the very idioms it ships --
+## the emitted deliverable and the computed ARD are the same code.
+#' @noRd
+.emit_analysis_script <- function(res, adam_dir = ".") {
+  datasets <- .tlf_datasets(list(res))
+  header <- c("library(cards)", "library(dplyr)", "library(haven)",
+              sprintf("adam_dir <- %s", encodeString(adam_dir, quote = "\"")))
+  loaders <- vapply(datasets, .loader_line, character(1))
+  de <- .denom_expr(res)
+  b  <- .emit_block(res)
+  code <- b$code
+  pop_def <- NULL
+  if (de != "ADSL") {
+    pop_def <- sprintf("pop_1 <- %s", de)
+    code <- gsub(de, "pop_1", code, fixed = TRUE)
+  }
+  bind <- sprintf("ard_block <- cards::bind_ard(%s)",
+                  paste(b$objs, collapse = ", "))
+  paste(c(header, "", loaders, if (!is.null(pop_def)) c("", pop_def), "",
+          code, "", bind), collapse = "\n")
+}
+
+#' Execute one resolved analysis by sourcing its emitted cards block.
+#' Returns the block's `card` ARD, or stops on parse/eval error (caller traps).
+#' @noRd
+.run_emitted_block <- function(res, adam_dir = ".") {
+  script <- .emit_analysis_script(res, adam_dir)
+  parsed <- tryCatch(parse(text = script), error = function(e) e)
+  if (inherits(parsed, "error")) {
+    stop(sprintf("emitted block failed to parse: %s",
+                 conditionMessage(parsed)))
+  }
+  env <- new.env(parent = globalenv())
+  eval(parsed, envir = env)
+  get("ard_block", envir = env)
 }
 
 #' Write per-TLF {cards} deliverable scripts for an ARS spec

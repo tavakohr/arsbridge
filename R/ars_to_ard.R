@@ -77,6 +77,11 @@
 #'   distinct-subject counting and cross-dataset population joins.
 #'   Default `"USUBJID"`; set e.g. `"SUBJID"` or `"PATID"` for studies with
 #'   a non-standard subject key.
+#' @param legacy Deprecated execution path. When `FALSE` (default) each analysis
+#'   is computed by sourcing the pure-`{cards}` block arsbridge emits, so the
+#'   ARD is produced by the same code shipped as the deliverable. When `TRUE`
+#'   the retired `.ARD_EXECUTORS` registry is used instead (kept only for the
+#'   engine-equivalence test and as a transitional escape hatch).
 #'
 #' @return A tidy ARD data frame of class `"card"`, with traceability
 #'   columns `analysis_id`, `method_id`, `output_id`, `method_intended`,
@@ -89,7 +94,8 @@
 #'   ard <- ars_to_ard("outputs/reporting_event.json", "inputs/ADaM")
 #' }
 ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
-                       analysis_ids = NULL, subject_key = "USUBJID") {
+                       analysis_ids = NULL, subject_key = "USUBJID",
+                       legacy = FALSE) {
   if (!file.exists(ars_path)) {
     cli::cli_abort("ARS JSON file not found: {.path {ars_path}}")
   }
@@ -410,13 +416,17 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       next
     }
 
-    # Execute {cards} via the method registry; unknown methods use the
-    # generic fallback summarizer and record the substitution.
-    executor      <- .ARD_EXECUTORS[[method_id]]
+    # Resolve the method to a cards idiom. Unknown methods fall back to a
+    # continuous/categorical summary chosen by the data type, recorded in
+    # method_actual. eff_method_id drives the emitter; the legacy registry is
+    # only consulted when legacy = TRUE.
     method_actual <- method_id
-    if (is.null(executor)) {
+    eff_method_id <- method_id
+    if (is.null(.ARD_EXECUTORS[[method_id]])) {
       is_num <- is.numeric(df_filtered[[analysis_var]])
       method_actual <- if (is_num) "FALLBACK_CONTINUOUS" else "FALLBACK_CATEGORICAL"
+      eff_method_id <- if (is_num) "MTH_SUMMARY_STATISTICS_CONTINUOUS" else
+        "MTH_COUNT_AND_PERCENTAGE"
       cli::cli_warn("Method {.val {method_id}} for analysis {.val {analysis_id}} not natively supported. Using fallback summarizer.")
       diag_add(
         stage = "execute_ard", severity = "WARN",
@@ -425,17 +435,6 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
         action = sprintf("Generic %s summary used instead (method_actual = %s) -- verify the statistics match the shell",
                          if (is_num) "continuous" else "categorical", method_actual)
       )
-      executor <- if (is_num) {
-        function(df, var, by, denom, subject_key) {
-          cards::ard_continuous(data = df, variables = all_of(var),
-                                by = all_of(by))
-        }
-      } else {
-        function(df, var, by, denom, subject_key) {
-          cards::ard_categorical(data = df, variables = all_of(var),
-                                 by = all_of(by), denominator = denom)
-        }
-      }
     }
 
     if (!subject_key %in% names(df_filtered) &&
@@ -479,40 +478,50 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       next
     }
 
-    ard <- tryCatch(
-      executor(df_filtered, analysis_var, by_arg, df_population, subject_key),
-      error = function(e) {
-        cli::cli_warn("Analysis {.val {analysis_id}} failed during {.pkg cards} calculation: {e$message}")
-        diag_add(
-          stage = "execute_ard", severity = "FAIL",
-          problem = paste0("cards calculation error: ", conditionMessage(e)),
-          location = analysis_id,
-          action = "Analysis skipped -- no results in ARD"
-        )
-        NULL
-      }
-    )
-
-    ## Shell carries an overall/Total column: add an ungrouped pass so the
-    ## ARD holds both the by-group and the total statistics.
-    include_total <- res$include_total
-    if (!is.null(ard) && include_total && !is.null(by_arg)) {
-      ard_total <- tryCatch(
-        executor(df_filtered, analysis_var, NULL, df_population, subject_key),
-        error = function(e) {
-          diag_add(
-            stage = "execute_ard", severity = "WARN",
-            problem = paste0("Total-column pass failed: ", conditionMessage(e)),
-            location = analysis_id,
-            action = "ARD contains by-group results only"
-          )
-          NULL
+    ard <- tryCatch({
+      if (legacy) {
+        ## Retired registry path -- kept only for the engine-equivalence test.
+        executor <- .ARD_EXECUTORS[[method_id]]
+        if (is.null(executor)) {
+          executor <- if (identical(eff_method_id,
+                                    "MTH_SUMMARY_STATISTICS_CONTINUOUS")) {
+            function(df, var, by, denom, subject_key)
+              cards::ard_continuous(data = df, variables = all_of(var),
+                                    by = all_of(by))
+          } else {
+            function(df, var, by, denom, subject_key)
+              cards::ard_categorical(data = df, variables = all_of(var),
+                                     by = all_of(by), denominator = denom)
+          }
         }
-      )
-      if (!is.null(ard_total)) {
-        ard <- cards::bind_ard(ard, ard_total)
+        a <- executor(df_filtered, analysis_var, by_arg, df_population,
+                      subject_key)
+        if (isTRUE(res$include_total) && !is.null(by_arg)) {
+          a <- cards::bind_ard(a, executor(df_filtered, analysis_var, NULL,
+                                           df_population, subject_key))
+        }
+        a
+      } else {
+        ## Default: execute by sourcing the emitted cards block, so the ARD is
+        ## computed by the same code arsbridge ships as the deliverable. Feed
+        ## the resolver the validated variable/grouping names and the
+        ## data-driven fallback method so emitted == executed.
+        res$variable      <- analysis_var
+        res$by            <- by_arg
+        res$method_id     <- eff_method_id
+        res$include_total <- isTRUE(res$include_total)
+        .run_emitted_block(res, adam_dir)
       }
-    }
+    }, error = function(e) {
+      cli::cli_warn("Analysis {.val {analysis_id}} failed during {.pkg cards} calculation: {e$message}")
+      diag_add(
+        stage = "execute_ard", severity = "FAIL",
+        problem = paste0("cards calculation error: ", conditionMessage(e)),
+        location = analysis_id,
+        action = "Analysis skipped -- no results in ARD"
+      )
+      NULL
+    })
 
     if (!is.null(ard)) {
       # Add traceability metadata. analysis_descr carries the analysis's
