@@ -35,12 +35,22 @@
 #'   against the ADaM spec and write a validation report.
 #' @param report_path    Path for the validation report `.xlsx`.
 #'   Default `"spec_validation_report.xlsx"`.
+#' @param code_dir       Directory for the emitted per-TLF pure-`{cards}` `.R`
+#'   deliverables. When `NULL` (default) a `code/` folder next to `output_path`
+#'   is used. These scripts are both the human-readable deliverable and the
+#'   engine `ars_to_ard()` sources to build the ARD.
+#' @param adam_dir       ADaM directory baked into each emitted script's header
+#'   (the reader can edit it). Default `"."`.
 #' @param verbose        Print progress messages. Default `TRUE`.
 #'
 #' @return Invisibly returns a named list:
 #'   \describe{
 #'     \item{`ars_path`}{Path to the generated ARS JSON file.}
 #'     \item{`report_path`}{Path to the validation report (if validate=TRUE).}
+#'     \item{`code_dir`}{Directory holding the emitted per-TLF `{cards}` `.R`
+#'       deliverables.}
+#'     \item{`code_paths`}{Named character vector of the emitted `.R` paths
+#'       (names = output ids).}
 #'     \item{`n_tlfs`}{Number of TLF sections processed.}
 #'     \item{`n_analyses`}{Number of ARS Analysis objects created.}
 #'     \item{`n_warnings`}{Number of spec validation warnings.}
@@ -84,6 +94,8 @@ spec_to_ars <- function(shell_path,
                         spec_column_aliases = NULL,
                         validate     = TRUE,
                         report_path  = "spec_validation_report.xlsx",
+                        code_dir     = NULL,
+                        adam_dir     = ".",
                         verbose      = TRUE) {
 
   if (!file.exists(shell_path)) {
@@ -192,6 +204,23 @@ spec_to_ars <- function(shell_path,
     cli::cli_alert_success("Wrote ARS JSON to {.path {output_path}}")
   }
 
+  ## --- Emit pure-{cards} deliverables --------------------------------
+  ## One self-contained <TLF>.R per output. This is the final deliverable AND
+  ## the code ars_to_ard() sources to compute the ARD. Read back the written
+  ## JSON so emission parses the spec exactly as the engine will.
+  if (is.null(code_dir)) code_dir <- file.path(dirname(output_path), "code")
+  code_paths <- tryCatch(
+    write_tlf_code(output_path, code_dir, adam_dir = adam_dir,
+                   log = if (verbose) function(m) cli::cli_alert(m) else NULL),
+    error = function(e) {
+      cli::cli_warn("Could not emit {.path code/} scripts: {conditionMessage(e)}")
+      character(0)
+    }
+  )
+  if (verbose && length(code_paths)) {
+    cli::cli_alert_success("Emitted {length(code_paths)} {.path .R} deliverable{?s} to {.path {code_dir}}")
+  }
+
   ## --- Diagnostics summary + report ----------------------------------
   diagnostics <- diag_records()
   if (nrow(diagnostics) > 0) {
@@ -211,6 +240,8 @@ spec_to_ars <- function(shell_path,
   result <- list(
     ars_path        = output_path,
     report_path     = if (isTRUE(validate)) report_path else NULL,
+    code_dir        = code_dir,
+    code_paths      = code_paths,
     n_tlfs          = length(enriched),
     n_analyses      = length(re$analyses),
     n_warnings      = if (!is.null(validation))

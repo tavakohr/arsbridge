@@ -60,6 +60,34 @@ test_that("spec_to_ars rejects wrong shell extension", {
   )
 })
 
+test_that("spec_to_ars emits per-TLF {cards} deliverables (offline heuristic)", {
+  skip_if_not_installed("cards")
+  ## A bogus key makes .enrich_structured() return NULL, so the heuristic
+  ## fallback runs the whole pipeline with no real LLM call.
+  td       <- withr::local_tempdir()
+  json_out <- file.path(td, "re.json")
+  res <- spec_to_ars(
+    shell_path     = test_path("fixtures/annotated_shell_2tlf_minimal.docx"),
+    adam_spec_path = test_path("fixtures/adam_spec_minimal.xlsx"),
+    output_path    = json_out,
+    report_path    = file.path(td, "rep.xlsx"),
+    api_key        = "sk-ant-offline", provider = "anthropic",
+    model          = "claude-haiku-4-5",
+    verbose        = FALSE
+  )
+
+  expect_gte(length(res$code_paths), 1)
+  expect_true(all(file.exists(res$code_paths)))
+  expect_equal(normalizePath(res$code_dir),
+               normalizePath(file.path(dirname(json_out), "code")))
+  ## Every emitted deliverable is valid R and free of internal symbols.
+  for (p in res$code_paths) {
+    txt <- paste(readLines(p), collapse = "\n")
+    expect_silent(parse(text = txt))
+    expect_false(grepl("arsbridge|MTH_|load_adam", txt))
+  }
+})
+
 test_that("spec_to_ars end-to-end on minimal synthetic fixture (requires API key)", {
   skip_if(Sys.getenv("ANTHROPIC_API_KEY") == "",
           "ANTHROPIC_API_KEY not set -- skipping live LLM integration test")

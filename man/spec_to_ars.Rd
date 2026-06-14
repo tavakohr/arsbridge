@@ -16,6 +16,8 @@ spec_to_ars(
   spec_column_aliases = NULL,
   validate = TRUE,
   report_path = "spec_validation_report.xlsx",
+  code_dir = NULL,
+  adam_dir = ".",
   verbose = TRUE
 )
 }
@@ -57,6 +59,14 @@ against the ADaM spec and write a validation report.}
 \item{report_path}{Path for the validation report \code{.xlsx}.
 Default \code{"spec_validation_report.xlsx"}.}
 
+\item{code_dir}{Directory for the emitted per-TLF pure-\code{{cards}} \code{.R}
+deliverables. When \code{NULL} (default) a \verb{code/} folder next to \code{output_path}
+is used. These scripts are both the human-readable deliverable and the
+engine \code{ars_to_ard()} sources to build the ARD.}
+
+\item{adam_dir}{ADaM directory baked into each emitted script's header
+(the reader can edit it). Default \code{"."}.}
+
 \item{verbose}{Print progress messages. Default \code{TRUE}.}
 }
 \value{
@@ -64,6 +74,10 @@ Invisibly returns a named list:
 \describe{
 \item{\code{ars_path}}{Path to the generated ARS JSON file.}
 \item{\code{report_path}}{Path to the validation report (if validate=TRUE).}
+\item{\code{code_dir}}{Directory holding the emitted per-TLF \code{{cards}} \code{.R}
+deliverables.}
+\item{\code{code_paths}}{Named character vector of the emitted \code{.R} paths
+(names = output ids).}
 \item{\code{n_tlfs}}{Number of TLF sections processed.}
 \item{\code{n_analyses}}{Number of ARS Analysis objects created.}
 \item{\code{n_warnings}}{Number of spec validation warnings.}
