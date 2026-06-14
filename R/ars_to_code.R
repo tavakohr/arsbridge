@@ -36,17 +36,23 @@
 #' @noRd
 .blk_name <- function(analysis_id) paste0("blk_", make.names(analysis_id))
 
-## Robust inline loader: prefer .xpt, fall back to .csv. Pure base/haven.
+## Robust inline loader: case-insensitive filename match (ADaM cuts ship as
+## ADSL.xpt / adsl.csv / etc., and Linux file systems are case-sensitive), with
+## an .xpt-or-.csv reader. Pure base/haven, self-contained per dataset.
 #' @noRd
 .loader_line <- function(ds) {
-  lc <- tolower(ds)
   sprintf(paste0(
-    "%s <- if (file.exists(file.path(adam_dir, \"%s.xpt\"))) {\n",
-    "  haven::read_xpt(file.path(adam_dir, \"%s.xpt\"))\n",
-    "} else {\n",
-    "  utils::read.csv(file.path(adam_dir, \"%s.csv\"), ",
-    "stringsAsFactors = FALSE, check.names = FALSE)\n",
-    "}"), ds, lc, lc, lc)
+    "%s <- local({\n",
+    "  f <- list.files(adam_dir, pattern = \"(?i)^%s\\\\.(xpt|csv)$\",\n",
+    "                  full.names = TRUE)[1]\n",
+    "  if (is.na(f)) stop(\"%s not found in \", adam_dir)\n",
+    "  if (grepl(\"(?i)\\\\.xpt$\", f)) {\n",
+    "    haven::read_xpt(f)\n",
+    "  } else {\n",
+    "    utils::read.csv(f, stringsAsFactors = FALSE, check.names = FALSE)\n",
+    "  }\n",
+    "})"),
+    ds, tolower(ds), ds)
 }
 
 ## ---- data / denominator expressions ---------------------------------------
