@@ -285,6 +285,16 @@ build_ars_json <- function(sections,
   }
   count_method_id <- .STANDARD_METHODS[["Count and Percentage"]]$id
 
+  ## TRUE when a "DATASET.VARIABLE" annotation reference is resolvable against
+  ## the ADaM spec (exact DATASET.VAR key, or VAR present in any dataset).
+  ## Used to warn, per TLF, when a shell references variables the spec lacks.
+  ## spec_lookup is named by DATASET.VARIABLE (that's how .var_is_categorical
+  ## indexes it). A reference is "developable" only when its exact
+  ## dataset+variable key exists -- a same-named variable in a DIFFERENT
+  ## dataset must not satisfy "ADSL.WEIGHT" (that would mask a genuine gap).
+  .spec_keys_up <- toupper(names(spec_lookup %||% list()))
+  .ref_present <- function(ref) toupper(ref) %in% .spec_keys_up
+
   analysis_sets    <- list(); seen_as  <- character()
   data_subsets     <- list(); seen_ds  <- character()
   grouping_factors <- list(); seen_gf  <- character()
@@ -293,6 +303,26 @@ build_ars_json <- function(sections,
   outputs          <- list()
 
   for (sec in sections) {
+    ## --- TLF-level developability check ---
+    ## Warn (once per TLF) when the shell references variables the ADaM spec
+    ## does not contain -- those rows can't be developed and will be skipped.
+    if (!is.null(spec_lookup) && length(spec_lookup)) {
+      ann_refs <- unique(unlist(lapply(
+        Filter(function(r) isTRUE(r$has_annot), sec$stub_rows),
+        function(r) extract_annotation_vars(r$annotation))))
+      miss <- ann_refs[!vapply(ann_refs, .ref_present, logical(1))]
+      if (length(miss)) {
+        cli::cli_warn(
+          "TLF {sec$tlf_number}: cannot be fully developed -- {length(miss)} variable{?s} not in the ADaM spec: {.val {miss}}")
+        diag_add(
+          stage = "build_ars", severity = "WARN", tlf_number = sec$tlf_number,
+          location = sec$title %||% "",
+          problem = sprintf("TLF %s references %d variable(s) not in the ADaM spec: %s",
+                            sec$tlf_number, length(miss), paste(miss, collapse = ", ")),
+          action = "These rows will be skipped at execution. Add the variable(s) to the ADaM dataset and spec to develop this TLF fully.")
+      }
+    }
+
     ## --- AnalysisSet from population ---
     as_obj <- .build_analysis_set(sec)
     if (!as_obj$id %in% seen_as) {
