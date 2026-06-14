@@ -9,6 +9,7 @@ ars_render_all(
   ard,
   adam_dir = NULL,
   file = NULL,
+  output_ids = NULL,
   types = c("table", "listing", "figure"),
   max_rows = 500,
   progress = NULL
@@ -25,7 +26,13 @@ figures. If \code{NULL}, those are skipped (recorded in the manifest).}
 \item{file}{Output \code{.docx} path. Default: \code{reporting_event_tlfs.docx} in
 \code{\link[=tempdir]{tempdir()}}.}
 
-\item{types}{Which output kinds to render. Default all three.}
+\item{output_ids}{Optional character vector of output ids or names
+(case-insensitive) to render -- any mix of tables, listings, and figures.
+\code{NULL} (default) renders every output. Ids absent from the spec are
+reported in the manifest as skipped.}
+
+\item{types}{Which output kinds to render. Default all three. Applied in
+addition to \code{output_ids}.}
 
 \item{max_rows}{Row cap for listings (see \code{\link[=ars_render_listing]{ars_render_listing()}}).}
 
@@ -41,6 +48,13 @@ Walks all outputs of an ARS reporting event, rendering tables with
 \code{\link[=ars_render_figure]{ars_render_figure()}}, and assembles them into a single landscape \code{.docx}
 (one output per page). Returns a manifest recording, for every output,
 whether it rendered and -- if not -- why.
+}
+\examples{
+\dontrun{
+  # Just three specific outputs into one Word document:
+  ars_render_all(ars, ard, adam_dir,
+                 output_ids = c("T_14_1_1", "L_16_2_4_1", "F_14_2_1"))
+}
 }
 \seealso{
 \code{\link[=ars_render_tlf]{ars_render_tlf()}}, \code{\link[=ars_render_listing]{ars_render_listing()}}, \code{\link[=ars_render_figure]{ars_render_figure()}}

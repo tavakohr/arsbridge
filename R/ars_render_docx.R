@@ -84,18 +84,43 @@
 #'   figures. If `NULL`, those are skipped (recorded in the manifest).
 #' @param file Output `.docx` path. Default: `reporting_event_tlfs.docx` in
 #'   [tempdir()].
-#' @param types Which output kinds to render. Default all three.
+#' @param output_ids Optional character vector of output ids or names
+#'   (case-insensitive) to render -- any mix of tables, listings, and figures.
+#'   `NULL` (default) renders every output. Ids absent from the spec are
+#'   reported in the manifest as skipped.
+#' @param types Which output kinds to render. Default all three. Applied in
+#'   addition to `output_ids`.
 #' @param max_rows Row cap for listings (see [ars_render_listing()]).
 #' @param progress Optional `function(i, n, output_id)` for progress reporting.
 #' @return A data frame manifest (`output_id`, `type`, `status`, `reason`),
 #'   invisibly carrying the written file path as attribute `"file"`.
 #' @seealso [ars_render_tlf()], [ars_render_listing()], [ars_render_figure()]
 #' @export
+#' @examples
+#' \dontrun{
+#'   # Just three specific outputs into one Word document:
+#'   ars_render_all(ars, ard, adam_dir,
+#'                  output_ids = c("T_14_1_1", "L_16_2_4_1", "F_14_2_1"))
+#' }
 ars_render_all <- function(ars_path, ard, adam_dir = NULL, file = NULL,
+                           output_ids = NULL,
                            types = c("table", "listing", "figure"),
                            max_rows = 500, progress = NULL) {
   spec <- jsonlite::fromJSON(ars_path, simplifyVector = FALSE)
   file <- file %||% file.path(tempdir(), "reporting_event_tlfs.docx")
+
+  ## Optional explicit selection (match id OR name, case-insensitive). Warn on
+  ## any requested id that is not in the spec.
+  want <- NULL
+  if (!is.null(output_ids)) {
+    want <- tolower(trimws(output_ids))
+    spec_keys <- unlist(lapply(spec[["outputs"]], function(o)
+      tolower(c(.sc(o[["id"]]), .sc(o[["name"]])))))
+    missing_ids <- output_ids[!want %in% spec_keys]
+    if (length(missing_ids)) {
+      cli::cli_warn("Output id{?s} not found in the spec: {.val {missing_ids}}")
+    }
+  }
   sect <- officer::prop_section(
     page_size = officer::page_size(orient = "landscape"), type = "continuous")
   doc  <- officer::read_docx()
@@ -115,6 +140,12 @@ ars_render_all <- function(ars_path, ard, adam_dir = NULL, file = NULL,
     oid  <- .sc(o[["id"]])
     kind <- classify(o)
     if (!is.null(progress)) progress(i, n, oid)
+
+    ## When an explicit selection is given, silently pass over the rest so the
+    ## manifest lists only what was requested.
+    if (!is.null(want) &&
+        !any(tolower(c(oid, .sc(o[["name"]]))) %in% want)) next
+
     rec <- list(output_id = oid, type = kind, status = "skipped", reason = "")
 
     if (!kind %in% types) {
@@ -151,9 +182,14 @@ ars_render_all <- function(ars_path, ard, adam_dir = NULL, file = NULL,
   }
 
   print(doc, target = file)
-  manifest <- do.call(rbind, lapply(rows, function(r)
-    data.frame(output_id = r$output_id, type = r$type, status = r$status,
-               reason = r$reason, stringsAsFactors = FALSE)))
+  manifest <- if (length(rows)) {
+    do.call(rbind, lapply(rows, function(r)
+      data.frame(output_id = r$output_id, type = r$type, status = r$status,
+                 reason = r$reason, stringsAsFactors = FALSE)))
+  } else {
+    data.frame(output_id = character(0), type = character(0),
+               status = character(0), reason = character(0))
+  }
   attr(manifest, "file") <- file
   manifest
 }
