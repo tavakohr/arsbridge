@@ -105,9 +105,19 @@ parse_where_clause <- function(expr) {
   ## Anything that survived boilerplate-stripping but didn't parse into a
   ## condition is silently weaker filtering downstream -- record it. Skip
   ## parts with no DATASET.VARIABLE shape at all (plain prose like
-  ## "Safety Population" is not a condition attempt).
+  ## "Safety Population" is not a condition attempt), AND skip a BARE
+  ## DATASET.VARIABLE reference with no operator (e.g. a stub's analysis-
+  ## variable annotation "ADSL.AGEGR1") -- that is a variable pointer, not a
+  ## filter, so "no condition" is correct, not a parse failure.
+  ## A part is an ATTEMPTED condition (worth warning) only when something
+  ## remains after its DATASET.VARIABLE token -- an operator, value, or stray
+  ## comparator like "like". A token alone is a bare variable pointer.
+  is_attempt <- function(s) {
+    rest <- sub(paste0(.ADAM_DS, "\\.", .ADAM_VAR), "", s, perl = TRUE)
+    nzchar(trimws(rest))
+  }
   for (u in unparsed) {
-    if (grepl(paste0(.ADAM_DS, "\\.", .ADAM_VAR), u, perl = TRUE)) {
+    if (grepl(paste0(.ADAM_DS, "\\.", .ADAM_VAR), u, perl = TRUE) && is_attempt(u)) {
       diag_add(
         stage = "where_clause", severity = "WARN",
         problem = "Condition could not be parsed into an ARS WhereClause",
