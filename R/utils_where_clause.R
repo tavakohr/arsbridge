@@ -213,6 +213,89 @@ flat_data_subset <- function(annotation) {
   )
 }
 
+## --- WhereClause -> R predicate source text -------------------------------
+##
+## where_to_filter_expr() turns a WhereClause into a dplyr/base predicate STRING
+## that, evaluated against a dataset, reproduces the logical mask of
+## eval_where_clause()/eval_condition() in ars_to_ard.R EXACTLY. The cards
+## emitter (R/ars_to_code.R) drops these strings into `dplyr::filter(...)`, so
+## the code arsbridge emits filters identically to how arsbridge executes --
+## the deterministic-equivalence guarantee of Plan B. Keep the two in lock-step:
+## any change to eval_condition() must be mirrored here (see test-where_to_filter_expr).
+
+#' Render a character vector as an escaped R `c("a", "b")` literal.
+#' @noRd
+.r_chr_vec <- function(vals) {
+  paste0("c(", paste(encodeString(as.character(vals), quote = "\""),
+                     collapse = ", "), ")")
+}
+
+#' One WhereClauseCondition -> predicate string (mirrors eval_condition()).
+#' @noRd
+.condition_to_expr <- function(cond) {
+  var  <- .as_scalar_char(cond[["variable"]])
+  comp <- .as_scalar_char(cond[["comparator"]]) %||% "EQ"
+  vals <- unlist(cond[["value"]])
+  vals <- vals[!is.na(vals)]
+
+  if (is.null(var) || !nzchar(var)) return("TRUE")
+
+  if (comp %in% c("EQ", "IN")) {
+    if (length(vals) == 0) sprintf("(is.na(%s) | %s == \"\")", var, var)
+    else sprintf("%s %%in%% %s", var, .r_chr_vec(vals))
+  } else if (comp %in% c("NE", "NOTIN")) {
+    if (length(vals) == 0) sprintf("(!is.na(%s) & %s != \"\")", var, var)
+    else sprintf("!(%s %%in%% %s)", var, .r_chr_vec(vals))
+  } else if (comp %in% c("LT", "LE", "GT", "GE")) {
+    op <- c(LT = "<", LE = "<=", GT = ">", GE = ">=")[[comp]]
+    sprintf("%s %s as.numeric(%s)", var, op,
+            encodeString(as.character(vals[1]), quote = "\""))
+  } else if (comp == "CONTAINS") {
+    if (length(vals) == 0) return("FALSE")
+    atoms <- vapply(vals, function(v) sprintf(
+      "grepl(tolower(%s), tolower(as.character(%s)), fixed = TRUE)",
+      encodeString(v, quote = "\""), var), character(1))
+    if (length(atoms) == 1) atoms
+    else paste0("(", paste(atoms, collapse = " | "), ")")
+  } else {
+    "TRUE"
+  }
+}
+
+#' Convert an ARS WhereClause into a predicate string.
+#'
+#' Mirrors `eval_where_clause()` in ars_to_ard.R: `NULL` -> "TRUE" (no filter);
+#' a `condition` -> the comparator predicate; a `compoundExpression` -> the
+#' parenthesised atoms joined by ` & ` (AND) or ` | ` (OR); an unrecognised
+#' operator -> "TRUE".
+#'
+#' @param where A WhereClause-bearing object (analysisSet / dataSubset /
+#'   WhereClause), or `NULL`.
+#' @return A single character string suitable for `eval(parse(text = .))` or
+#'   `dplyr::filter()`.
+#' @noRd
+where_to_filter_expr <- function(where) {
+  if (is.null(where)) return("TRUE")
+  if (!is.null(where[["condition"]])) {
+    return(.condition_to_expr(where[["condition"]]))
+  }
+  if (!is.null(where[["compoundExpression"]])) {
+    ce      <- where[["compoundExpression"]]
+    op      <- .as_scalar_char(ce[["logicalOperator"]])
+    clauses <- ce[["whereClauses"]]
+    if (length(clauses) == 0) return("TRUE")
+    sep <- if (identical(op, "AND")) " & " else if (identical(op, "OR")) " | " else NULL
+    if (is.null(sep)) return("TRUE")
+    atoms <- vapply(clauses, function(cl) sprintf("(%s)", where_to_filter_expr(cl)),
+                    character(1))
+    return(paste(atoms, collapse = sep))
+  }
+  if (!is.null(where[["variable"]])) {
+    return(.condition_to_expr(where))
+  }
+  "TRUE"
+}
+
 .cond <- function(dataset, variable, comparator, value) {
   list(
     condition = list(
