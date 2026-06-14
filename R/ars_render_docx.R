@@ -39,18 +39,22 @@
   ft <- flextable::flextable(d)
   ft <- flextable::set_header_labels(ft, values = stats::setNames(as.list(header_vals), names(d)))
   hdr <- c(oid_name, if (length(title)) title[1] else NULL)
-  ft <- flextable::add_header_lines(ft, values = hdr[nzchar(hdr)])
+  hdr <- hdr[nzchar(hdr)]
+  ft <- flextable::add_header_lines(ft, values = hdr)
   if (length(footnotes)) {
     ft <- flextable::add_footer_lines(ft, values = footnotes)
     ft <- flextable::fontsize(ft, size = 8, part = "footer")
     ft <- flextable::italic(ft, part = "footer")
   }
   if (any(grp_flag)) ft <- flextable::bold(ft, i = which(grp_flag), j = 1, part = "body")
-  ft <- flextable::font(ft, fontname = "Times New Roman", part = "all")
+  ## Match the annotated shell's look: Arial, with the table id + title block
+  ## centred above the columns (regulatory house style).
+  ft <- flextable::font(ft, fontname = "Arial", part = "all")
   ft <- flextable::fontsize(ft, size = 9, part = "body")
   ft <- flextable::bold(ft, part = "header")
   ft <- flextable::align(ft, j = 1, align = "left", part = "all")
   if (length(body_cols)) ft <- flextable::align(ft, j = body_cols, align = "center", part = "all")
+  if (length(hdr)) ft <- flextable::align(ft, i = seq_along(hdr), align = "center", part = "header")
   ft <- flextable::border_remove(ft)
   ft <- flextable::hline_top(ft, part = "header", border = thin)
   ft <- flextable::hline_bottom(ft, part = "header", border = thin)
@@ -64,7 +68,9 @@
     flextable::save_as_rtf(ft, path = file)
   } else {
     sect <- officer::prop_section(
-      page_size = officer::page_size(orient = "landscape"), type = "continuous")
+      page_size = officer::page_size(orient = "landscape"), type = "continuous",
+      page_margins = officer::page_mar(top = 0.5, bottom = 0.5,
+                                       left = 0.5, right = 0.5))
     flextable::save_as_docx(ft, path = file, pr_section = sect)
   }
   invisible(file)
@@ -122,7 +128,9 @@ ars_render_all <- function(ars_path, ard, adam_dir = NULL, file = NULL,
     }
   }
   sect <- officer::prop_section(
-    page_size = officer::page_size(orient = "landscape"), type = "continuous")
+    page_size = officer::page_size(orient = "landscape"), type = "continuous",
+    page_margins = officer::page_mar(top = 0.5, bottom = 0.5,
+                                     left = 0.5, right = 0.5))
   doc  <- officer::read_docx()
   doc  <- officer::body_set_default_section(doc, sect)
 
