@@ -135,46 +135,12 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     dfs[[name_upper]]
   }
 
-  # Scalar character helper to prevent list-column issues when simplifyVector = FALSE
-  as_scalar_char <- function(x) {
-    if (is.null(x)) return(NULL)
-    val <- unlist(x)
-    if (length(val) == 0) return(NULL)
-    as.character(val[1])
-  }
+  # Scalar character helper (shared file-level implementation in resolve_analysis.R).
+  as_scalar_char <- .as_scalar_char
 
-  # Build mapping from analysisId to outputId
-  analysis_to_output <- list()
-  for (out in spec[["outputs"]]) {
-    out_id <- as_scalar_char(out[["id"]])
-    if (is.null(out_id)) next
-    for (an_id in unlist(out[["referencedAnalysisIds"]])) {
-      an_id_str <- as_scalar_char(an_id)
-      if (!is.null(an_id_str)) {
-        analysis_to_output[[an_id_str]] <- out_id
-      }
-    }
-  }
-
-  # Build lookup map for groupings
-  grouping_map <- list()
-  for (gf in spec[["analysisGroupings"]]) {
-    gf_id <- as_scalar_char(gf[["id"]])
-    if (is.null(gf_id)) next
-    gf_var <- NULL
-    if (is.list(gf[["groupingVariable"]])) {
-      gf_var <- gf[["groupingVariable"]][["variable"]]
-    } else {
-      gf_var <- gf[["groupingVariable"]]
-    }
-    if (is.null(gf_var) || !nzchar(gf_var)) {
-      gf_var <- gf[["name"]]
-    }
-    gf_var_str <- as_scalar_char(gf_var)
-    if (!is.null(gf_var_str)) {
-      grouping_map[[gf_id]] <- gf_var_str
-    }
-  }
+  # Lookup maps built once from the spec and shared with resolve_analysis().
+  analysis_to_output <- .build_analysis_to_output(spec)
+  grouping_map       <- .build_grouping_map(spec)
 
   # Helper functions to clean and evaluate filters
   clean_var_name <- function(var_name, df_names) {
@@ -344,9 +310,10 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
   # Walk analyses and execute
   ard_list <- list()
   for (ana in spec[["analyses"]]) {
-    analysis_id <- as_scalar_char(ana[["id"]])
+    res <- resolve_analysis(ana, spec, subject_key, grouping_map, analysis_to_output)
+    analysis_id <- res$analysis_id
     if (is.null(analysis_id)) next
-    out_id <- if (!is.null(analysis_id)) analysis_to_output[[analysis_id]] else NULL
+    out_id <- res$output_id
 
     # Filter by user-selected output_ids and analysis_ids
     if (!is.null(output_ids) || !is.null(analysis_ids)) {
@@ -365,11 +332,9 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       if (!matched) next
     }
 
-    method_id <- as_scalar_char(ana[["methodId"]])
-    analysis_var <- as_scalar_char(ana[["analysisVariable"]][["variable"]] %||% ana[["variable"]])
-    analysis_ds <- as_scalar_char(ana[["analysisVariable"]][["dataset"]] %||% ana[["dataset"]])
-    pop_id <- as_scalar_char(ana[["analysisSetId"]])
-    subset_id <- as_scalar_char(ana[["dataSubsetId"]])
+    method_id    <- res$method_id
+    analysis_var <- res$variable
+    analysis_ds  <- res$dataset
 
     if (is.null(analysis_ds) || !nzchar(analysis_ds)) {
       cli::cli_warn("Skipping analysis {.val {analysis_id}}: primary dataset not specified.")
@@ -386,25 +351,8 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       next
     }
 
-    pop_where <- NULL
-    if (!is.null(pop_id) && nzchar(pop_id)) {
-      for (aset in spec[["analysisSets"]]) {
-        if (identical(as_scalar_char(aset[["id"]]), pop_id)) {
-          pop_where <- aset
-          break
-        }
-      }
-    }
-
-    subset_where <- NULL
-    if (!is.null(subset_id) && nzchar(subset_id)) {
-      for (dsub in spec[["dataSubsets"]]) {
-        if (identical(as_scalar_char(dsub[["id"]]), subset_id)) {
-          subset_where <- dsub
-          break
-        }
-      }
-    }
+    pop_where    <- res$pop_where
+    subset_where <- res$subset_where
 
     # Apply filters
     df_filtered <- df_base
@@ -439,19 +387,8 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       next
     }
 
-    # Resolve groupings
-    grouping_vars <- character(0)
-    if (!is.null(ana[["orderedGroupings"]])) {
-      for (grp in ana[["orderedGroupings"]]) {
-        gf_id <- as_scalar_char(grp[["groupingId"]])
-        if (!is.null(gf_id)) {
-          gf_var <- grouping_map[[gf_id]]
-          if (!is.null(gf_var) && nzchar(gf_var)) {
-            grouping_vars <- c(grouping_vars, gf_var)
-          }
-        }
-      }
-    }
+    # Resolve groupings (raw names from the shared resolver; cleaned below)
+    grouping_vars <- res$by
 
     grouping_vars <- unname(sapply(grouping_vars, clean_var_name, df_names = names(df_filtered)))
     dropped_groupings <- grouping_vars[!grouping_vars %in% names(df_filtered)]
@@ -558,7 +495,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
 
     ## Shell carries an overall/Total column: add an ungrouped pass so the
     ## ARD holds both the by-group and the total statistics.
-    include_total <- isTRUE(as.logical(unlist(ana[["includeTotal"]])[1] %||% FALSE))
+    include_total <- res$include_total
     if (!is.null(ard) && include_total && !is.null(by_arg)) {
       ard_total <- tryCatch(
         executor(df_filtered, analysis_var, NULL, df_population, subject_key),
@@ -582,8 +519,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       # human label (e.g. "EASI75 at Week 16") so the rendering layer can
       # disambiguate rows when several analyses summarise the same variable
       # under different data subsets within one output.
-      analysis_descr <- as_scalar_char(ana[["description"]]) %||%
-        as_scalar_char(ana[["name"]]) %||% analysis_id
+      analysis_descr <- res$description
       ard[["analysis_id"]]     <- analysis_id
       ard[["analysis_descr"]]  <- analysis_descr
       ard[["method_id"]]       <- method_id
