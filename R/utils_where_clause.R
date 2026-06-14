@@ -195,6 +195,24 @@ parse_where_clause <- function(expr) {
   NULL
 }
 
+#' Flatten a single annotation WHERE clause into the
+#' `{dataset, variable, comparator, value}` shape that
+#' `.build_data_subset()` consumes. Returns NULL when the annotation has no
+#' parseable condition, or when it parses to a compound expression (which the
+#' single-condition DataSubset builder cannot represent yet).
+#' @noRd
+flat_data_subset <- function(annotation) {
+  wc <- parse_where_clause(annotation)
+  if (is.null(wc) || is.null(wc$condition)) return(NULL)
+  cond <- wc$condition
+  list(
+    dataset    = cond$dataset,
+    variable   = cond$variable,
+    comparator = cond$comparator %||% "EQ",
+    value      = cond$value      %||% list()
+  )
+}
+
 .cond <- function(dataset, variable, comparator, value) {
   list(
     condition = list(

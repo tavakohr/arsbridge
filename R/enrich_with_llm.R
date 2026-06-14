@@ -134,6 +134,13 @@ enrich_with_llm <- function(section,
   section$analysis_type   <- atype %||% .infer_analysis_type(section)
   section$ars_method_name <- nz(parsed$ars_method_name) %||% .infer_method_name(section$analysis_type)
   section$enriched_rows   <- nz(parsed$row_enrichments) %||% .fallback_enrichments(annotated_rows)
+  ## A flag annotation like "ADSL.RANDFL='Y'" is a SUBSET FILTER, not an
+  ## analysis variable. The LLM (and the heuristic fallback) frequently omit
+  ## the DataSubset, which makes ars_to_ard() count the flag's levels ("Y", "")
+  ## -- collapsing e.g. a 15-row disposition table to 2 rows with a stray "Y"
+  ## column. Backfill the where-clause for any row that lacks a data_subset.
+  section$enriched_rows   <- .backfill_data_subsets(section$enriched_rows,
+                                                    annotated_rows)
 
   ## --- Grouping variable resolution -----------------------------------
   ## Multi-level: the LLM returns an ORDERED by_variables array (outermost
@@ -461,6 +468,34 @@ enrich_with_llm <- function(section,
     if (cand %in% adsl_vars) return(cand)
   }
   NULL
+}
+
+#' Backfill a DataSubset onto every enriched row that lacks one, derived from
+#' the row's original annotation WHERE clause. Idempotent: rows that already
+#' carry a non-empty `data_subset` are left untouched (LLM output wins).
+#' @noRd
+.backfill_data_subsets <- function(enriched_rows, annotated_rows) {
+  ann_by_label <- stats::setNames(
+    lapply(annotated_rows, function(r) r$annotation %||% ""),
+    vapply(annotated_rows, function(r) r$label %||% "", character(1)))
+  lapply(enriched_rows, function(er) {
+    ds <- er$data_subset
+    if (!is.null(ds) && length(ds) > 0) return(er)        # keep existing
+    ann <- ann_by_label[[er$label %||% ""]]
+    if (is.null(ann) || !nzchar(ann)) return(er)
+    fs <- flat_data_subset(ann)
+    if (is.null(fs)) return(er)
+    er$data_subset <- fs
+    diag_add(
+      stage = "enrich_llm", severity = "INFO",
+      problem = sprintf("Backfilled DataSubset for row '%s' from its annotation",
+                        er$label %||% "?"),
+      location = ann,
+      action = sprintf("Applied %s.%s %s '%s' as a subset filter (not an analysis variable)",
+                       fs$dataset, fs$variable, fs$comparator,
+                       if (length(fs$value)) fs$value[[1]] else ""))
+    er
+  })
 }
 
 .fallback_enrichments <- function(annotated_rows) {
