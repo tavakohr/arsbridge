@@ -223,6 +223,25 @@ flat_data_subset <- function(annotation) {
 ## the deterministic-equivalence guarantee of Plan B. Keep the two in lock-step:
 ## any change to eval_condition() must be mirrored here (see test-where_to_filter_expr).
 
+#' Datasets referenced anywhere in a WhereClause (mirrors the
+#' get_referenced_datasets() closure in ars_to_ard.R). Used by the emitter to
+#' decide direct-filter vs cross-dataset subject restriction.
+#' @noRd
+.where_datasets <- function(where) {
+  if (is.null(where)) return(character(0))
+  if (!is.null(where[["condition"]])) {
+    return(.as_scalar_char(where[["condition"]][["dataset"]]) %||% character(0))
+  }
+  if (!is.null(where[["compoundExpression"]])) {
+    cls <- where[["compoundExpression"]][["whereClauses"]]
+    return(unique(unlist(lapply(cls, .where_datasets))))
+  }
+  if (!is.null(where[["dataset"]])) {
+    return(.as_scalar_char(where[["dataset"]]) %||% character(0))
+  }
+  character(0)
+}
+
 #' Render a character vector as an escaped R `c("a", "b")` literal.
 #' @noRd
 .r_chr_vec <- function(vals) {
