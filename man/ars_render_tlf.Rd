@@ -8,7 +8,8 @@ ars_render_tlf(
   ars_path,
   ard,
   output_id,
-  format = c("gt", "rtf"),
+  format = c("gt", "docx", "rtf"),
+  file = NULL,
   rtf_path = NULL,
   ...
 )
@@ -21,16 +22,20 @@ ars_render_tlf(
 \item{output_id}{\code{character(1)} ARS output id or name to render
 (case-insensitive).}
 
-\item{format}{Output format. \code{"gt"} (default) returns a \code{gt_tbl}. \code{"rtf"} is
-experimental and not yet implemented (the installed \code{{tfrmt}} provides no
-RTF writer); requesting it raises an informative error.}
+\item{format}{Output format. \code{"gt"} (default) returns a \code{gt_tbl}; \code{"docx"}
+and \code{"rtf"} write a regulatory-style Word / RTF file (via
+\code{{flextable}} + \code{{officer}}) and return the path invisibly.}
 
-\item{rtf_path}{Output path, reserved for the experimental \code{"rtf"} format.}
+\item{file}{Output path for \code{format = "docx"} / \code{"rtf"}. Defaults to
+\verb{<output_id>.<format>} in \code{\link[=tempdir]{tempdir()}}.}
+
+\item{rtf_path}{Deprecated alias for \code{file}.}
 
 \item{...}{Passed to \code{\link[=ars_to_tfrmt]{ars_to_tfrmt()}} (e.g. \code{col_var}, \code{label_var}).}
 }
 \value{
-A \code{gt_tbl} when \code{format = "gt"}.
+A \code{gt_tbl} when \code{format = "gt"}; otherwise the written file path,
+invisibly.
 }
 \description{
 Convenience wrapper: builds the \code{\link[tfrmt:tfrmt]{tfrmt::tfrmt()}} spec with \code{\link[=ars_to_tfrmt]{ars_to_tfrmt()}},
@@ -40,8 +45,9 @@ footnotes as GT source notes.
 \examples{
 \dontrun{
   gt_tbl <- ars_render_tlf(ars_path, ard, "T_14_1_1")
+  ars_render_tlf(ars_path, ard, "T_14_1_1", format = "docx", file = "t1.docx")
 }
 }
 \seealso{
-\code{\link[=ars_to_tfrmt]{ars_to_tfrmt()}}
+\code{\link[=ars_to_tfrmt]{ars_to_tfrmt()}}, \code{\link[=ars_render_all]{ars_render_all()}}
 }

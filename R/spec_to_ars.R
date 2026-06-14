@@ -182,7 +182,8 @@ spec_to_ars <- function(shell_path,
   ## --- Build and write ARS JSON --------------------------------------
   if (verbose) cli::cli_alert_info("Building CDISC ARS v1.0 ReportingEvent...")
   re <- build_ars_json(enriched, study_id = study_id,
-                       study_name = study_name %||% study_id)
+                       study_name = study_name %||% study_id,
+                       spec_lookup = spec$lookup)
 
   json_text <- jsonlite::toJSON(re, auto_unbox = TRUE, pretty = TRUE, null = "null")
   writeLines(json_text, output_path, useBytes = TRUE)

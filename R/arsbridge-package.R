@@ -16,4 +16,5 @@
 
 #' @importFrom stats setNames
 #' @importFrom utils modifyList packageVersion head tail
+#' @importFrom rlang .data
 NULL

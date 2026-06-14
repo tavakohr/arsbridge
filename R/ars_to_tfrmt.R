@@ -180,9 +180,22 @@ detect_row_roles <- function(ard, col_var) {
   ## group hierarchy: remaining group level cols, then `variable` (each
   ## analysis variable becomes its own row block / header).
   group_vars <- lvl_cols
-  if ("variable" %in% nms) {
-    n_var <- length(unique(stats::na.omit(.flat_chr(ard[["variable"]]))))
-    if (n_var >= 1) group_vars <- c(group_vars, "variable")
+  if ("variable" %in% nms) group_vars <- c(group_vars, "variable")
+
+  ## Disambiguate collapsed rows: when several analyses summarise the SAME
+  ## variable for the same column under different data subsets (e.g. a change
+  ## from baseline at multiple visits/parameters), they share one
+  ## (column, variable, stat) identity and tfrmt cannot combine them. If that
+  ## happens, promote the analysis descriptor to the outermost row group so
+  ## each subset becomes its own labelled block.
+  if ("analysis_descr" %in% nms) {
+    key_cols <- intersect(c(col_var, "variable", "variable_level",
+                            "stat_name", lvl_cols), nms)
+    key   <- do.call(paste, c(lapply(key_cols, function(k) .flat_chr(ard[[k]])),
+                              sep = ""))
+    descr <- .flat_chr(ard[["analysis_descr"]])
+    collide <- tapply(descr, key, function(d) length(unique(stats::na.omit(d))) > 1)
+    if (any(collide, na.rm = TRUE)) group_vars <- c("analysis_descr", group_vars)
   }
   list(label_var = .ARS_ROW_LABEL, group_vars = group_vars)
 }
@@ -472,21 +485,26 @@ ars_to_tfrmt <- function(ars_path, ard, output_id,
 #' footnotes as GT source notes.
 #'
 #' @inheritParams ars_to_tfrmt
-#' @param format Output format. `"gt"` (default) returns a `gt_tbl`. `"rtf"` is
-#'   experimental and not yet implemented (the installed `{tfrmt}` provides no
-#'   RTF writer); requesting it raises an informative error.
-#' @param rtf_path Output path, reserved for the experimental `"rtf"` format.
+#' @param format Output format. `"gt"` (default) returns a `gt_tbl`; `"docx"`
+#'   and `"rtf"` write a regulatory-style Word / RTF file (via
+#'   `{flextable}` + `{officer}`) and return the path invisibly.
+#' @param file Output path for `format = "docx"` / `"rtf"`. Defaults to
+#'   `<output_id>.<format>` in [tempdir()].
+#' @param rtf_path Deprecated alias for `file`.
 #' @param ... Passed to [ars_to_tfrmt()] (e.g. `col_var`, `label_var`).
 #'
-#' @return A `gt_tbl` when `format = "gt"`.
-#' @seealso [ars_to_tfrmt()]
+#' @return A `gt_tbl` when `format = "gt"`; otherwise the written file path,
+#'   invisibly.
+#' @seealso [ars_to_tfrmt()], [ars_render_all()]
 #' @export
 #' @examples
 #' \dontrun{
 #'   gt_tbl <- ars_render_tlf(ars_path, ard, "T_14_1_1")
+#'   ars_render_tlf(ars_path, ard, "T_14_1_1", format = "docx", file = "t1.docx")
 #' }
 ars_render_tlf <- function(ars_path, ard, output_id,
-                           format = c("gt", "rtf"), rtf_path = NULL, ...) {
+                           format = c("gt", "docx", "rtf"),
+                           file = NULL, rtf_path = NULL, ...) {
   format  <- match.arg(format)
   tf      <- ars_to_tfrmt(ars_path, ard, output_id, ...)
 
@@ -498,20 +516,12 @@ ars_render_tlf <- function(ars_path, ard, output_id,
 
   ## Use the canonical output id resolved during ars_to_tfrmt().
   spec    <- jsonlite::fromJSON(ars_path, simplifyVector = FALSE)
-  out_id  <- .sc(find_output(spec, output_id)[["id"]])
+  out_obj <- find_output(spec, output_id)
+  out_id  <- .sc(out_obj[["id"]])
 
   data_prepped <- .tfrmt_prep_ard(ard, out_id, col_var, label_var,
                                   group_vars, keep_params)
   stopifnot(label_var %in% names(data_prepped))
-
-  if (format == "rtf") {
-    ## Experimental / out of scope: the installed {tfrmt} exposes no RTF
-    ## writer, so fail clearly rather than silently producing nothing.
-    cli::cli_abort(c(
-      "RTF output is experimental and not implemented.",
-      "i" = "Render with {.code format = 'gt'} and export via {.pkg gt}, e.g. {.code gt::gtsave()}."
-    ))
-  }
 
   gt_tbl <- tfrmt::print_to_gt(tf, .data = data_prepped)
   ## Blank the synthetic row-label column header.
@@ -524,7 +534,14 @@ ars_render_tlf <- function(ars_path, ard, output_id,
       gt_tbl <- gt::tab_source_note(gt_tbl, source_note = fn)
     }
   }
-  gt_tbl
+
+  if (format == "gt") return(gt_tbl)
+
+  ## Word / RTF via flextable.
+  file <- file %||% rtf_path %||% file.path(tempdir(), paste0(out_id, ".", format))
+  ft <- .gt_to_flextable(gt_tbl, .sc(out_obj[["name"]]) %||% out_id,
+                         extract_title(out_obj), footnotes)
+  .write_flextable(ft, file, format)
 }
 
 ## ---------------------------------------------------------------------------

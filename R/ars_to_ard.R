@@ -432,7 +432,9 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
         stage = "execute_ard", severity = "FAIL",
         problem = sprintf("Variable %s not found in dataset %s", analysis_var, analysis_ds),
         location = analysis_id,
-        action = "Analysis skipped -- no results in ARD"
+        action = paste0("Analysis skipped -- the shell references ", analysis_var,
+                        " but the supplied ", analysis_ds,
+                        " does not contain it. Provide an ADaM cut that includes this variable.")
       )
       next
     }
@@ -512,6 +514,34 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       next
     }
 
+    ## A study variable that exists but is entirely missing in this data cut
+    ## (e.g. a special-interest AE flag with no events) has nothing to
+    ## tabulate. {cards} errors hard on an all-NA non-factor column, so detect
+    ## this first and skip with an explanatory WARN rather than a cryptic
+    ## calculation failure. The output stays empty until a populated cut is
+    ## supplied.
+    is_continuous_method <- method_id %in% c("MTH_SUMMARY_STATISTICS_CONTINUOUS") ||
+      identical(method_actual, "FALLBACK_CONTINUOUS")
+    col_vals      <- df_filtered[[analysis_var]]
+    all_missing   <- if (is_continuous_method) {
+      all(is.na(suppressWarnings(as.numeric(col_vals))))
+    } else {
+      !is.factor(col_vals) && all(is.na(col_vals))
+    }
+    if (analysis_var %in% names(df_filtered) && all_missing) {
+      reason <- if (is_continuous_method)
+        "has no numeric values to summarise" else "is all-missing"
+      cli::cli_warn("Skipping analysis {.val {analysis_id}}: variable {.val {analysis_var}} {reason} in this data cut.")
+      diag_add(
+        stage = "execute_ard", severity = "WARN",
+        problem = sprintf("Variable %s %s in dataset %s", analysis_var, reason, analysis_ds),
+        location = analysis_id,
+        action = paste0("Nothing to tabulate in this cut -- supply an ADaM ",
+                        "dataset where ", analysis_var, " is populated to render this row.")
+      )
+      next
+    }
+
     ard <- tryCatch(
       executor(df_filtered, analysis_var, by_arg, df_population, subject_key),
       error = function(e) {
@@ -548,8 +578,14 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     }
 
     if (!is.null(ard)) {
-      # Add traceability metadata
+      # Add traceability metadata. analysis_descr carries the analysis's
+      # human label (e.g. "EASI75 at Week 16") so the rendering layer can
+      # disambiguate rows when several analyses summarise the same variable
+      # under different data subsets within one output.
+      analysis_descr <- as_scalar_char(ana[["description"]]) %||%
+        as_scalar_char(ana[["name"]]) %||% analysis_id
       ard[["analysis_id"]]     <- analysis_id
+      ard[["analysis_descr"]]  <- analysis_descr
       ard[["method_id"]]       <- method_id
       ard[["output_id"]]       <- out_id %||% NA_character_
       ard[["method_intended"]] <- method_id

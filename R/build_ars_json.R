@@ -259,10 +259,31 @@
 #' @noRd
 build_ars_json <- function(sections,
                            study_id   = "STUDY-001",
-                           study_name = NULL) {
+                           study_name = NULL,
+                           spec_lookup = NULL) {
   if (length(sections) == 0) {
     cli::cli_abort("Cannot build ReportingEvent: no TLF sections provided.")
   }
+
+  ## TRUE when the ADaM spec marks this variable as character-typed or
+  ## controlled-terminology (has a codelist) -- i.e. a categorical variable
+  ## that must be summarised by counts, never by continuous statistics.
+  .var_is_categorical <- function(dataset, variable) {
+    if (is.null(spec_lookup) || is.null(variable) || !nzchar(variable)) return(NA)
+    variable <- toupper(sub("^.*\\.", "", variable))
+    dataset  <- toupper(dataset %||% "")
+    rec <- spec_lookup[[paste0(dataset, ".", variable)]]
+    if (is.null(rec)) {
+      hits <- spec_lookup[vapply(spec_lookup, function(r)
+        identical(toupper(r$variable %||% ""), variable), logical(1))]
+      if (!length(hits)) return(NA)
+      rec <- hits[[1]]
+    }
+    type <- tolower(as.character(rec$type %||% ""))
+    cl   <- as.character(rec$codelist %||% "")
+    grepl("char|text|string|^c$", type) || (nzchar(cl) && !is.na(cl))
+  }
+  count_method_id <- .STANDARD_METHODS[["Count and Percentage"]]$id
 
   analysis_sets    <- list(); seen_as  <- character()
   data_subsets     <- list(); seen_ds  <- character()
@@ -317,11 +338,33 @@ build_ars_json <- function(sections,
         data_subsets[[length(data_subsets) + 1L]] <- ds_obj
         seen_ds <- c(seen_ds, ds_obj$id)
       }
+      ## Per-row method correction: a section classified as continuous may
+      ## still contain categorical rows (e.g. SEX, RACE in a demographics
+      ## table). Summarising those with continuous stats yields NaN -- so when
+      ## the ADaM spec marks the row variable as categorical, route it to the
+      ## count-and-percentage method instead.
+      row_method_id <- mth_obj$id
+      if (identical(mth_obj$id, "MTH_SUMMARY_STATISTICS_CONTINUOUS") &&
+          isTRUE(.var_is_categorical(er$primary_dataset, er$primary_variable))) {
+        row_method_id <- count_method_id
+        if (!count_method_id %in% seen_mth) {
+          methods[[length(methods) + 1L]] <-
+            .with_op_self_rels(.STANDARD_METHODS[["Count and Percentage"]])
+          seen_mth <- c(seen_mth, count_method_id)
+        }
+        diag_add(
+          stage = "build_ars", severity = "INFO",
+          problem = sprintf("Row variable %s is categorical but its TLF was classified continuous",
+                            er$primary_variable %||% row$label %||% "?"),
+          tlf_number = sec$tlf_number,
+          action = "Routed this row to Count and Percentage instead of continuous summary"
+        )
+      }
       an_obj <- .build_analysis(
         section = sec, row = row, enrichment = er,
         index = idx, as_id = as_obj$id,
         gf_ids = gf_ids,
-        method_id = mth_obj$id,
+        method_id = row_method_id,
         ds_id = if (!is.null(ds_obj)) ds_obj$id else NULL
       )
       analyses[[length(analyses) + 1L]] <- an_obj
