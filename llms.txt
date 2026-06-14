@@ -341,6 +341,12 @@ MIT © Hamid Tavakoli. See [LICENSE.md](LICENSE.md).
 
 - [`ars_diagnostics()`](ars_diagnostics.md) : Retrieve pipeline
   diagnostics from the most recent run
+- [`ars_render_all()`](ars_render_all.md) : Render every output of a
+  reporting event into one Word document
+- [`ars_render_figure()`](ars_render_figure.md) : Render an ARS figure
+  output to a ggplot
+- [`ars_render_listing()`](ars_render_listing.md) : Render an ARS
+  listing output to a GT table
 - [`ars_render_tlf()`](ars_render_tlf.md) : Render an ARS output to a
   formatted clinical table
 - [`ars_to_ard()`](ars_to_ard.md) : Execute ARS JSON and return an ARD

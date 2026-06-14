@@ -52,7 +52,8 @@ footnotes as GT source notes.</p>
 <span>  <span class="va">ars_path</span>,</span>
 <span>  <span class="va">ard</span>,</span>
 <span>  <span class="va">output_id</span>,</span>
-<span>  format <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"gt"</span>, <span class="st">"rtf"</span><span class="op">)</span>,</span>
+<span>  format <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"gt"</span>, <span class="st">"docx"</span>, <span class="st">"rtf"</span><span class="op">)</span>,</span>
+<span>  file <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  rtf_path <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -76,13 +77,18 @@ footnotes as GT source notes.</p>
 
 
 <dt id="arg-format">format<a class="anchor" aria-label="anchor" href="#arg-format"></a></dt>
-<dd><p>Output format. <code>"gt"</code> (default) returns a <code>gt_tbl</code>. <code>"rtf"</code> is
-experimental and not yet implemented (the installed <code>{tfrmt}</code> provides no
-RTF writer); requesting it raises an informative error.</p></dd>
+<dd><p>Output format. <code>"gt"</code> (default) returns a <code>gt_tbl</code>; <code>"docx"</code>
+and <code>"rtf"</code> write a regulatory-style Word / RTF file (via
+<code>{flextable}</code> + <code>{officer}</code>) and return the path invisibly.</p></dd>
+
+
+<dt id="arg-file">file<a class="anchor" aria-label="anchor" href="#arg-file"></a></dt>
+<dd><p>Output path for <code>format = "docx"</code> / <code>"rtf"</code>. Defaults to
+<code>&lt;output_id&gt;.&lt;format&gt;</code> in <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code>.</p></dd>
 
 
 <dt id="arg-rtf-path">rtf_path<a class="anchor" aria-label="anchor" href="#arg-rtf-path"></a></dt>
-<dd><p>Output path, reserved for the experimental <code>"rtf"</code> format.</p></dd>
+<dd><p>Deprecated alias for <code>file</code>.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
@@ -91,17 +97,19 @@ RTF writer); requesting it raises an informative error.</p></dd>
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>A <code>gt_tbl</code> when <code>format = "gt"</code>.</p>
+    <p>A <code>gt_tbl</code> when <code>format = "gt"</code>; otherwise the written file path,
+invisibly.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
-    <div class="dont-index"><p><code><a href="ars_to_tfrmt.html">ars_to_tfrmt()</a></code></p></div>
+    <div class="dont-index"><p><code><a href="ars_to_tfrmt.html">ars_to_tfrmt()</a></code>, <code><a href="ars_render_all.html">ars_render_all()</a></code></p></div>
     </div>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
 <span class="r-in"><span>  <span class="va">gt_tbl</span> <span class="op">&lt;-</span> <span class="fu">ars_render_tlf</span><span class="op">(</span><span class="va">ars_path</span>, <span class="va">ard</span>, <span class="st">"T_14_1_1"</span><span class="op">)</span></span></span>
+<span class="r-in"><span>  <span class="fu">ars_render_tlf</span><span class="op">(</span><span class="va">ars_path</span>, <span class="va">ard</span>, <span class="st">"T_14_1_1"</span>, format <span class="op">=</span> <span class="st">"docx"</span>, file <span class="op">=</span> <span class="st">"t1.docx"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
 </code></pre></div>
     </div>

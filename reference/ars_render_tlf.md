@@ -13,7 +13,8 @@ ars_render_tlf(
   ars_path,
   ard,
   output_id,
-  format = c("gt", "rtf"),
+  format = c("gt", "docx", "rtf"),
+  file = NULL,
   rtf_path = NULL,
   ...
 )
@@ -36,13 +37,19 @@ ars_render_tlf(
 
 - format:
 
-  Output format. `"gt"` (default) returns a `gt_tbl`. `"rtf"` is
-  experimental and not yet implemented (the installed `{tfrmt}` provides
-  no RTF writer); requesting it raises an informative error.
+  Output format. `"gt"` (default) returns a `gt_tbl`; `"docx"` and
+  `"rtf"` write a regulatory-style Word / RTF file (via `{flextable}` +
+  `{officer}`) and return the path invisibly.
+
+- file:
+
+  Output path for `format = "docx"` / `"rtf"`. Defaults to
+  `<output_id>.<format>` in
+  [`tempdir()`](https://rdrr.io/r/base/tempfile.html).
 
 - rtf_path:
 
-  Output path, reserved for the experimental `"rtf"` format.
+  Deprecated alias for `file`.
 
 - ...:
 
@@ -51,16 +58,19 @@ ars_render_tlf(
 
 ## Value
 
-A `gt_tbl` when `format = "gt"`.
+A `gt_tbl` when `format = "gt"`; otherwise the written file path,
+invisibly.
 
 ## See also
 
-[`ars_to_tfrmt()`](ars_to_tfrmt.md)
+[`ars_to_tfrmt()`](ars_to_tfrmt.md),
+[`ars_render_all()`](ars_render_all.md)
 
 ## Examples
 
 ``` r
 if (FALSE) { # \dontrun{
   gt_tbl <- ars_render_tlf(ars_path, ard, "T_14_1_1")
+  ars_render_tlf(ars_path, ard, "T_14_1_1", format = "docx", file = "t1.docx")
 } # }
 ```
