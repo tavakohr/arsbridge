@@ -16,8 +16,12 @@ docs/
 /*.Rcheck/
 
 # Study-specific working dirs (NEVER commit client data)
-inputs/
+# inputs/ is shared for user practice; only the extracted loose XPT
+# folder is ignored (ADaM.zip itself IS tracked).
+inputs/ADaM/
 outputs/
+.align_backup/
+~$*
 scratch_*.R
 run_*.R
 .siera_ref/
