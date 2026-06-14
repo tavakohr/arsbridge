@@ -7,6 +7,7 @@
 spec_to_ars(
   shell_path,
   adam_spec_path,
+  sap_path = NULL,
   output_path = "reporting_event.json",
   study_id = "STUDY-001",
   study_name = NULL,
@@ -34,6 +35,11 @@ development before \code{define.xml} is produced)
 One of the two is required. The SDTM spec is NOT a valid input --
 TLF annotations reference ADaM variables, so the grounding source
 must be the ADaM spec.}
+
+\item{sap_path}{Optional path to the Statistical Analysis Plan \code{.docx}.
+When supplied, its prose is matched per TLF and carried into each analysis
+as \code{sapDescription}, becoming the human-readable comment above the emitted
+\code{{cards}} block. Gracefully ignored when absent or unreadable.}
 
 \item{output_path}{Path for the ARS JSON. Default \code{"reporting_event.json"}.}
 

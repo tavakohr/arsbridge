@@ -12,6 +12,10 @@
 #' \code{siera::readARS()}.
 #'
 #' @param shell_path     Path to annotated TLF shells `.docx`.
+#' @param sap_path       Optional path to the Statistical Analysis Plan `.docx`.
+#'   When supplied, its prose is matched per TLF and carried into each analysis
+#'   as `sapDescription`, becoming the human-readable comment above the emitted
+#'   `{cards}` block. Gracefully ignored when absent or unreadable.
 #' @param adam_spec_path Path to the ADaM specification. Accepts either:
 #'   * `.xml` -- ADaM `define.xml` (preferred when available)
 #'   * `.xlsx` / `.xls` -- ADaM specification Excel (fallback used during
@@ -85,6 +89,7 @@
 #' @export
 spec_to_ars <- function(shell_path,
                         adam_spec_path,
+                        sap_path     = NULL,
                         output_path  = "reporting_event.json",
                         study_id     = "STUDY-001",
                         study_name   = NULL,
@@ -189,6 +194,30 @@ spec_to_ars <- function(shell_path,
     }
     enriched[[i]] <- enrich_with_llm(sec, spec_lookup = spec$lookup,
                                      model = model, api_key = api_key, provider = provider)
+  }
+
+  ## --- SAP enrichment (optional) -------------------------------------
+  ## Match SAP prose per TLF and attach it to the enriched section; .build_analysis
+  ## persists it as sapDescription, which the emitter prints as the block comment.
+  if (!is.null(sap_path) && nzchar(sap_path)) {
+    sap_df <- tryCatch(parse_sap_docx(sap_path), error = function(e) {
+      cli::cli_warn("Could not parse SAP {.path {sap_path}}: {conditionMessage(e)}")
+      NULL
+    })
+    n_sap <- 0L
+    if (!is.null(sap_df)) {
+      for (i in seq_along(enriched)) {
+        txt <- match_sap_section(sap_df, enriched[[i]]$tlf_number,
+                                 enriched[[i]]$title)
+        if (!is.na(txt)) {
+          enriched[[i]]$sap_text <- .clip_sap(txt)
+          n_sap <- n_sap + 1L
+        }
+      }
+    }
+    if (verbose) {
+      cli::cli_alert_info("Matched SAP text to {n_sap}/{length(enriched)} TLF{?s}.")
+    }
   }
 
   ## --- Build and write ARS JSON --------------------------------------

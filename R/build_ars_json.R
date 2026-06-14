@@ -625,6 +625,9 @@ build_ars_json <- function(sections,
     referencedAnalysisOperations = ref_ops,
     methodId                     = method_id,
     annotation                   = row$annotation,
+    ## SAP prose matched to this TLF (when a SAP was supplied); the emitter
+    ## prints it as the human-readable comment above the {cards} block.
+    sapDescription               = section$sap_text %||% "",
     variableRole                 = enrichment$variable_role %||% "ANALYSIS",
     ## Extension field: TRUE when the shell carries an overall/Total column
     ## in addition to the per-group columns. The executor then also
