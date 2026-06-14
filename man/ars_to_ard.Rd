@@ -9,7 +9,8 @@ ars_to_ard(
   adam_dir,
   output_ids = NULL,
   analysis_ids = NULL,
-  subject_key = "USUBJID"
+  subject_key = "USUBJID",
+  legacy = FALSE
 )
 }
 \arguments{
@@ -28,6 +29,12 @@ those specific analyses.}
 distinct-subject counting and cross-dataset population joins.
 Default \code{"USUBJID"}; set e.g. \code{"SUBJID"} or \code{"PATID"} for studies with
 a non-standard subject key.}
+
+\item{legacy}{Deprecated execution path. When \code{FALSE} (default) each analysis
+is computed by sourcing the pure-\code{{cards}} block arsbridge emits, so the
+ARD is produced by the same code shipped as the deliverable. When \code{TRUE}
+the retired \code{.ARD_EXECUTORS} registry is used instead (kept only for the
+engine-equivalence test and as a transitional escape hatch).}
 }
 \value{
 A tidy ARD data frame of class \code{"card"}, with traceability
