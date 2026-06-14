@@ -11,6 +11,7 @@ Analysis Results Standard (ARS) v1.0 ARM-TS JSON file consumable by
 spec_to_ars(
   shell_path,
   adam_spec_path,
+  sap_path = NULL,
   output_path = "reporting_event.json",
   study_id = "STUDY-001",
   study_name = NULL,
@@ -20,6 +21,8 @@ spec_to_ars(
   spec_column_aliases = NULL,
   validate = TRUE,
   report_path = "spec_validation_report.xlsx",
+  code_dir = NULL,
+  adam_dir = ".",
   verbose = TRUE
 )
 ```
@@ -42,6 +45,13 @@ spec_to_ars(
   One of the two is required. The SDTM spec is NOT a valid input – TLF
   annotations reference ADaM variables, so the grounding source must be
   the ADaM spec.
+
+- sap_path:
+
+  Optional path to the Statistical Analysis Plan `.docx`. When supplied,
+  its prose is matched per TLF and carried into each analysis as
+  `sapDescription`, becoming the human-readable comment above the
+  emitted `{cards}` block. Gracefully ignored when absent or unreadable.
 
 - output_path:
 
@@ -85,6 +95,18 @@ spec_to_ars(
   Path for the validation report `.xlsx`. Default
   `"spec_validation_report.xlsx"`.
 
+- code_dir:
+
+  Directory for the emitted per-TLF pure-`{cards}` `.R` deliverables.
+  When `NULL` (default) a `code/` folder next to `output_path` is used.
+  These scripts are both the human-readable deliverable and the engine
+  [`ars_to_ard()`](ars_to_ard.md) sources to build the ARD.
+
+- adam_dir:
+
+  ADaM directory baked into each emitted script's header (the reader can
+  edit it). Default `"."`.
+
 - verbose:
 
   Print progress messages. Default `TRUE`.
@@ -100,6 +122,14 @@ Invisibly returns a named list:
 - `report_path`:
 
   Path to the validation report (if validate=TRUE).
+
+- `code_dir`:
+
+  Directory holding the emitted per-TLF `{cards}` `.R` deliverables.
+
+- `code_paths`:
+
+  Named character vector of the emitted `.R` paths (names = output ids).
 
 - `n_tlfs`:
 

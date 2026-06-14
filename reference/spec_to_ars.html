@@ -54,6 +54,7 @@ Results Standard (ARS) v1.0 ARM-TS JSON file consumable by
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">spec_to_ars</span><span class="op">(</span></span>
 <span>  <span class="va">shell_path</span>,</span>
 <span>  <span class="va">adam_spec_path</span>,</span>
+<span>  sap_path <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  output_path <span class="op">=</span> <span class="st">"reporting_event.json"</span>,</span>
 <span>  study_id <span class="op">=</span> <span class="st">"STUDY-001"</span>,</span>
 <span>  study_name <span class="op">=</span> <span class="cn">NULL</span>,</span>
@@ -63,6 +64,8 @@ Results Standard (ARS) v1.0 ARM-TS JSON file consumable by
 <span>  spec_column_aliases <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  validate <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  report_path <span class="op">=</span> <span class="st">"spec_validation_report.xlsx"</span>,</span>
+<span>  code_dir <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  adam_dir <span class="op">=</span> <span class="st">"."</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">TRUE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -82,6 +85,13 @@ development before <code>define.xml</code> is produced)</p></li>
 </ul><p>One of the two is required. The SDTM spec is NOT a valid input –
 TLF annotations reference ADaM variables, so the grounding source
 must be the ADaM spec.</p></dd>
+
+
+<dt id="arg-sap-path">sap_path<a class="anchor" aria-label="anchor" href="#arg-sap-path"></a></dt>
+<dd><p>Optional path to the Statistical Analysis Plan <code>.docx</code>.
+When supplied, its prose is matched per TLF and carried into each analysis
+as <code>sapDescription</code>, becoming the human-readable comment above the emitted
+<code>{cards}</code> block. Gracefully ignored when absent or unreadable.</p></dd>
 
 
 <dt id="arg-output-path">output_path<a class="anchor" aria-label="anchor" href="#arg-output-path"></a></dt>
@@ -126,6 +136,18 @@ against the ADaM spec and write a validation report.</p></dd>
 Default <code>"spec_validation_report.xlsx"</code>.</p></dd>
 
 
+<dt id="arg-code-dir">code_dir<a class="anchor" aria-label="anchor" href="#arg-code-dir"></a></dt>
+<dd><p>Directory for the emitted per-TLF pure-<code>{cards}</code> <code>.R</code>
+deliverables. When <code>NULL</code> (default) a <code>code/</code> folder next to <code>output_path</code>
+is used. These scripts are both the human-readable deliverable and the
+engine <code><a href="ars_to_ard.html">ars_to_ard()</a></code> sources to build the ARD.</p></dd>
+
+
+<dt id="arg-adam-dir">adam_dir<a class="anchor" aria-label="anchor" href="#arg-adam-dir"></a></dt>
+<dd><p>ADaM directory baked into each emitted script's header
+(the reader can edit it). Default <code>"."</code>.</p></dd>
+
+
 <dt id="arg-verbose">verbose<a class="anchor" aria-label="anchor" href="#arg-verbose"></a></dt>
 <dd><p>Print progress messages. Default <code>TRUE</code>.</p></dd>
 
@@ -137,6 +159,14 @@ Default <code>"spec_validation_report.xlsx"</code>.</p></dd>
 
 <dt><code>report_path</code></dt>
 <dd><p>Path to the validation report (if validate=TRUE).</p></dd>
+
+<dt><code>code_dir</code></dt>
+<dd><p>Directory holding the emitted per-TLF <code>{cards}</code> <code>.R</code>
+deliverables.</p></dd>
+
+<dt><code>code_paths</code></dt>
+<dd><p>Named character vector of the emitted <code>.R</code> paths
+(names = output ids).</p></dd>
 
 <dt><code>n_tlfs</code></dt>
 <dd><p>Number of TLF sections processed.</p></dd>

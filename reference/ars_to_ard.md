@@ -13,7 +13,8 @@ ars_to_ard(
   adam_dir,
   output_ids = NULL,
   analysis_ids = NULL,
-  subject_key = "USUBJID"
+  subject_key = "USUBJID",
+  legacy = FALSE
 )
 ```
 
@@ -43,6 +44,15 @@ ars_to_ard(
   Subject-level identifier variable used for distinct-subject counting
   and cross-dataset population joins. Default `"USUBJID"`; set e.g.
   `"SUBJID"` or `"PATID"` for studies with a non-standard subject key.
+
+- legacy:
+
+  Deprecated execution path. When `FALSE` (default) each analysis is
+  computed by sourcing the pure-`{cards}` block arsbridge emits, so the
+  ARD is produced by the same code shipped as the deliverable. When
+  `TRUE` the retired `.ARD_EXECUTORS` registry is used instead (kept
+  only for the engine-equivalence test and as a transitional escape
+  hatch).
 
 ## Value
 
