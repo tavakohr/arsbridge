@@ -15,6 +15,7 @@ ars_render_all(
   ard,
   adam_dir = NULL,
   file = NULL,
+  output_ids = NULL,
   types = c("table", "listing", "figure"),
   max_rows = 500,
   progress = NULL
@@ -41,9 +42,17 @@ ars_render_all(
   Output `.docx` path. Default: `reporting_event_tlfs.docx` in
   [`tempdir()`](https://rdrr.io/r/base/tempfile.html).
 
+- output_ids:
+
+  Optional character vector of output ids or names (case-insensitive) to
+  render – any mix of tables, listings, and figures. `NULL` (default)
+  renders every output. Ids absent from the spec are reported in the
+  manifest as skipped.
+
 - types:
 
-  Which output kinds to render. Default all three.
+  Which output kinds to render. Default all three. Applied in addition
+  to `output_ids`.
 
 - max_rows:
 
@@ -64,3 +73,13 @@ invisibly carrying the written file path as attribute `"file"`.
 [`ars_render_tlf()`](ars_render_tlf.md),
 [`ars_render_listing()`](ars_render_listing.md),
 [`ars_render_figure()`](ars_render_figure.md)
+
+## Examples
+
+``` r
+if (FALSE) { # \dontrun{
+  # Just three specific outputs into one Word document:
+  ars_render_all(ars, ard, adam_dir,
+                 output_ids = c("T_14_1_1", "L_16_2_4_1", "F_14_2_1"))
+} # }
+```
