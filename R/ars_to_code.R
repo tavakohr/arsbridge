@@ -167,14 +167,22 @@
   mk_call <- function(b) {
     if (.is_bare_flag(res) &&
         method %in% c("MTH_SUBJECT_COUNT", "MTH_COUNT_AND_PERCENTAGE")) {
-      lab <- res$label %||% res$description %||% var
+      lab  <- res$label %||% res$description %||% var
+      qlab <- encodeString(lab, quote = "\"")
+      ## Encode subset membership as a single-level factor over the FULL
+      ## population (keeping the `by` column populated) instead of filtering to
+      ## the subset. A flag with no Y in this cut then tabulates as n = 0 by
+      ## group, rather than erroring on a 0-row `by` column.
+      data_pop <- .apply_where_expr(res$dataset, res$dataset, res$pop_where, sk)
+      pred <- where_to_filter_expr(res$subset_where)
       sprintf(paste0(
         "cards::ard_categorical(\n",
         "  data = %s |>\n    dplyr::distinct(%s, .keep_all = TRUE) |>\n",
-        "    dplyr::mutate(%s = %s),\n",
+        "    dplyr::mutate(%s = factor(\n",
+        "      dplyr::if_else(%s, %s, NA_character_), levels = %s)),\n",
         "  variables = all_of(%s)%s,\n  denominator = %s\n)"),
-        data_e, sk, .bt(lab), encodeString(lab, quote = "\""),
-        encodeString(lab, quote = "\""), by_line(b), denom)
+        data_pop, sk, .bt(lab), pred, qlab, qlab,
+        qlab, by_line(b), denom)
     } else if (identical(method, "MTH_SUMMARY_STATISTICS_CONTINUOUS")) {
       sprintf(paste0(
         "cards::ard_continuous(\n",

@@ -142,3 +142,36 @@ test_that("disposition bare-flag renders as a labelled subject count, not Y", {
   ns <- ard[ard$stat_name == "n", ]
   expect_true(all(unlist(ns$stat) == 3))
 })
+
+test_that("disposition flag with no Y in the cut tabulates n=0, not an error", {
+  skip_if_not_installed("cards")
+  td <- withr::local_tempdir()
+  ## CROSSFL is all "N" -- the subset has zero rows. A bare string column would
+  ## error ("all missing"); the emitted single-level factor must give n = 0.
+  utils::write.csv(data.frame(
+    USUBJID = sprintf("%02d", 1:8),
+    TRT01A  = rep(c("Drug A", "Placebo"), each = 4),
+    CROSSFL = rep("N", 8),
+    stringsAsFactors = FALSE
+  ), file.path(td, "adsl.csv"), row.names = FALSE)
+  spec <- .ac_spec(
+    list(list(
+      id = "AN_X", methodId = "MTH_SUBJECT_COUNT",
+      label = "Crossed over", dataset = "ADSL", variable = "CROSSFL",
+      analysisVariable = list(dataset = "ADSL", variable = "CROSSFL"),
+      analysisSetId = "", dataSubsetId = "DS_X",
+      orderedGroupings = list(list(order = 1, groupingId = "GF_TRT",
+                                   resultsByGroup = TRUE)),
+      includeTotal = FALSE)),
+    subsets = list(list(
+      id = "DS_X",
+      condition = list(dataset = "ADSL", variable = "CROSSFL",
+                       comparator = "EQ", value = list("Y"))))
+  )
+  paths <- write_tlf_code(.ac_write(spec, td), file.path(td, "code"),
+                          adam_dir = td)
+  ard <- .ac_source(paths[[1]])  # must not error
+  expect_true("Crossed over" %in% unlist(ard$variable_level))
+  ns <- ard[ard$stat_name == "n", ]
+  expect_true(all(unlist(ns$stat) == 0))
+})
