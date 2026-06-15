@@ -165,22 +165,22 @@ ars_render_all <- function(ars_path, ard, adam_dir = NULL, file = NULL,
         ft <- .gt_to_flextable(ars_render_tlf(ars_path, ard, oid),
                                .sc(o[["name"]]) %||% oid, extract_title(o),
                                extract_footnotes(o))
-        if (!first) doc <<- officer::body_add_break(doc)
-        doc <<- flextable::body_add_flextable(doc, ft, align = "left"); first <<- FALSE
+        if (!first) doc <- officer::body_add_break(doc)
+        doc <- flextable::body_add_flextable(doc, ft, align = "left"); first <- FALSE
         "ok"
       } else if (kind == "listing") {
         if (is.null(adam_dir)) stop("adam_dir required for listings")
         ft <- .gt_to_flextable(ars_render_listing(ars_path, adam_dir, oid, max_rows = max_rows),
                                .sc(o[["name"]]) %||% oid, extract_title(o),
                                extract_footnotes(o))
-        if (!first) doc <<- officer::body_add_break(doc)
-        doc <<- flextable::body_add_flextable(doc, ft, align = "left"); first <<- FALSE
+        if (!first) doc <- officer::body_add_break(doc)
+        doc <- flextable::body_add_flextable(doc, ft, align = "left"); first <- FALSE
         "ok"
       } else {
         if (is.null(adam_dir)) stop("adam_dir required for figures")
         p <- ars_render_figure(ars_path, adam_dir, oid)
-        if (!first) doc <<- officer::body_add_break(doc)
-        doc <<- officer::body_add_gg(doc, p, width = 9, height = 5.5); first <<- FALSE
+        if (!first) doc <- officer::body_add_break(doc)
+        doc <- officer::body_add_gg(doc, p, width = 9, height = 5.5); first <- FALSE
         "ok"
       }
     }, error = function(e) conditionMessage(e))
