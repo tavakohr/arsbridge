@@ -18,7 +18,8 @@ ars_diagnostics()
 ## Value
 
 Data frame with columns `stage`, `severity` (`FAIL` / `WARN` / `INFO`),
-`tlf_number`, `location`, `problem`, `action`.
+`input` (which input document the finding concerns), `tlf_number`,
+`location`, `problem`, `action`.
 
 ## Examples
 

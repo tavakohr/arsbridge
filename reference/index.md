@@ -2,6 +2,8 @@
 
 ## All functions
 
+- [`ars_blockers()`](ars_blockers.md) : Blocking problems from the most
+  recent run, in plain English
 - [`ars_diagnostics()`](ars_diagnostics.md) : Retrieve pipeline
   diagnostics from the most recent run
 - [`ars_render_all()`](ars_render_all.md) : Render every output of a
