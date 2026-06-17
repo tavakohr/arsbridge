@@ -217,7 +217,8 @@ enrich_with_llm <- function(section,
   if (!nzchar(path) || !file.exists(path)) {
     cli::cli_abort("Prompt template not found: enrich_tlf_prompt.txt")
   }
-  tmpl <- paste(readLines(path, warn = FALSE, encoding = "UTF-8"), collapse = "\n")
+  tmpl <- paste(.read_lines(path, "the prompt template (enrich_tlf_prompt.txt)"),
+                collapse = "\n")
   tlf_json <- jsonlite::toJSON(tlf_payload, auto_unbox = TRUE, pretty = TRUE)
   glue::glue(tmpl, tlf_json = tlf_json, .open = "<<", .close = ">>")
 }

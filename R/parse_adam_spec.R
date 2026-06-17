@@ -92,7 +92,7 @@ parse_adam_spec <- function(path, column_aliases = NULL) {
                                           col_types = "text", .name_repair = "minimal")),
       error = function(e) {
         diag_add(
-          stage = "parse_spec", severity = "WARN",
+          stage = "parse_spec", severity = "WARN", input = INPUT_SPEC,
           problem = paste0("Sheet could not be read: ", conditionMessage(e)),
           location = sh,
           action = "Sheet skipped"
@@ -104,6 +104,13 @@ parse_adam_spec <- function(path, column_aliases = NULL) {
     if (is.null(df) || nrow(df) == 0 || ncol(df) == 0) {
       if (!is.null(df)) {
         sheet_notes <- c(sheet_notes, sprintf("'%s': empty", sh))
+        .diag_gap(
+          stage = "parse_spec", severity = "INFO", input = INPUT_SPEC,
+          problem = sprintf("Spec sheet '%s' is empty and was skipped.", sh),
+          why = "No variables were read from it.",
+          fix = "If this sheet should define variables, add a header row (Dataset, Variable Name, ...) plus the variable rows.",
+          location = sh
+        )
       }
       next
     }
@@ -115,7 +122,7 @@ parse_adam_spec <- function(path, column_aliases = NULL) {
     has_ds  <- !is.null(mapping$dataset)
     if (!has_var) {
       diag_add(
-        stage = "parse_spec", severity = "INFO",
+        stage = "parse_spec", severity = "INFO", input = INPUT_SPEC,
         problem = "Sheet has no recognisable Variable column",
         location = sh,
         action = paste0("Sheet skipped (columns seen: ",
@@ -131,7 +138,7 @@ parse_adam_spec <- function(path, column_aliases = NULL) {
     fallback_ds <- if (has_ds) NULL else toupper(sh)
     if (!is.null(fallback_ds) && !grepl("^AD[A-Z0-9]+$", fallback_ds)) {
       diag_add(
-        stage = "parse_spec", severity = "WARN",
+        stage = "parse_spec", severity = "WARN", input = INPUT_SPEC,
         problem = sprintf("No Dataset column; sheet name '%s' used as dataset but does not look like an ADaM dataset name", sh),
         location = sh,
         action = "Rows keyed under this dataset name -- verify against shell annotations"
@@ -332,7 +339,7 @@ parse_adam_spec <- function(path, column_aliases = NULL) {
 
   if (length(unresolved_oids) > 0) {
     diag_add(
-      stage = "parse_spec", severity = "WARN",
+      stage = "parse_spec", severity = "WARN", input = INPUT_SPEC,
       problem = sprintf("%d ItemRef(s) in define.xml point to missing ItemDefs", length(unresolved_oids)),
       location = paste(utils::head(unresolved_oids, 5), collapse = "; "),
       action = "Variables dropped from spec lookup -- annotations referencing them will FAIL validation"

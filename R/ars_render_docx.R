@@ -112,7 +112,14 @@ ars_render_all <- function(ars_path, ard, adam_dir = NULL, file = NULL,
                            output_ids = NULL,
                            types = c("table", "listing", "figure"),
                            max_rows = 500, progress = NULL) {
-  spec <- jsonlite::fromJSON(ars_path, simplifyVector = FALSE)
+  spec <- .read_json(ars_path)
+  if (is.null(ard)) {
+    cli::cli_abort(c(
+      "x" = "No ARD was supplied ({.arg ard} is NULL) -- there are no results to render.",
+      "i" = "To fix: run {.fn ars_to_ard} first and pass its result as {.arg ard}."
+    ))
+  }
+  if (!is.null(adam_dir)) .require_dir(adam_dir, "adam_dir", INPUT_DATA)
   file <- file %||% file.path(tempdir(), "reporting_event_tlfs.docx")
 
   ## Optional explicit selection (match id OR name, case-insensitive). Warn on

@@ -96,17 +96,13 @@
 ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
                        analysis_ids = NULL, subject_key = "USUBJID",
                        legacy = FALSE) {
-  if (!file.exists(ars_path)) {
-    cli::cli_abort("ARS JSON file not found: {.path {ars_path}}")
-  }
-  if (!dir.exists(adam_dir)) {
-    cli::cli_abort("ADaM directory not found: {.path {adam_dir}}")
-  }
+  .require_file(ars_path, "ars_path", INPUT_ARS)
+  .require_dir(adam_dir,  "adam_dir", INPUT_DATA)
 
   ## Fresh diagnostics for this execution run (inspect via ars_diagnostics()).
   diag_reset()
 
-  spec <- jsonlite::fromJSON(ars_path, simplifyVector = FALSE)
+  spec <- .read_json(ars_path)
 
   # Cache list for loaded datasets
   dfs <- list()
@@ -120,17 +116,16 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       xpt_file <- files[basenames == tolower(paste0(name_upper, ".xpt"))]
 
       if (length(xpt_file) > 0) {
-        if (requireNamespace("haven", quietly = TRUE)) {
-          dfs[[name_upper]] <<- haven::read_xpt(xpt_file[1])
-        } else {
-          cli::cli_abort("Package {.pkg haven} is required to read .xpt files.")
-        }
+        ## .read_dataset reads .xpt/.csv and, on a read failure, records a FAIL
+        ## diagnostic naming the dataset and returns NULL (this analysis is then
+        ## skipped) rather than throwing a cryptic base-R error.
+        dfs[[name_upper]] <<- .read_dataset(xpt_file[1], name_upper)
       } else if (length(csv_file) > 0) {
-        dfs[[name_upper]] <<- utils::read.csv(csv_file[1], stringsAsFactors = FALSE, check.names = FALSE)
+        dfs[[name_upper]] <<- .read_dataset(csv_file[1], name_upper)
       } else {
         cli::cli_warn("Dataset {.val {name_upper}} not found in {.path {adam_dir}}.")
         diag_add(
-          stage = "execute_ard", severity = "FAIL",
+          stage = "execute_ard", severity = "FAIL", input = INPUT_DATA,
           problem = sprintf("Dataset %s not found in ADaM directory", name_upper),
           location = adam_dir,
           action = "All analyses against this dataset were skipped"
@@ -297,7 +292,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
         }
       } else {
         diag_add(
-          stage = "execute_ard", severity = "WARN",
+          stage = "execute_ard", severity = "WARN", input = INPUT_DATA,
           problem = sprintf("Subject key %s not present in dataset %s referenced by a where-clause",
                             subject_key, ref_ds),
           location = target_ds_name,
@@ -314,15 +309,25 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
   }
 
   # Walk analyses and execute
+  user_filtered <- !is.null(output_ids) || !is.null(analysis_ids)
+  n_selected    <- 0L   # how many analyses passed the user's id selection
   ard_list <- list()
   for (ana in spec[["analyses"]]) {
     res <- resolve_analysis(ana, spec, subject_key, grouping_map, analysis_to_output)
     analysis_id <- res$analysis_id
-    if (is.null(analysis_id)) next
+    if (is.null(analysis_id)) {
+      .diag_gap(
+        stage = "execute_ard", severity = "WARN", input = INPUT_ARS,
+        problem = "An analysis in the ARS spec has no analysis id and was skipped.",
+        why = "Without an id the analysis cannot be tied to an output, so it yields no ARD row.",
+        fix = "Regenerate the ARS with spec_to_ars() -- a hand-edited spec may be missing an analysis 'id'."
+      )
+      next
+    }
     out_id <- res$output_id
 
     # Filter by user-selected output_ids and analysis_ids
-    if (!is.null(output_ids) || !is.null(analysis_ids)) {
+    if (user_filtered) {
       matched <- FALSE
       if (!is.null(analysis_ids) && tolower(analysis_id) %in% tolower(analysis_ids)) {
         matched <- TRUE
@@ -337,6 +342,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       }
       if (!matched) next
     }
+    n_selected <- n_selected + 1L
 
     method_id    <- res$method_id
     analysis_var <- res$variable
@@ -344,10 +350,24 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
 
     if (is.null(analysis_ds) || !nzchar(analysis_ds)) {
       cli::cli_warn("Skipping analysis {.val {analysis_id}}: primary dataset not specified.")
+      .diag_gap(
+        stage = "execute_ard", severity = "FAIL", input = INPUT_ARS,
+        problem = sprintf("Analysis %s does not name a source dataset and was skipped.", analysis_id),
+        why = "Without a dataset the result cannot be computed, so this output stays empty.",
+        fix = "Check the ADaM spec annotation for this TLF names a dataset, then regenerate the ARS.",
+        location = analysis_id
+      )
       next
     }
     if (is.null(analysis_var) || !nzchar(analysis_var)) {
       cli::cli_warn("Skipping analysis {.val {analysis_id}}: analysis variable not specified.")
+      .diag_gap(
+        stage = "execute_ard", severity = "FAIL", input = INPUT_ARS,
+        problem = sprintf("Analysis %s does not name an analysis variable and was skipped.", analysis_id),
+        why = "Without a variable the result cannot be computed, so this output stays empty.",
+        fix = "Check the shell/spec annotation for this row names a variable, then regenerate the ARS.",
+        location = analysis_id
+      )
       next
     }
 
@@ -383,7 +403,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     if (!analysis_var %in% names(df_filtered)) {
       cli::cli_warn("Skipping analysis {.val {analysis_id}}: variable {.val {analysis_var}} not in dataset {.val {analysis_ds}}.")
       diag_add(
-        stage = "execute_ard", severity = "FAIL",
+        stage = "execute_ard", severity = "FAIL", input = INPUT_DATA,
         problem = sprintf("Variable %s not found in dataset %s", analysis_var, analysis_ds),
         location = analysis_id,
         action = paste0("Analysis skipped -- the shell references ", analysis_var,
@@ -400,7 +420,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     dropped_groupings <- grouping_vars[!grouping_vars %in% names(df_filtered)]
     if (length(dropped_groupings) > 0) {
       diag_add(
-        stage = "execute_ard", severity = "WARN",
+        stage = "execute_ard", severity = "WARN", input = INPUT_DATA,
         problem = sprintf("Grouping variable(s) %s not present in dataset %s",
                           paste(dropped_groupings, collapse = ", "), analysis_ds),
         location = analysis_id,
@@ -429,7 +449,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
         "MTH_COUNT_AND_PERCENTAGE"
       cli::cli_warn("Method {.val {method_id}} for analysis {.val {analysis_id}} not natively supported. Using fallback summarizer.")
       diag_add(
-        stage = "execute_ard", severity = "WARN",
+        stage = "execute_ard", severity = "WARN", input = INPUT_ARS,
         problem = sprintf("Method %s not natively supported by the executor", method_id),
         location = analysis_id,
         action = sprintf("Generic %s summary used instead (method_actual = %s) -- verify the statistics match the shell",
@@ -441,7 +461,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
         method_id %in% c("MTH_AE_FREQUENCY_COUNT", "MTH_SUBJECT_COUNT")) {
       cli::cli_warn("Skipping analysis {.val {analysis_id}}: subject key {.val {subject_key}} not in dataset {.val {analysis_ds}}.")
       diag_add(
-        stage = "execute_ard", severity = "FAIL",
+        stage = "execute_ard", severity = "FAIL", input = INPUT_DATA,
         problem = sprintf("Subject key %s required by %s but not present in dataset %s",
                           subject_key, method_id, analysis_ds),
         location = analysis_id,
@@ -469,7 +489,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
         "has no numeric values to summarise" else "is all-missing"
       cli::cli_warn("Skipping analysis {.val {analysis_id}}: variable {.val {analysis_var}} {reason} in this data cut.")
       diag_add(
-        stage = "execute_ard", severity = "WARN",
+        stage = "execute_ard", severity = "WARN", input = INPUT_DATA,
         problem = sprintf("Variable %s %s in dataset %s", analysis_var, reason, analysis_ds),
         location = analysis_id,
         action = paste0("Nothing to tabulate in this cut -- supply an ADaM ",
@@ -515,7 +535,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     }, error = function(e) {
       cli::cli_warn("Analysis {.val {analysis_id}} failed during {.pkg cards} calculation: {e$message}")
       diag_add(
-        stage = "execute_ard", severity = "FAIL",
+        stage = "execute_ard", severity = "FAIL", input = INPUT_DATA,
         problem = paste0("cards calculation error: ", conditionMessage(e)),
         location = analysis_id,
         action = "Analysis skipped -- no results in ARD"
@@ -549,6 +569,27 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     cli::cli_alert_warning(
       "{nrow(diags)} execution diagnostic{?s} ({n_fail} FAIL, {n_warn} WARN) -- inspect with {.code ars_diagnostics()}"
     )
+  }
+
+  ## An explicit id selection that matched nothing is almost always a typo --
+  ## tell the user plainly and list the ids that ARE available, instead of
+  ## silently handing back an empty/NULL ARD.
+  if (user_filtered && n_selected == 0L) {
+    valid_ids <- unique(Filter(nzchar, vapply(
+      spec[["outputs"]], function(o) as_scalar_char(o[["id"]]) %||% "", character(1)
+    )))
+    requested <- paste(c(output_ids, analysis_ids), collapse = ", ")
+    .diag_gap(
+      stage = "execute_ard", severity = "FAIL", input = INPUT_ARS,
+      problem = sprintf("None of the requested ids matched any analysis: %s.", requested),
+      why = "There was nothing to compute, so no ARD was produced.",
+      fix = sprintf("Use one of the available output ids: %s.",
+                    paste(valid_ids, collapse = ", "))
+    )
+    cli::cli_abort(c(
+      "x" = "None of the requested ids matched any analysis in the {INPUT_ARS}: {.val {c(output_ids, analysis_ids)}}.",
+      "i" = "Available output ids: {.val {valid_ids}}."
+    ))
   }
 
   if (length(ard_list) == 0) {

@@ -77,11 +77,7 @@
 #' @keywords internal
 #' @noRd
 parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
-  if (!file.exists(docx_path)) {
-    cli::cli_abort("Shell file not found: {.path {docx_path}}")
-  }
-
-  doc      <- officer::read_docx(docx_path)
+  doc      <- .read_docx(docx_path)
   root_xml <- doc$doc_obj$get()
   body_xml <- xml2::xml_find_first(root_xml, ".//*[local-name()='body']")
   if (inherits(body_xml, "xml_missing")) {
@@ -171,7 +167,20 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
       }
 
     } else if (tag == "tbl") {
-      if (is.null(current) || seen_table) next
+      if (is.null(current)) next
+      if (seen_table) {
+        ## arsbridge models one table per TLF section; a second table here is
+        ## dropped -- say so rather than lose it silently.
+        .diag_gap(
+          stage = "parse_shell", severity = "WARN", input = INPUT_SHELL,
+          problem = sprintf("A second table was found under %s and was ignored.",
+                            current$tlf_number),
+          why = "arsbridge builds one table per TLF heading, so any extra table is dropped.",
+          fix = "Give the extra table its own Table/Listing heading in the shell, or merge it into the first.",
+          tlf_number = current$tlf_number, location = current$title %||% ""
+        )
+        next
+      }
       current    <- .populate_table(current, child)
       seen_table <- TRUE
     }
@@ -187,7 +196,7 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
       "i" = "Expected paragraphs matching {.val Table X.X.X}, {.val Figure X.X.X}, or {.val Listing X.X.X}."
     ))
     diag_add(
-      stage = "parse_shell", severity = "FAIL",
+      stage = "parse_shell", severity = "FAIL", input = INPUT_SHELL,
       problem = "No TLF sections found in shell document",
       location = basename(docx_path),
       action = "Nothing parsed -- check heading format (expected 'Table X.X.X' / 'Figure X.X.X' / 'Listing X.X.X')"
@@ -204,7 +213,7 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
     n_annot <- sum(vapply(sec$stub_rows, function(r) isTRUE(r$has_annot), logical(1)))
     if (n_rows > 0 && n_annot == 0) {
       diag_add(
-        stage = "parse_shell", severity = "WARN",
+        stage = "parse_shell", severity = "WARN", input = INPUT_SHELL,
         problem = sprintf("Section has %d stub row(s) but no annotations were detected", n_rows),
         tlf_number = sec$tlf_number,
         location = sec$title %||% "",
@@ -213,7 +222,7 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
     }
     if (n_rows == 0 && !identical(sec$tlf_type, "FIGURE")) {
       diag_add(
-        stage = "parse_shell", severity = "WARN",
+        stage = "parse_shell", severity = "WARN", input = INPUT_SHELL,
         problem = "No table rows captured for this section",
         tlf_number = sec$tlf_number,
         location = sec$title %||% "",
@@ -222,7 +231,7 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
     }
     if (length(sec$source_datasets) == 0) {
       diag_add(
-        stage = "parse_shell", severity = "INFO",
+        stage = "parse_shell", severity = "INFO", input = INPUT_SHELL,
         problem = "No 'Source: ...' line found for this section",
         tlf_number = sec$tlf_number,
         location = sec$title %||% "",
@@ -310,7 +319,7 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
   source_ds <- trimws(sub("\\s*\\(.*$", "", source_ds))
   if (!nzchar(source_ds)) {
     diag_add(
-      stage = "parse_shell", severity = "WARN",
+      stage = "parse_shell", severity = "WARN", input = INPUT_SHELL,
       problem = "Listing has no source dataset; header variables defaulted to ADSL",
       tlf_number = sec$tlf_number,
       location = sec$title %||% "",
@@ -336,7 +345,7 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
     if (!nzchar(d$annotation) &&
         length(strsplit(as.character(p$text %||% ""), "\n", fixed = TRUE)[[1]]) >= 2) {
       diag_add(
-        stage = "parse_shell", severity = "INFO",
+        stage = "parse_shell", severity = "INFO", input = INPUT_SHELL,
         problem = "Multi-line listing header cell yielded no variable annotation",
         tlf_number = sec$tlf_number,
         location = substr(gsub("\n", " | ", p$text), 1, 80),

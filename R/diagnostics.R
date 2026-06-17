@@ -30,15 +30,20 @@ diag_reset <- function() {
 #' @param severity "FAIL" (output likely wrong), "WARN" (fallback applied --
 #'   needs review), or "INFO" (notable decision, no action expected).
 #' @param problem  What happened, in plain language.
+#' @param input    Which input document the finding concerns, in plain
+#'   English (e.g. one of the `INPUT_*` labels: annotated shell, ADaM spec,
+#'   ADaM dataset, ARS JSON). NA when not tied to a specific document.
 #' @param tlf_number TLF the finding belongs to (NA when not applicable,
 #'   e.g. spec-level findings).
 #' @param location Finer-grained context: sheet name, stub label,
 #'   annotation text, analysis id, ...
-#' @param action   What the pipeline did about it (the fallback taken).
+#' @param action   What the pipeline did about it (the fallback taken) and/or
+#'   how the user should fix it.
 #' @noRd
 diag_add <- function(stage,
                      severity,
                      problem,
+                     input      = NA_character_,
                      tlf_number = NA_character_,
                      location   = NA_character_,
                      action     = NA_character_) {
@@ -52,6 +57,7 @@ diag_add <- function(stage,
   rec <- data.frame(
     stage      = chr1(stage),
     severity   = chr1(severity),
+    input      = chr1(input),
     tlf_number = chr1(tlf_number),
     location   = chr1(location),
     problem    = chr1(problem),
@@ -62,6 +68,23 @@ diag_add <- function(stage,
   invisible(NULL)
 }
 
+#' Record a gap using the standard plain-English contract.
+#'
+#' Thin wrapper over [diag_add()] that enforces the house message shape:
+#' *what is wrong* (`problem`), *why it blocks a clean deliverable* (`why`,
+#' folded into the problem text), and *how to fix it on the named input
+#' document* (`fix`, surfaced as the action). Keeps wording consistent across
+#' every collection point without changing the stored schema.
+#' @noRd
+.diag_gap <- function(stage, severity, input, problem, why = NULL, fix = NULL,
+                      tlf_number = NA_character_, location = NA_character_) {
+  prob <- if (!is.null(why) && nzchar(why)) paste0(problem, " ", why) else problem
+  act  <- if (!is.null(fix) && nzchar(fix)) paste0("To fix: ", fix) else NA_character_
+  diag_add(stage = stage, severity = severity, input = input,
+           problem = prob, action = act,
+           tlf_number = tlf_number, location = location)
+}
+
 #' All diagnostics recorded since the last `diag_reset()`, as a data frame.
 #' Zero-row (with the full column set) when nothing was recorded.
 #' @noRd
@@ -70,6 +93,7 @@ diag_records <- function() {
     return(data.frame(
       stage      = character(),
       severity   = character(),
+      input      = character(),
       tlf_number = character(),
       location   = character(),
       problem    = character(),
@@ -93,7 +117,8 @@ diag_records <- function() {
 #' after the fact.
 #'
 #' @return Data frame with columns `stage`, `severity` (`FAIL` / `WARN` /
-#'   `INFO`), `tlf_number`, `location`, `problem`, `action`.
+#'   `INFO`), `input` (which input document the finding concerns),
+#'   `tlf_number`, `location`, `problem`, `action`.
 #'
 #' @examples
 #' \dontrun{
@@ -103,4 +128,43 @@ diag_records <- function() {
 #' @export
 ars_diagnostics <- function() {
   diag_records()
+}
+
+#' Blocking problems from the most recent run, in plain English
+#'
+#' The show-stoppers: every `FAIL`-severity finding from the most recent
+#' [spec_to_ars()] or [ars_to_ard()] call -- the gaps that mean arsbridge
+#' could not produce clean ARS / ARD / ready-to-run R code. Each row names the
+#' input document to open (`input`), what is wrong and why (`problem`), and how
+#' to fix it (`action`). A zero-row result means there were no blocking gaps.
+#'
+#' This is the same set surfaced at the top of the validation report
+#' ("What to fix first") and returned in the `blockers` element of the
+#' [spec_to_ars()] result; this accessor exists for interactive inspection.
+#'
+#' @param diagnostics Data frame of diagnostics to summarise. Defaults to the
+#'   findings from the most recent run ([ars_diagnostics()]).
+#'
+#' @return Data frame with columns `input`, `problem`, `action`, `stage`,
+#'   `tlf_number`, `location` -- one row per blocking (FAIL) finding.
+#'
+#' @examples
+#' \dontrun{
+#' spec_to_ars("shells.docx", "adam_spec.xlsx")
+#' ars_blockers()   # what must be fixed, in plain English
+#' }
+#' @export
+ars_blockers <- function(diagnostics = ars_diagnostics()) {
+  cols <- c("input", "problem", "action", "stage", "tlf_number", "location")
+  if (is.null(diagnostics) || nrow(diagnostics) == 0 ||
+      !"severity" %in% names(diagnostics)) {
+    empty <- stats::setNames(
+      lapply(cols, function(.) character()), cols)
+    return(data.frame(empty, stringsAsFactors = FALSE))
+  }
+  fails <- diagnostics[diagnostics$severity == "FAIL", , drop = FALSE]
+  keep  <- intersect(cols, names(fails))
+  fails <- fails[, keep, drop = FALSE]
+  rownames(fails) <- NULL
+  fails
 }

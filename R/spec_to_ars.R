@@ -103,12 +103,8 @@ spec_to_ars <- function(shell_path,
                         adam_dir     = ".",
                         verbose      = TRUE) {
 
-  if (!file.exists(shell_path)) {
-    cli::cli_abort("Shell file not found: {.path {shell_path}}")
-  }
-  if (!file.exists(adam_spec_path)) {
-    cli::cli_abort("ADaM spec file not found: {.path {adam_spec_path}}")
-  }
+  .require_file(shell_path, "shell_path", INPUT_SHELL)
+  .require_file(adam_spec_path, "adam_spec_path", INPUT_SPEC)
   if (!grepl("\\.docx?$", shell_path, ignore.case = TRUE)) {
     cli::cli_abort("Shell file must have a {.val .docx} extension: {.path {shell_path}}")
   }
@@ -227,7 +223,7 @@ spec_to_ars <- function(shell_path,
                        spec_lookup = spec$lookup)
 
   json_text <- jsonlite::toJSON(re, auto_unbox = TRUE, pretty = TRUE, null = "null")
-  writeLines(json_text, output_path, useBytes = TRUE)
+  .write_text(json_text, output_path, "the ARS JSON", useBytes = TRUE)
 
   if (verbose) {
     cli::cli_alert_success("Wrote ARS JSON to {.path {output_path}}")
@@ -252,6 +248,7 @@ spec_to_ars <- function(shell_path,
 
   ## --- Diagnostics summary + report ----------------------------------
   diagnostics <- diag_records()
+  blockers    <- ars_blockers(diagnostics)
   if (nrow(diagnostics) > 0) {
     n_fail <- sum(diagnostics$severity == "FAIL")
     n_warn_diag <- sum(diagnostics$severity == "WARN")
@@ -262,8 +259,15 @@ spec_to_ars <- function(shell_path,
              else " -- inspect with {.code ars_diagnostics()}")
     )
   }
+  if (nrow(blockers) > 0) {
+    cli::cli_alert_danger(
+      paste0("{nrow(blockers)} blocking gap{?s} mean the ARS/ARD/R code may be ",
+             "incomplete -- inspect with {.code ars_blockers()} and fix the named input{?s}.")
+    )
+  }
   if (isTRUE(validate)) {
-    write_validation_report(validation, report_path, diagnostics = diagnostics)
+    write_validation_report(validation, report_path,
+                            diagnostics = diagnostics, blockers = blockers)
   }
 
   result <- list(
@@ -277,7 +281,8 @@ spec_to_ars <- function(shell_path,
                         sum(validation$status %in% c("WARN", "FAIL")) else 0L,
     reporting_event = re,
     validation      = validation,
-    diagnostics     = diagnostics
+    diagnostics     = diagnostics,
+    blockers        = blockers
   )
   invisible(result)
 }

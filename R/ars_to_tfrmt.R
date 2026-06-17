@@ -414,11 +414,29 @@ build_col_levels <- function(out_obj, ard_out, col_var) {
 #' }
 ars_to_tfrmt <- function(ars_path, ard, output_id,
                          col_var = NULL, label_var = NULL, group_vars = NULL) {
-  if (!file.exists(ars_path)) {
-    cli::cli_abort("ARS JSON file not found: {.path {ars_path}}")
+  spec <- .read_json(ars_path)
+  if (is.null(ard)) {
+    cli::cli_abort(c(
+      "x" = "No ARD was supplied ({.arg ard} is NULL) -- there are no results to render.",
+      "i" = "To fix: run {.fn ars_to_ard} first and pass its result as {.arg ard}."
+    ))
   }
-  spec    <- jsonlite::fromJSON(ars_path, simplifyVector = FALSE)
+  if (is.null(output_id) || !is.character(output_id) || length(output_id) != 1 ||
+      !nzchar(output_id)) {
+    cli::cli_abort(c(
+      "x" = "No {.arg output_id} was supplied.",
+      "i" = "To fix: pass the id of the output to render, e.g. {.val T_14_1_1}."
+    ))
+  }
   out_obj <- find_output(spec, output_id)
+  if (is.null(out_obj)) {
+    valid <- vapply(spec[["outputs"]], function(o) .sc(o[["id"]]) %||% "",
+                    character(1))
+    cli::cli_abort(c(
+      "x" = "Output id {.val {output_id}} is not in the {INPUT_ARS}.",
+      "i" = "Available output ids: {.val {valid[nzchar(valid)]}}."
+    ))
+  }
   ## Resolve the canonical output id (the ARD keys on id, not name).
   output_id <- .sc(out_obj[["id"]])
 
@@ -515,7 +533,7 @@ ars_render_tlf <- function(ars_path, ard, output_id,
   footnotes   <- attr(tf, "arsbridge_footnotes")
 
   ## Use the canonical output id resolved during ars_to_tfrmt().
-  spec    <- jsonlite::fromJSON(ars_path, simplifyVector = FALSE)
+  spec    <- .read_json(ars_path)
   out_obj <- find_output(spec, output_id)
   out_id  <- .sc(out_obj[["id"]])
 
@@ -561,7 +579,7 @@ ars_render_tlf <- function(ars_path, ard, output_id,
 #' @seealso [ars_to_tfrmt()], [ars_render_tlf()]
 #' @export
 ars_to_tfrmt_list <- function(ars_path, ard) {
-  spec       <- jsonlite::fromJSON(ars_path, simplifyVector = FALSE)
+  spec       <- .read_json(ars_path)
   output_ids <- vapply(spec[["outputs"]], function(o) .sc(o[["id"]]), character(1))
   ard_ids    <- unique(stats::na.omit(.flat_chr(ard[["output_id"]])))
   output_ids <- output_ids[output_ids %in% ard_ids]

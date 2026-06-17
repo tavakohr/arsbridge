@@ -8,7 +8,8 @@ ars_diagnostics()
 }
 \value{
 Data frame with columns \code{stage}, \code{severity} (\code{FAIL} / \code{WARN} /
-\code{INFO}), \code{tlf_number}, \code{location}, \code{problem}, \code{action}.
+\code{INFO}), \code{input} (which input document the finding concerns),
+\code{tlf_number}, \code{location}, \code{problem}, \code{action}.
 }
 \description{
 Returns every fallback, parsing miss, skipped sheet, LLM failure,

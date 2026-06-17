@@ -6,7 +6,7 @@ test_that("diag_reset clears and diag_records returns a typed empty frame", {
   recs <- diag_records()
   expect_s3_class(recs, "data.frame")
   expect_equal(nrow(recs), 0)
-  expect_named(recs, c("stage", "severity", "tlf_number", "location",
+  expect_named(recs, c("stage", "severity", "input", "tlf_number", "location",
                        "problem", "action"))
 })
 

@@ -12,18 +12,30 @@
 #' @param report_df Data frame from `validate_annotations_spec()`.
 #' @param output_path Path to the `.xlsx` to write.
 #' @param diagnostics Optional data frame from `diag_records()` -- written to
-#'   a second "Diagnostics" worksheet when it has rows.
+#'   a "Diagnostics" worksheet when it has rows.
+#' @param blockers Optional data frame from `ars_blockers()` -- written as the
+#'   FIRST worksheet ("What to fix first") when it has rows, so the user sees
+#'   the show-stoppers before anything else.
 #'
 #' @return Invisibly returns `output_path`.
 #'
 #' @keywords internal
 #' @noRd
-write_validation_report <- function(report_df, output_path, diagnostics = NULL) {
+write_validation_report <- function(report_df, output_path, diagnostics = NULL,
+                                    blockers = NULL) {
   if (!requireNamespace("openxlsx2", quietly = TRUE)) {
     cli::cli_abort("openxlsx2 is required to write the validation report.")
   }
 
   wb <- openxlsx2::wb_workbook(creator = "arsbridge")
+
+  ## Show-stoppers first, so the reader fixes the blocking inputs before
+  ## wading through the full validation / diagnostics detail.
+  if (!is.null(blockers) && nrow(blockers) > 0) {
+    wb$add_worksheet("What to fix first")
+    .write_styled_sheet(wb, "What to fix first", blockers, tint_col = "severity")
+  }
+
   wb$add_worksheet("Validation")
 
   if (nrow(report_df) == 0) {
