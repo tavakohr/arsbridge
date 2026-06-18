@@ -646,6 +646,12 @@ build_ars_json <- function(sections,
     displays              = list(list(
       order        = 1L,
       displayTitle = section$title %||% "",
+      ## Carry the shell's column-header order so the renderer lays treatment
+      ## columns out as the author wrote them (build_col_levels reads this),
+      ## instead of falling back to alphabetical ARD order.
+      columns      = lapply(
+        Filter(nzchar, as.character(section$col_headers %||% character())),
+        function(h) list(label = h)),
       displaySections = list(list(
         sectionType = "Footnote",
         subSections = lapply(section$footnotes %||% list(),

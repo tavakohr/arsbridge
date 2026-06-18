@@ -316,7 +316,14 @@ build_col_levels <- function(out_obj, ard_out, col_var) {
   norm   <- function(x) tolower(gsub("\\s+", "", x))
   ordered <- character(0)
   for (lb in labels) {
-    hit <- ard_levels[norm(ard_levels) == norm(lb)]
+    ## Tolerant match: a shell column header carries extra text the ARD arm
+    ## value does not (e.g. "UPADALIMIB 15 mg\n(N=200) n (%)" vs the level
+    ## "UPADALIMIB 15 mg"), so treat the arm value as a substring of the header.
+    nlb <- norm(lb)
+    hit <- ard_levels[!ard_levels %in% ordered &
+                        vapply(ard_levels,
+                               function(a) grepl(norm(a), nlb, fixed = TRUE),
+                               logical(1))]
     if (length(hit)) ordered <- c(ordered, hit[1])
   }
   ordered <- c(ordered, setdiff(ard_levels, ordered))
@@ -552,6 +559,11 @@ ars_render_tlf <- function(ars_path, ard, output_id,
       gt_tbl <- gt::tab_source_note(gt_tbl, source_note = fn)
     }
   }
+
+  ## Carry the stub identity so the flextable converter can keep the row-label
+  ## (and any group) column on the LEFT regardless of tfrmt's column order.
+  attr(gt_tbl, "arsbridge_label_var")  <- label_var
+  attr(gt_tbl, "arsbridge_group_vars") <- group_vars
 
   if (format == "gt") return(gt_tbl)
 

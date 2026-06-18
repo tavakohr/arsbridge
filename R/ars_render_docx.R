@@ -16,6 +16,17 @@
   grp_flag[is.na(grp_flag)] <- FALSE
   d <- d[, !names(d) %in% c("..tfrmt_row_grp_lbl", ".tfrmt_row_grp_lbl"), drop = FALSE]
 
+  ## Keep the row-label (and group) column on the LEFT. tfrmt's col_plan only
+  ## names the treatment columns, so with .drop=FALSE the label column can be
+  ## appended on the right; move the known stub columns back to the front so the
+  ## table is not mirrored. Names come from ars_render_tlf() as attributes.
+  label_var  <- attr(gt_tbl, "arsbridge_label_var")
+  group_vars <- attr(gt_tbl, "arsbridge_group_vars") %||% character()
+  stub_cols  <- intersect(c(group_vars, label_var), names(d))
+  if (length(stub_cols)) {
+    d <- d[, c(stub_cols, setdiff(names(d), stub_cols)), drop = FALSE]
+  }
+
   ## Restore display labels from the GT column labels when present.
   labs <- tryCatch(gt_tbl[["_boxhead"]][["column_label"]], error = function(e) NULL)
   vars <- tryCatch(gt_tbl[["_boxhead"]][["var"]], error = function(e) NULL)
@@ -28,7 +39,7 @@
     }, character(1))
   }
 
-  label_col <- names(d)[1]
+  label_col <- if (!is.null(label_var) && label_var %in% names(d)) label_var else names(d)[1]
   body_cols <- names(d)[-1]
   lbl <- as.character(d[[label_col]])
   lbl[!grp_flag] <- paste0("    ", lbl[!grp_flag])
