@@ -159,6 +159,13 @@ detect_col_var <- function(ard, spec) {
 ## tfrmt render mixed categorical + continuous outputs with correct row layout.
 .ARS_ROW_LABEL <- ".arsbridge_row"
 
+## Loud, unmistakable filler for a reserved manual_pending cell (ADR 0002
+## phase 4). Never blank, never "NA", never a number -- a reviewer must not
+## read a reserved cell as a value or a zero. U+2021 (double dagger) keyed to a
+## table footnote. Defined once; also used by the placeholder enrichment in
+## ars_render_docx.R.
+.MANUAL_MARKER <- paste0("[", intToUtf8(0x2021), " manual]")
+
 ## Map a continuous stat_name to the row line it belongs to.
 .statline_for <- function(stat_name) {
   sn <- tolower(stat_name)
@@ -220,6 +227,16 @@ detect_row_roles <- function(ard, col_var) {
     group_val = ".default", label_val = label_val, frmt)
   structs <- list()
   params  <- character(0)
+
+  ## Declared-but-unexecutable method (ADR 0002 phase 4): the stub rows carry
+  ## stat = NA. Render each as the loud manual-derivation marker so a reserved
+  ## cell can never be read as a value or a zero. frmt(missing=) prints the
+  ## marker because a manual_pending stat is always NA.
+  if (method_id %in% names(.UNEXECUTABLE_METHODS)) {
+    structs <- lapply(stat_names, function(sn)
+      fs(.statline_for(sn), tfrmt::frmt("xx", missing = .MANUAL_MARKER)))
+    return(list(structures = structs, params = unique(stat_names)))
+  }
 
   count_like <- c("MTH_COUNT_AND_PERCENTAGE", "MTH_AE_FREQUENCY_COUNT",
                   "FALLBACK_CATEGORICAL")
@@ -353,7 +370,13 @@ build_col_levels <- function(out_obj, ard_out, col_var) {
     var_lvl <- if ("variable_level" %in% names(ard_out)) {
       .flat_chr(ard_out[["variable_level"]])
     } else rep(NA_character_, nrow(ard_out))
-    row_lbl <- ifelse(.is_continuous_method(method),
+    ## Continuous methods AND declared-but-unexecutable methods label each row
+    ## by its stat line (Mean (SD), Median, or for a reserved cell the stat name
+    ## like "Conf.low"), so the body-plan structure that formats it -- including
+    ## the [‡ manual] marker branch -- matches on label_val.
+    statline <- .is_continuous_method(method) |
+      method %in% names(.UNEXECUTABLE_METHODS)
+    row_lbl <- ifelse(statline,
                       vapply(out[["stat_name"]], .statline_for, character(1)),
                       var_lvl)
   } else {
@@ -463,6 +486,18 @@ ars_to_tfrmt <- function(ars_path, ard, output_id,
   col_lvls  <- build_col_levels(out_obj, ard_out, col_var)
   title     <- extract_title(out_obj)
   footnotes <- extract_footnotes(out_obj)
+
+  ## When any reserved manual_pending cell is rendered, key the marker to a
+  ## footnote so a reviewer knows the cell awaits a validated manual derivation
+  ## (ADR 0002 phase 4).
+  if ("result_status" %in% names(ard_out) &&
+      any(.flat_chr(ard_out[["result_status"]]) == "manual_pending",
+          na.rm = TRUE)) {
+    footnotes <- c(footnotes, paste0(
+      .MANUAL_MARKER,
+      " = statistic requires manual derivation; not computed by arsbridge. ",
+      "See ars_manual_worklist()."))
+  }
 
   ## Assemble the tfrmt call. group/column take quosure lists (vars()); label/
   ## param/value take single quosures -- build them programmatically.

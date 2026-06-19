@@ -1,6 +1,13 @@
 # arsbridge 0.1.0
 
 * Initial release.
+* Partial table rendering (ADR 0002, phase 4). An output that arsbridge can
+  compute only in part now renders: the computable cells are filled and each
+  reserved `manual_pending` cell renders as a loud `[‡ manual]` marker (never
+  blank, never `NA`, never a number), keyed to a table footnote. An output with
+  no computable cell at all stays a whole-table numbered placeholder, which now
+  also names the reserved cells. The render manifest flags a partial table as
+  `partial -- manual cells reserved`.
 * Partial-results traceability (ADR 0002, phases 1-3). `ars_to_ard()` now stamps
   every row with provenance columns (`result_status`, `value_source`,
   `derivation_ref`, `derived_by`, `derived_dt`). A declared-but-unexecutable

@@ -72,3 +72,74 @@ test_that("ars_to_tfrmt_list returns a named list with tfrmt elements", {
   expect_true(all(vapply(non_null, inherits, logical(1), "tfrmt")))
   expect_true(fx$output_id %in% names(result))
 })
+
+# ---- Phase 4: partial rendering with [‡ manual] markers --------------------
+# A mixed output: one supported analysis (count n/%) and one declared-but-
+# unexecutable analysis (exact CI) over the same response variable, sharing one
+# output. ars_to_ard() computes the counts and reserves manual_pending stub
+# cells for the CI; the renderer must fill the counts and mark the CI cells.
+
+.mixed_fixture <- function() {
+  adam_dir <- withr::local_tempdir(.local_envir = parent.frame())
+  utils::write.csv(data.frame(
+    USUBJID = sprintf("S%02d", 1:8),
+    TRT01A  = rep(c("Drug A", "Placebo"), each = 4),
+    SAFFL   = rep("Y", 8),
+    RESP    = c("Y", "Y", "N", "N", "Y", "N", "N", "N"),
+    stringsAsFactors = FALSE
+  ), file.path(adam_dir, "ADSL.csv"), row.names = FALSE)
+
+  grp <- list(list(order = 1, groupingId = "GF_TRT", resultsByGroup = TRUE))
+  spec <- list(
+    id = "MIX", name = "Mixed", version = "1",
+    analysisSets = list(list(id = "AS_ITT", name = "ITT",
+      condition = list(dataset = "ADSL", variable = "SAFFL",
+                       comparator = "EQ", value = list("Y")))),
+    analysisGroupings = list(list(id = "GF_TRT", name = "TRT01A",
+      groupingVariable = list(dataset = "ADSL", variable = "TRT01A"))),
+    methods = list(list(id = "MTH_COUNT_AND_PERCENTAGE", name = "Count"),
+                   list(id = "MTH_PROPORTION_CI_EXACT", name = "Exact CI",
+                        supported = FALSE)),
+    analyses = list(
+      list(id = "AN_CNT", name = "Responders", analysisSetId = "AS_ITT",
+           methodId = "MTH_COUNT_AND_PERCENTAGE",
+           analysisVariable = list(dataset = "ADSL", variable = "RESP"),
+           orderedGroupings = grp),
+      list(id = "AN_CI", name = "Exact CI", analysisSetId = "AS_ITT",
+           methodId = "MTH_PROPORTION_CI_EXACT",
+           analysisVariable = list(dataset = "ADSL", variable = "RESP"),
+           orderedGroupings = grp)),
+    outputs = list(list(id = "T_X", name = "T-X",
+      referencedAnalysisIds = list("AN_CNT", "AN_CI")))
+  )
+  ars_path <- tempfile("ars_", fileext = ".json")
+  writeLines(jsonlite::toJSON(spec, auto_unbox = TRUE, null = "null"), ars_path)
+  ard <- ars_to_ard(ars_path, adam_dir)
+  list(ars_path = ars_path, ard = ard)
+}
+
+test_that("a mixed ARD reserves manual_pending CI cells alongside computed counts", {
+  skip_if_not_installed("cards")
+  fx <- .mixed_fixture()
+  expect_true(any(fx$ard$result_status == "computed"))
+  expect_true(any(fx$ard$result_status == "manual_pending"))
+  expect_setequal(
+    unique(fx$ard$method_id[fx$ard$result_status == "manual_pending"]),
+    "MTH_PROPORTION_CI_EXACT")
+})
+
+test_that("ars_render_tlf renders the [‡ manual] marker and its footnote", {
+  skip_if_not_installed("cards")
+  marker <- paste0("[", intToUtf8(0x2021), " manual]")
+  fx <- .mixed_fixture()
+  gt_obj <- ars_render_tlf(fx$ars_path, fx$ard, "T_X")
+  expect_s3_class(gt_obj, "gt_tbl")
+  body <- as.data.frame(gt_obj[["_data"]])
+  # Reserved CI cells show the loud marker, not blank / NA / a number.
+  expect_true(any(grepl(marker, unlist(body), fixed = TRUE)))
+  # Computed counts are still present as n (p%).
+  expect_true(any(grepl("\\([0-9]+\\.[0-9]\\%\\)", unlist(body))))
+  # The marker is keyed to a source-note footnote.
+  notes <- unlist(gt_obj[["_source_notes"]])
+  expect_true(any(grepl("manual derivation", notes)))
+})

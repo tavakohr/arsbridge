@@ -21,7 +21,8 @@
 ## analysis needs statistics beyond arsbridge's descriptive {cards} scope, and
 ## the placeholder must read as an intentional boundary, not a bug. `gate =
 ## FALSE` marks an actual render failure, where the reason is an error message.
-.add_placeholder <- function(doc, heading, title, reason, first, gate = TRUE) {
+.add_placeholder <- function(doc, heading, title, reason, first, gate = TRUE,
+                             detail = NULL) {
   if (!first) doc <- officer::body_add_break(doc)
   doc <- officer::body_add_par(doc, heading)
   if (nzchar(title %||% "")) doc <- officer::body_add_par(doc, title)
@@ -42,7 +43,33 @@
       reason %||% "render error")
   }
   doc <- officer::body_add_par(doc, msg)
+  if (!is.null(detail) && nzchar(detail)) doc <- officer::body_add_par(doc, detail)
   doc
+}
+
+## TRUE when the ARD holds at least one computed (non-stub) result for an
+## output. Drives the render-vs-placeholder choice (ADR 0002 phase 4): an
+## output with some computable cells is rendered with its manual_pending cells
+## marked; one with no computable cells stays a whole-table placeholder.
+.output_has_computed <- function(ard, oid) {
+  if (is.null(ard) || !all(c("output_id", "result_status") %in% names(ard)))
+    return(FALSE)
+  chr <- function(col) if (is.list(col)) vapply(col, function(x)
+    if (length(x)) as.character(x[[1]]) else NA_character_, character(1)) else
+      as.character(col)
+  o <- chr(ard[["output_id"]]); s <- chr(ard[["result_status"]])
+  any(!is.na(o) & o == oid & !is.na(s) & s == "computed")
+}
+
+## One-line summary of the reserved manual_pending cells for an output, listed
+## on its placeholder page so the document names exactly which keyed cells need
+## a manual derivation (they exist as stub rows in the ARD).
+.reserved_cells_detail <- function(ard, oid) {
+  wl <- ars_manual_worklist(ard)
+  wl <- wl[!is.na(wl$output_id) & wl$output_id == oid, , drop = FALSE]
+  if (nrow(wl) == 0) return(NULL)
+  paste0("Reserved cell(s) needing manual derivation (see ars_manual_worklist()): ",
+         paste(sprintf("%s [%s]", wl$stat_name, wl$method_id), collapse = "; "))
 }
 
 ## Convert a GT table (from ars_render_tlf / ars_render_listing) to a
@@ -226,12 +253,18 @@ ars_render_all <- function(ars_path, ard, adam_dir = NULL, file = NULL,
       rows[[length(rows) + 1L]] <- rec; next
     }
 
-    ## Unsupported analysis -> numbered placeholder (no execution attempted).
+    ## Capability-gated analysis. If the ARD has NO computable cell for this
+    ## output -> whole-table numbered placeholder (no execution), now naming the
+    ## reserved manual cells. If it has SOME computed cells, fall through and
+    ## render the partial table: computed cells are filled, reserved
+    ## manual_pending cells render as the loud [‡ manual] marker (ADR 0002 ph4).
     unsup <- unsupported_map[[oid]]
-    if (!is.null(unsup)) {
+    if (!is.null(unsup) && !.output_has_computed(ard, oid)) {
       doc <- .add_placeholder(doc, .tlf_heading(oid, kind),
                               extract_title(o) %||% .sc(o[["name"]]) %||% oid,
-                              unsup, first); first <- FALSE
+                              unsup, first, gate = TRUE,
+                              detail = .reserved_cells_detail(ard, oid))
+      first <- FALSE
       rec$status <- "placeholder"; rec$reason <- unsup
       rows[[length(rows) + 1L]] <- rec; next
     }
@@ -262,6 +295,9 @@ ars_render_all <- function(ars_path, ard, adam_dir = NULL, file = NULL,
 
     if (identical(res, "ok")) {
       rec$status <- "rendered"
+      ## A gated output that still rendered did so partially: some cells are
+      ## reserved manual_pending markers. Flag it in the manifest.
+      if (!is.null(unsup)) rec$reason <- "partial -- manual cells reserved"
     } else {
       ## Render failed -> emit a numbered placeholder so the table still
       ## appears in the document and shell numbering stays intact.
