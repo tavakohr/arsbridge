@@ -4,16 +4,22 @@ Version: 0.1.0
 Authors@R:
     person("Hamid", "Tavakoli",
            email = "htavakoli@gmail.com",
-           role  = c("aut", "cre"))
+           role  = c("aut", "cre"),
+           comment = c(ORCID = "0000-0003-0574-7739"))
 Description: Reads a lead programmer's already-annotated TLF shell Word
     document and the study's ADaM specification Excel, and produces a
     valid CDISC Analysis Results Standard (ARS) v1.0 ARM-TS JSON file
     suitable for consumption by 'siera::readARS()'. Annotation extraction
     is style-agnostic: detects ADaM variable references whether marked by
     font colour, character formatting, brackets, or plain-text appended
-    after the stub label. Uses 'ellmer' (Anthropic Claude) only for
-    light semantic enrichment per TLF section (analysis type, method
-    name, row roles), never for variable invention.
+    after the stub label. An LLM ('ellmer'; Anthropic, OpenAI, Gemini, or
+    an OpenAI-compatible provider such as GLM) acts as the primary reader of
+    variant shell layouts, separating display label from variable reference,
+    and also supplies light semantic enrichment per TLF section (analysis
+    type, method name, row roles). Every LLM-proposed variable is gated
+    against the ADaM specification, so an out-of-spec proposal is rejected
+    and flagged rather than shipped; with no API key the reader degrades to
+    deterministic parsing.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Depends:
@@ -43,6 +49,7 @@ Suggests:
     pkgdown,
     rmarkdown,
     siera (>= 0.5.0),
+    spelling,
     survival,
     testthat (>= 3.0.0),
     withr
@@ -51,3 +58,4 @@ BugReports: https://github.com/tavakohr/arsbridge/issues
 Config/testthat/edition: 3
 VignetteBuilder: knitr
 Config/roxygen2/version: 8.0.0
+Language: en-US

@@ -30,12 +30,17 @@ calculations against ADaM datasets.
 
 ## Key Features
 
-1.  **Multi-Provider LLM Integration**: Natively configure and use
-    Anthropic, OpenAI, or Gemini API keys to automate metadata
-    enrichment.
-2.  **Authoritative Parsing**: Extract annotations without guessing. It
-    relies on the lead programmer’s annotations in the Word shells as
-    the ground truth.
+1.  **Multi-Provider LLM Integration**: Configure Anthropic, OpenAI,
+    Gemini, or any OpenAI-compatible provider (e.g. GLM) from a single
+    provider registry. Adding a provider is one entry; selecting one is
+    `ARS_LLM_PROVIDER`. The LLM is the primary reader of variant shell
+    layouts, separating display label from variable reference.
+2.  **Spec-Gated Extraction**: Every LLM-proposed `DATASET.VARIABLE` is
+    checked against your ADaM spec. An out-of-spec proposal is rejected
+    and logged as a blocker for human review – the spec is the
+    hallucination seatbelt, so the model can only pick variables that
+    actually exist. With no API key, extraction degrades to
+    deterministic regex parsing of known annotation conventions.
 3.  **Spec Validation**: Checks every annotation against your ADaM spec
     (`define.xml` or Excel) and produces an interactive Excel validation
     report showing gaps or typos.
@@ -48,6 +53,45 @@ calculations against ADaM datasets.
     treatment columns, row groups, and labels; rescaling percentages;
     and carrying titles and footnotes through. Closes the loop from
     annotated shell to final TLF.
+
+------------------------------------------------------------------------
+
+## How arsbridge Reads the Shell
+
+Every TLF shell is annotated differently – the ADaM variable for a row
+might be a coloured run, bold text, a bracketed
+`[ADAE.AEDECOD WHERE AEREL='RELATED']`, plain text after the label, or a
+layout no regex has seen. arsbridge is built to extract **as many of
+these variants as possible**, and to never ship a variable it cannot
+prove exists. It reads each shell **twice and takes the union**:
+
+1.  **Deterministic regex pass** (`parse_shell_docx()`) – a four-layer
+    detector (colour, formatting, brackets, plain text). Fast, free,
+    offline; always runs, even with no API key.
+2.  **LLM primary pass** (`extract_shell_llm()`) – re-reads the raw cell
+    and separates display label from variable reference in *any* layout,
+    generalising to formats the regex was never written for.
+3.  **Hard ADaM-spec gate** – every LLM-proposed `DATASET.VARIABLE` must
+    exist in your ADaM spec. Out-of-spec proposals are **rejected and
+    logged as blockers**, never shipped. The spec is the hallucination
+    seatbelt.
+
+A row is read if **either** pass finds it. On a conflict the LLM wins
+and a `WARN` flags the disagreement for human review. With no API key
+the LLM pass is skipped and arsbridge runs on the deterministic regex
+alone.
+
+| Row situation | Regex | LLM (in spec) | Result |
+|----|:--:|:--:|----|
+| Known convention | ✓ | silent | regex kept |
+| Known convention, different reads | ✓ | ✓ diff | **LLM wins** + `WARN` |
+| **Variant layout regex can’t parse** | ✗ | ✓ | **LLM adds it** |
+| Non-spec proposal | ✗ | ✗ rejected | dropped + **blocker** |
+| No variable | ✗ | silent | empty |
+
+This keeps the founding promise – *extracts and converts, does not
+invent* – now **enforced by the spec gate** rather than by limiting the
+reader. Full detail in `vignette("reading-engine")`.
 
 ------------------------------------------------------------------------
 
@@ -88,9 +132,34 @@ set_anthropic_key()  # Writes ANTHROPIC_API_KEY to ~/.Renviron
 set_openai_key()     # Writes OPENAI_API_KEY to ~/.Renviron
 set_gemini_key()     # Writes GEMINI_API_KEY to ~/.Renviron
 
+# Any other registry provider (e.g. an OpenAI-compatible one like GLM):
+set_llm_key("glm", "your-glm-key")
+
 # Show what API keys are configured and which provider is currently active
 show_active_llm()
 ```
+
+#### Adding a New / Trending Model
+
+Providers live in one registry (`R/llm_providers.R`). There are two ways
+to reach a model that is not the default:
+
+- **Same provider, newer model** – just pass `model =`:
+
+  ``` r
+  spec_to_ars(..., model = "claude-3-7-sonnet-latest")
+  ```
+
+- **A new provider** (GLM, DeepSeek, OpenRouter, …) – add one registry
+  entry with its `env` var, default `model`, the `ellmer` `chat`
+  constructor, and a `base_url` if it is OpenAI-compatible. No other
+  code changes. Then:
+
+  ``` r
+  set_llm_key("glm", "your-glm-key")
+  Sys.setenv(ARS_LLM_PROVIDER = "glm")   # make it active
+  spec_to_ars(..., model = "glm-4.6")    # exact model id from your account
+  ```
 
 #### How Provider Selection Works:
 

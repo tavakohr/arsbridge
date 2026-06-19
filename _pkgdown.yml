@@ -2,3 +2,41 @@ url: ~
 template:
   bootstrap: 5
 
+articles:
+- title: Articles
+  navbar: ~
+  contents:
+  - reading-engine
+  - getting-started
+
+reference:
+- title: Pipeline
+  desc: Convert an annotated shell + ADaM spec to ARS, ARD, and formatted TLFs.
+  contents:
+  - spec_to_ars
+  - spec_to_ars_example
+  - ars_to_ard
+  - ars_to_tfrmt
+  - ars_to_tfrmt_list
+  - ars_render_tlf
+  - ars_render_all
+  - ars_render_listing
+  - ars_render_figure
+- title: Diagnostics
+  desc: Plain-English findings that point at the input document to fix.
+  contents:
+  - ars_diagnostics
+  - ars_blockers
+- title: LLM providers
+  desc: Configure and select the LLM that reads variant shells.
+  contents:
+  - set_anthropic_key
+  - set_openai_key
+  - set_gemini_key
+  - set_llm_key
+  - check_anthropic_key
+  - get_active_llm
+  - show_active_llm
+- title: Examples
+  contents:
+  - arsbridge_example

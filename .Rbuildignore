@@ -18,7 +18,10 @@
 ^\.siera_ref$
 ^\.align_backup$
 ^cran-comments\.md$
+^CONTRIBUTING\.md$
+^codemeta\.json$
 ^siera_cards_integration_plan\.md$
 ^CRAN-RELEASE$
 ^revdep$
 ^README\.Rmd$
+^CODE_OF_CONDUCT\.md$
