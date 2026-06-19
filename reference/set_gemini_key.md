@@ -1,8 +1,8 @@
 # Set your Gemini API key for arsbridge
 
-Writes `GEMINI_API_KEY=...` to your user `.Renviron` file so it loads
-automatically every time you start R, AND sets it in the current
-session.
+Sets `GEMINI_API_KEY` for the current R session. In an interactive
+session you are then asked whether to also persist it to your
+`.Renviron`; no file is written without that confirmation.
 
 ## Usage
 
@@ -19,9 +19,11 @@ set_gemini_key(key = NULL, scope = c("user", "project"))
 
 - scope:
 
-  `"user"` (default) writes to your home `.Renviron`. `"project"` writes
-  to `.Renviron` in the current working directory.
+  `"user"` (default) targets your home `.Renviron`; `"project"` targets
+  `.Renviron` in the current working directory. Only used if you confirm
+  the (optional) persistence step.
 
 ## Value
 
-Invisibly returns the path to the `.Renviron` file that was updated.
+Invisibly returns the path to the `.Renviron` that would be / was
+written.

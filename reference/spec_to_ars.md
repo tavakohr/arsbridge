@@ -12,7 +12,7 @@ spec_to_ars(
   shell_path,
   adam_spec_path,
   sap_path = NULL,
-  output_path = "reporting_event.json",
+  output_path = file.path(tempdir(), "reporting_event.json"),
   study_id = "STUDY-001",
   study_name = NULL,
   model = NULL,
@@ -20,7 +20,7 @@ spec_to_ars(
   provider = NULL,
   spec_column_aliases = NULL,
   validate = TRUE,
-  report_path = "spec_validation_report.xlsx",
+  report_path = file.path(tempdir(), "spec_validation_report.xlsx"),
   code_dir = NULL,
   adam_dir = ".",
   verbose = TRUE
@@ -55,7 +55,9 @@ spec_to_ars(
 
 - output_path:
 
-  Path for the ARS JSON. Default `"reporting_event.json"`.
+  Path for the ARS JSON. Defaults to `reporting_event.json` in
+  [`tempdir()`](https://rdrr.io/r/base/tempfile.html); pass an explicit
+  path to write it somewhere permanent.
 
 - study_id:
 
@@ -92,8 +94,9 @@ spec_to_ars(
 
 - report_path:
 
-  Path for the validation report `.xlsx`. Default
-  `"spec_validation_report.xlsx"`.
+  Path for the validation report `.xlsx`. Defaults to
+  `spec_validation_report.xlsx` in
+  [`tempdir()`](https://rdrr.io/r/base/tempfile.html).
 
 - code_dir:
 

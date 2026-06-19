@@ -55,7 +55,7 @@ Results Standard (ARS) v1.0 ARM-TS JSON file consumable by
 <span>  <span class="va">shell_path</span>,</span>
 <span>  <span class="va">adam_spec_path</span>,</span>
 <span>  sap_path <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  output_path <span class="op">=</span> <span class="st">"reporting_event.json"</span>,</span>
+<span>  output_path <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"reporting_event.json"</span><span class="op">)</span>,</span>
 <span>  study_id <span class="op">=</span> <span class="st">"STUDY-001"</span>,</span>
 <span>  study_name <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  model <span class="op">=</span> <span class="cn">NULL</span>,</span>
@@ -63,7 +63,7 @@ Results Standard (ARS) v1.0 ARM-TS JSON file consumable by
 <span>  provider <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  spec_column_aliases <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  validate <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>  report_path <span class="op">=</span> <span class="st">"spec_validation_report.xlsx"</span>,</span>
+<span>  report_path <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"spec_validation_report.xlsx"</span><span class="op">)</span>,</span>
 <span>  code_dir <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  adam_dir <span class="op">=</span> <span class="st">"."</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">TRUE</span></span>
@@ -95,7 +95,9 @@ as <code>sapDescription</code>, becoming the human-readable comment above the em
 
 
 <dt id="arg-output-path">output_path<a class="anchor" aria-label="anchor" href="#arg-output-path"></a></dt>
-<dd><p>Path for the ARS JSON. Default <code>"reporting_event.json"</code>.</p></dd>
+<dd><p>Path for the ARS JSON. Defaults to
+<code>reporting_event.json</code> in <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code>; pass an explicit path to write it
+somewhere permanent.</p></dd>
 
 
 <dt id="arg-study-id">study_id<a class="anchor" aria-label="anchor" href="#arg-study-id"></a></dt>
@@ -132,8 +134,8 @@ against the ADaM spec and write a validation report.</p></dd>
 
 
 <dt id="arg-report-path">report_path<a class="anchor" aria-label="anchor" href="#arg-report-path"></a></dt>
-<dd><p>Path for the validation report <code>.xlsx</code>.
-Default <code>"spec_validation_report.xlsx"</code>.</p></dd>
+<dd><p>Path for the validation report <code>.xlsx</code>. Defaults to
+<code>spec_validation_report.xlsx</code> in <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code>.</p></dd>
 
 
 <dt id="arg-code-dir">code_dir<a class="anchor" aria-label="anchor" href="#arg-code-dir"></a></dt>
