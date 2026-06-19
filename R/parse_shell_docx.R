@@ -287,7 +287,8 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
         annotation           = detection$annotation,
         has_annot            = nzchar(detection$annotation),
         detection_method     = detection$method,
-        detection_confidence = detection$confidence
+        detection_confidence = detection$confidence,
+        raw_text             = raw_text   ## unsplit cell, for the LLM extractor
       )
     }
     current$stub_rows <- Filter(Negate(is.null), stub_rows)
@@ -338,7 +339,8 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
       annotation           = d$annotation,
       has_annot            = nzchar(d$annotation),
       detection_method     = d$method,
-      detection_confidence = d$confidence
+      detection_confidence = d$confidence,
+      raw_text             = as.character(p$text %||% "")
     )
     ## A multi-line header cell that yielded no variable token usually means
     ## the variable-name convention differs from "ALL-CAPS on line 2+".

@@ -9,14 +9,22 @@
 arsbridge reads a lead programmer's already-annotated TLF shell Word
 document and the study's ADaM specification Excel, and produces a valid
 CDISC Analysis Results Standard (ARS) v1.0 ARM-TS JSON file consumable by
-\code{\link[siera:readARS]{siera::readARS()}}. Annotation extraction is style-agnostic: detects ADaM
-variable references whether marked by font colour, character formatting,
-brackets, or plain text appended after the stub label.
+\code{\link[siera:readARS]{siera::readARS()}}.
 }
 \details{
-Core principle: the parser extracts and converts -- it does not invent.
-Every variable in the ARS output traces back to an annotation written by
-a lead programmer in the annotated shell.
+Annotation reading is style-agnostic and uses two passes together to
+extract as many annotation variants as possible: a deterministic
+four-layer regex detector (font colour, character formatting, brackets,
+plain text) and an LLM primary reader that separates display label from
+variable reference in layouts no regex was written for. A row is read if
+either pass finds it; on conflict the LLM wins and a warning flags it.
+
+Core principle: the package extracts and converts -- it does not invent.
+Every LLM-proposed variable passes a hard gate against the ADaM
+specification, so a variable absent from the spec is rejected and logged,
+never shipped. Every variable in the ARS output traces back to a real
+annotation grounded in the study's ADaM spec. See the "How arsbridge reads
+an annotated shell" vignette.
 }
 \seealso{
 Useful links:
@@ -27,11 +35,11 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Hamid Tavakoli \email{htavakoli@gmail.com}
+\strong{Maintainer}: Hamid Tavakoli \email{htavakoli@gmail.com} (\href{https://orcid.org/0000-0003-0574-7739}{ORCID})
 
 Authors:
 \itemize{
-  \item Hamid Tavakoli \email{htavakoli@gmail.com}
+  \item Hamid Tavakoli \email{htavakoli@gmail.com} (\href{https://orcid.org/0000-0003-0574-7739}{ORCID})
 }
 
 }

@@ -24,20 +24,20 @@
 #' @examples
 #' get_active_llm()
 get_active_llm <- function() {
-  keys <- list(
-    anthropic = Sys.getenv("ANTHROPIC_API_KEY", unset = ""),
-    openai    = Sys.getenv("OPENAI_API_KEY", unset = ""),
-    gemini    = Sys.getenv("GEMINI_API_KEY", unset = "")
+  provs <- .llm_provider_names()
+  keys  <- stats::setNames(
+    lapply(provs, function(p) Sys.getenv(.llm_env_var(p), unset = "")),
+    provs
   )
 
-  keys_set <- names(keys)[sapply(keys, nzchar)]
+  keys_set <- names(keys)[vapply(keys, nzchar, logical(1))]
 
   # Check for explicit user preference
   pref <- Sys.getenv("ARS_LLM_PROVIDER", unset = getOption("ars.llm.provider", ""))
   pref <- tolower(trimws(pref))
 
   provider <- NULL
-  if (nzchar(pref) && pref %in% c("anthropic", "openai", "gemini")) {
+  if (nzchar(pref) && pref %in% provs) {
     if (pref %in% keys_set) {
       provider <- pref
     } else {
@@ -45,24 +45,15 @@ get_active_llm <- function() {
     }
   }
 
-  if (is.null(provider)) {
-    if ("anthropic" %in% keys_set) {
-      provider <- "anthropic"
-    } else if ("openai" %in% keys_set) {
-      provider <- "openai"
-    } else if ("gemini" %in% keys_set) {
-      provider <- "gemini"
-    }
+  if (is.null(provider) && length(keys_set) > 0) {
+    ## First key set, in registry priority order.
+    provider <- provs[provs %in% keys_set][1]
   }
 
   model <- NULL
   active_key_masked <- NULL
   if (!is.null(provider)) {
-    model <- switch(provider,
-      anthropic = "claude-sonnet-4-6",
-      openai    = "gpt-4o",
-      gemini    = "gemini-2.5-pro"
-    )
+    model <- .llm_default_model(provider)
     raw_key <- keys[[provider]]
     n <- nchar(raw_key)
     if (n > 10) {
@@ -97,13 +88,13 @@ show_active_llm <- function() {
   active <- get_active_llm()
   
   cli::cli_h2("LLM Configuration Status")
-  
-  keys <- list(
-    anthropic = Sys.getenv("ANTHROPIC_API_KEY", unset = ""),
-    openai    = Sys.getenv("OPENAI_API_KEY", unset = ""),
-    gemini    = Sys.getenv("GEMINI_API_KEY", unset = "")
+
+  provs <- .llm_provider_names()
+  keys  <- stats::setNames(
+    lapply(provs, function(p) Sys.getenv(.llm_env_var(p), unset = "")),
+    provs
   )
-  
+
   for (prov in names(keys)) {
     status <- if (nzchar(keys[[prov]])) {
       k <- keys[[prov]]
@@ -154,13 +145,43 @@ show_active_llm <- function() {
 #'   written.
 #' @export
 set_anthropic_key <- function(key = NULL, scope = c("user", "project")) {
+  set_llm_key("anthropic", key = key, scope = scope)
+}
+
+#' Set the API key for any supported LLM provider
+#'
+#' Generic key setter driven by the provider registry. Use this for providers
+#' that have no dedicated `set_*_key()` helper (e.g. `"glm"`), or call the
+#' named wrappers ([set_anthropic_key()], [set_openai_key()],
+#' [set_gemini_key()]) for the common three. Sets the provider's API-key
+#' environment variable for the current session; in an interactive session you
+#' are then asked whether to also persist it to your `.Renviron`.
+#'
+#' @param provider Provider id. One of the registry names
+#'   (currently `"anthropic"`, `"openai"`, `"gemini"`, `"glm"`).
+#' @param key Character. The API key. If `NULL` (default) and R is running
+#'   interactively, you are prompted.
+#' @param scope `"user"` (default) targets your home `.Renviron`;
+#'   `"project"` targets `.Renviron` in the current working directory.
+#'
+#' @return Invisibly returns the path to the `.Renviron` that would be / was
+#'   written.
+#' @export
+#' @examples
+#' \dontrun{
+#' # Add a trending OpenAI-compatible provider already in the registry:
+#' set_llm_key("glm", "your-glm-key")
+#' Sys.setenv(ARS_LLM_PROVIDER = "glm")  # make it the active provider
+#' }
+set_llm_key <- function(provider, key = NULL, scope = c("user", "project")) {
+  p <- .llm_provider(provider)
   .set_key_generic(
-    provider_name = "Anthropic",
-    env_var       = "ANTHROPIC_API_KEY",
-    prefix        = "sk-ant-",
+    provider_name = p$label,
+    env_var       = p$env,
+    prefix        = p$prefix %||% "",
     key           = key,
     scope         = scope,
-    url           = "https://console.anthropic.com/settings/keys"
+    url           = p$url
   )
 }
 
@@ -180,14 +201,7 @@ set_anthropic_key <- function(key = NULL, scope = c("user", "project")) {
 #'   written.
 #' @export
 set_openai_key <- function(key = NULL, scope = c("user", "project")) {
-  .set_key_generic(
-    provider_name = "OpenAI",
-    env_var       = "OPENAI_API_KEY",
-    prefix        = "sk-",
-    key           = key,
-    scope         = scope,
-    url           = "https://platform.openai.com/api-keys"
-  )
+  set_llm_key("openai", key = key, scope = scope)
 }
 
 #' Set your Gemini API key for arsbridge
@@ -206,14 +220,7 @@ set_openai_key <- function(key = NULL, scope = c("user", "project")) {
 #'   written.
 #' @export
 set_gemini_key <- function(key = NULL, scope = c("user", "project")) {
-  .set_key_generic(
-    provider_name = "Gemini",
-    env_var       = "GEMINI_API_KEY",
-    prefix        = "",
-    key           = key,
-    scope         = scope,
-    url           = "https://aistudio.google.com/app/apikey"
-  )
+  set_llm_key("gemini", key = key, scope = scope)
 }
 
 #' Check whether the Anthropic API key is set

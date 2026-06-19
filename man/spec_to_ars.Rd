@@ -15,6 +15,7 @@ spec_to_ars(
   api_key = NULL,
   provider = NULL,
   spec_column_aliases = NULL,
+  extract_with_llm = TRUE,
   validate = TRUE,
   report_path = file.path(tempdir(), "spec_validation_report.xlsx"),
   code_dir = NULL,
@@ -60,6 +61,14 @@ Defaults to the active provider.}
 aliases for the ADaM spec Excel (see \code{parse_adam_spec()}); useful when
 a workbook uses non-standard or non-English headers. Example:
 \code{list(variable = "nom de variable", dataset = "domaine")}.}
+
+\item{extract_with_llm}{If \code{TRUE} (default), the LLM re-reads each section's
+raw shell cells as the primary annotation reader, separating display label
+from variable reference in variant layouts. Every proposed
+\code{DATASET.VARIABLE} is gated against the ADaM spec -- out-of-spec proposals
+are rejected and logged as blockers, never shipped. With no API key the
+pass degrades to the deterministic regex result and emits one warning.
+Set \code{FALSE} to use deterministic parsing only.}
 
 \item{validate}{If \code{TRUE} (default), cross-reference annotations
 against the ADaM spec and write a validation report.}

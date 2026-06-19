@@ -37,6 +37,13 @@
 #'   aliases for the ADaM spec Excel (see `parse_adam_spec()`); useful when
 #'   a workbook uses non-standard or non-English headers. Example:
 #'   `list(variable = "nom de variable", dataset = "domaine")`.
+#' @param extract_with_llm If `TRUE` (default), the LLM re-reads each section's
+#'   raw shell cells as the primary annotation reader, separating display label
+#'   from variable reference in variant layouts. Every proposed
+#'   `DATASET.VARIABLE` is gated against the ADaM spec -- out-of-spec proposals
+#'   are rejected and logged as blockers, never shipped. With no API key the
+#'   pass degrades to the deterministic regex result and emits one warning.
+#'   Set `FALSE` to use deterministic parsing only.
 #' @param validate       If `TRUE` (default), cross-reference annotations
 #'   against the ADaM spec and write a validation report.
 #' @param report_path    Path for the validation report `.xlsx`. Defaults to
@@ -99,6 +106,7 @@ spec_to_ars <- function(shell_path,
                         api_key      = NULL,
                         provider     = NULL,
                         spec_column_aliases = NULL,
+                        extract_with_llm = TRUE,
                         validate     = TRUE,
                         report_path  = file.path(tempdir(), "spec_validation_report.xlsx"),
                         code_dir     = NULL,
@@ -134,12 +142,7 @@ spec_to_ars <- function(shell_path,
     model <- active$model
   }
   if (is.null(api_key)) {
-    env_var <- switch(provider,
-      anthropic = "ANTHROPIC_API_KEY",
-      openai    = "OPENAI_API_KEY",
-      gemini    = "GEMINI_API_KEY"
-    )
-    api_key <- Sys.getenv(env_var)
+    api_key <- Sys.getenv(.llm_env_var(provider))
   }
 
   if (is.null(api_key) || !nzchar(api_key)) {
@@ -165,6 +168,17 @@ spec_to_ars <- function(shell_path,
   sections <- parse_shell_docx(shell_path, spec_lookup = spec$lookup)
   if (length(sections) == 0) {
     cli::cli_abort("No TLF sections found in {.path {shell_path}}.")
+  }
+
+  ## --- LLM-primary extraction (with deterministic + spec cross-check) -------
+  ## The LLM re-reads each section's raw cells to separate label from variable
+  ## in variant layouts. Every proposed variable passes a hard ADaM-spec gate;
+  ## hallucinations are rejected and logged. Keyless => degraded regex-only.
+  if (isTRUE(extract_with_llm)) {
+    if (verbose) cli::cli_alert_info("Extracting annotations with {toupper(provider)} (spec-gated)...")
+    sections <- lapply(sections, function(sec)
+      extract_shell_llm(sec, spec_lookup = spec$lookup,
+                        provider = provider, model = model, api_key = api_key))
   }
 
   ## --- Validation ----------------------------------------------------

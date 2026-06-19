@@ -45,12 +45,7 @@ enrich_with_llm <- function(section,
     model <- active$model
   }
   if (is.null(api_key)) {
-    env_var <- switch(provider,
-      anthropic = "ANTHROPIC_API_KEY",
-      openai    = "OPENAI_API_KEY",
-      gemini    = "GEMINI_API_KEY"
-    )
-    api_key <- Sys.getenv(env_var)
+    api_key <- Sys.getenv(.llm_env_var(provider))
   }
 
   if (is.null(api_key) || !nzchar(api_key)) {
@@ -330,12 +325,7 @@ enrich_with_llm <- function(section,
                                system_prompt = paste(
                                  "You are an expert CDISC clinical",
                                  "statistical programmer.")) {
-  env_var <- switch(provider,
-    anthropic = "ANTHROPIC_API_KEY",
-    openai    = "OPENAI_API_KEY",
-    gemini    = "GEMINI_API_KEY",
-    cli::cli_abort("Unsupported LLM provider: {.val {provider}}")
-  )
+  env_var <- .llm_env_var(provider)
 
   ## Keep the key in the environment for the WHOLE call -- the Anthropic /
   ## OpenAI / Gemini providers read it at request time, not construction.
@@ -354,14 +344,8 @@ enrich_with_llm <- function(section,
   }
 
   max_tokens <- if (identical(provider, "openai")) 4096L else 8192L
-  chat <- switch(provider,
-    anthropic = ellmer::chat_anthropic(system_prompt = system_prompt,
-      model = model, params = ellmer::params(max_tokens = max_tokens)),
-    openai = ellmer::chat_openai(system_prompt = system_prompt,
-      model = model, params = ellmer::params(max_tokens = max_tokens)),
-    gemini = ellmer::chat_google_gemini(system_prompt = system_prompt,
-      model = model, params = ellmer::params(max_tokens = max_tokens))
-  )
+  chat <- .llm_build_chat(provider, model, system_prompt, max_tokens,
+                          api_key = api_key)
 
   ## convert = FALSE keeps the raw list-of-lists shape (row_enrichments as
   ## a list, not a data.frame) that build_ars_json() iterates over.
