@@ -48,21 +48,28 @@ test_that(".tlf_heading reconstructs shell numbering", {
   expect_equal(.tlf_heading("F_14_2_1", "figure"),  "Figure 14.2.1")
 })
 
-test_that("build_ars_json emits a numbered placeholder output (no analyses) for unsupported", {
+test_that("build_ars_json keeps a declarative analysis for an unsupported output (ADR 0002 ph3)", {
   sec <- list(
     tlf_number = "T-14-2-1", tlf_type = "TABLE",
     title = "Proportion Achieving EASI 75", population_text = "ITT",
     population_annot = "", col_headers = character(),
     stub_rows = list(list(label = "Response", annotation = "ADEFF.AVAL",
                           has_annot = TRUE)),
+    enriched_rows = list(list(label = "Response", primary_dataset = "ADEFF",
+                              primary_variable = "AVAL", variable_role = "ANALYSIS")),
     unsupported = TRUE, unsupported_reason = "requires Cochran-Mantel-Haenszel test"
   )
   re <- build_ars_json(list(sec), study_id = "S1", spec_lookup = list(ADEFF.AVAL = list()))
   ids <- vapply(re$outputs, function(o) o$id %||% "", character(1))
   expect_true(any(grepl("14_2_1", ids)))
-  ## No analyses were built for it.
-  expect_equal(length(re$analyses), 0L)
-  ## Recorded in _meta for the renderer.
+  ## The chain is kept: an analysis is built and references the declarative
+  ## unsupported method (engine reserves a manual_pending stub for it).
+  expect_gt(length(re$analyses), 0L)
+  expect_equal(re$analyses[[1]]$methodId, "MTH_UNSUPPORTED_ANALYSIS")
+  mth <- Filter(function(m) identical(m$id, "MTH_UNSUPPORTED_ANALYSIS"), re$methods)
+  expect_length(mth, 1)
+  expect_false(mth[[1]]$supported)
+  ## Still recorded in _meta for the renderer's numbered placeholder.
   us <- re$`_meta`$unsupported_outputs
   expect_true(length(us) >= 1)
   expect_match(us[[1]]$reason, "Cochran-Mantel-Haenszel")

@@ -1,7 +1,7 @@
 # arsbridge 0.1.0
 
 * Initial release.
-* Partial-results traceability (ADR 0002, phases 1-2). `ars_to_ard()` now stamps
+* Partial-results traceability (ADR 0002, phases 1-3). `ars_to_ard()` now stamps
   every row with provenance columns (`result_status`, `value_source`,
   `derivation_ref`, `derived_by`, `derived_dt`). A declared-but-unexecutable
   method (e.g. `MTH_CMH_TEST` -- a statistic describable in the ARS but with no
@@ -10,7 +10,13 @@
   keeps a slot tied to its analysis/method/output. A later validated manual
   computation fills that slot rather than typing an orphan value into the
   rendered output. New `ars_manual_worklist()` lists every pending cell as the
-  analyst's checklist. Additive only -- computed results are unchanged.
+  analyst's checklist. The capability gate no longer strips analyses from a
+  gated table: the ARS keeps the analysis and a declarative
+  `MTH_UNSUPPORTED_ANALYSIS` method (flagged `supported = FALSE` with the
+  capability reason), so the Output -> Analysis -> Method chain is intact and
+  the engine reserves a stub cell for it. The renderer still emits a numbered
+  placeholder until partial rendering (phase 4) lands. Additive only --
+  computed results are unchanged.
 * Architecture decision records under `docs/adr/`: ADR 0001 sets the
   statistical-method extensibility boundary (bound the boundary, not the
   contents -- descriptor contract on the shared ARD shape, tiered honest

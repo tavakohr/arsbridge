@@ -304,23 +304,25 @@ build_ars_json <- function(sections,
   unsupported      <- list()   ## output_id -> reason, for _meta + placeholders
 
   for (sec in sections) {
-    ## --- Unsupported analysis: emit a numbered output with NO analyses ---
-    ## (so the table keeps its shell number/title in the final document as a
-    ## placeholder) and skip all native building -- never coerce it into a
-    ## meaningless count. Recorded in _meta.unsupported_outputs.
-    if (isTRUE(sec$unsupported)) {
-      out_obj <- .build_output(sec, character())
-      outputs[[length(outputs) + 1L]] <- out_obj
+    ## --- Capability-gated (unsupported) section ---------------------------
+    ## arsbridge cannot compute these statistics, but -- unlike before -- the
+    ## ARS still carries the analysis + a declarative (supported = FALSE) method
+    ## so the Output -> Analysis -> Method chain stays intact (ADR 0002 phase 3).
+    ## The engine reserves manual_pending stub ARD rows for them; the renderer
+    ## still shows a numbered placeholder (recorded in _meta.unsupported_outputs)
+    ## until partial rendering lands. Never coerce into a meaningless count.
+    sec_unsupported <- isTRUE(sec$unsupported)
+    if (sec_unsupported) {
       unsupported[[length(unsupported) + 1L]] <- list(
-        id     = out_obj$id %||% sec$tlf_number,
+        id     = make_output_id(sec$tlf_number),
         reason = sec$unsupported_reason %||% "not supported by arsbridge")
-      next
     }
 
     ## --- TLF-level developability check ---
     ## Warn (once per TLF) when the shell references variables the ADaM spec
     ## does not contain -- those rows can't be developed and will be skipped.
-    if (!is.null(spec_lookup) && length(spec_lookup)) {
+    ## Skipped for gated sections: their rows are manual by definition.
+    if (!sec_unsupported && !is.null(spec_lookup) && length(spec_lookup)) {
       ann_refs <- unique(unlist(lapply(
         Filter(function(r) isTRUE(r$has_annot), sec$stub_rows),
         function(r) extract_annotation_vars(r$annotation))))
@@ -356,8 +358,9 @@ build_ars_json <- function(sections,
     }
     gf_ids <- vapply(gf_objs, function(g) g$id, character(1))
 
-    ## --- AnalysisMethod (standard catalogue) ---
-    mth_obj <- .build_method(sec)
+    ## --- AnalysisMethod (standard catalogue, or declarative-unsupported) ---
+    mth_obj <- if (sec_unsupported) .build_unsupported_method(sec) else
+      .build_method(sec)
     if (!mth_obj$id %in% seen_mth) {
       methods[[length(methods) + 1L]] <- mth_obj
       seen_mth <- c(seen_mth, mth_obj$id)
@@ -388,7 +391,8 @@ build_ars_json <- function(sections,
       ## the ADaM spec marks the row variable as categorical, route it to the
       ## count-and-percentage method instead.
       row_method_id <- mth_obj$id
-      if (identical(mth_obj$id, "MTH_SUMMARY_STATISTICS_CONTINUOUS") &&
+      if (!sec_unsupported &&
+          identical(mth_obj$id, "MTH_SUMMARY_STATISTICS_CONTINUOUS") &&
           isTRUE(.var_is_categorical(er$primary_dataset, er$primary_variable))) {
         row_method_id <- count_method_id
         if (!count_method_id %in% seen_mth) {
@@ -568,6 +572,34 @@ build_ars_json <- function(sections,
     return(.with_op_self_rels(fallback))
   }
   .with_op_self_rels(std)
+}
+
+## Declarative method for a capability-gated (unsupported) section. The ARS
+## still carries the analysis + this method so the Output -> Analysis -> Method
+## chain stays intact (ADR 0002 phase 3); the engine reserves manual_pending
+## stub ARD rows for it (id matches .UNEXECUTABLE_METHODS in ars_to_ard.R).
+## Tagged supported = FALSE with the capability reason for traceability.
+#' @noRd
+.build_unsupported_method <- function(sec) {
+  reason <- sec$unsupported_reason %||% "not supported by arsbridge"
+  .with_op_self_rels(list(
+    id          = "MTH_UNSUPPORTED_ANALYSIS",
+    name        = "Unsupported analysis (manual)",
+    label       = "Unsupported analysis (manual)",
+    description = reason,
+    supported   = FALSE,
+    operations  = list(list(id = "OP_MANUAL", name = "Manual derivation",
+                            label = "Manual derivation", order = 1L,
+                            resultPattern = "X")),
+    codeTemplate = list(
+      context    = "R (siera)",
+      code       = paste0(
+        "## Manual derivation required -- ", reason, "\n",
+        "## arsbridge reserves a manual_pending ARD cell for this analysis;\n",
+        "## compute it with a validated script and fill the reserved row\n",
+        "## (see ars_manual_worklist())."),
+      parameters = list())
+  ))
 }
 
 .build_data_subset <- function(enrichment, tlf_number, index) {

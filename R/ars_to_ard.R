@@ -74,6 +74,12 @@
 ## each statistic is reported per group level (e.g. an exact CI per arm) or once
 ## for the analysis (e.g. a single CMH p-value, or a between-group difference).
 .UNEXECUTABLE_METHODS <- list(
+  ## Generic declarative method the spec generator assigns to a
+  ## capability-gated section (ADR 0002 phase 3) when the specific statistic is
+  ## not yet classified. Reserves one manual_pending cell per analysis row.
+  MTH_UNSUPPORTED_ANALYSIS     = list(stats = "result", by_group = FALSE),
+  ## Specific declarative methods (ADR 0001 descriptor seeds) -- assigned once
+  ## the shell reader classifies the exact statistic.
   MTH_CMH_TEST                 = list(stats = "p.value", by_group = FALSE),
   MTH_PROPORTION_CI_EXACT      = list(stats = c("conf.low", "conf.high"),
                                       by_group = TRUE),

@@ -113,6 +113,64 @@ test_that("Every standard method has a non-empty codeTemplate", {
   }
 })
 
+test_that("capability-gated section keeps a declarative analysis + method (ADR 0002 ph3)", {
+  sec <- .demo_section("T-14-2-1", "EASI75 CMH (primary endpoint)")
+  sec$unsupported        <- TRUE
+  sec$unsupported_reason <- "requires Cochran-Mantel-Haenszel test"
+  re <- build_ars_json(list(sec))
+
+  # Output is no longer stripped: it references its analysis.
+  out <- re$outputs[[1]]
+  expect_equal(out$id, "T_14_2_1")
+  expect_gt(length(out$referencedAnalysisIds), 0)
+
+  # The analysis uses the declarative unsupported method id (so the engine
+  # reserves a manual_pending stub row for it).
+  an <- re$analyses[[1]]
+  expect_equal(an$methodId, "MTH_UNSUPPORTED_ANALYSIS")
+
+  # The method is carried in the catalogue, flagged supported = FALSE with the
+  # capability reason -- the Output -> Analysis -> Method chain stays intact.
+  mth <- Filter(function(m) identical(m$id, "MTH_UNSUPPORTED_ANALYSIS"),
+                re$methods)
+  expect_length(mth, 1)
+  expect_false(mth[[1]]$supported)
+  expect_match(mth[[1]]$description, "Mantel")
+
+  # Still recorded for the renderer's numbered placeholder.
+  expect_length(re$`_meta`$unsupported_outputs, 1)
+  expect_equal(re$`_meta`$unsupported_outputs[[1]]$id, "T_14_2_1")
+})
+
+test_that("gated section flows end-to-end to a manual_pending ARD row", {
+  skip_if_not_installed("cards")
+  sec <- .demo_section("T-14-2-1", "EASI75 CMH (primary endpoint)")
+  sec$unsupported        <- TRUE
+  sec$unsupported_reason <- "requires Cochran-Mantel-Haenszel test"
+  re <- build_ars_json(list(sec))
+
+  adam_dir <- withr::local_tempdir()
+  utils::write.csv(data.frame(
+    USUBJID = c("S1", "S2", "S3", "S4"),
+    TRT01A  = c("A", "A", "B", "B"),
+    SAFFL   = rep("Y", 4),
+    AGE     = c(60L, 65L, 70L, 75L),
+    stringsAsFactors = FALSE
+  ), file.path(adam_dir, "ADSL.csv"), row.names = FALSE)
+
+  ars_path <- tempfile("ars_", fileext = ".json")
+  writeLines(jsonlite::toJSON(re, auto_unbox = TRUE, null = "null"), ars_path)
+
+  ard <- ars_to_ard(ars_path, adam_dir)
+  expect_s3_class(ard, "card")
+  expect_true(any(ard$result_status == "manual_pending"))
+  pend <- ard[ard$result_status == "manual_pending", , drop = FALSE]
+  expect_equal(unique(pend$method_id), "MTH_UNSUPPORTED_ANALYSIS")
+  expect_equal(unique(pend$output_id), "T_14_2_1")
+  # Surfaced on the worklist for the analyst.
+  expect_gt(nrow(ars_manual_worklist(ard)), 0)
+})
+
 test_that("otherListsOfContents (LOPO) is shaped like siera's exampleARS_*.json", {
   re <- build_ars_json(list(.demo_section("T-14-1-1"),
                             .demo_section("T-14-3-1", "AE Summary")))
