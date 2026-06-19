@@ -10,14 +10,17 @@ set_anthropic_key(key = NULL, scope = c("user", "project"))
 \item{key}{Character. Your Anthropic API key (starts with \code{"sk-ant-"}).
 If \code{NULL} (default) and R is running interactively, prompts you.}
 
-\item{scope}{\code{"user"} (default) writes to your home \code{.Renviron}.
-\code{"project"} writes to \code{.Renviron} in the current working directory.}
+\item{scope}{\code{"user"} (default) targets your home \code{.Renviron};
+\code{"project"} targets \code{.Renviron} in the current working directory. Only used
+if you confirm the (optional) persistence step.}
 }
 \value{
-Invisibly returns the path to the \code{.Renviron} file that was updated.
+Invisibly returns the path to the \code{.Renviron} that would be / was
+written.
 }
 \description{
-Writes \code{ANTHROPIC_API_KEY=...} to your user \code{.Renviron} file so it loads
-automatically every time you start R, AND sets it in the current session
-so you can call \code{\link[=spec_to_ars]{spec_to_ars()}} immediately.
+Sets \code{ANTHROPIC_API_KEY} for the current R session so you can call
+\code{\link[=spec_to_ars]{spec_to_ars()}} immediately. In an interactive session you are then asked
+whether to also persist it to your \code{.Renviron} (so it loads automatically in
+future sessions); no file is written without that confirmation.
 }

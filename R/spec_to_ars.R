@@ -24,7 +24,9 @@
 #'   One of the two is required. The SDTM spec is NOT a valid input --
 #'   TLF annotations reference ADaM variables, so the grounding source
 #'   must be the ADaM spec.
-#' @param output_path    Path for the ARS JSON. Default `"reporting_event.json"`.
+#' @param output_path    Path for the ARS JSON. Defaults to
+#'   `reporting_event.json` in [tempdir()]; pass an explicit path to write it
+#'   somewhere permanent.
 #' @param study_id       Study identifier. Default `"STUDY-001"`.
 #' @param study_name     Human-readable study name. Defaults to `study_id`.
 #' @param model          LLM model. Defaults to the active provider's default model.
@@ -37,8 +39,8 @@
 #'   `list(variable = "nom de variable", dataset = "domaine")`.
 #' @param validate       If `TRUE` (default), cross-reference annotations
 #'   against the ADaM spec and write a validation report.
-#' @param report_path    Path for the validation report `.xlsx`.
-#'   Default `"spec_validation_report.xlsx"`.
+#' @param report_path    Path for the validation report `.xlsx`. Defaults to
+#'   `spec_validation_report.xlsx` in [tempdir()].
 #' @param code_dir       Directory for the emitted per-TLF pure-`{cards}` `.R`
 #'   deliverables. When `NULL` (default) a `code/` folder next to `output_path`
 #'   is used. These scripts are both the human-readable deliverable and the
@@ -90,7 +92,7 @@
 spec_to_ars <- function(shell_path,
                         adam_spec_path,
                         sap_path     = NULL,
-                        output_path  = "reporting_event.json",
+                        output_path  = file.path(tempdir(), "reporting_event.json"),
                         study_id     = "STUDY-001",
                         study_name   = NULL,
                         model        = NULL,
@@ -98,7 +100,7 @@ spec_to_ars <- function(shell_path,
                         provider     = NULL,
                         spec_column_aliases = NULL,
                         validate     = TRUE,
-                        report_path  = "spec_validation_report.xlsx",
+                        report_path  = file.path(tempdir(), "spec_validation_report.xlsx"),
                         code_dir     = NULL,
                         adam_dir     = ".",
                         verbose      = TRUE) {

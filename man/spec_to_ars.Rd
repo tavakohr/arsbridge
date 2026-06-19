@@ -8,7 +8,7 @@ spec_to_ars(
   shell_path,
   adam_spec_path,
   sap_path = NULL,
-  output_path = "reporting_event.json",
+  output_path = file.path(tempdir(), "reporting_event.json"),
   study_id = "STUDY-001",
   study_name = NULL,
   model = NULL,
@@ -16,7 +16,7 @@ spec_to_ars(
   provider = NULL,
   spec_column_aliases = NULL,
   validate = TRUE,
-  report_path = "spec_validation_report.xlsx",
+  report_path = file.path(tempdir(), "spec_validation_report.xlsx"),
   code_dir = NULL,
   adam_dir = ".",
   verbose = TRUE
@@ -41,7 +41,9 @@ When supplied, its prose is matched per TLF and carried into each analysis
 as \code{sapDescription}, becoming the human-readable comment above the emitted
 \code{{cards}} block. Gracefully ignored when absent or unreadable.}
 
-\item{output_path}{Path for the ARS JSON. Default \code{"reporting_event.json"}.}
+\item{output_path}{Path for the ARS JSON. Defaults to
+\code{reporting_event.json} in \code{\link[=tempdir]{tempdir()}}; pass an explicit path to write it
+somewhere permanent.}
 
 \item{study_id}{Study identifier. Default \code{"STUDY-001"}.}
 
@@ -62,8 +64,8 @@ a workbook uses non-standard or non-English headers. Example:
 \item{validate}{If \code{TRUE} (default), cross-reference annotations
 against the ADaM spec and write a validation report.}
 
-\item{report_path}{Path for the validation report \code{.xlsx}.
-Default \code{"spec_validation_report.xlsx"}.}
+\item{report_path}{Path for the validation report \code{.xlsx}. Defaults to
+\code{spec_validation_report.xlsx} in \code{\link[=tempdir]{tempdir()}}.}
 
 \item{code_dir}{Directory for the emitted per-TLF pure-\code{{cards}} \code{.R}
 deliverables. When \code{NULL} (default) a \verb{code/} folder next to \code{output_path}

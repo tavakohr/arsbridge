@@ -139,16 +139,19 @@ show_active_llm <- function() {
 
 #' Set your Anthropic API key for arsbridge
 #'
-#' Writes `ANTHROPIC_API_KEY=...` to your user `.Renviron` file so it loads
-#' automatically every time you start R, AND sets it in the current session
-#' so you can call [spec_to_ars()] immediately.
+#' Sets `ANTHROPIC_API_KEY` for the current R session so you can call
+#' [spec_to_ars()] immediately. In an interactive session you are then asked
+#' whether to also persist it to your `.Renviron` (so it loads automatically in
+#' future sessions); no file is written without that confirmation.
 #'
 #' @param key Character. Your Anthropic API key (starts with `"sk-ant-"`).
 #'   If `NULL` (default) and R is running interactively, prompts you.
-#' @param scope `"user"` (default) writes to your home `.Renviron`.
-#'   `"project"` writes to `.Renviron` in the current working directory.
+#' @param scope `"user"` (default) targets your home `.Renviron`;
+#'   `"project"` targets `.Renviron` in the current working directory. Only used
+#'   if you confirm the (optional) persistence step.
 #'
-#' @return Invisibly returns the path to the `.Renviron` file that was updated.
+#' @return Invisibly returns the path to the `.Renviron` that would be / was
+#'   written.
 #' @export
 set_anthropic_key <- function(key = NULL, scope = c("user", "project")) {
   .set_key_generic(
@@ -163,15 +166,18 @@ set_anthropic_key <- function(key = NULL, scope = c("user", "project")) {
 
 #' Set your OpenAI API key for arsbridge
 #'
-#' Writes `OPENAI_API_KEY=...` to your user `.Renviron` file so it loads
-#' automatically every time you start R, AND sets it in the current session.
+#' Sets `OPENAI_API_KEY` for the current R session. In an interactive session
+#' you are then asked whether to also persist it to your `.Renviron`; no file is
+#' written without that confirmation.
 #'
 #' @param key Character. Your OpenAI API key (starts with `"sk-"`).
 #'   If `NULL` (default) and R is running interactively, prompts you.
-#' @param scope `"user"` (default) writes to your home `.Renviron`.
-#'   `"project"` writes to `.Renviron` in the current working directory.
+#' @param scope `"user"` (default) targets your home `.Renviron`;
+#'   `"project"` targets `.Renviron` in the current working directory. Only used
+#'   if you confirm the (optional) persistence step.
 #'
-#' @return Invisibly returns the path to the `.Renviron` file that was updated.
+#' @return Invisibly returns the path to the `.Renviron` that would be / was
+#'   written.
 #' @export
 set_openai_key <- function(key = NULL, scope = c("user", "project")) {
   .set_key_generic(
@@ -186,15 +192,18 @@ set_openai_key <- function(key = NULL, scope = c("user", "project")) {
 
 #' Set your Gemini API key for arsbridge
 #'
-#' Writes `GEMINI_API_KEY=...` to your user `.Renviron` file so it loads
-#' automatically every time you start R, AND sets it in the current session.
+#' Sets `GEMINI_API_KEY` for the current R session. In an interactive session
+#' you are then asked whether to also persist it to your `.Renviron`; no file is
+#' written without that confirmation.
 #'
 #' @param key Character. Your Gemini API key.
 #'   If `NULL` (default) and R is running interactively, prompts you.
-#' @param scope `"user"` (default) writes to your home `.Renviron`.
-#'   `"project"` writes to `.Renviron` in the current working directory.
+#' @param scope `"user"` (default) targets your home `.Renviron`;
+#'   `"project"` targets `.Renviron` in the current working directory. Only used
+#'   if you confirm the (optional) persistence step.
 #'
-#' @return Invisibly returns the path to the `.Renviron` file that was updated.
+#' @return Invisibly returns the path to the `.Renviron` that would be / was
+#'   written.
 #' @export
 set_gemini_key <- function(key = NULL, scope = c("user", "project")) {
   .set_key_generic(
@@ -231,7 +240,7 @@ check_anthropic_key <- function() {
 ## --- Internal helpers ------------------------------------------------------
 
 .set_key_generic <- function(provider_name, env_var, prefix, key, scope, url) {
-  scope <- match.arg(scope)
+  scope <- match.arg(scope, c("user", "project"))
 
   if (is.null(key)) {
     if (!interactive()) {
@@ -262,16 +271,41 @@ check_anthropic_key <- function() {
     project = file.path(getwd(), ".Renviron")
   )
 
-  .write_key_to_renviron_generic(env_var, key, renv_path)
-  
+  ## Always set the key for the CURRENT session (transient, changes no files).
   args <- list(key)
   names(args) <- env_var
   do.call(Sys.setenv, args)
 
-  cli::cli_alert_success("Saved {provider_name} key to {.path {renv_path}}.")
-  cli::cli_alert_info("Also set in the current R session -- no restart needed.")
+  ## Persisting to .Renviron modifies a user file, so do it ONLY with explicit
+  ## interactive consent (CRAN policy: never write outside tempdir() or touch
+  ## .Renviron without the user's permission).
+  persisted <- interactive() && .confirm_renviron_write(renv_path)
+  if (persisted) {
+    .write_key_to_renviron_generic(env_var, key, renv_path)
+    cli::cli_alert_success(
+      "Saved {provider_name} key to {.path {renv_path}} and set it for this session.")
+  } else {
+    cli::cli_alert_success("Set {provider_name} key for the current R session.")
+    cli::cli_alert_info(c(
+      "Left {.path {renv_path}} unchanged.",
+      "i" = "To persist it across sessions, add {.code {env_var}=<your key>} yourself (e.g. via {.code usethis::edit_r_environ()})."
+    ))
+  }
 
   invisible(renv_path)
+}
+
+#' Ask the user, in an interactive session, whether to write the key to their
+#' .Renviron. Returns TRUE only on an explicit "yes". `utils::menu()` returns 0
+#' when nothing is chosen (or the session is non-interactive), so the default
+#' is to NOT touch the file.
+#' @noRd
+.confirm_renviron_write <- function(path) {
+  ans <- utils::menu(
+    choices = c("Yes, write the key to this file", "No, keep it to this session only"),
+    title   = sprintf("Persist the key to %s? This modifies that file.", path)
+  )
+  identical(ans, 1L)
 }
 
 .prompt_for_key_generic <- function(provider_name) {
