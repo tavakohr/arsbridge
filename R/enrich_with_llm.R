@@ -123,6 +123,12 @@ enrich_with_llm <- function(section,
 
   section$analysis_type   <- atype %||% .infer_analysis_type(section)
   section$ars_method_name <- nz(parsed$ars_method_name) %||% .infer_method_name(section$analysis_type)
+  ## Capability signal from the LLM (the keyword scan in assess_capability is
+  ## the keyless safety net). Default is_supported = TRUE when the field is
+  ## absent so a missing answer never silently drops a table.
+  section$is_supported <- if (is.null(parsed$is_supported)) TRUE
+                          else isTRUE(as.logical(parsed$is_supported))
+  section$unsupported_reason <- nz(parsed$unsupported_reason) %||% ""
   section$enriched_rows   <- nz(parsed$row_enrichments) %||% .fallback_enrichments(annotated_rows)
   ## A flag annotation like "ADSL.RANDFL='Y'" is a SUBSET FILTER, not an
   ## analysis variable. The LLM (and the heuristic fallback) frequently omit
@@ -234,6 +240,22 @@ enrich_with_llm <- function(section,
     ),
     ars_method_name = ellmer::type_string(
       "Closest standard ARS method name, or a short descriptive name.",
+      required = FALSE
+    ),
+    is_supported = ellmer::type_boolean(
+      paste(
+        "FALSE when this table needs an inferential or model-based method",
+        "that a descriptive engine cannot produce -- e.g. a hypothesis test",
+        "(p-value, Cochran-Mantel-Haenszel, Fisher, chi-square, log-rank), a",
+        "confidence interval on a difference/ratio (Clopper-Pearson, Newcombe),",
+        "a regression (logistic, Cox/hazard ratio, ANCOVA/MMRM/LS-means), or",
+        "imputation (NRI, multiple imputation). TRUE for plain descriptive",
+        "summaries, counts/percentages, AE frequencies, subject counts,",
+        "listings, and basic figures."),
+      required = FALSE
+    ),
+    unsupported_reason = ellmer::type_string(
+      "When is_supported is FALSE, a short reason naming the method needed.",
       required = FALSE
     ),
     by_variables = ellmer::type_array(

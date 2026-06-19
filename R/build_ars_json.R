@@ -301,8 +301,22 @@ build_ars_json <- function(sections,
   methods          <- list(); seen_mth <- character()
   analyses         <- list()
   outputs          <- list()
+  unsupported      <- list()   ## output_id -> reason, for _meta + placeholders
 
   for (sec in sections) {
+    ## --- Unsupported analysis: emit a numbered output with NO analyses ---
+    ## (so the table keeps its shell number/title in the final document as a
+    ## placeholder) and skip all native building -- never coerce it into a
+    ## meaningless count. Recorded in _meta.unsupported_outputs.
+    if (isTRUE(sec$unsupported)) {
+      out_obj <- .build_output(sec, character())
+      outputs[[length(outputs) + 1L]] <- out_obj
+      unsupported[[length(unsupported) + 1L]] <- list(
+        id     = out_obj$id %||% sec$tlf_number,
+        reason = sec$unsupported_reason %||% "not supported by arsbridge")
+      next
+    }
+
     ## --- TLF-level developability check ---
     ## Warn (once per TLF) when the shell references variables the ADaM spec
     ## does not contain -- those rows can't be developed and will be skipped.
@@ -448,7 +462,11 @@ build_ars_json <- function(sections,
       sections_needing_review = as.list(vapply(
         Filter(function(s) isTRUE(s$needs_review), sections),
         function(s) s$tlf_number %||% "", character(1)
-      ))
+      )),
+      ## Outputs arsbridge cannot generate (inferential / model-based). The
+      ## renderer emits a numbered placeholder for each; the programmer
+      ## produces them manually.
+      unsupported_outputs = unsupported
     )
   )
 }

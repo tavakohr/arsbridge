@@ -1,6 +1,14 @@
 # arsbridge 0.1.0
 
 * Initial release.
+* Capability gate: tables needing inferential or model-based methods
+  (Cochran-Mantel-Haenszel, Clopper-Pearson / Newcombe intervals, p-values,
+  odds/hazard ratios, regression, ANCOVA/MMRM, NRI imputation) are detected
+  (LLM + keyword scan), raised as blockers, and NOT coerced into a
+  meaningless count. They are carried to the final output as a numbered
+  placeholder so the table numbering still matches the shell exactly;
+  produce them manually. Render failures also emit a numbered placeholder
+  instead of vanishing from the document.
 * Hybrid shell reading: a deterministic four-layer regex detector and an
   LLM primary reader (`extract_shell_llm()`) run together and take the
   union, to extract as many annotation variants as possible. Every
