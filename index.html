@@ -141,7 +141,12 @@
 </tbody>
 </table>
 <p>This keeps the founding promise – <em>extracts and converts, does not invent</em> – now <strong>enforced by the spec gate</strong> rather than by limiting the reader. Full detail in <code><a href="articles/reading-engine.html">vignette("reading-engine")</a></code>.</p>
+<div class="section level3">
+<h3 id="what-arsbridge-can-and-cannot-build">What arsbridge can and cannot build<a class="anchor" aria-label="anchor" href="#what-arsbridge-can-and-cannot-build"></a>
+</h3>
+<p>arsbridge builds <strong>descriptive</strong> outputs: summary statistics, counts and percentages, AE frequencies, subject counts, listings, and basic figures. <strong>Inferential / model-based</strong> tables (Cochran-Mantel-Haenszel, exact or Newcombe confidence intervals, p-values, odds / hazard ratios, regression, ANCOVA / MMRM, NRI imputation) have no <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> equivalent. arsbridge <strong>detects</strong> these (LLM + keyword scan), raises a <strong>blocker</strong>, and – rather than coerce them into a meaningless count – emits a <strong>numbered placeholder</strong> in the final document so your table numbering still matches the shell exactly. Produce those tables manually.</p>
 <hr>
+</div>
 </div>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>

@@ -86,6 +86,19 @@ invent* – now **enforced by the spec gate** rather than by limiting the
 reader. Full detail in
 [`vignette("reading-engine")`](articles/reading-engine.md).
 
+### What arsbridge can and cannot build
+
+arsbridge builds **descriptive** outputs: summary statistics, counts and
+percentages, AE frequencies, subject counts, listings, and basic
+figures. **Inferential / model-based** tables (Cochran-Mantel-Haenszel,
+exact or Newcombe confidence intervals, p-values, odds / hazard ratios,
+regression, ANCOVA / MMRM, NRI imputation) have no
+[cards](https://github.com/insightsengineering/cards) equivalent.
+arsbridge **detects** these (LLM + keyword scan), raises a **blocker**,
+and – rather than coerce them into a meaningless count – emits a
+**numbered placeholder** in the final document so your table numbering
+still matches the shell exactly. Produce those tables manually.
+
 ------------------------------------------------------------------------
 
 ## Installation
