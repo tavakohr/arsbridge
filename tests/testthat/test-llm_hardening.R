@@ -137,6 +137,7 @@ test_that("structured-call failure (NULL) falls back to heuristics + FAIL diag",
                          provider = "anthropic", model = "m", api_key = "k")
   ## Keyword heuristic should still classify this AE table.
   expect_equal(out$analysis_type, "AE_FREQUENCY")
-  recs <- diag_records()
-  expect_true(any(recs$stage == "enrich_llm" & recs$severity == "FAIL"))
+  ## A wholesale LLM failure is now counted (spec_to_ars raises one summary
+  ## finding for it) rather than logged once per TLF.
+  expect_gt(.diag_llm_fail_count(), 0)
 })

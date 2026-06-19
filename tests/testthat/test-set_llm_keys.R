@@ -31,7 +31,7 @@ test_that("get_active_llm and set functions work correctly", {
   Sys.setenv(ANTHROPIC_API_KEY = "sk-ant-testkey123")
   active <- get_active_llm()
   expect_equal(active$provider, "anthropic")
-  expect_equal(active$model, "claude-3-5-sonnet-latest")
+  expect_equal(active$model, "claude-sonnet-4-6")
 
   # Add OpenAI key
   Sys.setenv(OPENAI_API_KEY = "sk-openaikey456")
@@ -50,7 +50,7 @@ test_that("get_active_llm and set functions work correctly", {
   Sys.setenv(ARS_LLM_PROVIDER = "gemini")
   active <- get_active_llm()
   expect_equal(active$provider, "gemini")
-  expect_equal(active$model, "gemini-1.5-pro")
+  expect_equal(active$model, "gemini-2.5-pro")
 
   # Check show_active_llm works without error
   show_active_llm()

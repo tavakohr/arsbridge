@@ -14,14 +14,24 @@
 
 .diag_env <- new.env(parent = emptyenv())
 .diag_env$records <- list()
+.diag_env$llm_fail <- 0L
 
 #' Reset the diagnostics collector (called at the start of each exported
 #' pipeline entry point).
 #' @noRd
 diag_reset <- function() {
   .diag_env$records <- list()
+  .diag_env$llm_fail <- 0L
   invisible(NULL)
 }
+
+## A wholesale LLM-enrichment failure is one root cause (usually a bad API key
+## or model id) that repeats once per TLF. Count it here and let the caller
+## raise a SINGLE summary finding, instead of N identical per-TLF rows.
+#' @noRd
+.diag_llm_fail_bump  <- function() .diag_env$llm_fail <- (.diag_env$llm_fail %||% 0L) + 1L
+#' @noRd
+.diag_llm_fail_count <- function() .diag_env$llm_fail %||% 0L
 
 #' Record one diagnostic finding.
 #'

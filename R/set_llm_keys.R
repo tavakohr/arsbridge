@@ -59,9 +59,9 @@ get_active_llm <- function() {
   active_key_masked <- NULL
   if (!is.null(provider)) {
     model <- switch(provider,
-      anthropic = "claude-3-5-sonnet-latest",
+      anthropic = "claude-sonnet-4-6",
       openai    = "gpt-4o",
-      gemini    = "gemini-1.5-pro"
+      gemini    = "gemini-2.5-pro"
     )
     raw_key <- keys[[provider]]
     n <- nchar(raw_key)

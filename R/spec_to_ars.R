@@ -194,6 +194,25 @@ spec_to_ars <- function(shell_path,
                                      model = model, api_key = api_key, provider = provider)
   }
 
+  ## One summary finding for a wholesale LLM outage (almost always a bad/expired
+  ## API key or model id), instead of one identical FAIL per TLF.
+  n_llm_fail <- .diag_llm_fail_count()
+  if (n_llm_fail > 0) {
+    .diag_gap(
+      stage = "enrich_llm", severity = "FAIL", input = INPUT_LLM,
+      problem = sprintf("LLM enrichment was unavailable for %d of %d TLF section%s (provider %s, model %s).",
+                        n_llm_fail, length(sections),
+                        if (length(sections) == 1) "" else "s",
+                        provider %||% "?", model %||% "default"),
+      why = "Those sections fell back to keyword heuristics, so analysis type / method / grouping may be less accurate.",
+      fix = "Check the API key and model id (set_anthropic_key() or the app's key field), then re-run for full enrichment."
+    )
+    if (verbose) {
+      cli::cli_alert_warning(
+        "LLM unavailable for {n_llm_fail}/{length(sections)} TLF{?s} -- ran on keyword heuristics.")
+    }
+  }
+
   ## --- SAP enrichment (optional) -------------------------------------
   ## Match SAP prose per TLF and attach it to the enriched section; .build_analysis
   ## persists it as sapDescription, which the emitter prints as the block comment.

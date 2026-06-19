@@ -84,14 +84,9 @@ enrich_with_llm <- function(section,
   ## then per-field fallbacks. These feed the validation report so a study
   ## team can see exactly which TLFs ran on heuristics instead of the LLM.
   if (length(parsed) == 0) {
-    diag_add(
-      stage = "enrich_llm", severity = "FAIL",
-      problem = sprintf("LLM call failed (provider %s, model %s)",
-                        provider %||% "?", model %||% "default"),
-      tlf_number = section$tlf_number,
-      location = section$title %||% "",
-      action = "All enrichment fields fell back to keyword heuristics -- review this TLF's analysis type, method, and grouping"
-    )
+    ## Whole-response failure: count it (the caller emits ONE summary finding
+    ## for all affected TLFs) rather than logging an identical row per section.
+    .diag_llm_fail_bump()
   } else {
     if (is.null(parsed$analysis_type) || !nzchar(parsed$analysis_type %||% "")) {
       diag_add(

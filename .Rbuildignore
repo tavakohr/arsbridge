@@ -16,6 +16,7 @@
 ^\.env$
 ^run_.*\.R$
 ^\.siera_ref$
+^\.align_backup$
 ^cran-comments\.md$
 ^siera_cards_integration_plan\.md$
 ^CRAN-RELEASE$
