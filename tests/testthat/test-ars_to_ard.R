@@ -176,3 +176,68 @@ test_that("ars_to_ard works on synthetic ARS and ADaM datasets", {
   unlink(adam_dir, recursive = TRUE)
   unlink(ars_path)
 })
+
+test_that("declared-but-unexecutable method reserves manual_pending stub rows", {
+  skip_if_not_installed("cards")
+  adam_dir <- withr::local_tempdir()
+  utils::write.csv(data.frame(
+    USUBJID = sprintf("S%02d", 1:6),
+    TRT01A  = rep(c("Drug A", "Placebo"), each = 3),
+    SAFFL   = rep("Y", 6),
+    stringsAsFactors = FALSE
+  ), file.path(adam_dir, "ADSL.csv"), row.names = FALSE)
+  utils::write.csv(data.frame(
+    USUBJID = sprintf("S%02d", 1:6),
+    TRT01A  = rep(c("Drug A", "Placebo"), each = 3),
+    SAFFL   = rep("Y", 6),
+    AVAL    = c(1, 0, 1, 0, 1, 0),
+    stringsAsFactors = FALSE
+  ), file.path(adam_dir, "ADEFF.csv"), row.names = FALSE)
+
+  spec <- list(
+    id = "MOCK", name = "Mock", version = "1",
+    analysisSets = list(list(id = "AS_ITT", name = "ITT",
+      condition = list(dataset = "ADEFF", variable = "SAFFL",
+                       comparator = "EQ", value = list("Y")))),
+    analysisGroupings = list(list(id = "GF_TRT", name = "TRT01A",
+      groupingVariable = list(dataset = "ADEFF", variable = "TRT01A"))),
+    methods = list(list(id = "MTH_CMH_TEST", name = "CMH test")),
+    analyses = list(list(
+      id = "AN_CMH", name = "EASI75 CMH", analysisSetId = "AS_ITT",
+      methodId = "MTH_CMH_TEST",
+      analysisVariable = list(dataset = "ADEFF", variable = "AVAL"),
+      orderedGroupings = list(list(groupingId = "GF_TRT")))),
+    outputs = list(list(id = "T_14_2_1", name = "T-14.2.1",
+      referencedAnalysisIds = list("AN_CMH")))
+  )
+  ars_path <- tempfile("ars_", fileext = ".json")
+  writeLines(jsonlite::toJSON(spec, auto_unbox = TRUE, null = "null"), ars_path)
+
+  ard <- ars_to_ard(ars_path, adam_dir)
+  expect_s3_class(ard, "card")
+
+  cmh <- dplyr::filter(ard, analysis_id == "AN_CMH")
+  # MTH_CMH_TEST declares a single (not by-group) p.value stat -> one stub row.
+  expect_equal(nrow(cmh), 1L)
+  expect_equal(unique(cmh$result_status), "manual_pending")
+  expect_equal(unique(cmh$stat_name), "p.value")
+  expect_true(is.na(unlist(cmh$stat)))
+  expect_true(is.na(unique(cmh$value_source)))
+  expect_true(is.na(unique(cmh$derived_dt)))   # not stamped until filled
+  # keyed to the analysis/method/output so the value is never an orphan
+  expect_equal(unique(cmh$method_id), "MTH_CMH_TEST")
+  expect_equal(unique(cmh$output_id), "T_14_2_1")
+
+  # Worklist surfaces the pending cell
+  wl <- ars_manual_worklist(ard)
+  expect_equal(nrow(wl), 1L)
+  expect_equal(wl$analysis_id, "AN_CMH")
+  expect_equal(wl$stat_name, "p.value")
+})
+
+test_that("ars_manual_worklist returns an empty frame when nothing is pending", {
+  expect_equal(nrow(ars_manual_worklist(NULL)), 0L)
+  fake <- data.frame(result_status = c("computed", "computed"),
+                     stringsAsFactors = FALSE)
+  expect_equal(nrow(ars_manual_worklist(fake)), 0L)
+})

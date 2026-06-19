@@ -2,6 +2,7 @@
 
 export(ars_blockers)
 export(ars_diagnostics)
+export(ars_manual_worklist)
 export(ars_render_all)
 export(ars_render_figure)
 export(ars_render_listing)

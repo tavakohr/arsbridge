@@ -11,8 +11,10 @@ AE
 ANCOVA
 APX
 Clopper
+Cochran
 Haenszel
 MMRM
+Mantel
 NRI
 Newcombe
 OOXML
@@ -73,4 +75,6 @@ generalises
 generalising
 matcher
 recognises
+unexecutable
 unparsed
+worklist

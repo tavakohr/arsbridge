@@ -60,6 +60,83 @@
   }
 )
 
+## ---------------------------------------------------------------------------
+## Declared-but-unexecutable methods (ADR 0001 descriptor seeds / ADR 0002).
+## These statistics are describable in the ARS but have no {cards}/{cardx}
+## executor yet, so the engine cannot compute them. Rather than skip the
+## analysis (which orphans the table cell) or coerce it into a meaningless
+## count, ars_to_ard() emits a reserved, fully-keyed stub ARD row per declared
+## statistic with result_status = "manual_pending" and stat = NA. A validated
+## manual computation later fills that keyed slot (ADR 0002 phases 3-5), keeping
+## the Output -> Analysis -> Method -> result chain intact.
+##
+## Each entry: stats = the stat_names the method declares; by_group = whether
+## each statistic is reported per group level (e.g. an exact CI per arm) or once
+## for the analysis (e.g. a single CMH p-value, or a between-group difference).
+.UNEXECUTABLE_METHODS <- list(
+  MTH_CMH_TEST                 = list(stats = "p.value", by_group = FALSE),
+  MTH_PROPORTION_CI_EXACT      = list(stats = c("conf.low", "conf.high"),
+                                      by_group = TRUE),
+  MTH_PROPORTION_DIFF_NEWCOMBE = list(stats = c("estimate", "conf.low",
+                                                "conf.high"), by_group = FALSE)
+)
+
+## A one-row {cards} card used as a schema prototype, so stub rows carry exactly
+## the columns of the installed {cards} version (list-cols and all) instead of a
+## hand-coded guess that could drift across versions. Built with a `by` so the
+## group1 / group1_level columns are present.
+#' @noRd
+.ard_schema_proto <- function() {
+  cards::ard_categorical(
+    data.frame(.v = factor("a"), .g = factor("x")),
+    variables = ".v", by = ".g")[1, , drop = FALSE]
+}
+
+## Build one keyed, value-less stub ARD row from a prototype row.
+#' @noRd
+.stub_ard_row <- function(proto, variable, stat_name, by_var, by_level) {
+  r <- proto
+  r$group1         <- if (is.na(by_var)) NA_character_ else by_var
+  r$group1_level   <- list(if (is.na(by_level)) NA_character_ else by_level)
+  r$variable       <- variable %||% NA_character_
+  r$variable_level <- list(NA_character_)
+  if ("context" %in% names(r))    r$context    <- "manual_pending"
+  r$stat_name      <- stat_name
+  r$stat_label     <- stat_name
+  r$stat           <- list(NA_real_)
+  if ("fmt_fun" %in% names(r))    r$fmt_fun    <- list(NULL)
+  if ("warning" %in% names(r))    r$warning    <- list(NULL)
+  if ("error"   %in% names(r))    r$error      <- list(NULL)
+  r
+}
+
+## Assemble all stub rows for one unexecutable method: one row per declared
+## statistic, times the group levels present in the data when the statistic is
+## reported by group. Returns a `card`, or NULL if nothing to reserve.
+#' @noRd
+.stub_ard_for_method <- function(res, method_id, df, by, var) {
+  desc  <- .UNEXECUTABLE_METHODS[[method_id]]
+  proto <- .ard_schema_proto()
+  by1   <- if (!is.null(by) && length(by) && by[1] %in% names(df))
+    by[1] else NA_character_
+  levels <- if (isTRUE(desc$by_group) && !is.na(by1)) {
+    unique(as.character(df[[by1]]))
+  } else {
+    NA_character_
+  }
+  rows <- list()
+  for (lv in levels) {
+    for (st in desc$stats) {
+      rows[[length(rows) + 1L]] <- .stub_ard_row(
+        proto, var, st,
+        by_var   = if (isTRUE(desc$by_group)) by1 else NA_character_,
+        by_level = lv)
+    }
+  }
+  if (length(rows) == 0) return(NULL)
+  cards::bind_ard(!!!rows)
+}
+
 #' Execute ARS JSON and return an ARD object using 'cards'
 #'
 #' Reads a CDISC ARS JSON specification and executes the analyses defined within
@@ -448,7 +525,11 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     # only consulted when legacy = TRUE.
     method_actual <- method_id
     eff_method_id <- method_id
-    if (is.null(.ARD_EXECUTORS[[method_id]])) {
+    ## Declared-but-unexecutable method (ADR 0002): reserve a stub row instead
+    ## of computing. Skip fallback coercion and the all-missing data check --
+    ## the stub does not depend on tabulable values.
+    is_stub <- method_id %in% names(.UNEXECUTABLE_METHODS)
+    if (!is_stub && is.null(.ARD_EXECUTORS[[method_id]])) {
       is_num <- is.numeric(df_filtered[[analysis_var]])
       method_actual <- if (is_num) "FALLBACK_CONTINUOUS" else "FALLBACK_CATEGORICAL"
       eff_method_id <- if (is_num) "MTH_SUMMARY_STATISTICS_CONTINUOUS" else
@@ -490,7 +571,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     } else {
       !is.factor(col_vals) && all(is.na(col_vals))
     }
-    if (analysis_var %in% names(df_filtered) && all_missing) {
+    if (!is_stub && analysis_var %in% names(df_filtered) && all_missing) {
       reason <- if (is_continuous_method)
         "has no numeric values to summarise" else "is all-missing"
       cli::cli_warn("Skipping analysis {.val {analysis_id}}: variable {.val {analysis_var}} {reason} in this data cut.")
@@ -504,7 +585,10 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       next
     }
 
-    ard <- tryCatch({
+    ard <- if (is_stub) {
+      ## Reserve keyed manual_pending rows; no calculation attempted.
+      .stub_ard_for_method(res, method_id, df_filtered, by_arg, analysis_var)
+    } else tryCatch({
       if (legacy) {
         ## Retired registry path -- kept only for the engine-equivalence test.
         executor <- .ARD_EXECUTORS[[method_id]]
@@ -562,17 +646,30 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       ard[["method_intended"]] <- method_id
       ard[["method_actual"]]   <- method_actual
 
-      ## Provenance (ADR 0002, phase 1). Every computed row self-describes so a
-      ## later partial/manual fill (a stub row a human completes) can be told
-      ## apart from engine output, and an auditor can trace where a value came
-      ## from. All current results are produced by {cards}; cardx/manual sources
-      ## arrive with the descriptor work in later phases. derived_dt is stamped
-      ## once after assembly (below) so it is identical across a run's rows.
-      ard[["result_status"]]  <- "computed"
-      ard[["value_source"]]   <- "cards"
-      ard[["derivation_ref"]] <- paste0("arsbridge:emitted:", analysis_id)
-      ard[["derived_by"]]     <- "arsbridge"
+      ## Provenance (ADR 0002). A computed row self-describes as {cards} output;
+      ## a stub row (declared-but-unexecutable method) is flagged
+      ## manual_pending with no value source, so a later validated manual fill
+      ## can be told apart from engine output and an auditor can trace where a
+      ## value came from. derived_dt is stamped once after assembly (below) for
+      ## computed rows only; a manual_pending row stays NA until it is filled.
+      ard[["result_status"]]  <- if (is_stub) "manual_pending" else "computed"
+      ard[["value_source"]]   <- if (is_stub) NA_character_ else "cards"
+      ard[["derivation_ref"]] <- if (is_stub) NA_character_ else
+        paste0("arsbridge:emitted:", analysis_id)
+      ard[["derived_by"]]     <- if (is_stub) NA_character_ else "arsbridge"
       ard[["derived_dt"]]     <- NA_character_
+
+      if (is_stub) {
+        diag_add(
+          stage = "execute_ard", severity = "WARN", input = INPUT_ARS,
+          problem = sprintf(
+            "Method %s has no executor; reserved %d manual_pending cell(s)",
+            method_id, nrow(ard)),
+          location = analysis_id,
+          action = paste0("Compute these cells with a validated analysis ",
+                          "script and fill the reserved ARD rows -- see ",
+                          "ars_manual_worklist()"))
+      }
 
       ard_list[[length(ard_list) + 1L]] <- ard
     }
@@ -620,9 +717,57 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
   ## Stamp the run timestamp once (ADR 0002), not inside the per-analysis loop:
   ## keeps resolve/emit pure and gives every row of one run an identical value.
   ## ISO-8601 character (not POSIXct) so a stored/round-tripped ARD is
-  ## timezone-stable. The arsbridge.derived_dt option lets tests pin it.
-  final_ard[["derived_dt"]] <- getOption(
-    "arsbridge.derived_dt",
-    format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"))
+  ## timezone-stable. The arsbridge.derived_dt option lets tests pin it. Only
+  ## computed rows are stamped; a manual_pending stub has no value yet, so its
+  ## derived_dt stays NA until a manual fill sets it.
+  ts <- getOption("arsbridge.derived_dt",
+                  format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"))
+  computed <- !is.na(final_ard[["result_status"]]) &
+    final_ard[["result_status"]] == "computed"
+  final_ard[["derived_dt"]][computed] <- ts
   return(final_ard)
+}
+
+#' Manual-derivation worklist from an ARD
+#'
+#' Lists every reserved `manual_pending` cell in an ARD produced by
+#' [ars_to_ard()] -- statistics arsbridge could not compute (a
+#' declared-but-unexecutable method, e.g. a Cochran-Mantel-Haenszel p-value)
+#' and reserved as keyed stub rows. This is the analyst's checklist: each row
+#' must be computed with a validated analysis script and written back into the
+#' ARD (set `stat`, `result_status = "manual_filled"`, `value_source`,
+#' `derivation_ref`) before the table is final. See `vignette("getting-started")`
+#' and the ADRs under `docs/adr/` for the round-trip.
+#'
+#' @param ard An ARD data frame of class `"card"` from [ars_to_ard()].
+#' @return A data frame with one row per pending cell: `output_id`,
+#'   `analysis_id`, `method_id`, `group1`, `group1_level`, `variable`,
+#'   `stat_name`. Zero rows (with those columns) when nothing is pending.
+#' @export
+#' @examples
+#' \dontrun{
+#'   ard <- ars_to_ard("outputs/reporting_event.json", "inputs/ADaM")
+#'   ars_manual_worklist(ard)
+#' }
+ars_manual_worklist <- function(ard) {
+  cols <- c("output_id", "analysis_id", "method_id", "group1", "group1_level",
+            "variable", "stat_name")
+  empty <- stats::setNames(
+    as.data.frame(rep(list(character(0)), length(cols)),
+                  stringsAsFactors = FALSE), cols)
+  if (is.null(ard) || !"result_status" %in% names(ard)) return(empty)
+  pending <- ard[!is.na(ard[["result_status"]]) &
+                   ard[["result_status"]] == "manual_pending", , drop = FALSE]
+  if (nrow(pending) == 0) return(empty)
+  cols_data <- lapply(cols, function(cn) {
+    if (!cn %in% names(pending)) return(rep(NA_character_, nrow(pending)))
+    col <- pending[[cn]]
+    if (is.list(col)) vapply(col, function(x)
+      if (length(x)) as.character(x[[1]]) else NA_character_, character(1))
+    else as.character(col)
+  })
+  names(cols_data) <- cols
+  flat <- as.data.frame(cols_data, stringsAsFactors = FALSE)
+  rownames(flat) <- NULL
+  flat
 }
