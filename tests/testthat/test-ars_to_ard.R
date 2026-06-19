@@ -125,6 +125,18 @@ test_that("ars_to_ard works on synthetic ARS and ADaM datasets", {
   expect_true("method_id" %in% names(ard_full))
   expect_true("output_id" %in% names(ard_full))
 
+  # Provenance columns (ADR 0002, phase 1): every computed row self-describes.
+  for (col in c("result_status", "value_source", "derivation_ref",
+                "derived_by", "derived_dt")) {
+    expect_true(col %in% names(ard_full), info = paste("missing column", col))
+  }
+  expect_true(all(ard_full$result_status == "computed"))
+  expect_true(all(ard_full$value_source == "cards"))
+  expect_true(all(ard_full$derived_by == "arsbridge"))
+  expect_true(all(grepl("^arsbridge:emitted:", ard_full$derivation_ref)))
+  # derived_dt is stamped once per run -> a single value across all rows.
+  expect_equal(length(unique(ard_full$derived_dt)), 1L)
+
   # Check demographics: AGE (Continuous) has been calculated
   age_ard <- dplyr::filter(ard_full, analysis_id == "AN_DEMOG_AGE")
   expect_gt(nrow(age_ard), 0)

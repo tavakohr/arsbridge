@@ -40,7 +40,13 @@ engine-equivalence test and as a transitional escape hatch).}
 A tidy ARD data frame of class \code{"card"}, with traceability
 columns \code{analysis_id}, \code{method_id}, \code{output_id}, \code{method_intended},
 and \code{method_actual} (differs from \code{method_intended} when the generic
-fallback summarizer was used).
+fallback summarizer was used), plus provenance columns (ADR 0002):
+\code{result_status} (\code{"computed"} for engine output), \code{value_source}
+(\code{"cards"}), \code{derivation_ref} (the emitted block, \verb{arsbridge:emitted:<id>}),
+\code{derived_by} (\code{"arsbridge"}), and \code{derived_dt} (run timestamp, ISO-8601;
+pin with \code{options(arsbridge.derived_dt=)}). These let a later partial /
+manual fill be distinguished from engine output without breaking
+traceability.
 }
 \description{
 Reads a CDISC ARS JSON specification and executes the analyses defined within

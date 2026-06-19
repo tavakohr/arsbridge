@@ -86,7 +86,13 @@
 #' @return A tidy ARD data frame of class `"card"`, with traceability
 #'   columns `analysis_id`, `method_id`, `output_id`, `method_intended`,
 #'   and `method_actual` (differs from `method_intended` when the generic
-#'   fallback summarizer was used).
+#'   fallback summarizer was used), plus provenance columns (ADR 0002):
+#'   `result_status` (`"computed"` for engine output), `value_source`
+#'   (`"cards"`), `derivation_ref` (the emitted block, `arsbridge:emitted:<id>`),
+#'   `derived_by` (`"arsbridge"`), and `derived_dt` (run timestamp, ISO-8601;
+#'   pin with `options(arsbridge.derived_dt=)`). These let a later partial /
+#'   manual fill be distinguished from engine output without breaking
+#'   traceability.
 #' @importFrom tidyselect all_of
 #' @export
 #' @examples
@@ -556,6 +562,18 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       ard[["method_intended"]] <- method_id
       ard[["method_actual"]]   <- method_actual
 
+      ## Provenance (ADR 0002, phase 1). Every computed row self-describes so a
+      ## later partial/manual fill (a stub row a human completes) can be told
+      ## apart from engine output, and an auditor can trace where a value came
+      ## from. All current results are produced by {cards}; cardx/manual sources
+      ## arrive with the descriptor work in later phases. derived_dt is stamped
+      ## once after assembly (below) so it is identical across a run's rows.
+      ard[["result_status"]]  <- "computed"
+      ard[["value_source"]]   <- "cards"
+      ard[["derivation_ref"]] <- paste0("arsbridge:emitted:", analysis_id)
+      ard[["derived_by"]]     <- "arsbridge"
+      ard[["derived_dt"]]     <- NA_character_
+
       ard_list[[length(ard_list) + 1L]] <- ard
     }
   }
@@ -598,5 +616,13 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
 
   # Combine all analyses
   final_ard <- cards::bind_ard(!!!ard_list)
+
+  ## Stamp the run timestamp once (ADR 0002), not inside the per-analysis loop:
+  ## keeps resolve/emit pure and gives every row of one run an identical value.
+  ## ISO-8601 character (not POSIXct) so a stored/round-tripped ARD is
+  ## timezone-stable. The arsbridge.derived_dt option lets tests pin it.
+  final_ard[["derived_dt"]] <- getOption(
+    "arsbridge.derived_dt",
+    format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"))
   return(final_ard)
 }
