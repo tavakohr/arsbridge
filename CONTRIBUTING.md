@@ -49,6 +49,29 @@ write a unit test, if needed).
 * We use [testthat](https://cran.r-project.org/package=testthat) (edition 3)
   for unit tests. Contributions with test cases included are easier to accept.
 
+## Architecture decisions
+
+Design-level decisions live as numbered Architecture Decision Records in
+[`docs/adr/`](docs/adr/). Read them before proposing a change to the engine's
+scope or the ARD contract — they explain *why* the current boundaries exist:
+
+* `0001-statistical-method-extensibility.md` — arsbridge bounds the *boundary*,
+  not the *contents*, of the statistics space. New statistics are added as
+  descriptors on the shared ARD shape, not as new `switch` branches. Inferential
+  and model-based methods are tiered (descriptive → standard test → model-based
+  scaffold → placeholder), and code emission stays deterministic while the LLM
+  only classifies the shell.
+* `0002-partial-results-traceability.md` — how a partially-computable table
+  stays traceable: arsbridge fills the cells it can and reserves a keyed
+  `manual_pending` stub ARD row, with provenance columns, for the rest. All
+  values — computed or manual — enter at the ARD layer; nothing is typed
+  straight into the rendered output. Status: proposed (phased plan, not yet
+  implemented).
+
+When you make a design-level change, add or update an ADR in the same PR. Keep
+the standard `ARS → ARD → tfrmt` pipeline — the shell is never the source of
+truth for layout.
+
 ## Code of Conduct
 
 Please note that the arsbridge project is released with a

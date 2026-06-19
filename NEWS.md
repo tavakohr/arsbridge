@@ -1,6 +1,14 @@
 # arsbridge 0.1.0
 
 * Initial release.
+* Architecture decision records under `docs/adr/`: ADR 0001 sets the
+  statistical-method extensibility boundary (bound the boundary, not the
+  contents -- descriptor contract on the shared ARD shape, tiered honest
+  degradation, deterministic emission with the LLM only classifying); ADR 0002
+  proposes partial results with intact traceability (reserved stub ARD rows +
+  provenance columns so a cell arsbridge cannot compute keeps a keyed slot for
+  a validated manual fill, never an orphan value). ADR 0002 is a plan, not yet
+  implemented.
 * Capability gate: tables needing inferential or model-based methods
   (Cochran-Mantel-Haenszel, Clopper-Pearson / Newcombe intervals, p-values,
   odds/hazard ratios, regression, ANCOVA/MMRM, NRI imputation) are detected
