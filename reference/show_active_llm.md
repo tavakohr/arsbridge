@@ -24,5 +24,6 @@ show_active_llm()
 #> ℹ ANTHROPIC: {.danger NOT SET}
 #> ℹ OPENAI: {.danger NOT SET}
 #> ℹ GEMINI: {.danger NOT SET}
+#> ℹ GLM: {.danger NOT SET}
 #> ✖ No active LLM provider found. Set an API key to get started.
 ```

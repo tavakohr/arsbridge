@@ -9,10 +9,14 @@ consumed downstream by
 [`siera::readARS()`](https://pharmaverse.github.io/siera/) to generate
 the R analysis code that produces the actual TLFs.
 
-**Core principle:** the parser extracts and converts – it does not
-invent. Every variable in the ARS output traces back to an annotation
-the lead programmer wrote in the shell. No blank shells, no LLM-inferred
-variable names.
+**Core principle:** the package extracts and converts – it does not
+invent. The shell is read by a deterministic regex detector *and* an LLM
+primary reader together, to capture as many annotation variants as
+possible; but every LLM-proposed variable is gated against the ADaM
+spec, so a variable absent from the spec is rejected and logged, never
+shipped. Every variable in the ARS output traces back to a real
+annotation grounded in the spec. For the full reading process see
+[`vignette("reading-engine")`](../articles/reading-engine.md).
 
 ## Prerequisites
 

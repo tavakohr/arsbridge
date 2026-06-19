@@ -1,0 +1,146 @@
+# How arsbridge reads an annotated shell
+
+## The problem: every shell is annotated differently
+
+A TLF shell is a Word document. The lead programmer marks which ADaM
+variable feeds each row, but there is **no single convention**. Across
+studies, sponsors, and individuals you see the variable reference
+carried by:
+
+- a coloured run (`ADSL.AGE` in red),
+- bold / italic / underlined text,
+- square or round brackets (`[ADAE.AEDECOD WHERE AEREL='RELATED']`),
+- plain text appended after the label (`Age (years) ADSL.AGE`),
+- or a layout no regex has seen before – the variable on line 2 of the
+  cell, in a sentence, split across runs, mixed-case, abbreviated.
+
+A pure pattern matcher reads the conventions it was written for and
+silently misses the rest. arsbridge is built to **extract as many
+annotation variants as possible** – and to never ship a variable it
+cannot prove exists.
+
+## The engine: deterministic regex + LLM, together
+
+arsbridge reads each shell **twice**, and takes the union.
+
+                     annotated shell (.docx)
+                              │
+            ┌─────────────────┴─────────────────┐
+            ▼                                   ▼
+    1. DETERMINISTIC PASS               2. LLM PASS (primary)
+       parse_shell_docx()                  extract_shell_llm()
+       4-layer regex detector              re-reads each raw cell,
+       • colour                            separates label vs variable
+       • bold/italic/underline             in ANY layout
+       • plain-text DATASET.VAR
+       • (gap → handed to LLM)
+            │                                   │
+            └─────────────────┬─────────────────┘
+                              ▼
+                3. HARD ADaM-SPEC GATE
+           every proposed DATASET.VARIABLE must
+           exist in the ADaM spec, or it is
+           REJECTED and logged as a blocker
+                              ▼
+                  validated annotations → ARS JSON
+
+### Pass 1 – deterministic regex (fast, free, offline)
+
+`parse_shell_docx()` walks the document’s OOXML and runs a four-layer
+detector on every stub cell and listing header. It recognises the known
+conventions above with no API call. This pass alone fully handles shells
+that follow a standard annotation style, and it always runs – even with
+no API key.
+
+### Pass 2 – the LLM as primary reader (handles the variants)
+
+`extract_shell_llm()` re-reads the **raw** text of each cell and asks
+the model to separate the human display label from the machine variable
+reference, in whatever layout the shell happens to use. This is where
+the “as many variants as possible” power comes from: the LLM generalises
+to formats the regex was never written for. It returns structured output
+(via an `ellmer` type), never free text to parse.
+
+### Pass 3 – the hard spec gate (the seatbelt)
+
+The LLM is powerful but can hallucinate. So **every** proposed
+`DATASET.VARIABLE` is checked against your ADaM specification
+(`define.xml` or Excel). A proposal that is not in the spec is
+**dropped, not shipped**, and recorded as a blocking finding that names
+the row and the rejected token. The spec is the ground-truth oracle: the
+model can only pick variables that actually exist in your study.
+
+This preserves arsbridge’s founding promise – *it extracts and converts;
+it does not invent* – while letting the LLM read freely. The promise is
+now **enforced by the gate**, not by limiting the reader.
+
+## How the two passes combine (coverage table)
+
+A row’s annotation is taken if **either** pass finds it. On a conflict,
+the LLM wins (it is the primary reader) and a warning flags the
+disagreement so a human can check it.
+
+| Row situation | Regex | LLM (in spec) | Result |
+|----|:--:|:--:|----|
+| Known convention | ✓ | silent | **regex kept** |
+| Known convention | ✓ | ✓ same | confirmed |
+| Known convention, different reads | ✓ | ✓ different | **LLM wins** + `WARN` |
+| **Variant layout regex can’t parse** | ✗ | ✓ | **LLM adds it** (the win) |
+| LLM proposes a non-spec variable | ✗ | ✗ (rejected) | dropped + **blocker** |
+| Genuinely no variable | ✗ | silent | empty |
+
+Guards keep the regex catch safe: if the LLM returns an empty
+dataset/variable, omits a row, or no API key is set, the deterministic
+result stands.
+
+## Degraded mode: it still runs with no key
+
+No API key, or `extract_with_llm = FALSE`, means Pass 2 is skipped and
+arsbridge runs on the deterministic regex alone, emitting one warning
+that variant-format extraction is unavailable. The pipeline still
+produces ARS, ARD, and code for standard shells – offline and in CI.
+
+``` r
+
+res <- arsbridge::spec_to_ars(
+  shell_path     = "inputs/shells.docx",
+  adam_spec_path = "inputs/adam_spec.xlsx",
+  extract_with_llm = TRUE     # default; FALSE = regex only
+)
+```
+
+## Every gap is reported in plain English
+
+Nothing is dropped silently. Rejected variables, regex/LLM
+disagreements, LLM outages, and unparsed rows all land in the
+diagnostics and blockers, with the **input document to fix** named:
+
+``` r
+
+arsbridge::ars_diagnostics(res$diagnostics)  # everything recorded
+arsbridge::ars_blockers(res$diagnostics)     # only what blocks clean output
+```
+
+A blocker tells you *what* (rejected variable / missed row), *why* (not
+in spec / unknown convention), and *how to fix* (correct the shell
+annotation, or add the variable to the ADaM spec).
+
+## Choosing and adding a model
+
+The reader works with any provider in the registry – Anthropic, OpenAI,
+Gemini, or an OpenAI-compatible one such as GLM. For clinical text,
+Anthropic has the lowest false-positive content-filter rate; some
+providers block adverse-event terminology.
+
+``` r
+
+arsbridge::set_anthropic_key()                 # recommended for clinical text
+arsbridge::set_llm_key("glm", "your-glm-key")  # any registry provider
+Sys.setenv(ARS_LLM_PROVIDER = "anthropic")     # pick the active one
+arsbridge::show_active_llm()
+```
+
+Adding a brand-new provider is a single entry in the provider registry
+(`R/llm_providers.R`): its key environment variable, default model, the
+`ellmer` chat constructor, and a `base_url` if it is OpenAI-compatible.
+No other code changes.
