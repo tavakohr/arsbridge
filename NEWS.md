@@ -6,9 +6,12 @@
   odds/hazard ratios, regression, ANCOVA/MMRM, NRI imputation) are detected
   (LLM + keyword scan), raised as blockers, and NOT coerced into a
   meaningless count. They are carried to the final output as a numbered
-  placeholder so the table numbering still matches the shell exactly;
-  produce them manually. Render failures also emit a numbered placeholder
-  instead of vanishing from the document.
+  placeholder so the table numbering still matches the shell exactly. The
+  placeholder now reads as an intentional capability gate (not a bug) and
+  points to a separate validated analysis script; render *failures* emit a
+  distinct placeholder clearly labelled as an error, not a gate. The
+  rationale and the path to extending coverage are recorded in
+  `docs/adr/0001-statistical-method-extensibility.md`.
 * Hybrid shell reading: a deterministic four-layer regex detector and an
   LLM primary reader (`extract_shell_llm()`) run together and take the
   union, to extract as many annotation variants as possible. Every

@@ -10,7 +10,9 @@
 
 # Build artifacts
 inst/doc/
-docs/
+# pkgdown output, but keep hand-written ADRs (docs/adr/) under version control
+docs/*
+!docs/adr/
 /*.tar.gz
 /*.tgz
 /*.Rcheck/
@@ -25,4 +27,3 @@ outputs/
 scratch_*.R
 run_*.R
 .siera_ref/
-docs
