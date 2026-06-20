@@ -1,6 +1,15 @@
 # arsbridge 0.1.0
 
 * Initial release.
+* First executable descriptor: exact (Clopper-Pearson) binomial CI (ADR 0001).
+  When `{cardx}` is installed, the `MTH_PROPORTION_CI_EXACT` method is no longer
+  reserved as a manual cell -- arsbridge emits a `cardx::ard_categorical_ci()`
+  call and computes the per-arm CIs like any other result (`value_source =
+  "cardx"`). It needs no operand beyond the response variable and the treatment
+  grouping. Without `{cardx}` the same cell degrades gracefully to a
+  `manual_pending` stub. Cochran-Mantel-Haenszel and the Newcombe difference
+  stay reserve-only until their stratification / reference-group operands are
+  carried through the spec. `{cardx}` is a soft dependency (Suggests).
 * Manual-fill round-trip + guard (ADR 0002, phase 5). After computing a reserved
   `manual_pending` cell with a validated script, the analyst writes the value
   back into the ARD row (`stat`, `result_status = "manual_filled"`,

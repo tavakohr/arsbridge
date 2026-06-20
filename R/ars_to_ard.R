@@ -87,6 +87,16 @@
                                                 "conf.high"), by_group = FALSE)
 )
 
+## Methods that DO have a {cardx} executor (emitted by .emit_block) and so are
+## computed -- not reserved -- whenever {cardx} is installed. They remain listed
+## in .UNEXECUTABLE_METHODS above so that, when {cardx} is absent, the engine
+## degrades gracefully and reserves a manual_pending stub instead of erroring.
+## Seeded with the exact (Clopper-Pearson) CI, which needs no operand beyond the
+## response variable and the treatment grouping. CMH and Newcombe stay
+## reserve-only until their stratification / reference-group operands are
+## carried through the spec.
+.CARDX_METHODS <- c("MTH_PROPORTION_CI_EXACT")
+
 ## A one-row {cards} card used as a schema prototype, so stub rows carry exactly
 ## the columns of the installed {cards} version (list-cols and all) instead of a
 ## hand-coded guess that could drift across versions. Built with a `by` so the
@@ -531,11 +541,14 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     # only consulted when legacy = TRUE.
     method_actual <- method_id
     eff_method_id <- method_id
-    ## Declared-but-unexecutable method (ADR 0002): reserve a stub row instead
-    ## of computing. Skip fallback coercion and the all-missing data check --
-    ## the stub does not depend on tabulable values.
-    is_stub <- method_id %in% names(.UNEXECUTABLE_METHODS)
-    if (!is_stub && is.null(.ARD_EXECUTORS[[method_id]])) {
+    ## A {cardx}-backed method computes via its emitted block when {cardx} is
+    ## installed; otherwise it degrades to a reserved stub. A method with no
+    ## executor at all always reserves a stub (ADR 0002). A stub skips fallback
+    ## coercion and the all-missing data check -- it needs no tabulable values.
+    is_cardx_exec <- method_id %in% .CARDX_METHODS &&
+      requireNamespace("cardx", quietly = TRUE)
+    is_stub <- (method_id %in% names(.UNEXECUTABLE_METHODS)) && !is_cardx_exec
+    if (!is_stub && !is_cardx_exec && is.null(.ARD_EXECUTORS[[method_id]])) {
       is_num <- is.numeric(df_filtered[[analysis_var]])
       method_actual <- if (is_num) "FALLBACK_CONTINUOUS" else "FALLBACK_CATEGORICAL"
       eff_method_id <- if (is_num) "MTH_SUMMARY_STATISTICS_CONTINUOUS" else
@@ -659,7 +672,8 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       ## value came from. derived_dt is stamped once after assembly (below) for
       ## computed rows only; a manual_pending row stays NA until it is filled.
       ard[["result_status"]]  <- if (is_stub) "manual_pending" else "computed"
-      ard[["value_source"]]   <- if (is_stub) NA_character_ else "cards"
+      ard[["value_source"]]   <- if (is_stub) NA_character_ else
+        if (is_cardx_exec) "cardx" else "cards"
       ard[["derivation_ref"]] <- if (is_stub) NA_character_ else
         paste0("arsbridge:emitted:", analysis_id)
       ard[["derived_by"]]     <- if (is_stub) NA_character_ else "arsbridge"

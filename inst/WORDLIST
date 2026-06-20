@@ -12,6 +12,7 @@ ANCOVA
 APX
 Clopper
 Cochran
+Pearson
 Haenszel
 MMRM
 Mantel
@@ -46,6 +47,7 @@ anonymised
 ars
 atopic
 bdat
+cardx
 colour
 csv
 customise

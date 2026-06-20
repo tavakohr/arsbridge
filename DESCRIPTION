@@ -45,6 +45,7 @@ Imports:
     xml2 (>= 1.3.0)
 Suggests:
     askpass,
+    cardx (>= 0.2.0),
     knitr,
     pkgdown,
     rmarkdown,

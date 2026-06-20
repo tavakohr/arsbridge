@@ -207,6 +207,15 @@
         "cards::ard_categorical(\n",
         "  data = %s,\n  variables = all_of(%s)%s,\n  denominator = %s\n)"),
         data_e, qvar, by_line(b), denom)
+    } else if (identical(method, "MTH_PROPORTION_CI_EXACT")) {
+      ## Exact (Clopper-Pearson) binomial CI per group level via {cardx}. Needs
+      ## only the response variable and the treatment grouping -- no extra
+      ## operand -- so it executes wherever cardx is installed (ADR 0001/0002).
+      sprintf(paste0(
+        "cardx::ard_categorical_ci(\n",
+        "  data = %s,\n  variables = all_of(%s)%s,\n",
+        "  method = \"clopper-pearson\"\n)"),
+        data_e, qvar, by_line(b))
     } else {
       sprintf(paste0(
         "# Fallback: no dedicated idiom for this method; categorical n(%%) used.\n",
