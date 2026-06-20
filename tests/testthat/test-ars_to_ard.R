@@ -270,3 +270,66 @@ test_that("ars_validate_manual_fills passes a fully traceable fill", {
   expect_equal(nrow(ars_validate_manual_fills(ard)), 0L)
   expect_equal(nrow(ars_validate_manual_fills(NULL)), 0L)
 })
+
+test_that("ard_cmh_test returns a one-row CMH p-value card", {
+  skip_if_not_installed("cards")
+  d <- data.frame(
+    RESP   = rep(c("Y", "N"), 30),
+    TRT    = rep(c("A", "B"), each = 30),
+    REGION = rep(c("NA", "EU", "APAC"), 20),
+    stringsAsFactors = FALSE)
+  card <- ard_cmh_test(d, response = "RESP", by = "TRT", strata = "REGION")
+  expect_equal(nrow(card), 1L)
+  expect_equal(card$stat_name, "p.value")
+  p <- as.numeric(card$stat[[1]])
+  expect_true(is.na(p) || (p >= 0 && p <= 1))
+  # Missing column is a clear error.
+  expect_error(ard_cmh_test(d, "RESP", "TRT", "NOPE"), "not found")
+})
+
+test_that("MTH_CMH_TEST computes with a strata operand, reserves without one", {
+  skip_if_not_installed("cards")
+  adam_dir <- withr::local_tempdir()
+  utils::write.csv(data.frame(
+    USUBJID = sprintf("S%03d", 1:60),
+    TRT01A  = rep(c("Drug A", "Placebo"), 30),
+    SAFFL   = "Y",
+    REGION  = rep(c("NA", "EU", "APAC"), 20),
+    AVAL    = rep(c(1, 0), 30),
+    stringsAsFactors = FALSE
+  ), file.path(adam_dir, "ADSL.csv"), row.names = FALSE)
+
+  mk_spec <- function(strata) {
+    grp <- list(list(order = 1, groupingId = "GF_TRT", resultsByGroup = TRUE))
+    ana <- list(id = "AN_CMH", name = "CMH", analysisSetId = "AS_ITT",
+                methodId = "MTH_CMH_TEST",
+                analysisVariable = list(dataset = "ADSL", variable = "AVAL"),
+                orderedGroupings = grp)
+    if (!is.null(strata)) ana$strata <- strata
+    list(id = "S", name = "S", version = "1",
+      analysisSets = list(list(id = "AS_ITT", name = "ITT",
+        condition = list(dataset = "ADSL", variable = "SAFFL",
+                         comparator = "EQ", value = list("Y")))),
+      analysisGroupings = list(list(id = "GF_TRT", name = "TRT01A",
+        groupingVariable = list(dataset = "ADSL", variable = "TRT01A"))),
+      methods = list(list(id = "MTH_CMH_TEST", name = "CMH")),
+      analyses = list(ana),
+      outputs = list(list(id = "T_CMH", name = "T-CMH",
+        referencedAnalysisIds = list("AN_CMH"))))
+  }
+
+  p1 <- tempfile(fileext = ".json")
+  writeLines(jsonlite::toJSON(mk_spec("REGION"), auto_unbox = TRUE, null = "null"), p1)
+  ard1 <- ars_to_ard(p1, adam_dir)
+  cmh1 <- ard1[ard1$method_id == "MTH_CMH_TEST", , drop = FALSE]
+  expect_equal(unique(cmh1$result_status), "computed")
+  expect_equal(unique(cmh1$value_source), "stats")
+  expect_equal(unique(cmh1$stat_name), "p.value")
+  expect_false(is.na(as.numeric(cmh1$stat[[1]])))
+
+  p2 <- tempfile(fileext = ".json")
+  writeLines(jsonlite::toJSON(mk_spec(NULL), auto_unbox = TRUE, null = "null"), p2)
+  ard2 <- ars_to_ard(p2, adam_dir)
+  cmh2 <- ard2[ard2$method_id == "MTH_CMH_TEST", , drop = FALSE]
+  expect_equal(unique(cmh2$result_status), "manual_pending")
+})

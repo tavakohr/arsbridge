@@ -216,6 +216,16 @@
         "  data = %s,\n  variables = all_of(%s)%s,\n",
         "  method = \"clopper-pearson\"\n)"),
         data_e, qvar, by_line(b))
+    } else if (identical(method, "MTH_CMH_TEST")) {
+      ## Stratified Cochran-Mantel-Haenszel p-value via arsbridge's base-R
+      ## wrapper (cardx's mantelhaen wrapper is not used). Needs the response,
+      ## the treatment grouping, and a resolved strata operand (ADR 0001).
+      strata_q <- encodeString(.clean_emit_name(res$strata) %||% "", quote = "\"")
+      by_q     <- if (length(b)) encodeString(b[1], quote = "\"") else "NULL"
+      sprintf(paste0(
+        "arsbridge::ard_cmh_test(\n",
+        "  data = %s,\n  response = %s,\n  by = %s,\n  strata = %s\n)"),
+        data_e, qvar, by_q, strata_q)
     } else {
       sprintf(paste0(
         "# Fallback: no dedicated idiom for this method; categorical n(%%) used.\n",
@@ -230,7 +240,10 @@
   objs <- obj
 
   ## include_total: an extra ungrouped pass (shell carries an overall column).
-  if (isTRUE(res$include_total) && length(by)) {
+  ## Skipped for the inferential methods, where an ungrouped pass is meaningless
+  ## (a CMH needs the grouping; a per-arm CI has no "total" arm).
+  if (isTRUE(res$include_total) && length(by) &&
+      !method %in% c("MTH_CMH_TEST", "MTH_PROPORTION_CI_EXACT")) {
     obj_t <- paste0(obj, "_total")
     code  <- paste0(code, "\n", sprintf("%s <- %s", obj_t, mk_call(character(0))))
     objs  <- c(objs, obj_t)

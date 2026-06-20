@@ -87,15 +87,27 @@
                                                 "conf.high"), by_group = FALSE)
 )
 
-## Methods that DO have a {cardx} executor (emitted by .emit_block) and so are
-## computed -- not reserved -- whenever {cardx} is installed. They remain listed
-## in .UNEXECUTABLE_METHODS above so that, when {cardx} is absent, the engine
-## degrades gracefully and reserves a manual_pending stub instead of erroring.
-## Seeded with the exact (Clopper-Pearson) CI, which needs no operand beyond the
-## response variable and the treatment grouping. CMH and Newcombe stay
-## reserve-only until their stratification / reference-group operands are
-## carried through the spec.
-.CARDX_METHODS <- c("MTH_PROPORTION_CI_EXACT")
+## Methods that DO have an executor emitted by .emit_block, and so are computed
+## -- not reserved -- when their prerequisites are met. Each entry: the
+## `value_source` to stamp on the result, and an `available(res)` predicate that
+## decides, per analysis, whether the method can actually run. A method stays
+## listed in .UNEXECUTABLE_METHODS above, so when `available()` is FALSE (a
+## missing package, or an operand the spec did not carry) the engine degrades
+## gracefully and reserves a manual_pending stub instead of erroring.
+##   * Exact (Clopper-Pearson) CI -- via {cardx}; needs only response + grouping.
+##   * CMH p-value -- via base R (ard_cmh_test); needs a resolved strata operand.
+## Newcombe stays reserve-only until its reference-group operand is carried.
+.EXEC_DESCRIPTORS <- list(
+  MTH_PROPORTION_CI_EXACT = list(
+    value_source = "cardx",
+    available = function(res) requireNamespace("cardx", quietly = TRUE)),
+  MTH_CMH_TEST = list(
+    value_source = "stats",
+    available = function(res) {
+      s <- res$strata
+      !is.null(s) && length(s) == 1L && nzchar(s)
+    })
+)
 
 ## A one-row {cards} card used as a schema prototype, so stub rows carry exactly
 ## the columns of the installed {cards} version (list-cols and all) instead of a
@@ -529,6 +541,15 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     grouping_vars <- grouping_vars[grouping_vars %in% names(df_filtered)]
     by_arg <- if (length(grouping_vars) > 0) grouping_vars else NULL
 
+    ## Resolve the stratification operand (CMH etc.) against the data, like the
+    ## grouping vars. An absent or unknown strata means the method cannot
+    ## execute, so .EXEC_DESCRIPTORS$available() returns FALSE and the cell is
+    ## reserved as manual_pending instead.
+    strata_clean <- if (!is.null(res$strata) && nzchar(res$strata))
+      unname(clean_var_name(res$strata, names(df_filtered))) else NULL
+    res$strata <- if (!is.null(strata_clean) &&
+                      strata_clean %in% names(df_filtered)) strata_clean else NULL
+
     # Handle listings
     if (identical(method_id, "MTH_LISTING")) {
       cli::cli_inform("Skipping listing analysis {.val {analysis_id}} (listings are not summarized in ARD).")
@@ -541,14 +562,15 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     # only consulted when legacy = TRUE.
     method_actual <- method_id
     eff_method_id <- method_id
-    ## A {cardx}-backed method computes via its emitted block when {cardx} is
-    ## installed; otherwise it degrades to a reserved stub. A method with no
-    ## executor at all always reserves a stub (ADR 0002). A stub skips fallback
-    ## coercion and the all-missing data check -- it needs no tabulable values.
-    is_cardx_exec <- method_id %in% .CARDX_METHODS &&
-      requireNamespace("cardx", quietly = TRUE)
-    is_stub <- (method_id %in% names(.UNEXECUTABLE_METHODS)) && !is_cardx_exec
-    if (!is_stub && !is_cardx_exec && is.null(.ARD_EXECUTORS[[method_id]])) {
+    ## A method with an executor descriptor computes via its emitted block when
+    ## its prerequisites are met (its package is installed, its operand resolved);
+    ## otherwise it degrades to a reserved stub. A method with no executor at all
+    ## always reserves a stub (ADR 0002). A stub skips fallback coercion and the
+    ## all-missing data check -- it needs no tabulable values.
+    exec_desc <- .EXEC_DESCRIPTORS[[method_id]]
+    is_exec   <- !is.null(exec_desc) && isTRUE(exec_desc$available(res))
+    is_stub   <- (method_id %in% names(.UNEXECUTABLE_METHODS)) && !is_exec
+    if (!is_stub && !is_exec && is.null(.ARD_EXECUTORS[[method_id]])) {
       is_num <- is.numeric(df_filtered[[analysis_var]])
       method_actual <- if (is_num) "FALLBACK_CONTINUOUS" else "FALLBACK_CATEGORICAL"
       eff_method_id <- if (is_num) "MTH_SUMMARY_STATISTICS_CONTINUOUS" else
@@ -673,7 +695,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       ## computed rows only; a manual_pending row stays NA until it is filled.
       ard[["result_status"]]  <- if (is_stub) "manual_pending" else "computed"
       ard[["value_source"]]   <- if (is_stub) NA_character_ else
-        if (is_cardx_exec) "cardx" else "cards"
+        if (is_exec) exec_desc$value_source else "cards"
       ard[["derivation_ref"]] <- if (is_stub) NA_character_ else
         paste0("arsbridge:emitted:", analysis_id)
       ard[["derived_by"]]     <- if (is_stub) NA_character_ else "arsbridge"
@@ -857,4 +879,56 @@ ars_validate_manual_fills <- function(ard) {
     stringsAsFactors = FALSE)
   rownames(out) <- NULL
   out
+}
+
+#' Cochran-Mantel-Haenszel test as an ARD row
+#'
+#' Stratified CMH chi-square test of association between a response and a
+#' treatment grouping, returned as a single `{cards}`-shaped ARD row carrying
+#' the `p.value`. arsbridge emits a call to this function for a `MTH_CMH_TEST`
+#' analysis (ADR 0001), so the deliverable script and the executed ARD are the
+#' same code. It wraps [stats::mantelhaen.test()] on the
+#' response x group x strata contingency table -- base R, no extra dependency
+#' (cardx's wrapper is not used). The continuity correction is applied only for
+#' a 2x2xK table.
+#'
+#' @param data A data frame.
+#' @param response,by,strata Length-1 column names of the response variable, the
+#'   treatment grouping, and the stratification variable.
+#' @param correct Logical; request the continuity correction (default `TRUE`,
+#'   honoured only when the response and grouping are both binary).
+#' @return A one-row ARD (`card`) with the CMH `p.value`; `stat` is `NA` and the
+#'   `error` column is populated if the test could not be computed.
+#' @seealso [ars_to_ard()]
+#' @export
+#' @examples
+#' \dontrun{
+#'   ard_cmh_test(adeff, response = "AVAL", by = "TRT01A", strata = "REGION")
+#' }
+ard_cmh_test <- function(data, response, by, strata, correct = TRUE) {
+  for (nm in c(response, by, strata)) {
+    if (!nm %in% names(data))
+      cli::cli_abort("CMH test: column {.val {nm}} not found in data.")
+  }
+  keep <- stats::complete.cases(data[, c(response, by, strata), drop = FALSE])
+  tab  <- table(data[[response]][keep], data[[by]][keep], data[[strata]][keep])
+  correct_eff <- isTRUE(correct) && all(dim(tab)[1:2] == 2L)
+  ht <- tryCatch(stats::mantelhaen.test(tab, correct = correct_eff),
+                 error = function(e) e)
+  err  <- if (inherits(ht, "error")) conditionMessage(ht) else NULL
+  pval <- if (is.null(err)) unname(ht$p.value) else NA_real_
+
+  row <- .ard_schema_proto()
+  row$group1         <- NA_character_
+  row$group1_level   <- list(NA_character_)
+  row$variable       <- response
+  row$variable_level <- list(NA_character_)
+  if ("context" %in% names(row)) row$context <- "cmh"
+  row$stat_name      <- "p.value"
+  row$stat_label     <- "CMH p-value"
+  row$stat           <- list(pval)
+  if ("fmt_fun" %in% names(row)) row$fmt_fun <- list(NULL)
+  if ("warning" %in% names(row)) row$warning <- list(NULL)
+  if ("error"   %in% names(row)) row$error   <- list(err)
+  row
 }

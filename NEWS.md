@@ -1,6 +1,16 @@
 # arsbridge 0.1.0
 
 * Initial release.
+* Second executable descriptor: Cochran-Mantel-Haenszel p-value (ADR 0001). New
+  exported `ard_cmh_test()` wraps base R's `stats::mantelhaen.test()` (cardx's
+  wrapper is not used) and returns the CMH p-value as a one-row ARD. When a
+  `MTH_CMH_TEST` analysis carries a stratification operand (`strata` on the
+  analysis, resolved against the data), arsbridge emits an
+  `arsbridge::ard_cmh_test()` call and computes the p-value (`value_source =
+  "stats"`); with no resolvable strata it degrades to a `manual_pending` stub.
+  The executable-method registry is now general (`.EXEC_DESCRIPTORS`: a
+  `value_source` plus an `available(res)` predicate per method), replacing the
+  cardx-only flag. `resolve_analysis()` carries the new `strata` operand.
 * First executable descriptor: exact (Clopper-Pearson) binomial CI (ADR 0001).
   When `{cardx}` is installed, the `MTH_PROPORTION_CI_EXACT` method is no longer
   reserved as a manual cell -- arsbridge emits a `cardx::ard_categorical_ci()`

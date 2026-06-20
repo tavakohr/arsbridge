@@ -78,7 +78,8 @@
 #' @return A list with `analysis_id`, `output_id`, `method_id`, `dataset`,
 #'   `variable` (raw, uncleaned), `by` (character vector of grouping vars),
 #'   `pop_where`, `subset_where` (WhereClause objects or `NULL`),
-#'   `include_total` (logical), `subject_key`, `label`, `annotation`,
+#'   `include_total` (logical), `strata` (stratification variable for methods
+#'   like CMH, or `NULL`), `subject_key`, `label`, `annotation`,
 #'   `description`, and `sap_description`.
 #' @noRd
 resolve_analysis <- function(ana, spec, subject_key = "USUBJID",
@@ -111,6 +112,12 @@ resolve_analysis <- function(ana, spec, subject_key = "USUBJID",
 
   include_total <- isTRUE(as.logical(unlist(ana[["includeTotal"]])[1] %||% FALSE))
 
+  ## Stratification operand for stratified methods (e.g. CMH). An arsbridge
+  ## extension field on the analysis; a bare variable name resolved against the
+  ## data later. Absent for the descriptive methods.
+  strata <- .as_scalar_char(ana[["strata"]]) %||%
+    .as_scalar_char(ana[["stratificationVariable"]])
+
   description <- .as_scalar_char(ana[["description"]]) %||%
     .as_scalar_char(ana[["name"]]) %||% analysis_id
 
@@ -124,6 +131,7 @@ resolve_analysis <- function(ana, spec, subject_key = "USUBJID",
     pop_where       = pop_where,
     subset_where    = subset_where,
     include_total   = include_total,
+    strata          = strata,
     subject_key     = subject_key,
     label           = .as_scalar_char(ana[["label"]]),
     annotation      = .as_scalar_char(ana[["annotation"]]),
