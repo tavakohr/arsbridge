@@ -211,10 +211,14 @@
       ## Exact (Clopper-Pearson) binomial CI per group level via {cardx}. Needs
       ## only the response variable and the treatment grouping -- no extra
       ## operand -- so it executes wherever cardx is installed (ADR 0001/0002).
+      ## Keep only the interval bounds: cardx also returns n / N / estimate,
+      ## which a paired count analysis already provides, and duplicate statistic
+      ## identities would make cards::bind_ard() error.
       sprintf(paste0(
         "cardx::ard_categorical_ci(\n",
         "  data = %s,\n  variables = all_of(%s)%s,\n",
-        "  method = \"clopper-pearson\"\n)"),
+        "  method = \"clopper-pearson\"\n) |>\n",
+        "  dplyr::filter(.data$stat_name %%in%% c(\"conf.low\", \"conf.high\"))"),
         data_e, qvar, by_line(b))
     } else if (identical(method, "MTH_CMH_TEST")) {
       ## Stratified Cochran-Mantel-Haenszel p-value via arsbridge's base-R

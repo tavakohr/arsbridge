@@ -142,6 +142,70 @@ test_that("capability-gated section keeps a declarative analysis + method (ADR 0
   expect_equal(re$`_meta`$unsupported_outputs[[1]]$id, "T_14_2_1")
 })
 
+test_that("a gated section with detectable methods builds executable analyses", {
+  sec <- .demo_section("T-14-2-1", "EASI 75 responders")
+  sec$unsupported <- TRUE
+  sec$unsupported_reason <- "requires Cochran-Mantel-Haenszel test"
+  sec$footnotes <- list("Clopper-Pearson 95% CI",
+                        "Cochran-Mantel-Haenszel stratified by REGION")
+  re <- build_ars_json(list(sec))
+
+  mids <- vapply(re$analyses, function(a) a$methodId %||% "", character(1))
+  expect_true("MTH_PROPORTION_CI_EXACT" %in% mids)
+  expect_true("MTH_CMH_TEST" %in% mids)
+  cmh <- Filter(function(a) identical(a$methodId, "MTH_CMH_TEST"), re$analyses)[[1]]
+  expect_equal(cmh$strata, "REGION")
+  # The exact-CI / CMH methods are carried as supported.
+  ci_m <- Filter(function(m) identical(m$id, "MTH_PROPORTION_CI_EXACT"), re$methods)[[1]]
+  expect_true(ci_m$supported)
+  # Residual is empty -> the output is NOT reserved as a whole-table placeholder.
+  ph_ids <- vapply(re$`_meta`$unsupported_outputs, function(u) u$id %||% "",
+                   character(1))
+  expect_false("T_14_2_1" %in% ph_ids)
+})
+
+test_that("classified methods compute end-to-end (CI + CMH) from a gated section", {
+  skip_if_not_installed("cards")
+  skip_if_not_installed("cardx")
+  adam_dir <- withr::local_tempdir()
+  utils::write.csv(data.frame(
+    USUBJID = sprintf("S%03d", 1:60),
+    TRT01A  = rep(c("Drug A", "Placebo"), 30),
+    SAFFL   = "Y",
+    REGION  = rep(c("NA", "EU", "APAC"), 20),
+    AVAL    = rep(c(1, 0), 30),
+    stringsAsFactors = FALSE
+  ), file.path(adam_dir, "ADSL.csv"), row.names = FALSE)
+
+  sec <- list(
+    tlf_number = "T-14-2-1", tlf_type = "TABLE", title = "EASI 75 responders",
+    population_text = "ITT", population_annot = "ADSL.SAFFL='Y'",
+    footnotes = list("Clopper-Pearson 95% CI",
+                     "Cochran-Mantel-Haenszel stratified by REGION"),
+    col_headers = c("Statistic", "Drug A", "Placebo"),
+    by_variable = "TRT01A",
+    stub_rows = list(list(label = "Responders, n (%)", annotation = "ADSL.AVAL",
+                          has_annot = TRUE)),
+    enriched_rows = list(list(label = "Responders, n (%)",
+                              primary_dataset = "ADSL", primary_variable = "AVAL",
+                              variable_role = "ANALYSIS")),
+    analysis_type = "COUNT", ars_method_name = "Count and Percentage",
+    unsupported = TRUE,
+    unsupported_reason = "requires Cochran-Mantel-Haenszel test")
+
+  re <- build_ars_json(list(sec), study_id = "S1")
+  ars_path <- tempfile("ars_", fileext = ".json")
+  writeLines(jsonlite::toJSON(re, auto_unbox = TRUE, null = "null"), ars_path)
+
+  ard <- ars_to_ard(ars_path, adam_dir)
+  expect_s3_class(ard, "card")
+  src <- function(m) unique(ard$value_source[ard$method_id == m])
+  expect_equal(src("MTH_PROPORTION_CI_EXACT"), "cardx")
+  expect_equal(src("MTH_CMH_TEST"), "stats")
+  # No reserved cells: both inferential methods computed.
+  expect_false(any(ard$result_status == "manual_pending"))
+})
+
 test_that("gated section flows end-to-end to a manual_pending ARD row", {
   skip_if_not_installed("cards")
   sec <- .demo_section("T-14-2-1", "EASI75 CMH (primary endpoint)")

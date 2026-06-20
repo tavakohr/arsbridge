@@ -74,3 +74,35 @@ test_that("build_ars_json keeps a declarative analysis for an unsupported output
   expect_true(length(us) >= 1)
   expect_match(us[[1]]$reason, "Cochran-Mantel-Haenszel")
 })
+
+test_that("classify_section_methods maps text to executable methods + operands", {
+  sec <- list(
+    title = "EASI 75 responders",
+    footnotes = list("[a] Clopper-Pearson 95% CI.",
+                     "[b] Cochran-Mantel-Haenszel test stratified by REGION."),
+    stub_rows = list())
+  cls <- classify_section_methods(sec)
+  ids <- vapply(cls$executable, function(e) e$method_id, character(1))
+  expect_true("MTH_PROPORTION_CI_EXACT" %in% ids)
+  expect_true("MTH_CMH_TEST" %in% ids)
+  cmh <- Filter(function(e) identical(e$method_id, "MTH_CMH_TEST"),
+                cls$executable)[[1]]
+  expect_equal(cmh$strata, "REGION")
+  expect_length(cls$residual, 0)
+})
+
+test_that("CMH without a named strata is residual, not executable", {
+  sec <- list(title = "Response rate, Cochran-Mantel-Haenszel p-value",
+              footnotes = list(), stub_rows = list())
+  cls <- classify_section_methods(sec)
+  expect_length(cls$executable, 0)
+  expect_true(any(grepl("Mantel", cls$residual)))
+})
+
+test_that("an unhandled inferential indicator (Newcombe) stays residual", {
+  sec <- list(title = "Difference in response, Newcombe 95% CI",
+              footnotes = list(), stub_rows = list())
+  cls <- classify_section_methods(sec)
+  expect_length(cls$executable, 0)
+  expect_true(any(grepl("Newcombe|Wilson", cls$residual)))
+})

@@ -85,6 +85,79 @@
   list(supported = FALSE, reason = reason)
 }
 
+## ---------------------------------------------------------------------------
+## Method classification (ADR 0001). A gated section is not necessarily a
+## wholesale "unsupported" -- some of its statistics now have executable
+## descriptors (a Clopper-Pearson CI, a stratified CMH p-value). This layer maps
+## the section's text to those specific methods, extracting the operands they
+## need, and reports the residual indicators arsbridge still cannot compute.
+## Deterministic keyword scan; an LLM enrichment may supersede it later.
+## ---------------------------------------------------------------------------
+
+## Pull a stratification variable out of "stratified by REGION" / "stratified by
+## region" style text. Returns an upper-cased token (an ADaM-style variable
+## name) or NULL when none is named -- a CMH needs it to execute.
+#' @noRd
+.extract_strata <- function(text) {
+  m <- regmatches(text, regexec(
+    "strat[a-z]*\\s+by\\s+(?:the\\s+)?([A-Za-z][A-Za-z0-9_]*)", text,
+    ignore.case = TRUE))[[1]]
+  if (length(m) >= 2 && nzchar(m[2])) toupper(m[2]) else NULL
+}
+
+#' Classify the executable methods a gated section needs
+#'
+#' Deterministic keyword mapping from a section's text to the specific
+#' arsbridge-executable methods it calls for (ADR 0001), plus the residual
+#' inferential indicators that remain unsupported. Used by `build_ars_json()` to
+#' build a partial section: descriptive rows plus one analysis per executable
+#' method, reserving only the residual.
+#'
+#' @param section A parsed/enriched TLF section.
+#' @return `list(executable = list(list(method_id, strata)), residual =
+#'   character())`. `strata` is `NULL` unless the method needs and names one.
+#' @keywords internal
+#' @noRd
+classify_section_methods <- function(section) {
+  raw <- .section_text(section)
+  txt <- tolower(raw)
+  exec <- list(); residual <- character()
+  if (!nzchar(trimws(txt))) return(list(executable = exec, residual = residual))
+
+  handled_cmh <- FALSE
+  ## Clopper-Pearson exact CI -- needs no operand beyond response + grouping.
+  if (grepl("clopper[-\\s]*pearson", txt, perl = TRUE)) {
+    exec[[length(exec) + 1L]] <- list(method_id = "MTH_PROPORTION_CI_EXACT",
+                                      strata = NULL)
+  }
+  ## CMH -- executable only when a stratification variable is named.
+  if (grepl("cochran[-\\s]*mantel[-\\s]*haenszel|\\bcmh\\b", txt, perl = TRUE)) {
+    strata <- .extract_strata(raw)
+    if (!is.null(strata)) {
+      exec[[length(exec) + 1L]] <- list(method_id = "MTH_CMH_TEST",
+                                        strata = strata)
+      handled_cmh <- TRUE
+    } else {
+      residual <- c(residual,
+                    "Cochran-Mantel-Haenszel test (no stratification variable named)")
+    }
+  }
+
+  ## Inferential indicators we cannot yet compute -> residual. The generic
+  ## p-value indicator is dropped (it is implied by any handled test) so a fully
+  ## classified table is not needlessly reserved.
+  skip <- c("p-value (hypothesis test)",
+            "exact confidence interval (Clopper-Pearson)")
+  if (handled_cmh) skip <- c(skip, "Cochran-Mantel-Haenszel test")
+  for (ind in .UNSUPPORTED_INDICATORS) {
+    if (ind$label %in% skip) next
+    if (grepl(ind$re, txt, perl = TRUE, ignore.case = TRUE)) {
+      residual <- c(residual, ind$label)
+    }
+  }
+  list(executable = exec, residual = unique(residual))
+}
+
 #' Combined capability verdict for one enriched section (union of both layers).
 #'
 #' @param section    The parsed/enriched section (carries title, footnotes,

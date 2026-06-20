@@ -1,6 +1,17 @@
 # arsbridge 0.1.0
 
 * Initial release.
+* Classification wiring (ADR 0001): a capability-gated table is no longer
+  reserved wholesale. `build_ars_json()` now classifies which of its statistics
+  arsbridge can compute (deterministic keyword scan of the section's title,
+  footnotes, and labels) and builds a *partial* section -- the descriptive rows
+  compute, and each detected executable method (a Clopper-Pearson CI; a CMH
+  p-value when "stratified by <VAR>" names a strata variable) is appended as its
+  own analysis with operands. Only the residual indicators it still cannot
+  compute (e.g. a Newcombe difference) are reserved as `manual_pending` and
+  named on the placeholder. With no residual, the table is no longer flagged
+  unsupported at all -- it renders with the computed CI / CMH cells. An LLM
+  enrichment can supersede the keyword layer later.
 * Second executable descriptor: Cochran-Mantel-Haenszel p-value (ADR 0001). New
   exported `ard_cmh_test()` wraps base R's `stats::mantelhaen.test()` (cardx's
   wrapper is not used) and returns the CMH p-value as a one-row ARD. When a

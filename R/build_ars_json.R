@@ -312,10 +312,26 @@ build_ars_json <- function(sections,
     ## still shows a numbered placeholder (recorded in _meta.unsupported_outputs)
     ## until partial rendering lands. Never coerce into a meaningless count.
     sec_unsupported <- isTRUE(sec$unsupported)
-    if (sec_unsupported) {
+    ## Classify which gated statistics arsbridge can now actually compute (ADR
+    ## 0001). A gated section with executable methods is built as a *partial*
+    ## section: descriptive rows compute, each executable inferential method is
+    ## appended as its own analysis, and only the residual is reserved. A gated
+    ## section with nothing executable is reserved wholesale (Phase 3).
+    cls <- if (sec_unsupported) classify_section_methods(sec) else
+      list(executable = list(), residual = character())
+    has_exec      <- length(cls$executable) > 0
+    gated_generic <- sec_unsupported && !has_exec
+    oid_ph        <- make_output_id(sec$tlf_number)
+    if (gated_generic) {
       unsupported[[length(unsupported) + 1L]] <- list(
-        id     = make_output_id(sec$tlf_number),
+        id     = oid_ph,
         reason = sec$unsupported_reason %||% "not supported by arsbridge")
+    } else if (sec_unsupported && length(cls$residual) > 0) {
+      ## Partial: some cells compute, but a residual (e.g. a Newcombe interval)
+      ## stays reserved -- numbered placeholder text names it.
+      unsupported[[length(unsupported) + 1L]] <- list(
+        id     = oid_ph,
+        reason = paste(cls$residual, collapse = "; "))
     }
 
     ## --- TLF-level developability check ---
@@ -359,7 +375,9 @@ build_ars_json <- function(sections,
     gf_ids <- vapply(gf_objs, function(g) g$id, character(1))
 
     ## --- AnalysisMethod (standard catalogue, or declarative-unsupported) ---
-    mth_obj <- if (sec_unsupported) .build_unsupported_method(sec) else
+    ## A wholesale-gated section's descriptive rows are reserved; a partial
+    ## section's descriptive rows compute with the normal method.
+    mth_obj <- if (gated_generic) .build_unsupported_method(sec) else
       .build_method(sec)
     if (!mth_obj$id %in% seen_mth) {
       methods[[length(methods) + 1L]] <- mth_obj
@@ -391,7 +409,7 @@ build_ars_json <- function(sections,
       ## the ADaM spec marks the row variable as categorical, route it to the
       ## count-and-percentage method instead.
       row_method_id <- mth_obj$id
-      if (!sec_unsupported &&
+      if (!gated_generic &&
           identical(mth_obj$id, "MTH_SUMMARY_STATISTICS_CONTINUOUS") &&
           isTRUE(.var_is_categorical(er$primary_dataset, er$primary_variable))) {
         row_method_id <- count_method_id
@@ -417,6 +435,46 @@ build_ars_json <- function(sections,
       )
       analyses[[length(analyses) + 1L]] <- an_obj
       analysis_ids <- c(analysis_ids, an_obj$id)
+    }
+
+    ## Executable inferential methods (ADR 0001): one analysis each on the
+    ## section's primary response variable, carrying any operand (e.g. CMH
+    ## strata). These compute through the arsbridge engine.
+    if (has_exec) {
+      resp_er  <- .section_primary_enrichment(sec)
+      resp_row <- list(label = sec$title %||% sec$tlf_number,
+                       annotation = "", has_annot = TRUE)
+      for (k in seq_along(cls$executable)) {
+        em <- cls$executable[[k]]
+        if (!em$method_id %in% seen_mth) {
+          methods[[length(methods) + 1L]] <- .build_exec_method(em$method_id)
+          seen_mth <- c(seen_mth, em$method_id)
+        }
+        an <- .build_analysis(
+          section = sec, row = resp_row, enrichment = resp_er,
+          index = length(analysis_ids) + 1L, as_id = as_obj$id,
+          gf_ids = gf_ids, method_id = em$method_id, ds_id = NULL)
+        if (!is.null(em$strata)) an$strata <- em$strata
+        analyses[[length(analyses) + 1L]] <- an
+        analysis_ids <- c(analysis_ids, an$id)
+      }
+    }
+
+    ## Residual reserve: a generic manual_pending cell for indicators that are
+    ## still not computable (e.g. a Newcombe difference), so they appear marked.
+    if (!gated_generic && sec_unsupported && length(cls$residual) > 0) {
+      if (!"MTH_UNSUPPORTED_ANALYSIS" %in% seen_mth) {
+        methods[[length(methods) + 1L]] <- .build_unsupported_method(sec)
+        seen_mth <- c(seen_mth, "MTH_UNSUPPORTED_ANALYSIS")
+      }
+      an <- .build_analysis(
+        section = sec, row = list(label = "Manual", annotation = "",
+                                  has_annot = TRUE),
+        enrichment = .section_primary_enrichment(sec),
+        index = length(analysis_ids) + 1L, as_id = as_obj$id,
+        gf_ids = gf_ids, method_id = "MTH_UNSUPPORTED_ANALYSIS", ds_id = NULL)
+      analyses[[length(analyses) + 1L]] <- an
+      analysis_ids <- c(analysis_ids, an$id)
     }
 
     outputs[[length(outputs) + 1L]] <- .build_output(sec, analysis_ids)
@@ -600,6 +658,44 @@ build_ars_json <- function(sections,
         "## (see ars_manual_worklist())."),
       parameters = list())
   ))
+}
+
+## A supported AnalysisMethod for an arsbridge-executable inferential method
+## (ADR 0001) -- the exact CI or the CMH p-value. Unlike .build_unsupported_method
+## this is tagged supported = TRUE; the arsbridge engine emits the cardx / base-R
+## call for it. A minimal codeTemplate keeps siera happy.
+#' @noRd
+.build_exec_method <- function(method_id) {
+  nm <- switch(method_id,
+    MTH_CMH_TEST            = "Cochran-Mantel-Haenszel test",
+    MTH_PROPORTION_CI_EXACT = "Clopper-Pearson exact confidence interval",
+    method_id)
+  .with_op_self_rels(list(
+    id          = method_id,
+    name        = nm,
+    label       = nm,
+    description = nm,
+    supported   = TRUE,
+    operations  = list(list(id = "OP_STAT", name = nm, label = nm, order = 1L,
+                            resultPattern = "X")),
+    codeTemplate = list(
+      context    = "R (arsbridge)",
+      code       = paste0("## ", nm,
+                          " -- computed by the arsbridge engine (cardx / base R)."),
+      parameters = list())
+  ))
+}
+
+## The enrichment (primary dataset + variable) of a section's main response row,
+## used as the analysis variable for the section-level inferential methods.
+## Returns the first enriched row that names a primary variable, or list().
+#' @noRd
+.section_primary_enrichment <- function(sec) {
+  for (er in sec$enriched_rows %||% list()) {
+    if (!is.null(er$primary_variable) && nzchar(er$primary_variable %||% ""))
+      return(er)
+  }
+  list()
 }
 
 .build_data_subset <- function(enrichment, tlf_number, index) {
