@@ -233,8 +233,11 @@ detect_row_roles <- function(ard, col_var) {
   ## cell can never be read as a value or a zero. frmt(missing=) prints the
   ## marker because a manual_pending stat is always NA.
   if (method_id %in% names(.UNEXECUTABLE_METHODS)) {
+    ## NA stat (still pending) -> the loud marker; a filled value (manual_filled,
+    ## ADR 0002 phase 5) -> a generic 3-dp number. The analyst can refine the
+    ## display per study, but the value is never lost or shown as the marker.
     structs <- lapply(stat_names, function(sn)
-      fs(.statline_for(sn), tfrmt::frmt("xx", missing = .MANUAL_MARKER)))
+      fs(.statline_for(sn), tfrmt::frmt("xx.xxx", missing = .MANUAL_MARKER)))
     return(list(structures = structs, params = unique(stat_names)))
   }
 

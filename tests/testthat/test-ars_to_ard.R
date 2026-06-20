@@ -241,3 +241,32 @@ test_that("ars_manual_worklist returns an empty frame when nothing is pending", 
                      stringsAsFactors = FALSE)
   expect_equal(nrow(ars_manual_worklist(fake)), 0L)
 })
+
+test_that("ars_validate_manual_fills flags untraceable and unfilled manual cells", {
+  ard <- data.frame(
+    output_id      = c("T1", "T1", "T1", "T1"),
+    analysis_id    = c("A1", "A2", "A3", "A4"),
+    method_id      = "MTH_CMH_TEST",
+    stat_name      = "p.value",
+    result_status  = c("manual_filled", "manual_filled", "manual_filled",
+                       "computed"),
+    derivation_ref = c("cmh.R", NA, "cmh.R", "arsbridge:emitted:A4"),
+    stringsAsFactors = FALSE)
+  ard$stat <- list(0.02, 0.03, NA_real_, 0.5)   # A2 no ref, A3 no value
+
+  bad <- ars_validate_manual_fills(ard)
+  expect_equal(nrow(bad), 2L)
+  expect_setequal(bad$analysis_id, c("A2", "A3"))
+  expect_match(bad$problem[bad$analysis_id == "A2"], "derivation_ref")
+  expect_match(bad$problem[bad$analysis_id == "A3"], "NA")
+})
+
+test_that("ars_validate_manual_fills passes a fully traceable fill", {
+  ard <- data.frame(
+    output_id = "T1", analysis_id = "A1", method_id = "MTH_CMH_TEST",
+    stat_name = "p.value", result_status = "manual_filled",
+    derivation_ref = "cmh_t1421.R", stringsAsFactors = FALSE)
+  ard$stat <- list(0.012)
+  expect_equal(nrow(ars_validate_manual_fills(ard)), 0L)
+  expect_equal(nrow(ars_validate_manual_fills(NULL)), 0L)
+})

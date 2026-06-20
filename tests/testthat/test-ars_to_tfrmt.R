@@ -143,3 +143,27 @@ test_that("ars_render_tlf renders the [‡ manual] marker and its footnote", {
   notes <- unlist(gt_obj[["_source_notes"]])
   expect_true(any(grepl("manual derivation", notes)))
 })
+
+test_that("a filled manual cell renders its value, not the marker (phase 5)", {
+  skip_if_not_installed("cards")
+  marker <- paste0("[", intToUtf8(0x2021), " manual]")
+  fx <- .mixed_fixture()
+  ard <- fx$ard
+  # Fill one reserved CI cell with a validated value + derivation_ref.
+  ci <- which(ard$result_status == "manual_pending")
+  expect_gt(length(ci), 0)
+  one <- ci[1]
+  ard$stat[[one]]          <- 0.123
+  ard$result_status[one]   <- "manual_filled"
+  ard$value_source[one]    <- "manual"
+  ard$derivation_ref[one]  <- "ci_t_x.R"
+
+  expect_equal(nrow(ars_validate_manual_fills(ard)), 0L)
+
+  gt_obj <- ars_render_tlf(fx$ars_path, ard, "T_X")
+  body <- as.data.frame(gt_obj[["_data"]])
+  flat <- unlist(body)
+  # The filled value is rendered (3 dp); other reserved cells still marked.
+  expect_true(any(grepl("0.123", flat, fixed = TRUE)))
+  expect_true(any(grepl(marker, flat, fixed = TRUE)))
+})

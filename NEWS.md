@@ -1,6 +1,16 @@
 # arsbridge 0.1.0
 
 * Initial release.
+* Manual-fill round-trip + guard (ADR 0002, phase 5). After computing a reserved
+  `manual_pending` cell with a validated script, the analyst writes the value
+  back into the ARD row (`stat`, `result_status = "manual_filled"`,
+  `value_source`, `derivation_ref`) -- the ARD is a diffable, auditable data
+  frame. New `ars_validate_manual_fills()` flags any `manual_filled` cell that
+  has no `derivation_ref` or no value; `ars_render_all()` raises each as a
+  blocker before rendering, so an untraceable manual number can never ship. A
+  filled cell then renders its value like any other. See
+  `vignette("getting-started")` for the round-trip. ADR 0002 is now fully
+  implemented (phases 1-5).
 * Partial table rendering (ADR 0002, phase 4). An output that arsbridge can
   compute only in part now renders: the computable cells are filled and each
   reserved `manual_pending` cell renders as a loud `[‡ manual]` marker (never

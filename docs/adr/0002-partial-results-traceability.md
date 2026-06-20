@@ -1,7 +1,7 @@
 # ADR 0002 — Partial results with intact traceability (stub ARD rows + provenance)
 
-* Status: Proposed
-* Date: 2026-06-19
+* Status: Accepted -- phases 1-5 implemented
+* Date: 2026-06-19 (accepted 2026-06-20)
 * Depends on: ADR 0001 (statistical-method extensibility)
 * Pipeline constraint: stay on the standard **ARS → ARD → tfrmt** flow. No
   shell-dominant rendering. The shell is never the source of truth for layout.
@@ -195,7 +195,26 @@ Nothing is ever "nothing". The slot is always reserved and keyed; the human
 fills a known slot, not an orphan; the fill records its source. Traceability
 holds because the ARD is the single point of entry for all results.
 
-## Open questions (resolve before coding Phase 2)
+## Implementation status
+
+All five phases are implemented (arsbridge 0.1.0 development line).
+
+| Phase | What shipped | Where |
+| --- | --- | --- |
+| 1 | Provenance columns on every computed row | `ars_to_ard()` |
+| 2 | `.UNEXECUTABLE_METHODS` registry, `.stub_ard_for_method()`, `manual_pending` stubs, `ars_manual_worklist()` | `ars_to_ard.R` |
+| 3 | Gate keeps the analysis + declarative `MTH_UNSUPPORTED_ANALYSIS` method | `build_ars_json.R` |
+| 4 | `[‡ manual]` marker + footnote; render-vs-placeholder by computable-cell count | `ars_to_tfrmt.R`, `ars_render_docx.R` |
+| 5 | `ars_validate_manual_fills()` guard, render-time blocker, filled-value rendering, round-trip docs | `ars_to_ard.R`, `ars_render_docx.R`, `vignette("getting-started")` |
+
+The four open questions below were resolved during a read-only spike before
+Phase 2: cards 0.8.0 row schema confirmed; `bind_ard()` tolerates the extra
+provenance columns and a `stat = list(NA_real_)` list-column; an NA-stat row
+survives flattening and renders to the marker via `frmt(missing=)`; and the
+engine-equivalence test's `.eq_norm` projection already drops provenance
+columns, so it needed no change.
+
+## Open questions (resolved during the Phase 2 spike)
 
 1. **Exact stub schema.** Match `.stub_ard_row()` column-for-column against a
    live `cards::ard_categorical()` row (group/variable/stat/context columns vary

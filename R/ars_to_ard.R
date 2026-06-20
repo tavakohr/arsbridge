@@ -777,3 +777,70 @@ ars_manual_worklist <- function(ard) {
   rownames(flat) <- NULL
   flat
 }
+
+#' Validate manually-filled ARD cells
+#'
+#' Checks the manual fills in an ARD (ADR 0002 phase 5). A cell whose
+#' `result_status` was set to `"manual_filled"` must carry both a value
+#' (`stat`) and a `derivation_ref` -- the path/id of the validated program that
+#' produced it. A manual value with no derivation reference is untraceable and
+#' must never ship; [ars_render_all()] surfaces any offending row as a blocker
+#' diagnostic before rendering. Run it yourself on a filled ARD to clear the
+#' worklist.
+#'
+#' @param ard An ARD data frame (class `"card"`), typically one whose
+#'   `manual_pending` cells (see [ars_manual_worklist()]) have been filled.
+#' @return A data frame, one row per offending cell: `output_id`,
+#'   `analysis_id`, `method_id`, `stat_name`, and `problem`. Zero rows (with
+#'   those columns) when every manual fill is traceable.
+#' @seealso [ars_manual_worklist()]
+#' @export
+#' @examples
+#' \dontrun{
+#'   bad <- ars_validate_manual_fills(filled_ard)
+#'   if (nrow(bad)) stop("untraceable manual values present")
+#' }
+ars_validate_manual_fills <- function(ard) {
+  cols  <- c("output_id", "analysis_id", "method_id", "stat_name", "problem")
+  empty <- stats::setNames(
+    as.data.frame(rep(list(character(0)), length(cols)),
+                  stringsAsFactors = FALSE), cols)
+  if (is.null(ard) || !"result_status" %in% names(ard)) return(empty)
+
+  chr <- function(col) if (is.list(col)) vapply(col, function(x)
+    if (length(x)) as.character(x[[1]]) else NA_character_, character(1)) else
+      as.character(col)
+
+  status <- chr(ard[["result_status"]])
+  filled <- !is.na(status) & status == "manual_filled"
+  if (!any(filled)) return(empty)
+
+  dref <- if ("derivation_ref" %in% names(ard)) chr(ard[["derivation_ref"]]) else
+    rep(NA_character_, length(status))
+  sval <- if ("stat" %in% names(ard)) {
+    vapply(ard[["stat"]], function(x)
+      if (length(x)) suppressWarnings(as.numeric(x[[1]])) else NA_real_,
+      numeric(1))
+  } else rep(NA_real_, length(status))
+
+  no_ref   <- filled & (is.na(dref) | !nzchar(trimws(dref)))
+  no_value <- filled & is.na(sval)
+  bad      <- no_ref | no_value
+  if (!any(bad)) return(empty)
+
+  problem <- ifelse(no_ref[bad],
+                    "manual_filled without derivation_ref (untraceable value)",
+                    "manual_filled but value (stat) is still NA")
+  rows <- which(bad)
+  get  <- function(cn) if (cn %in% names(ard)) chr(ard[[cn]])[rows] else
+    rep(NA_character_, length(rows))
+  out <- data.frame(
+    output_id   = get("output_id"),
+    analysis_id = get("analysis_id"),
+    method_id   = get("method_id"),
+    stat_name   = get("stat_name"),
+    problem     = problem,
+    stringsAsFactors = FALSE)
+  rownames(out) <- NULL
+  out
+}

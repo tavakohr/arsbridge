@@ -199,6 +199,29 @@ ars_render_all <- function(ars_path, ard, adam_dir = NULL, file = NULL,
   if (!is.null(adam_dir)) .require_dir(adam_dir, "adam_dir", INPUT_DATA)
   file <- file %||% file.path(tempdir(), "reporting_event_tlfs.docx")
 
+  ## Guard the manual fills before rendering (ADR 0002 phase 5): a value typed
+  ## into a manual_filled cell without a derivation_ref is untraceable and must
+  ## never ship. Surface each as a blocker rather than silently rendering it.
+  bad_fills <- ars_validate_manual_fills(ard)
+  if (nrow(bad_fills) > 0) {
+    for (i in seq_len(nrow(bad_fills))) {
+      diag_add(
+        stage = "render", severity = "FAIL", input = INPUT_ARS,
+        problem = sprintf("Untraceable manual fill in %s (%s): %s",
+                          bad_fills$output_id[i] %||% "?",
+                          bad_fills$stat_name[i] %||% "?",
+                          bad_fills$problem[i]),
+        location = bad_fills$analysis_id[i] %||% "",
+        action = paste0("Set derivation_ref (the validated program that ",
+                        "produced the value) and a non-NA stat before ",
+                        "rendering -- see ars_validate_manual_fills()."))
+    }
+    cli::cli_warn(paste0(
+      "{nrow(bad_fills)} manual fill{?s} {?is/are} untraceable (no ",
+      "derivation_ref or no value) -- inspect with {.fn ars_validate_manual_fills}; ",
+      "rendered cells stay marked until fixed."))
+  }
+
   ## Optional explicit selection (match id OR name, case-insensitive). Warn on
   ## any requested id that is not in the spec.
   want <- NULL
