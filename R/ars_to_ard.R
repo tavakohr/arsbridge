@@ -881,6 +881,47 @@ ars_validate_manual_fills <- function(ard) {
   out
 }
 
+#' Exact (Clopper-Pearson) binomial confidence interval as ARD rows
+#'
+#' Per-group exact binomial CIs for a categorical response, returned as a
+#' `{cards}`-shaped ARD carrying only the interval bounds (`conf.low`,
+#' `conf.high`). arsbridge emits a call to this function for a
+#' `MTH_PROPORTION_CI_EXACT` analysis (ADR 0001), so the deliverable script and
+#' the executed ARD are the same code. Wraps
+#' [cardx::ard_categorical_ci()] with `method = "clopper-pearson"`; the n / N /
+#' estimate rows cardx also returns are dropped (a paired count analysis
+#' supplies them, and duplicate statistic identities would make
+#' [cards::bind_ard()] error). The `"card"` class is re-asserted after the
+#' subset so the result binds cleanly across `{cards}` versions.
+#'
+#' @param data A data frame.
+#' @param variables Length-1 column name of the response variable.
+#' @param by Optional column name(s) of the grouping (treatment) variable.
+#' @param conf.level Confidence level (default `0.95`).
+#' @return A `{cards}` ARD of `conf.low` / `conf.high` rows per group level.
+#' @seealso [ars_to_ard()]
+#' @export
+#' @examples
+#' \dontrun{
+#'   ard_proportion_ci_exact(adrs, variables = "AVALC", by = "TRT01A")
+#' }
+ard_proportion_ci_exact <- function(data, variables, by = NULL,
+                                    conf.level = 0.95) {
+  if (!requireNamespace("cardx", quietly = TRUE)) {
+    cli::cli_abort("Package {.pkg cardx} is required for exact confidence intervals.")
+  }
+  res <- cardx::ard_categorical_ci(
+    data = data, variables = all_of(variables),
+    by = if (is.null(by)) NULL else all_of(by),
+    method = "clopper-pearson", conf.level = conf.level)
+  keep <- res[["stat_name"]] %in% c("conf.low", "conf.high")
+  res  <- res[keep, , drop = FALSE]
+  ## dplyr / base subsetting can drop the "card" subclass on some {cards}
+  ## versions; re-assert it so cards::bind_ard() accepts the rows.
+  if (!inherits(res, "card")) class(res) <- union("card", class(res))
+  res
+}
+
 #' Cochran-Mantel-Haenszel test as an ARD row
 #'
 #' Stratified CMH chi-square test of association between a response and a
@@ -889,14 +930,14 @@ ars_validate_manual_fills <- function(ard) {
 #' analysis (ADR 0001), so the deliverable script and the executed ARD are the
 #' same code. It wraps [stats::mantelhaen.test()] on the
 #' response x group x strata contingency table -- base R, no extra dependency
-#' (cardx's wrapper is not used). The continuity correction is applied only for
-#' a 2x2xK table.
+#' (the cardx wrapper is not used). The continuity correction is applied only
+#' for a 2x2xK table.
 #'
 #' @param data A data frame.
 #' @param response,by,strata Length-1 column names of the response variable, the
 #'   treatment grouping, and the stratification variable.
 #' @param correct Logical; request the continuity correction (default `TRUE`,
-#'   honoured only when the response and grouping are both binary).
+#'   applied only when the response and grouping are both binary).
 #' @return A one-row ARD (`card`) with the CMH `p.value`; `stat` is `NA` and the
 #'   `error` column is populated if the test could not be computed.
 #' @seealso [ars_to_ard()]

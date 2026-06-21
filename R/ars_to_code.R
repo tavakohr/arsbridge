@@ -208,18 +208,15 @@
         "  data = %s,\n  variables = all_of(%s)%s,\n  denominator = %s\n)"),
         data_e, qvar, by_line(b), denom)
     } else if (identical(method, "MTH_PROPORTION_CI_EXACT")) {
-      ## Exact (Clopper-Pearson) binomial CI per group level via {cardx}. Needs
-      ## only the response variable and the treatment grouping -- no extra
-      ## operand -- so it executes wherever cardx is installed (ADR 0001/0002).
-      ## Keep only the interval bounds: cardx also returns n / N / estimate,
-      ## which a paired count analysis already provides, and duplicate statistic
-      ## identities would make cards::bind_ard() error.
+      ## Exact (Clopper-Pearson) binomial CI per group level via arsbridge's
+      ## thin {cardx} wrapper, which keeps only the interval bounds and returns
+      ## a clean card. Needs only the response variable and the treatment
+      ## grouping -- no extra operand (ADR 0001/0002).
+      by_q <- if (length(b)) .r_chr_vec(b) else "NULL"
       sprintf(paste0(
-        "cardx::ard_categorical_ci(\n",
-        "  data = %s,\n  variables = all_of(%s)%s,\n",
-        "  method = \"clopper-pearson\"\n) |>\n",
-        "  dplyr::filter(.data$stat_name %%in%% c(\"conf.low\", \"conf.high\"))"),
-        data_e, qvar, by_line(b))
+        "arsbridge::ard_proportion_ci_exact(\n",
+        "  data = %s,\n  variables = %s,\n  by = %s\n)"),
+        data_e, qvar, by_q)
     } else if (identical(method, "MTH_CMH_TEST")) {
       ## Stratified Cochran-Mantel-Haenszel p-value via arsbridge's base-R
       ## wrapper (cardx's mantelhaen wrapper is not used). Needs the response,

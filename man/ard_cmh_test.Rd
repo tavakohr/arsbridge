@@ -13,7 +13,7 @@ ard_cmh_test(data, response, by, strata, correct = TRUE)
 treatment grouping, and the stratification variable.}
 
 \item{correct}{Logical; request the continuity correction (default \code{TRUE},
-honoured only when the response and grouping are both binary).}
+applied only when the response and grouping are both binary).}
 }
 \value{
 A one-row ARD (\code{card}) with the CMH \code{p.value}; \code{stat} is \code{NA} and the
@@ -26,8 +26,8 @@ the \code{p.value}. arsbridge emits a call to this function for a \code{MTH_CMH_
 analysis (ADR 0001), so the deliverable script and the executed ARD are the
 same code. It wraps \code{\link[stats:mantelhaen.test]{stats::mantelhaen.test()}} on the
 response x group x strata contingency table -- base R, no extra dependency
-(cardx's wrapper is not used). The continuity correction is applied only for
-a 2x2xK table.
+(the cardx wrapper is not used). The continuity correction is applied only
+for a 2x2xK table.
 }
 \examples{
 \dontrun{
