@@ -22,6 +22,15 @@ reference:
   - ars_render_all
   - ars_render_listing
   - ars_render_figure
+- title: Inferential statistics & partial results
+  desc: >-
+    Executable descriptors for inferential statistics, and the manual-fill
+    round-trip for cells arsbridge cannot yet compute.
+  contents:
+  - ard_cmh_test
+  - ard_proportion_ci_exact
+  - ars_manual_worklist
+  - ars_validate_manual_fills
 - title: Diagnostics
   desc: Plain-English findings that point at the input document to fix.
   contents:

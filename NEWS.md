@@ -64,7 +64,7 @@
   the engine reserves a stub cell for it. The renderer still emits a numbered
   placeholder until partial rendering (phase 4) lands. Additive only --
   computed results are unchanged.
-* Architecture decision records under `docs/adr/`: ADR 0001 sets the
+* Architecture decision records under `adr/`: ADR 0001 sets the
   statistical-method extensibility boundary (bound the boundary, not the
   contents -- descriptor contract on the shared ARD shape, tiered honest
   degradation, deterministic emission with the LLM only classifying); ADR 0002
@@ -82,7 +82,7 @@
   points to a separate validated analysis script; render *failures* emit a
   distinct placeholder clearly labelled as an error, not a gate. The
   rationale and the path to extending coverage are recorded in
-  `docs/adr/0001-statistical-method-extensibility.md`.
+  `adr/0001-statistical-method-extensibility.md`.
 * Hybrid shell reading: a deterministic four-layer regex detector and an
   LLM primary reader (`extract_shell_llm()`) run together and take the
   union, to extract as many annotation variants as possible. Every

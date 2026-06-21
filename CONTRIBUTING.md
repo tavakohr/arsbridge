@@ -52,7 +52,7 @@ write a unit test, if needed).
 ## Architecture decisions
 
 Design-level decisions live as numbered Architecture Decision Records in
-[`docs/adr/`](docs/adr/). Read them before proposing a change to the engine's
+[`adr/`](adr/). Read them before proposing a change to the engine's
 scope or the ARD contract — they explain *why* the current boundaries exist:
 
 * `0001-statistical-method-extensibility.md` — arsbridge bounds the *boundary*,

@@ -10,9 +10,7 @@
 
 # Build artifacts
 inst/doc/
-# pkgdown output, but keep hand-written ADRs (docs/adr/) under version control
-docs/*
-!docs/adr/
+docs/
 /*.tar.gz
 /*.tgz
 /*.Rcheck/

@@ -779,7 +779,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
 #' must be computed with a validated analysis script and written back into the
 #' ARD (set `stat`, `result_status = "manual_filled"`, `value_source`,
 #' `derivation_ref`) before the table is final. See `vignette("getting-started")`
-#' and the ADRs under `docs/adr/` for the round-trip.
+#' and the ADRs under `adr/` for the round-trip.
 #'
 #' @param ard An ARD data frame of class `"card"` from [ars_to_ard()].
 #' @return A data frame with one row per pending cell: `output_id`,

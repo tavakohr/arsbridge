@@ -4,6 +4,7 @@
 ^README\.Rmd$
 ^_pkgdown\.yml$
 ^docs$
+^adr$
 ^pkgdown$
 ^\.github$
 ^CLAUDE_CODE_PROMPT.*\.md$

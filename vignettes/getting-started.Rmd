@@ -240,7 +240,7 @@ ars_validate_manual_fills(ard)   # zero rows = every manual fill is traceable
 ```
 
 A filled cell then renders its value like any other; the design and the full
-phased rationale live in `docs/adr/0002-partial-results-traceability.md`.
+phased rationale live in `adr/0002-partial-results-traceability.md`.
 
 ## What arsbridge will NOT do
 

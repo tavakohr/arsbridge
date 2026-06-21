@@ -130,7 +130,7 @@ back into the ARD (`ars_manual_worklist()` lists what is outstanding;
 render), so no number is ever an orphan typed into the final table. A
 table with no computable cell at all stays a numbered placeholder, so
 your table numbering always matches the shell. Full rationale in the
-ADRs under `docs/adr/`.
+ADRs under `adr/`.
 
 ------------------------------------------------------------------------
 

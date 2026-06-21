@@ -32,7 +32,7 @@
       "intentional capability gate, not a render error: the analysis needs ",
       "statistical methods beyond arsbridge's descriptive {cards} scope. ",
       "Produce it from a separate validated analysis script. See ",
-      "docs/adr/0001-statistical-method-extensibility.md for how this boundary ",
+      "adr/0001-statistical-method-extensibility.md for how this boundary ",
       "is drawn and extended. ]"),
       reason %||% "unsupported analysis")
   } else {
