@@ -75,6 +75,8 @@
 <strong>Native ARD Execution</strong>: Runs the generated ARS JSON directly using <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> against <code>.xpt</code> or <code>.csv</code> datasets, recursively applying population (<code>analysisSets</code>) and data subsetting (<code>dataSubsets</code>) filters.</li>
 <li>
 <strong>Publication-Ready Tables</strong>: Renders any ARS output to a formatted GT table via <a href="https://GSK-Biostatistics.github.io/tfrmt/" class="external-link">tfrmt</a> with <code><a href="reference/ars_render_tlf.html">ars_render_tlf()</a></code> – auto-detecting treatment columns, row groups, and labels; rescaling percentages; and carrying titles and footnotes through. Closes the loop from annotated shell to final TLF.</li>
+<li>
+<strong>Partial Results with Intact Traceability</strong>: A table that mixes computable cells with statistics arsbridge cannot yet compute is filled where it can and rendered with a <code>[‡ manual]</code> marker where it cannot, instead of being rejected wholesale. Each reserved cell is a keyed <code>manual_pending</code> row in the ARD; the analyst fills it from a validated script and <code><a href="reference/ars_validate_manual_fills.html">ars_validate_manual_fills()</a></code> blocks any untraceable value before render. Every value – computed (<a href="https://github.com/insightsengineering/cards" class="external-link">cards</a>/<a href="https://github.com/insightsengineering/cardx" class="external-link">cardx</a>/base R) or manual – carries provenance columns, so the whole table is auditable.</li>
 </ol>
 <hr>
 </div>
@@ -144,7 +146,9 @@
 <div class="section level3">
 <h3 id="what-arsbridge-can-and-cannot-build">What arsbridge can and cannot build<a class="anchor" aria-label="anchor" href="#what-arsbridge-can-and-cannot-build"></a>
 </h3>
-<p>arsbridge builds <strong>descriptive</strong> outputs: summary statistics, counts and percentages, AE frequencies, subject counts, listings, and basic figures. <strong>Inferential / model-based</strong> tables (Cochran-Mantel-Haenszel, exact or Newcombe confidence intervals, p-values, odds / hazard ratios, regression, ANCOVA / MMRM, NRI imputation) have no <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> equivalent. arsbridge <strong>detects</strong> these (LLM + keyword scan), raises a <strong>blocker</strong>, and – rather than coerce them into a meaningless count – emits a <strong>numbered placeholder</strong> in the final document so your table numbering still matches the shell exactly. Produce those tables manually.</p>
+<p>arsbridge builds <strong>descriptive</strong> outputs natively: summary statistics, counts and percentages, AE frequencies, subject counts, listings, and basic figures.</p>
+<p>A growing set of <strong>inferential</strong> statistics now compute too, through executable descriptors: an exact <strong>Clopper-Pearson</strong> confidence interval (via <a href="https://github.com/insightsengineering/cardx" class="external-link">cardx</a>) and a stratified <strong>Cochran-Mantel-Haenszel</strong> p-value (base R). arsbridge detects these in the shell, classifies them to the right method, and builds them automatically when their operands are present (e.g. a CMH stratification variable); it falls back to a reserved cell when a prerequisite is missing (<a href="https://github.com/insightsengineering/cardx" class="external-link">cardx</a> not installed, no strata named).</p>
+<p>Statistics it still cannot compute – a <strong>Newcombe</strong> difference interval, odds / hazard ratios, regression, ANCOVA / MMRM, NRI imputation – are never coerced into a meaningless count. Instead arsbridge <strong>reserves a keyed <code>manual_pending</code> cell</strong> in the ARD, tied to its output, analysis, and method, and renders it as a loud <code>[‡ manual]</code> marker. So a mixed table is filled where arsbridge can and marked where it cannot – a <strong>partial</strong> table rather than an all-or-nothing reject. The analyst computes each reserved cell with a validated script and writes the value back into the ARD (<code><a href="reference/ars_manual_worklist.html">ars_manual_worklist()</a></code> lists what is outstanding; <code><a href="reference/ars_validate_manual_fills.html">ars_validate_manual_fills()</a></code> blocks an untraceable value before render), so no number is ever an orphan typed into the final table. A table with no computable cell at all stays a numbered placeholder, so your table numbering always matches the shell. Full rationale in the ADRs under <code>adr/</code>.</p>
 <hr>
 </div>
 </div>
@@ -155,6 +159,9 @@
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># install.packages("devtools")</span></span>
 <span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">install_github</span><span class="op">(</span><span class="st">"tavakohr/arsbridge"</span><span class="op">)</span></span></code></pre></div>
+<p>For the executable inferential statistics (the exact Clopper-Pearson interval), also install the optional <a href="https://github.com/insightsengineering/cardx" class="external-link">cardx</a>. Without it, those cells degrade gracefully to reserved <code>manual_pending</code> placeholders rather than erroring.</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"cardx"</span><span class="op">)</span></span></code></pre></div>
 <hr>
 </div>
 <div class="section level2">
@@ -162,14 +169,14 @@
 </h2>
 <p>Here is the step-by-step use of the functions in <a href="https://github.com/tavakohr/arsbridge" class="external-link">arsbridge</a>:</p>
 <pre class="mermaid"><code>graph TD
-    A[Configure LLM API Keys] --&gt; B[Generate ARS JSON &amp; Validate Spec]
-    B --&gt; C[Execute ARS to get Tidy ARD]
-    C --&gt; D[Render Formatted TLF Table]</code></pre>
+    A["Configure LLM API keys"] --&gt; B["Generate ARS JSON and validate spec"]
+    B --&gt; C["Execute ARS into a tidy ARD (compute or reserve each cell)"]
+    C --&gt; D["Render the formatted TLF table"]</code></pre>
 <div class="section level3">
 <h3 id="step-1-set-up-and-check-api-keys">Step 1: Set Up and Check API Keys<a class="anchor" aria-label="anchor" href="#step-1-set-up-and-check-api-keys"></a>
 </h3>
 <p><a href="https://github.com/tavakohr/arsbridge" class="external-link">arsbridge</a> supports multiple LLM providers. You can store your API keys in your user <code>.Renviron</code> file so they load automatically in future sessions.</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/tavakohr/arsbridge" class="external-link">arsbridge</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Set up your preferred API key</span></span>
@@ -190,12 +197,12 @@
 <ul>
 <li>
 <p><strong>Same provider, newer model</strong> – just pass <code>model =</code>:</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/spec_to_ars.html">spec_to_ars</a></span><span class="op">(</span><span class="va">...</span>, model <span class="op">=</span> <span class="st">"claude-3-7-sonnet-latest"</span><span class="op">)</span></span></code></pre></div>
 </li>
 <li>
 <p><strong>A new provider</strong> (GLM, DeepSeek, OpenRouter, …) – add one registry entry with its <code>env</code> var, default <code>model</code>, the <code>ellmer</code> <code>chat</code> constructor, and a <code>base_url</code> if it is OpenAI-compatible. No other code changes. Then:</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/set_llm_key.html">set_llm_key</a></span><span class="op">(</span><span class="st">"glm"</span>, <span class="st">"your-glm-key"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>ARS_LLM_PROVIDER <span class="op">=</span> <span class="st">"glm"</span><span class="op">)</span>   <span class="co"># make it active</span></span>
 <span><span class="fu"><a href="reference/spec_to_ars.html">spec_to_ars</a></span><span class="op">(</span><span class="va">...</span>, model <span class="op">=</span> <span class="st">"glm-4.6"</span><span class="op">)</span>    <span class="co"># exact model id from your account</span></span></code></pre></div>
@@ -208,7 +215,7 @@
 <p>By default, if multiple API keys are set, <a href="https://github.com/tavakohr/arsbridge" class="external-link">arsbridge</a> searches in the priority order: <strong>Anthropic</strong> <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>→</mo><annotation encoding="application/x-tex">\rightarrow</annotation></semantics></math><strong>OpenAI</strong> <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>→</mo><annotation encoding="application/x-tex">\rightarrow</annotation></semantics></math><strong>Gemini</strong>. To override this default order and choose a specific active provider, set the <code>ARS_LLM_PROVIDER</code> environment variable (e.g., in your <code>.Renviron</code> or <code>.env</code> file):</p>
 <pre class="env"><code><span><span class="va">ARS_LLM_PROVIDER</span><span class="op">=</span><span class="va">openai</span></span></code></pre>
 <p>Or configure it in R using global options:</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">options</a></span><span class="op">(</span>ars.llm.provider <span class="op">=</span> <span class="st">"gemini"</span><span class="op">)</span></span></code></pre></div>
 <hr>
 </div>
@@ -217,7 +224,7 @@
 <h3 id="step-2-generating-ars-json-from-annotated-shells">Step 2: Generating ARS JSON from Annotated Shells<a class="anchor" aria-label="anchor" href="#step-2-generating-ars-json-from-annotated-shells"></a>
 </h3>
 <p>The primary orchestration function is <code><a href="reference/spec_to_ars.html">spec_to_ars()</a></code>. It extracts annotations from a Word TLF shell, cross-references them against an ADaM spec, calls the active LLM once per TLF section for semantic enrichment, and writes the CDISC ARS JSON.</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/spec_to_ars.html">spec_to_ars</a></span><span class="op">(</span></span>
 <span>  shell_path     <span class="op">=</span> <span class="st">"inputs/APX-DRM-301_TLF_Shells_v1.0_sample_annotated.docx"</span>,</span>
 <span>  adam_spec_path <span class="op">=</span> <span class="st">"inputs/adam_spec_APX-DRM-301.xlsx"</span>, <span class="co"># Can also be define.xml</span></span>
@@ -247,7 +254,7 @@
 <h3 id="step-3-inspecting-spec-validation-results">Step 3: Inspecting Spec Validation Results<a class="anchor" aria-label="anchor" href="#step-3-inspecting-spec-validation-results"></a>
 </h3>
 <p>The validation report (<code>outputs/spec_validation_report.xlsx</code>) is an Excel workbook that cross-references all shell annotations with the ADaM spec, assigning a status of <strong>PASS</strong>, <strong>WARN</strong>, or <strong>FAIL</strong>. This allows programmers to catch typos and identify missing variables in the ADaM spec prior to writing R code.</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Retrieve validation summary programmatically</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/table.html" class="external-link">table</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">validation</span><span class="op">$</span><span class="va">status</span><span class="op">)</span></span></code></pre></div>
 <hr>
@@ -257,7 +264,7 @@
 <a class="anchor" aria-label="anchor" href="#step-4-native-execution-to-tidy-ard-using-cards"></a>
 </h3>
 <p>Once the ARS JSON has been generated, you can execute it natively using <code><a href="reference/ars_to_ard.html">ars_to_ard()</a></code>. It dynamically loads the necessary ADaM datasets and runs calculations using the <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> package.</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ard</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ars_to_ard.html">ars_to_ard</a></span><span class="op">(</span></span>
 <span>  ars_path <span class="op">=</span> <span class="st">"outputs/reporting_event.json"</span>,</span>
 <span>  adam_dir <span class="op">=</span> <span class="st">"inputs/ADaM"</span></span>
@@ -269,7 +276,7 @@
 <h4 id="selective-execution">Selective Execution:<a class="anchor" aria-label="anchor" href="#selective-execution"></a>
 </h4>
 <p>To run only a specific subset of outputs or analyses (e.g. for debugging or incremental builds), pass character vectors to <code>output_ids</code> or <code>analysis_ids</code>:</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Run only the demographics table output</span></span>
 <span><span class="va">ard_demog</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ars_to_ard.html">ars_to_ard</a></span><span class="op">(</span></span>
 <span>  ars_path   <span class="op">=</span> <span class="st">"outputs/reporting_event.json"</span>,</span>
@@ -324,15 +331,15 @@
 <h3 id="id_4-calculation-mapping-to-cards">4. Calculation Mapping to <code>{cards}</code>
 <a class="anchor" aria-label="anchor" href="#id_4-calculation-mapping-to-cards"></a>
 </h3>
-<p><code><a href="reference/ars_to_ard.html">ars_to_ard()</a></code> maps standard ARS method identifiers to <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> function calls: - <code>MTH_SUMMARY_STATISTICS_CONTINUOUS</code> <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>→</mo><annotation encoding="application/x-tex">\rightarrow</annotation></semantics></math><code><a href="https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html" class="external-link">cards::ard_continuous()</a></code> - <code>MTH_COUNT_AND_PERCENTAGE</code> <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>→</mo><annotation encoding="application/x-tex">\rightarrow</annotation></semantics></math><code><a href="https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html" class="external-link">cards::ard_categorical()</a></code> - <code>MTH_AE_FREQUENCY_COUNT</code> <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>→</mo><annotation encoding="application/x-tex">\rightarrow</annotation></semantics></math> Evaluates distinct subject counts (<code>dplyr::distinct(USUBJID, variable)</code>) before calling <code><a href="https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html" class="external-link">cards::ard_categorical()</a></code>. - <code>MTH_SUBJECT_COUNT</code> <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>→</mo><annotation encoding="application/x-tex">\rightarrow</annotation></semantics></math><code><a href="https://insightsengineering.github.io/cards/latest-tag/reference/ard_total_n.html" class="external-link">cards::ard_total_n()</a></code> or <code><a href="https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html" class="external-link">cards::ard_categorical()</a></code>.</p>
-<p>Each computed row is injected with traceability metadata: <code>analysis_id</code>, <code>method_id</code>, and <code>output_id</code>.</p>
+<p><code><a href="reference/ars_to_ard.html">ars_to_ard()</a></code> maps standard ARS method identifiers to <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> function calls: - <code>MTH_SUMMARY_STATISTICS_CONTINUOUS</code> <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>→</mo><annotation encoding="application/x-tex">\rightarrow</annotation></semantics></math><code><a href="https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html" class="external-link">cards::ard_continuous()</a></code> - <code>MTH_COUNT_AND_PERCENTAGE</code> <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>→</mo><annotation encoding="application/x-tex">\rightarrow</annotation></semantics></math><code><a href="https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html" class="external-link">cards::ard_categorical()</a></code> - <code>MTH_AE_FREQUENCY_COUNT</code> <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>→</mo><annotation encoding="application/x-tex">\rightarrow</annotation></semantics></math> Evaluates distinct subject counts (<code>dplyr::distinct(USUBJID, variable)</code>) before calling <code><a href="https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html" class="external-link">cards::ard_categorical()</a></code>. - <code>MTH_SUBJECT_COUNT</code> <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>→</mo><annotation encoding="application/x-tex">\rightarrow</annotation></semantics></math><code><a href="https://insightsengineering.github.io/cards/latest-tag/reference/ard_total_n.html" class="external-link">cards::ard_total_n()</a></code> or <code><a href="https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html" class="external-link">cards::ard_categorical()</a></code>. - <code>MTH_PROPORTION_CI_EXACT</code> <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>→</mo><annotation encoding="application/x-tex">\rightarrow</annotation></semantics></math><code><a href="reference/ard_proportion_ci_exact.html">arsbridge::ard_proportion_ci_exact()</a></code> (wraps <code><a href="https://insightsengineering.github.io/cardx/latest-tag/reference/ard_categorical_ci.html" class="external-link">cardx::ard_categorical_ci()</a></code>; exact Clopper-Pearson interval). - <code>MTH_CMH_TEST</code> <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>→</mo><annotation encoding="application/x-tex">\rightarrow</annotation></semantics></math><code><a href="reference/ard_cmh_test.html">arsbridge::ard_cmh_test()</a></code> (stratified Cochran-Mantel-Haenszel p-value; base R, needs a <code>strata</code> operand).</p>
+<p>Each row carries traceability <strong>and</strong> provenance columns: <code>analysis_id</code>, <code>method_id</code>, <code>output_id</code>, plus <code>result_status</code> (<code>computed</code>, <code>manual_pending</code>, or <code>manual_filled</code>), <code>value_source</code> (<code>cards</code> / <code>cardx</code> / <code>stats</code> / <code>manual</code>), and <code>derivation_ref</code>. A computed cell, a reserved cell, and a manually-filled cell are therefore all distinguishable and auditable in the ARD itself.</p>
 <hr>
 </div>
 <div class="section level3">
-<h3 id="step-4-rendering-a-formatted-tlf-table">Step 4: Rendering a Formatted TLF Table<a class="anchor" aria-label="anchor" href="#step-4-rendering-a-formatted-tlf-table"></a>
+<h3 id="step-5-rendering-a-formatted-tlf-table">Step 5: Rendering a Formatted TLF Table<a class="anchor" aria-label="anchor" href="#step-5-rendering-a-formatted-tlf-table"></a>
 </h3>
 <p>With the ARD in hand, <code><a href="reference/ars_render_tlf.html">ars_render_tlf()</a></code> formats any ARS output into a publication-ready GT table – the final step of the closed-loop pipeline.</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Render the Subject Disposition table straight to a GT table</span></span>
 <span><span class="va">gt_table</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ars_render_tlf.html">ars_render_tlf</a></span><span class="op">(</span></span>
 <span>  ars_path  <span class="op">=</span> <span class="st">"outputs/reporting_event.json"</span>,</span>
@@ -347,10 +354,30 @@
 <li>
 <code><a href="reference/ars_to_tfrmt_list.html">ars_to_tfrmt_list()</a></code> returns one spec per output in a named list.</li>
 </ul>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">specs</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ars_to_tfrmt_list.html">ars_to_tfrmt_list</a></span><span class="op">(</span><span class="st">"outputs/reporting_event.json"</span>, <span class="va">ard</span><span class="op">)</span></span>
 <span><span class="va">all_tables</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">specs</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">oid</span><span class="op">)</span></span>
 <span>  <span class="fu"><a href="reference/ars_render_tlf.html">ars_render_tlf</a></span><span class="op">(</span><span class="st">"outputs/reporting_event.json"</span>, <span class="va">ard</span>, <span class="va">oid</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<hr>
+</div>
+<div class="section level3">
+<h3 id="step-6-handling-reserved-manual-cells">Step 6: Handling Reserved (Manual) Cells<a class="anchor" aria-label="anchor" href="#step-6-handling-reserved-manual-cells"></a>
+</h3>
+<p>A partial table leaves some cells as reserved <code>manual_pending</code> rows – statistics arsbridge could not compute (e.g. a Newcombe difference). List them, fill each from a validated analysis script, and validate before the table is final:</p>
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># What still needs a manual derivation?</span></span>
+<span><span class="fu"><a href="reference/ars_manual_worklist.html">ars_manual_worklist</a></span><span class="op">(</span><span class="va">ard</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Fill a reserved cell in the ARD with a validated value + its source program</span></span>
+<span><span class="va">i</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/which.html" class="external-link">which</a></span><span class="op">(</span><span class="va">ard</span><span class="op">$</span><span class="va">result_status</span> <span class="op">==</span> <span class="st">"manual_pending"</span><span class="op">)</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span></span>
+<span><span class="va">ard</span><span class="op">$</span><span class="va">stat</span><span class="op">[[</span><span class="va">i</span><span class="op">]</span><span class="op">]</span>         <span class="op">&lt;-</span> <span class="fl">0.012</span></span>
+<span><span class="va">ard</span><span class="op">$</span><span class="va">result_status</span><span class="op">[</span><span class="va">i</span><span class="op">]</span>  <span class="op">&lt;-</span> <span class="st">"manual_filled"</span></span>
+<span><span class="va">ard</span><span class="op">$</span><span class="va">value_source</span><span class="op">[</span><span class="va">i</span><span class="op">]</span>   <span class="op">&lt;-</span> <span class="st">"manual"</span></span>
+<span><span class="va">ard</span><span class="op">$</span><span class="va">derivation_ref</span><span class="op">[</span><span class="va">i</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="st">"programs/cmh_t1421.R"</span></span>
+<span></span>
+<span><span class="co"># Block any manual value that has no derivation_ref before rendering</span></span>
+<span><span class="fu"><a href="reference/ars_validate_manual_fills.html">ars_validate_manual_fills</a></span><span class="op">(</span><span class="va">ard</span><span class="op">)</span></span></code></pre></div>
+<p><code><a href="reference/ars_render_all.html">ars_render_all()</a></code> runs this check automatically and raises a blocker for any untraceable manual value, so it can never reach the final document.</p>
 <hr>
 </div>
 </div>
@@ -358,7 +385,7 @@
 <h2 id="demonstration-with-bundled-training-example">Demonstration with Bundled Training Example<a class="anchor" aria-label="anchor" href="#demonstration-with-bundled-training-example"></a>
 </h2>
 <p>You can run the full end-to-end pipeline using the bundled <code>APX-DRM-301</code> dataset without needing any external files:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/tavakohr/arsbridge" class="external-link">arsbridge</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># 1. Inspect bundled files</span></span>

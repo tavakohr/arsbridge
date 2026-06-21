@@ -23,6 +23,20 @@ Convert an annotated shell + ADaM spec to ARS, ARD, and formatted TLFs.
 - [`ars_render_figure()`](ars_render_figure.md) : Render an ARS figure
   output to a ggplot
 
+## Inferential statistics & partial results
+
+Executable descriptors for inferential statistics, and the manual-fill
+round-trip for cells arsbridge cannot yet compute.
+
+- [`ard_cmh_test()`](ard_cmh_test.md) : Cochran-Mantel-Haenszel test as
+  an ARD row
+- [`ard_proportion_ci_exact()`](ard_proportion_ci_exact.md) : Exact
+  (Clopper-Pearson) binomial confidence interval as ARD rows
+- [`ars_manual_worklist()`](ars_manual_worklist.md) : Manual-derivation
+  worklist from an ARD
+- [`ars_validate_manual_fills()`](ars_validate_manual_fills.md) :
+  Validate manually-filled ARD cells
+
 ## Diagnostics
 
 Plain-English findings that point at the input document to fix.

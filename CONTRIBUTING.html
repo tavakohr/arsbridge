@@ -63,6 +63,15 @@
 </ul></div>
 </div>
 <div class="section level2">
+<h2 id="architecture-decisions">Architecture decisions<a class="anchor" aria-label="anchor" href="#architecture-decisions"></a></h2>
+<p>Design-level decisions live as numbered Architecture Decision Records in <a href="adr/"><code>adr/</code></a>. Read them before proposing a change to the engine’s scope or the ARD contract — they explain <em>why</em> the current boundaries exist:</p>
+<ul><li>
+<code>0001-statistical-method-extensibility.md</code> — arsbridge bounds the <em>boundary</em>, not the <em>contents</em>, of the statistics space. New statistics are added as descriptors on the shared ARD shape, not as new <code>switch</code> branches. Inferential and model-based methods are tiered (descriptive → standard test → model-based scaffold → placeholder), and code emission stays deterministic while the LLM only classifies the shell.</li>
+<li>
+<code>0002-partial-results-traceability.md</code> — how a partially-computable table stays traceable: arsbridge fills the cells it can and reserves a keyed <code>manual_pending</code> stub ARD row, with provenance columns, for the rest. All values — computed or manual — enter at the ARD layer; nothing is typed straight into the rendered output. Status: proposed (phased plan, not yet implemented).</li>
+</ul><p>When you make a design-level change, add or update an ADR in the same PR. Keep the standard <code>ARS → ARD → tfrmt</code> pipeline — the shell is never the source of truth for layout.</p>
+</div>
+<div class="section level2">
 <h2 id="code-of-conduct">Code of Conduct<a class="anchor" aria-label="anchor" href="#code-of-conduct"></a></h2>
 <p>Please note that the arsbridge project is released with a <a href="CODE_OF_CONDUCT.html">Contributor Code of Conduct</a>. By contributing to this project you agree to abide by its terms.</p>
 </div>

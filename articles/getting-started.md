@@ -196,6 +196,59 @@ JSON arsbridge produces, runs it through
 to generate R analysis code, and executes that code against the
 simulated `ADaM.zip`. See `siera_workflow/README.md` for the full chain.
 
+## Partial tables and the manual-fill round-trip
+
+Some tables mix statistics arsbridge can compute (counts, percentages,
+summary statistics) with ones it cannot (a Cochran-Mantel-Haenszel
+p-value, an exact or Newcombe confidence interval, an NRI-imputed
+responder rate). arsbridge does not fabricate the latter. Instead it
+**reserves a keyed cell** for each: the ARD carries a `manual_pending`
+stub row (`stat = NA`) tied to the same output, analysis, and method as
+a real result, so nothing is ever an orphan value typed straight into
+the rendered table.
+
+List what is outstanding with
+[`ars_manual_worklist()`](../reference/ars_manual_worklist.md):
+
+``` r
+
+ard <- ars_to_ard(ars_path, "inputs/ADaM")
+ars_manual_worklist(ard)   # one row per reserved cell needing manual derivation
+```
+
+When the table is rendered, computed cells are filled and each reserved
+cell shows a loud `[‡ manual]` marker keyed to a footnote – never a
+blank, an `NA`, or a misleading zero. A table with *no* computable cell
+stays a numbered placeholder that names its reserved cells.
+
+To fill a reserved cell, compute it with a **validated analysis
+script**, then write the result back into the ARD row – the ARD is a
+data frame, so it is diffable, versioned, and auditable:
+
+``` r
+
+i <- which(ard$result_status == "manual_pending")[1]
+ard$stat[[i]]         <- 0.012            # the validated value
+ard$result_status[i]  <- "manual_filled"
+ard$value_source[i]   <- "manual"
+ard$derivation_ref[i] <- "programs/cmh_t1421.R"   # the program that produced it
+```
+
+`derivation_ref` is the audit trail: not “someone typed 0.012” but
+“value from `cmh_t1421.R`”. Before rendering, arsbridge checks every
+manual fill – [`ars_render_all()`](../reference/ars_render_all.md)
+raises a blocker for any `manual_filled` cell that has no
+`derivation_ref` or no value, so an untraceable number can never ship:
+
+``` r
+
+ars_validate_manual_fills(ard)   # zero rows = every manual fill is traceable
+```
+
+A filled cell then renders its value like any other; the design and the
+full phased rationale live in
+`adr/0002-partial-results-traceability.md`.
+
 ## What arsbridge will NOT do
 
 - Invent variable names from shell row labels or titles

@@ -45,6 +45,17 @@ calculations against ADaM datasets.
     auto-detecting treatment columns, row groups, and labels; rescaling
     percentages; and carrying titles and footnotes through. Closes the
     loop from annotated shell to final TLF.
+6.  **Partial Results with Intact Traceability**: A table that mixes
+    computable cells with statistics arsbridge cannot yet compute is
+    filled where it can and rendered with a `[‡ manual]` marker where it
+    cannot, instead of being rejected wholesale. Each reserved cell is a
+    keyed `manual_pending` row in the ARD; the analyst fills it from a
+    validated script and
+    [`ars_validate_manual_fills()`](reference/ars_validate_manual_fills.md)
+    blocks any untraceable value before render. Every value – computed
+    ([cards](https://github.com/insightsengineering/cards)/[cardx](https://github.com/insightsengineering/cardx)/base R)
+    or manual – carries provenance columns, so the whole table is
+    auditable.
 
 ------------------------------------------------------------------------
 
@@ -88,16 +99,37 @@ reader. Full detail in
 
 ### What arsbridge can and cannot build
 
-arsbridge builds **descriptive** outputs: summary statistics, counts and
-percentages, AE frequencies, subject counts, listings, and basic
-figures. **Inferential / model-based** tables (Cochran-Mantel-Haenszel,
-exact or Newcombe confidence intervals, p-values, odds / hazard ratios,
-regression, ANCOVA / MMRM, NRI imputation) have no
-[cards](https://github.com/insightsengineering/cards) equivalent.
-arsbridge **detects** these (LLM + keyword scan), raises a **blocker**,
-and – rather than coerce them into a meaningless count – emits a
-**numbered placeholder** in the final document so your table numbering
-still matches the shell exactly. Produce those tables manually.
+arsbridge builds **descriptive** outputs natively: summary statistics,
+counts and percentages, AE frequencies, subject counts, listings, and
+basic figures.
+
+A growing set of **inferential** statistics now compute too, through
+executable descriptors: an exact **Clopper-Pearson** confidence interval
+(via [cardx](https://github.com/insightsengineering/cardx)) and a
+stratified **Cochran-Mantel-Haenszel** p-value (base R). arsbridge
+detects these in the shell, classifies them to the right method, and
+builds them automatically when their operands are present (e.g. a CMH
+stratification variable); it falls back to a reserved cell when a
+prerequisite is missing
+([cardx](https://github.com/insightsengineering/cardx) not installed, no
+strata named).
+
+Statistics it still cannot compute – a **Newcombe** difference interval,
+odds / hazard ratios, regression, ANCOVA / MMRM, NRI imputation – are
+never coerced into a meaningless count. Instead arsbridge **reserves a
+keyed `manual_pending` cell** in the ARD, tied to its output, analysis,
+and method, and renders it as a loud `[‡ manual]` marker. So a mixed
+table is filled where arsbridge can and marked where it cannot – a
+**partial** table rather than an all-or-nothing reject. The analyst
+computes each reserved cell with a validated script and writes the value
+back into the ARD
+([`ars_manual_worklist()`](reference/ars_manual_worklist.md) lists what
+is outstanding;
+[`ars_validate_manual_fills()`](reference/ars_validate_manual_fills.md)
+blocks an untraceable value before render), so no number is ever an
+orphan typed into the final table. A table with no computable cell at
+all stays a numbered placeholder, so your table numbering always matches
+the shell. Full rationale in the ADRs under `adr/`.
 
 ------------------------------------------------------------------------
 
@@ -112,6 +144,17 @@ GitHub:
 devtools::install_github("tavakohr/arsbridge")
 ```
 
+For the executable inferential statistics (the exact Clopper-Pearson
+interval), also install the optional
+[cardx](https://github.com/insightsengineering/cardx). Without it, those
+cells degrade gracefully to reserved `manual_pending` placeholders
+rather than erroring.
+
+``` r
+
+install.packages("cardx")
+```
+
 ------------------------------------------------------------------------
 
 ## Step-by-Step Workflow & Function Guide
@@ -121,9 +164,9 @@ Here is the step-by-step use of the functions in
 
 ``` mermaid
 graph TD
-    A[Configure LLM API Keys] --> B[Generate ARS JSON & Validate Spec]
-    B --> C[Execute ARS to get Tidy ARD]
-    C --> D[Render Formatted TLF Table]
+    A["Configure LLM API keys"] --> B["Generate ARS JSON and validate spec"]
+    B --> C["Execute ARS into a tidy ARD (compute or reserve each cell)"]
+    C --> D["Render the formatted TLF table"]
 ```
 
 ### Step 1: Set Up and Check API Keys
@@ -337,14 +380,26 @@ counts (`dplyr::distinct(USUBJID, variable)`) before calling
 `MTH_SUBJECT_COUNT`
 $`\rightarrow`$[`cards::ard_total_n()`](https://insightsengineering.github.io/cards/latest-tag/reference/ard_total_n.html)
 or
-[`cards::ard_categorical()`](https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html).
+[`cards::ard_categorical()`](https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html). -
+`MTH_PROPORTION_CI_EXACT`
+$`\rightarrow`$[`arsbridge::ard_proportion_ci_exact()`](reference/ard_proportion_ci_exact.md)
+(wraps
+[`cardx::ard_categorical_ci()`](https://insightsengineering.github.io/cardx/latest-tag/reference/ard_categorical_ci.html);
+exact Clopper-Pearson interval). - `MTH_CMH_TEST`
+$`\rightarrow`$[`arsbridge::ard_cmh_test()`](reference/ard_cmh_test.md)
+(stratified Cochran-Mantel-Haenszel p-value; base R, needs a `strata`
+operand).
 
-Each computed row is injected with traceability metadata: `analysis_id`,
-`method_id`, and `output_id`.
+Each row carries traceability **and** provenance columns: `analysis_id`,
+`method_id`, `output_id`, plus `result_status` (`computed`,
+`manual_pending`, or `manual_filled`), `value_source` (`cards` / `cardx`
+/ `stats` / `manual`), and `derivation_ref`. A computed cell, a reserved
+cell, and a manually-filled cell are therefore all distinguishable and
+auditable in the ARD itself.
 
 ------------------------------------------------------------------------
 
-### Step 4: Rendering a Formatted TLF Table
+### Step 5: Rendering a Formatted TLF Table
 
 With the ARD in hand, [`ars_render_tlf()`](reference/ars_render_tlf.md)
 formats any ARS output into a publication-ready GT table – the final
@@ -379,6 +434,35 @@ specs <- ars_to_tfrmt_list("outputs/reporting_event.json", ard)
 all_tables <- lapply(names(specs), function(oid)
   ars_render_tlf("outputs/reporting_event.json", ard, oid))
 ```
+
+------------------------------------------------------------------------
+
+### Step 6: Handling Reserved (Manual) Cells
+
+A partial table leaves some cells as reserved `manual_pending` rows –
+statistics arsbridge could not compute (e.g. a Newcombe difference).
+List them, fill each from a validated analysis script, and validate
+before the table is final:
+
+``` r
+
+# What still needs a manual derivation?
+ars_manual_worklist(ard)
+
+# Fill a reserved cell in the ARD with a validated value + its source program
+i <- which(ard$result_status == "manual_pending")[1]
+ard$stat[[i]]         <- 0.012
+ard$result_status[i]  <- "manual_filled"
+ard$value_source[i]   <- "manual"
+ard$derivation_ref[i] <- "programs/cmh_t1421.R"
+
+# Block any manual value that has no derivation_ref before rendering
+ars_validate_manual_fills(ard)
+```
+
+[`ars_render_all()`](reference/ars_render_all.md) runs this check
+automatically and raises a blocker for any untraceable manual value, so
+it can never reach the final document.
 
 ------------------------------------------------------------------------
 

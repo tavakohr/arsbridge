@@ -59,7 +59,13 @@ ars_to_ard(
 A tidy ARD data frame of class `"card"`, with traceability columns
 `analysis_id`, `method_id`, `output_id`, `method_intended`, and
 `method_actual` (differs from `method_intended` when the generic
-fallback summarizer was used).
+fallback summarizer was used), plus provenance columns (ADR 0002):
+`result_status` (`"computed"` for engine output), `value_source`
+(`"cards"`), `derivation_ref` (the emitted block,
+`arsbridge:emitted:<id>`), `derived_by` (`"arsbridge"`), and
+`derived_dt` (run timestamp, ISO-8601; pin with
+`options(arsbridge.derived_dt=)`). These let a later partial / manual
+fill be distinguished from engine output without breaking traceability.
 
 ## Examples
 

@@ -11,8 +11,11 @@
 <url><loc>/authors.html</loc></url>
 <url><loc>/index.html</loc></url>
 <url><loc>/news/index.html</loc></url>
+<url><loc>/reference/ard_cmh_test.html</loc></url>
+<url><loc>/reference/ard_proportion_ci_exact.html</loc></url>
 <url><loc>/reference/ars_blockers.html</loc></url>
 <url><loc>/reference/ars_diagnostics.html</loc></url>
+<url><loc>/reference/ars_manual_worklist.html</loc></url>
 <url><loc>/reference/ars_render_all.html</loc></url>
 <url><loc>/reference/ars_render_figure.html</loc></url>
 <url><loc>/reference/ars_render_listing.html</loc></url>
@@ -20,6 +23,7 @@
 <url><loc>/reference/ars_to_ard.html</loc></url>
 <url><loc>/reference/ars_to_tfrmt.html</loc></url>
 <url><loc>/reference/ars_to_tfrmt_list.html</loc></url>
+<url><loc>/reference/ars_validate_manual_fills.html</loc></url>
 <url><loc>/reference/arsbridge-package.html</loc></url>
 <url><loc>/reference/arsbridge_example.html</loc></url>
 <url><loc>/reference/check_anthropic_key.html</loc></url>

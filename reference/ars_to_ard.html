@@ -103,7 +103,13 @@ engine-equivalence test and as a transitional escape hatch).</p></dd>
     <p>A tidy ARD data frame of class <code>"card"</code>, with traceability
 columns <code>analysis_id</code>, <code>method_id</code>, <code>output_id</code>, <code>method_intended</code>,
 and <code>method_actual</code> (differs from <code>method_intended</code> when the generic
-fallback summarizer was used).</p>
+fallback summarizer was used), plus provenance columns (ADR 0002):
+<code>result_status</code> (<code>"computed"</code> for engine output), <code>value_source</code>
+(<code>"cards"</code>), <code>derivation_ref</code> (the emitted block, <code>arsbridge:emitted:&lt;id&gt;</code>),
+<code>derived_by</code> (<code>"arsbridge"</code>), and <code>derived_dt</code> (run timestamp, ISO-8601;
+pin with <code>options(arsbridge.derived_dt=)</code>). These let a later partial /
+manual fill be distinguished from engine output without breaking
+traceability.</p>
     </div>
 
     <div class="section level2">
