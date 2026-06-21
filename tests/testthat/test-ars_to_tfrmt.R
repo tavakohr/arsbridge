@@ -204,7 +204,7 @@ test_that("a filled manual cell renders its value, not the marker (phase 5)", {
 
 test_that("Clopper-Pearson CI is computed via cardx, not reserved", {
   skip_if_not_installed("cards")
-  skip_if_not_installed("cardx")
+  skip_if_not(cardx_ci_works(), "cardx cannot compute a CI in this environment")
   fx <- .ci_fixture()
   ci <- fx$ard[fx$ard$method_id == "MTH_PROPORTION_CI_EXACT", , drop = FALSE]
   expect_gt(nrow(ci), 0)

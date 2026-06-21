@@ -166,7 +166,7 @@ test_that("a gated section with detectable methods builds executable analyses", 
 
 test_that("classified methods compute end-to-end (CI + CMH) from a gated section", {
   skip_if_not_installed("cards")
-  skip_if_not_installed("cardx")
+  skip_if_not(cardx_ci_works(), "cardx cannot compute a CI in this environment")
   adam_dir <- withr::local_tempdir()
   utils::write.csv(data.frame(
     USUBJID = sprintf("S%03d", 1:60),

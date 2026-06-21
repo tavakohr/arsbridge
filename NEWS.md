@@ -13,7 +13,7 @@
   unsupported at all -- it renders with the computed CI / CMH cells. An LLM
   enrichment can supersede the keyword layer later.
 * Second executable descriptor: Cochran-Mantel-Haenszel p-value (ADR 0001). New
-  exported `ard_cmh_test()` wraps base R's `stats::mantelhaen.test()` (cardx's
+  exported `ard_cmh_test()` wraps base R's `stats::mantelhaen.test()` (the cardx
   wrapper is not used) and returns the CMH p-value as a one-row ARD. When a
   `MTH_CMH_TEST` analysis carries a stratification operand (`strata` on the
   analysis, resolved against the data), arsbridge emits an
