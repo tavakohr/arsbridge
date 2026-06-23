@@ -217,3 +217,22 @@ test_that("Clopper-Pearson CI is computed via cardx, not reserved", {
   vals <- vapply(bounds$stat, function(x) as.numeric(x[[1]]), numeric(1))
   expect_true(all(vals >= 0 & vals <= 1))
 })
+
+test_that("ars_render_tlf writes docx and rtf files via flextable", {
+  skip_if_not_installed("flextable")
+  skip_if_not_installed("officer")
+  fx <- make_fixture()
+
+  docx <- tempfile(fileext = ".docx")
+  out_docx <- ars_render_tlf(fx$ars_path, fx$ard, fx$output_id,
+                             format = "docx", file = docx)
+  expect_equal(out_docx, docx)
+  expect_true(file.exists(docx))
+  expect_gt(file.info(docx)$size, 0)
+
+  rtf <- tempfile(fileext = ".rtf")
+  out_rtf <- ars_render_tlf(fx$ars_path, fx$ard, fx$output_id,
+                            format = "rtf", file = rtf)
+  expect_true(file.exists(rtf))
+  expect_gt(file.info(rtf)$size, 0)
+})

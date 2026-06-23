@@ -53,3 +53,33 @@ test_that("Layer 3 pattern detection sets confidence=high for full DATASET.VAR",
 test_that("parse_shell_docx aborts on missing file", {
   expect_error(parse_shell_docx("nonexistent.docx"), "not found")
 })
+
+test_that("parse_shell_docx walks the bundled annotated shell end to end", {
+  shell <- tryCatch(arsbridge_example("annotated_shell.docx"),
+                    error = function(e) "")
+  skip_if(!nzchar(shell) || !file.exists(shell), "bundled shell not available")
+
+  secs <- arsbridge:::parse_shell_docx(shell)
+  expect_type(secs, "list")
+  expect_gt(length(secs), 0)
+  # Every section carries a TLF number.
+  expect_true(all(vapply(secs, function(s) !is.null(s$tlf_number), logical(1))))
+  # Some sections have stub rows, and the deterministic detector annotated some.
+  expect_true(any(vapply(secs,
+    function(s) length(s$stub_rows) > 0, logical(1))))
+  any_annot <- any(vapply(secs, function(s)
+    any(vapply(s$stub_rows, function(r) isTRUE(r$has_annot), logical(1))),
+    logical(1)))
+  expect_true(any_annot)
+})
+
+test_that("parse_shell_docx validates listing headers against a spec lookup", {
+  shell <- tryCatch(arsbridge_example("annotated_shell.docx"),
+                    error = function(e) "")
+  skip_if(!nzchar(shell) || !file.exists(shell), "bundled shell not available")
+  # Exercise the spec_lookup branch of the column-header detector.
+  lookup <- list(ADSL.USUBJID = list(), ADAE.AEDECOD = list())
+  secs <- arsbridge:::parse_shell_docx(shell, spec_lookup = lookup)
+  expect_type(secs, "list")
+  expect_gt(length(secs), 0)
+})

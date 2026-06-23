@@ -1,0 +1,32 @@
+# Codecov configuration for arsbridge.
+# Keeps the coverage check informative rather than flaky: the project status
+# only fails on a real drop, and new code is held to a higher bar.
+
+coverage:
+  precision: 1
+  round: nearest
+  range: "70...90"
+  status:
+    project:
+      default:
+        # Compare against the previous coverage; a drop of more than ~1% fails,
+        # small fluctuations do not.
+        target: auto
+        threshold: 1%
+    patch:
+      default:
+        # New / changed lines in a PR should be well covered.
+        target: 80%
+        threshold: 5%
+
+# Files excluded from the coverage denominator: pure package metadata with no
+# executable logic. Everything else (including the rendering and LLM layers) is
+# kept in scope and tested.
+ignore:
+  - "R/arsbridge-package.R"
+  - "R/aaa_constants.R"
+
+comment:
+  layout: "reach, diff, files"
+  behavior: default
+  require_changes: false
