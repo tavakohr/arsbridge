@@ -69,3 +69,41 @@ test_that("ars_blockers is empty when there are no FAIL findings", {
   diag_add("parse_spec", "WARN", "just a warning", input = INPUT_SPEC)
   expect_equal(nrow(ars_blockers()), 0L)
 })
+
+# ---- error branches of the readers / writer (coverage) ---------------------
+
+test_that(".require_dir reports a missing directory cleanly", {
+  expect_error(.require_dir(tempfile("no_such_dir_"), "adam_dir", INPUT_DATA),
+               regexp = "not found")
+})
+
+test_that(".read_dataset returns NULL and records a FAIL on an unreadable file", {
+  diag_reset()
+  bad <- tempfile(fileext = ".xpt")
+  writeLines("this is not a SAS transport file", bad)
+  out <- .read_dataset(bad, "ADSL")
+  expect_null(out)
+  expect_true(any(diag_records()$severity == "FAIL"))
+})
+
+test_that(".read_docx aborts on a file that is not a real .docx", {
+  bad <- tempfile(fileext = ".docx")
+  writeLines("not a docx", bad)
+  expect_error(.read_docx(bad), regexp = "could not be opened")
+})
+
+test_that(".read_lines aborts on a missing file", {
+  expect_error(.read_lines(tempfile("missing_"), "prompt template"),
+               regexp = "Could not read")
+})
+
+test_that(".write_text aborts when the target folder does not exist", {
+  target <- file.path(tempfile("no_dir_"), "out.json")
+  expect_error(.write_text("x", target, "ARS JSON"), regexp = "Could not write")
+})
+
+test_that(".doc_label appends the basename when a path is given", {
+  expect_equal(.doc_label("ARS JSON", "/a/b/reporting_event.json"),
+               "ARS JSON 'reporting_event.json'")
+  expect_equal(.doc_label("ARS JSON", NULL), "ARS JSON")
+})
