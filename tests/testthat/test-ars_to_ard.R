@@ -333,3 +333,83 @@ test_that("MTH_CMH_TEST computes with a strata operand, reserves without one", {
   cmh2 <- ard2[ard2$method_id == "MTH_CMH_TEST", , drop = FALSE]
   expect_equal(unique(cmh2$result_status), "manual_pending")
 })
+
+# ---- edge-case branches (coverage) -----------------------------------------
+
+# Shared minimal ADSL + spec builder for the edge-case tests below.
+.edge_adam <- function(envir = parent.frame()) {
+  dir <- withr::local_tempdir(.local_envir = envir)
+  utils::write.csv(data.frame(
+    USUBJID = sprintf("S%02d", 1:6),
+    TRT01A  = rep(c("Drug A", "Placebo"), 3),
+    SAFFL   = "Y",
+    AGE     = c(45, 50, 55, 60, 65, 70),
+    EMPTYV  = NA,
+    stringsAsFactors = FALSE
+  ), file.path(dir, "ADSL.csv"), row.names = FALSE)
+  dir
+}
+.edge_spec <- function(method = "MTH_SUMMARY_STATISTICS_CONTINUOUS",
+                       variable = "AGE") {
+  grp <- list(list(order = 1, groupingId = "GF_TRT", resultsByGroup = TRUE))
+  list(
+    id = "S", name = "S", version = "1",
+    analysisSets = list(list(id = "AS_SAF", name = "Safety",
+      condition = list(dataset = "ADSL", variable = "SAFFL",
+                       comparator = "EQ", value = list("Y")))),
+    analysisGroupings = list(list(id = "GF_TRT", name = "TRT01A",
+      groupingVariable = list(dataset = "ADSL", variable = "TRT01A"))),
+    methods = list(list(id = method, name = method)),
+    analyses = list(list(id = "AN_E", methodId = method, analysisSetId = "AS_SAF",
+      analysisVariable = list(dataset = "ADSL", variable = variable),
+      orderedGroupings = grp)),
+    outputs = list(list(id = "T_E", name = "T-E",
+      referencedAnalysisIds = list("AN_E"))))
+}
+.edge_write <- function(spec) {
+  p <- tempfile("ars_", fileext = ".json")
+  writeLines(jsonlite::toJSON(spec, auto_unbox = TRUE, null = "null"), p)
+  p
+}
+
+test_that("an unknown method falls back to a data-driven summary", {
+  skip_if_not_installed("cards")
+  dir <- .edge_adam()
+  ard <- ars_to_ard(.edge_write(.edge_spec(method = "MTH_NONSTANDARD",
+                                           variable = "AGE")), dir)
+  expect_s3_class(ard, "card")
+  # Numeric variable -> continuous fallback, recorded in method_actual.
+  expect_equal(unique(ard$method_actual), "FALLBACK_CONTINUOUS")
+  expect_true("mean" %in% ard$stat_name)
+})
+
+test_that("a variable absent from the dataset is skipped with a FAIL diagnostic", {
+  skip_if_not_installed("cards")
+  dir <- .edge_adam()
+  ard <- ars_to_ard(.edge_write(.edge_spec(variable = "NOSUCHVAR")), dir)
+  expect_null(ard)                       # the only analysis produced nothing
+  diags <- ars_diagnostics()
+  expect_true(any(diags$severity == "FAIL"))
+})
+
+test_that("an all-missing variable is skipped with a WARN diagnostic", {
+  skip_if_not_installed("cards")
+  dir <- .edge_adam()
+  ard <- ars_to_ard(.edge_write(.edge_spec(variable = "EMPTYV")), dir)
+  expect_null(ard)
+  expect_true(any(ars_diagnostics()$severity == "WARN"))
+})
+
+test_that("an output id that matches nothing aborts with the available ids", {
+  skip_if_not_installed("cards")
+  dir <- .edge_adam()
+  expect_error(
+    ars_to_ard(.edge_write(.edge_spec()), dir, output_ids = "DOES_NOT_EXIST"),
+    regexp = "matched")
+})
+
+test_that("ars_to_ard errors when the ADaM directory is missing", {
+  expect_error(
+    ars_to_ard(.edge_write(.edge_spec()), tempfile("no_dir_")),
+    regexp = "dir|exist|found")
+})

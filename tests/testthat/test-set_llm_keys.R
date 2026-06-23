@@ -55,3 +55,47 @@ test_that("get_active_llm and set functions work correctly", {
   # Check show_active_llm works without error
   show_active_llm()
 })
+
+test_that("set_*_key sets the session env var and leaves files unchanged", {
+  withr::local_envvar(c(OPENAI_API_KEY = NA, GEMINI_API_KEY = NA,
+                        ANTHROPIC_API_KEY = NA, GLM_API_KEY = NA))
+  # Non-interactive: sets the session var, does not touch .Renviron.
+  expect_message(set_openai_key("sk-openai-abc123"), "current R session")
+  expect_equal(Sys.getenv("OPENAI_API_KEY"), "sk-openai-abc123")
+
+  set_gemini_key("gemini-xyz")
+  expect_equal(Sys.getenv("GEMINI_API_KEY"), "gemini-xyz")
+
+  # Generic setter for a registry provider with no dedicated wrapper.
+  set_llm_key("glm", "glm-key-123")
+  expect_equal(Sys.getenv("GLM_API_KEY"), "glm-key-123")
+})
+
+test_that("check_anthropic_key reflects whether the key is set", {
+  withr::local_envvar(c(ANTHROPIC_API_KEY = "sk-ant-abcdef1234"))
+  expect_true(check_anthropic_key())
+  withr::local_envvar(c(ANTHROPIC_API_KEY = NA))
+  expect_false(check_anthropic_key())
+})
+
+test_that("an empty key errors and a wrong prefix warns", {
+  withr::local_envvar(c(ANTHROPIC_API_KEY = NA))
+  expect_error(set_anthropic_key("   "), regexp = "[Ee]mpty")
+  expect_warning(set_anthropic_key("not-a-real-prefix-key"),
+                 regexp = "does not start with")
+})
+
+test_that("a NULL key in a non-interactive session is a clear error", {
+  # Tests run non-interactively, so the prompt path aborts with guidance.
+  expect_error(set_openai_key(NULL), regexp = "non-interactive")
+})
+
+test_that(".write_key_to_renviron_generic writes and de-duplicates the var", {
+  path <- withr::local_tempfile()
+  writeLines(c("OTHER=keep", "OPENAI_API_KEY=old"), path)
+  arsbridge:::.write_key_to_renviron_generic("OPENAI_API_KEY", "new", path)
+  lines <- readLines(path)
+  expect_true("OTHER=keep" %in% lines)          # unrelated line preserved
+  expect_equal(sum(grepl("^OPENAI_API_KEY=", lines)), 1L)  # de-duplicated
+  expect_true("OPENAI_API_KEY=new" %in% lines)  # updated value
+})
