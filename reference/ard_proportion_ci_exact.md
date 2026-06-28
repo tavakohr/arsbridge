@@ -43,7 +43,7 @@ A `{cards}` ARD of `conf.low` / `conf.high` rows per group level.
 
 ## See also
 
-[`ars_to_ard()`](ars_to_ard.md)
+[`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)
 
 ## Examples
 

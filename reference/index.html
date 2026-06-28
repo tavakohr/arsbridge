@@ -3,7 +3,7 @@
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
-    <nav class="navbar navbar-expand-lg fixed-top bg-light" data-bs-theme="light" aria-label="Site navigation"><div class="container">
+    <nav class="navbar navbar-expand-lg fixed-top bg-primary" data-bs-theme="dark" aria-label="Site navigation"><div class="container">
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
@@ -15,12 +15,13 @@
     </button>
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
-      <ul class="navbar-nav me-auto"><li class="active nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
+      <ul class="navbar-nav me-auto"><li class="nav-item"><a class="nav-link" href="../articles/getting-started.html">Get started</a></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
-  <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/reading-engine.html">How arsbridge reads an annotated shell</a></li>
-    <li><a class="dropdown-item" href="../articles/getting-started.html">Getting started with arsbridge</a></li>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/getting-started.html">Getting started</a></li>
+    <li><a class="dropdown-item" href="../articles/reading-engine.html">How arsbridge reads the shell</a></li>
   </ul></li>
+<li class="active nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="../search.json"></form></li>
@@ -39,7 +40,7 @@
     <div class="section level2">
       <h2 id="pipeline">Pipeline<a class="anchor" aria-label="anchor" href="#pipeline"></a></h2>
 
-      <div class="section-desc"><p>Convert an annotated shell + ADaM spec to ARS, ARD, and formatted TLFs.</p></div>
+      <div class="section-desc"><p>The end-to-end pipeline: annotated shell and ADaM spec in, formatted clinical table out.</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -109,9 +110,9 @@
         </dt>
         <dd>Render an ARS figure output to a ggplot</dd>
       </dl></div><div class="section level2">
-      <h2 id="inferential-statistics-partial-results">Inferential statistics &amp; partial results<a class="anchor" aria-label="anchor" href="#inferential-statistics-partial-results"></a></h2>
+      <h2 id="inferential-statistics-and-partial-results">Inferential statistics and partial results<a class="anchor" aria-label="anchor" href="#inferential-statistics-and-partial-results"></a></h2>
 
-      <div class="section-desc"><p>Executable descriptors for inferential statistics, and the manual-fill round-trip for cells arsbridge cannot yet compute.</p></div>
+      <div class="section-desc"><p>Executable descriptors for inferential statistics, and the manual-fill round-trip for cells arsbridge cannot yet compute automatically.</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -148,7 +149,7 @@
       </dl></div><div class="section level2">
       <h2 id="diagnostics">Diagnostics<a class="anchor" aria-label="anchor" href="#diagnostics"></a></h2>
 
-      <div class="section-desc"><p>Plain-English findings that point at the input document to fix.</p></div>
+      <div class="section-desc"><p>Plain-English findings that point at the exact location in the input document to fix.</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -171,7 +172,7 @@
       </dl></div><div class="section level2">
       <h2 id="llm-providers">LLM providers<a class="anchor" aria-label="anchor" href="#llm-providers"></a></h2>
 
-      <div class="section-desc"><p>Configure and select the LLM that reads variant shells.</p></div>
+      <div class="section-desc"><p>Configure and select the LLM that reads variant shell layouts and enriches ARS metadata.</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -229,7 +230,7 @@
       </dl></div><div class="section level2">
       <h2 id="examples">Examples<a class="anchor" aria-label="anchor" href="#examples"></a></h2>
 
-
+      <div class="section-desc"><p>Access the bundled APX-DRM-301 study files for offline testing.</p></div>
 
       <dl></dl></div><div class="section level2">
 

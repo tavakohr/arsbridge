@@ -4,7 +4,8 @@ Checks the manual fills in an ARD (ADR 0002 phase 5). A cell whose
 `result_status` was set to `"manual_filled"` must carry both a value
 (`stat`) and a `derivation_ref` – the path/id of the validated program
 that produced it. A manual value with no derivation reference is
-untraceable and must never ship; [`ars_render_all()`](ars_render_all.md)
+untraceable and must never ship;
+[`ars_render_all()`](https://tavakohr.github.io/arsbridge/reference/ars_render_all.md)
 surfaces any offending row as a blocker diagnostic before rendering. Run
 it yourself on a filled ARD to clear the worklist.
 
@@ -20,7 +21,8 @@ ars_validate_manual_fills(ard)
 
   An ARD data frame (class `"card"`), typically one whose
   `manual_pending` cells (see
-  [`ars_manual_worklist()`](ars_manual_worklist.md)) have been filled.
+  [`ars_manual_worklist()`](https://tavakohr.github.io/arsbridge/reference/ars_manual_worklist.md))
+  have been filled.
 
 ## Value
 
@@ -30,7 +32,7 @@ when every manual fill is traceable.
 
 ## See also
 
-[`ars_manual_worklist()`](ars_manual_worklist.md)
+[`ars_manual_worklist()`](https://tavakohr.github.io/arsbridge/reference/ars_manual_worklist.md)
 
 ## Examples
 

@@ -11,19 +11,21 @@
   method (a Clopper-Pearson CI; a CMH p-value when “stratified by
   `” names a strata variable) is appended as its own analysis with operands. Only the residual indicators it still cannot compute (e.g. a Newcombe difference) are reserved as ``manual_pending`` and named on the placeholder. With no residual, the table is no longer flagged unsupported at all – it renders with the computed CI / CMH cells. An LLM enrichment can supersede the keyword layer later.`
 - Second executable descriptor: Cochran-Mantel-Haenszel p-value (ADR
-  0001). New exported [`ard_cmh_test()`](../reference/ard_cmh_test.md)
+  0001). New exported
+  [`ard_cmh_test()`](https://tavakohr.github.io/arsbridge/reference/ard_cmh_test.md)
   wraps base R’s
   [`stats::mantelhaen.test()`](https://rdrr.io/r/stats/mantelhaen.test.html)
   (the cardx wrapper is not used) and returns the CMH p-value as a
   one-row ARD. When a `MTH_CMH_TEST` analysis carries a stratification
   operand (`strata` on the analysis, resolved against the data),
   arsbridge emits an
-  [`arsbridge::ard_cmh_test()`](../reference/ard_cmh_test.md) call and
-  computes the p-value (`value_source = "stats"`); with no resolvable
-  strata it degrades to a `manual_pending` stub. The executable-method
-  registry is now general (`.EXEC_DESCRIPTORS`: a `value_source` plus an
-  `available(res)` predicate per method), replacing the cardx-only flag.
-  `resolve_analysis()` carries the new `strata` operand.
+  [`arsbridge::ard_cmh_test()`](https://tavakohr.github.io/arsbridge/reference/ard_cmh_test.md)
+  call and computes the p-value (`value_source = "stats"`); with no
+  resolvable strata it degrades to a `manual_pending` stub. The
+  executable-method registry is now general (`.EXEC_DESCRIPTORS`: a
+  `value_source` plus an `available(res)` predicate per method),
+  replacing the cardx-only flag. `resolve_analysis()` carries the new
+  `strata` operand.
 - First executable descriptor: exact (Clopper-Pearson) binomial CI (ADR
   0001). When [cardx](https://github.com/insightsengineering/cardx) is
   installed, the `MTH_PROPORTION_CI_EXACT` method is no longer reserved
@@ -44,12 +46,14 @@
   writes the value back into the ARD row (`stat`,
   `result_status = "manual_filled"`, `value_source`, `derivation_ref`) –
   the ARD is a diffable, auditable data frame. New
-  [`ars_validate_manual_fills()`](../reference/ars_validate_manual_fills.md)
+  [`ars_validate_manual_fills()`](https://tavakohr.github.io/arsbridge/reference/ars_validate_manual_fills.md)
   flags any `manual_filled` cell that has no `derivation_ref` or no
-  value; [`ars_render_all()`](../reference/ars_render_all.md) raises
-  each as a blocker before rendering, so an untraceable manual number
-  can never ship. A filled cell then renders its value like any other.
-  See [`vignette("getting-started")`](../articles/getting-started.md)
+  value;
+  [`ars_render_all()`](https://tavakohr.github.io/arsbridge/reference/ars_render_all.md)
+  raises each as a blocker before rendering, so an untraceable manual
+  number can never ship. A filled cell then renders its value like any
+  other. See
+  [`vignette("getting-started")`](https://tavakohr.github.io/arsbridge/articles/getting-started.md)
   for the round-trip. ADR 0002 is now fully implemented (phases 1-5).
 - Partial table rendering (ADR 0002, phase 4). An output that arsbridge
   can compute only in part now renders: the computable cells are filled
@@ -60,20 +64,21 @@
   render manifest flags a partial table as
   `partial -- manual cells reserved`.
 - Partial-results traceability (ADR 0002, phases 1-3).
-  [`ars_to_ard()`](../reference/ars_to_ard.md) now stamps every row with
-  provenance columns (`result_status`, `value_source`, `derivation_ref`,
-  `derived_by`, `derived_dt`). A declared-but-unexecutable method
-  (e.g. `MTH_CMH_TEST` – a statistic describable in the ARS but with no
+  [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)
+  now stamps every row with provenance columns (`result_status`,
+  `value_source`, `derivation_ref`, `derived_by`, `derived_dt`). A
+  declared-but-unexecutable method (e.g. `MTH_CMH_TEST` – a statistic
+  describable in the ARS but with no
   [cards](https://github.com/insightsengineering/cards)/[cardx](https://github.com/insightsengineering/cardx)
   executor) no longer skips or coerces the analysis: it reserves keyed
   `manual_pending` stub ARD rows (`stat = NA`) so the table cell keeps a
   slot tied to its analysis/method/output. A later validated manual
   computation fills that slot rather than typing an orphan value into
   the rendered output. New
-  [`ars_manual_worklist()`](../reference/ars_manual_worklist.md) lists
-  every pending cell as the analyst’s checklist. The capability gate no
-  longer strips analyses from a gated table: the ARS keeps the analysis
-  and a declarative `MTH_UNSUPPORTED_ANALYSIS` method (flagged
+  [`ars_manual_worklist()`](https://tavakohr.github.io/arsbridge/reference/ars_manual_worklist.md)
+  lists every pending cell as the analyst’s checklist. The capability
+  gate no longer strips analyses from a gated table: the ARS keeps the
+  analysis and a declarative `MTH_UNSUPPORTED_ANALYSIS` method (flagged
   `supported = FALSE` with the capability reason), so the Output -\>
   Analysis -\> Method chain is intact and the engine reserves a stub
   cell for it. The renderer still emits a numbered placeholder until
@@ -105,27 +110,30 @@
   out-of-spec proposals are rejected and logged as blockers, never
   shipped. With no API key the reader degrades to the deterministic
   pass. See
-  [`vignette("reading-engine")`](../articles/reading-engine.md).
+  [`vignette("reading-engine")`](https://tavakohr.github.io/arsbridge/articles/reading-engine.md).
 - Provider registry (`R/llm_providers.R`): Anthropic, OpenAI, Gemini,
   and OpenAI-compatible providers such as GLM are defined in one place.
   Adding a provider is a single entry. New generic
-  [`set_llm_key()`](../reference/set_llm_key.md) setter; select the
-  active provider with `ARS_LLM_PROVIDER`.
-- [`spec_to_ars()`](../reference/spec_to_ars.md): parse an annotated TLF
-  shell `.docx` plus an ADaM specification (`define.xml` or Excel) into
-  CDISC Analysis Results Standard (ARS) v1.0 JSON.
-- [`ars_to_ard()`](../reference/ars_to_ard.md): execute an ARS JSON
-  natively into a tidy Analysis Results Data (ARD) object via
-  [cards](https://github.com/insightsengineering/cards), applying
-  `analysisSets` and `dataSubsets` filters against `.xpt` / `.csv`
-  datasets.
-- [`ars_render_tlf()`](../reference/ars_render_tlf.md),
-  [`ars_render_all()`](../reference/ars_render_all.md),
-  [`ars_to_tfrmt()`](../reference/ars_to_tfrmt.md): render ARS outputs
-  to publication-ready GT and Word tables via
+  [`set_llm_key()`](https://tavakohr.github.io/arsbridge/reference/set_llm_key.md)
+  setter; select the active provider with `ARS_LLM_PROVIDER`.
+- [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md):
+  parse an annotated TLF shell `.docx` plus an ADaM specification
+  (`define.xml` or Excel) into CDISC Analysis Results Standard (ARS)
+  v1.0 JSON.
+- [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md):
+  execute an ARS JSON natively into a tidy Analysis Results Data (ARD)
+  object via [cards](https://github.com/insightsengineering/cards),
+  applying `analysisSets` and `dataSubsets` filters against `.xpt` /
+  `.csv` datasets.
+- [`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md),
+  [`ars_render_all()`](https://tavakohr.github.io/arsbridge/reference/ars_render_all.md),
+  [`ars_to_tfrmt()`](https://tavakohr.github.io/arsbridge/reference/ars_to_tfrmt.md):
+  render ARS outputs to publication-ready GT and Word tables via
   [tfrmt](https://GSK-Biostatistics.github.io/tfrmt/).
 - Multi-provider LLM enrichment (Anthropic, OpenAI, Gemini) with a
   keyword-heuristic fallback so the pipeline runs without an API key.
-- [`ars_diagnostics()`](../reference/ars_diagnostics.md) /
-  [`ars_blockers()`](../reference/ars_blockers.md): plain-English
-  diagnostics that point the user at the input document to fix.
+- [`ars_diagnostics()`](https://tavakohr.github.io/arsbridge/reference/ars_diagnostics.md)
+  /
+  [`ars_blockers()`](https://tavakohr.github.io/arsbridge/reference/ars_blockers.md):
+  plain-English diagnostics that point the user at the input document to
+  fix.

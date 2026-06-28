@@ -94,5 +94,5 @@ Supported `type`s:
 
 ## See also
 
-[`ars_render_tlf()`](ars_render_tlf.md),
-[`ars_render_listing()`](ars_render_listing.md)
+[`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md),
+[`ars_render_listing()`](https://tavakohr.github.io/arsbridge/reference/ars_render_listing.md)

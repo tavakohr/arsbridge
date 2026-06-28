@@ -1,10 +1,10 @@
 # Set your Anthropic API key for arsbridge
 
 Sets `ANTHROPIC_API_KEY` for the current R session so you can call
-[`spec_to_ars()`](spec_to_ars.md) immediately. In an interactive session
-you are then asked whether to also persist it to your `.Renviron` (so it
-loads automatically in future sessions); no file is written without that
-confirmation.
+[`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
+immediately. In an interactive session you are then asked whether to
+also persist it to your `.Renviron` (so it loads automatically in future
+sessions); no file is written without that confirmation.
 
 ## Usage
 

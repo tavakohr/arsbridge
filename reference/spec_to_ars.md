@@ -114,7 +114,8 @@ spec_to_ars(
   Directory for the emitted per-TLF pure-`{cards}` `.R` deliverables.
   When `NULL` (default) a `code/` folder next to `output_path` is used.
   These scripts are both the human-readable deliverable and the engine
-  [`ars_to_ard()`](ars_to_ard.md) sources to build the ARD.
+  [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)
+  sources to build the ARD.
 
 - adam_dir:
 
@@ -176,7 +177,7 @@ Invisibly returns a named list:
   condition recorded during the run (`stage`, `severity`, `tlf_number`,
   `location`, `problem`, `action`). Also written to the "Diagnostics"
   sheet of the validation report and retrievable via
-  [`ars_diagnostics()`](ars_diagnostics.md).
+  [`ars_diagnostics()`](https://tavakohr.github.io/arsbridge/reference/ars_diagnostics.md).
 
 ## Human review
 

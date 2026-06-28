@@ -17,11 +17,12 @@ ars_to_tfrmt_list(ars_path, ard)
 - ars_path:
 
   Path to the CDISC ARS v1.0 JSON (output of
-  [`spec_to_ars()`](spec_to_ars.md)).
+  [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)).
 
 - ard:
 
-  Tidy ARD data frame (output of [`ars_to_ard()`](ars_to_ard.md)).
+  Tidy ARD data frame (output of
+  [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)).
 
 ## Value
 
@@ -31,5 +32,5 @@ objects (or `NULL` per skipped output), keyed by output id.
 
 ## See also
 
-[`ars_to_tfrmt()`](ars_to_tfrmt.md),
-[`ars_render_tlf()`](ars_render_tlf.md)
+[`ars_to_tfrmt()`](https://tavakohr.github.io/arsbridge/reference/ars_to_tfrmt.md),
+[`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md)

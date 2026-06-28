@@ -2,9 +2,10 @@
 
 Convenience wrapper: builds the
 [`tfrmt::tfrmt()`](https://gsk-biostatistics.github.io/tfrmt/reference/tfrmt.html)
-spec with [`ars_to_tfrmt()`](ars_to_tfrmt.md), flattens and rescales the
-ARD, renders to a GT table, and attaches any ARS footnotes as GT source
-notes.
+spec with
+[`ars_to_tfrmt()`](https://tavakohr.github.io/arsbridge/reference/ars_to_tfrmt.md),
+flattens and rescales the ARD, renders to a GT table, and attaches any
+ARS footnotes as GT source notes.
 
 ## Usage
 
@@ -25,11 +26,12 @@ ars_render_tlf(
 - ars_path:
 
   Path to the CDISC ARS v1.0 JSON (output of
-  [`spec_to_ars()`](spec_to_ars.md)).
+  [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)).
 
 - ard:
 
-  Tidy ARD data frame (output of [`ars_to_ard()`](ars_to_ard.md)).
+  Tidy ARD data frame (output of
+  [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)).
 
 - output_id:
 
@@ -53,8 +55,9 @@ ars_render_tlf(
 
 - ...:
 
-  Passed to [`ars_to_tfrmt()`](ars_to_tfrmt.md) (e.g. `col_var`,
-  `label_var`).
+  Passed to
+  [`ars_to_tfrmt()`](https://tavakohr.github.io/arsbridge/reference/ars_to_tfrmt.md)
+  (e.g. `col_var`, `label_var`).
 
 ## Value
 
@@ -63,8 +66,8 @@ invisibly.
 
 ## See also
 
-[`ars_to_tfrmt()`](ars_to_tfrmt.md),
-[`ars_render_all()`](ars_render_all.md)
+[`ars_to_tfrmt()`](https://tavakohr.github.io/arsbridge/reference/ars_to_tfrmt.md),
+[`ars_render_all()`](https://tavakohr.github.io/arsbridge/reference/ars_render_all.md)
 
 ## Examples
 

@@ -16,7 +16,7 @@
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
-    <nav class="navbar navbar-expand-lg fixed-top bg-light" data-bs-theme="light" aria-label="Site navigation"><div class="container">
+    <nav class="navbar navbar-expand-lg fixed-top bg-primary" data-bs-theme="dark" aria-label="Site navigation"><div class="container">
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
@@ -29,14 +29,15 @@
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto">
-<li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
-<li class="active nav-item dropdown">
+<li class="active nav-item"><a class="nav-link" href="../articles/getting-started.html">Get started</a></li>
+<li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
-<li><a class="dropdown-item" href="../articles/reading-engine.html">How arsbridge reads an annotated shell</a></li>
-    <li><a class="dropdown-item" href="../articles/getting-started.html">Getting started with arsbridge</a></li>
+<li><a class="dropdown-item" href="../articles/getting-started.html">Getting started</a></li>
+    <li><a class="dropdown-item" href="../articles/reading-engine.html">How arsbridge reads the shell</a></li>
   </ul>
 </li>
+<li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul>
 <ul class="navbar-nav">
@@ -67,74 +68,110 @@
     
     
 <div class="section level2">
-<h2 id="what-arsbridge-does">What <code>arsbridge</code> does<a class="anchor" aria-label="anchor" href="#what-arsbridge-does"></a>
+<h2 id="what-arsbridge-does">What arsbridge does<a class="anchor" aria-label="anchor" href="#what-arsbridge-does"></a>
 </h2>
-<p><code>arsbridge</code> reads a lead programmer’s already-annotated
-TLF shell Word document plus the study’s ADaM specification, and
-produces a CDISC Analysis Results Standard (ARS) v1.0 ARM-TS JSON file.
-That JSON is consumed downstream by <a href="https://pharmaverse.github.io/siera/" class="external-link"><code>siera::readARS()</code></a>
-to generate the R analysis code that produces the actual TLFs.</p>
-<p><strong>Core principle:</strong> the package extracts and converts –
-it does not invent. The shell is read by a deterministic regex detector
+<p><code>arsbridge</code> reads a lead programmer’s annotated TLF shell
+Word document together with the study’s ADaM specification, and produces
+a CDISC Analysis Results Standard (ARS) v1.0 JSON file. That JSON drives
+the rest of the pipeline: it executes against real ADaM datasets using
+<a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> to produce a tidy ARD, then renders to a formatted
+GT clinical table with no manual formatting step.</p>
+<p><strong>The core principle:</strong> arsbridge extracts and converts.
+It does not invent. The shell is read by a deterministic regex detector
 <em>and</em> an LLM primary reader together, to capture as many
-annotation variants as possible; but every LLM-proposed variable is
-gated against the ADaM spec, so a variable absent from the spec is
+annotation variants as possible. Every LLM-proposed variable is then
+checked against the ADaM spec, so a variable absent from the spec is
 rejected and logged, never shipped. Every variable in the ARS output
-traces back to a real annotation grounded in the spec. For the full
-reading process see <code><a href="../articles/reading-engine.html">vignette("reading-engine")</a></code>.</p>
+traces back to a real annotation grounded in the spec.</p>
+<p>For the full reading-engine detail, see
+<code><a href="../articles/reading-engine.html">vignette("reading-engine")</a></code>.</p>
+<hr>
 </div>
 <div class="section level2">
 <h2 id="prerequisites">Prerequisites<a class="anchor" aria-label="anchor" href="#prerequisites"></a>
 </h2>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"arsbridge"</span><span class="op">)</span>            <span class="co"># or devtools::install_github(...)</span></span>
+<code class="sourceCode R"><span><span class="co"># Install from GitHub</span></span>
+<span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">install_github</span><span class="op">(</span><span class="st">"tavakohr/arsbridge"</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># One-time API key setup (interactive prompt)</span></span>
+<span><span class="co"># One-time API key setup (interactive prompt; hides input when {askpass} is installed)</span></span>
 <span><span class="fu">arsbridge</span><span class="fu">::</span><span class="fu"><a href="../reference/set_anthropic_key.html">set_anthropic_key</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="fu">arsbridge</span><span class="fu">::</span><span class="fu"><a href="../reference/check_anthropic_key.html">check_anthropic_key</a></span><span class="op">(</span><span class="op">)</span>         <span class="co"># confirm</span></span></code></pre></div>
+<span><span class="fu">arsbridge</span><span class="fu">::</span><span class="fu"><a href="../reference/check_anthropic_key.html">check_anthropic_key</a></span><span class="op">(</span><span class="op">)</span>   <span class="co"># confirm the key loaded</span></span></code></pre></div>
 <p><code>arsbridge</code> calls Claude once per TLF section for light
-semantic enrichment (analysis type, method name, row role). All variable
-names come from the shell annotations – never the LLM.</p>
+semantic enrichment: analysis type, method name, and row role. All
+variable names come from the shell annotations, never from the LLM.</p>
+<hr>
 </div>
 <div class="section level2">
 <h2 id="the-fastest-path-spec_to_ars_example">The fastest path: <code>spec_to_ars_example()</code><a class="anchor" aria-label="anchor" href="#the-fastest-path-spec_to_ars_example"></a>
 </h2>
-<p>The package ships with a small bundled training example, so you can
-run the entire pipeline before you own a study:</p>
+<p>The package ships with a small bundled training example so you can
+run the entire pipeline before you own a study. This is the best way to
+get a feel for the output and the validation report.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/tavakohr/arsbridge" class="external-link">arsbridge</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/spec_to_ars_example.html">spec_to_ars_example</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co"># ARS JSON and validation report land in tempdir(); paths are in res.</span></span>
-<span><span class="va">res</span><span class="op">$</span><span class="va">n_tlfs</span>        <span class="co"># 40</span></span>
-<span><span class="va">res</span><span class="op">$</span><span class="va">n_analyses</span>    <span class="co"># ~226</span></span>
-<span><span class="va">res</span><span class="op">$</span><span class="va">n_warnings</span>    <span class="co"># ~29</span></span></code></pre></div>
-<p>Takes about six minutes (40 LLM calls).</p>
+<span><span class="va">res</span><span class="op">$</span><span class="va">n_tlfs</span>        <span class="co"># 40 TLF shells</span></span>
+<span><span class="va">res</span><span class="op">$</span><span class="va">n_analyses</span>    <span class="co"># ~226 analyses</span></span>
+<span><span class="va">res</span><span class="op">$</span><span class="va">n_warnings</span>    <span class="co"># ~29 warnings to review</span></span></code></pre></div>
+<p>Takes about six minutes (40 LLM calls, one per TLF section).</p>
+<hr>
 </div>
 <div class="section level2">
 <h2 id="inspecting-the-result">Inspecting the result<a class="anchor" aria-label="anchor" href="#inspecting-the-result"></a>
 </h2>
+<p>Once <code><a href="../reference/spec_to_ars_example.html">spec_to_ars_example()</a></code> finishes, you have a
+structured <code>reporting_event</code> object and a row-level
+validation report.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Top-level shape of the ARS ReportingEvent</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/str.html" class="external-link">str</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">reporting_event</span>, max.level <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Validation findings -- one row per annotation</span></span>
+<span><span class="co"># Validation findings: one row per annotation</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/table.html" class="external-link">table</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">validation</span><span class="op">$</span><span class="va">status</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/subset.html" class="external-link">subset</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">validation</span>, <span class="va">status</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"WARN"</span>, <span class="st">"FAIL"</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># One output, end to end</span></span>
+<span><span class="co"># Drill into one output</span></span>
 <span><span class="va">out</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/funprog.html" class="external-link">Filter</a></span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">o</span><span class="op">)</span> <span class="va">o</span><span class="op">$</span><span class="va">name</span> <span class="op">==</span> <span class="st">"T-14-1-2"</span>,</span>
 <span>              <span class="va">res</span><span class="op">$</span><span class="va">reporting_event</span><span class="op">$</span><span class="va">outputs</span><span class="op">)</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">out</span><span class="op">$</span><span class="va">referencedAnalysisIds</span><span class="op">)</span></span></code></pre></div>
+<p>The <strong>PASS / WARN / FAIL</strong> stamps tell you:</p>
+<table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
+<thead><tr class="header">
+<th>Status</th>
+<th>Meaning</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td><strong>PASS</strong></td>
+<td>Variable found in ADaM spec; annotation is clean.</td>
+</tr>
+<tr class="even">
+<td><strong>WARN</strong></td>
+<td>Regex and LLM disagree; human review recommended.</td>
+</tr>
+<tr class="odd">
+<td><strong>FAIL</strong></td>
+<td>Variable not found in ADaM spec; will be rejected as a blocker.</td>
+</tr>
+</tbody>
+</table>
+<hr>
 </div>
 <div class="section level2">
 <h2 id="from-ars-to-a-formatted-clinical-table">From ARS to a formatted clinical table<a class="anchor" aria-label="anchor" href="#from-ars-to-a-formatted-clinical-table"></a>
 </h2>
-<p>The ARS JSON plus the study ADaM data closes the loop:
-<code><a href="../reference/ars_to_ard.html">ars_to_ard()</a></code> executes the analyses into a tidy ARD
-(<a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> format), and <code><a href="../reference/ars_render_tlf.html">ars_render_tlf()</a></code> formats
-any output into a publication-ready GT table – no manual formatting
-step.</p>
+<p>With a valid ARS JSON in hand, two more functions close the loop.</p>
+<p><code><a href="../reference/ars_to_ard.html">ars_to_ard()</a></code> executes the ARS against ADaM datasets and
+returns a tidy ARD in <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> format.
+<code><a href="../reference/ars_render_tlf.html">ars_render_tlf()</a></code> then formats any output from that ARD into
+a publication-ready GT table, with no manual formatting step.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Unzip the bundled simulated ADaM data</span></span>
 <span><span class="va">adam_dir</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"ADaM"</span><span class="op">)</span></span>
@@ -142,15 +179,15 @@ step.</p>
 <span></span>
 <span><span class="co"># Execute the ARS specification into a tidy ARD</span></span>
 <span><span class="va">ard</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/ars_to_ard.html">ars_to_ard</a></span><span class="op">(</span></span>
-<span>  ars_path <span class="op">=</span> <span class="st">"outputs/reporting_event.json"</span>,</span>
+<span>  ars_path <span class="op">=</span> <span class="va">res</span><span class="op">$</span><span class="va">ars_path</span>,</span>
 <span>  adam_dir <span class="op">=</span> <span class="va">adam_dir</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Render one output straight to a formatted GT clinical table</span></span>
+<span><span class="co"># Render the Subject Disposition table (T_14_1_1) as a GT clinical table</span></span>
 <span><span class="va">gt_table</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/ars_render_tlf.html">ars_render_tlf</a></span><span class="op">(</span></span>
-<span>  ars_path  <span class="op">=</span> <span class="st">"outputs/reporting_event.json"</span>,</span>
+<span>  ars_path  <span class="op">=</span> <span class="va">res</span><span class="op">$</span><span class="va">ars_path</span>,</span>
 <span>  ard       <span class="op">=</span> <span class="va">ard</span>,</span>
-<span>  output_id <span class="op">=</span> <span class="st">"T_14_1_1"</span>      <span class="co"># Subject Disposition</span></span>
+<span>  output_id <span class="op">=</span> <span class="st">"T_14_1_1"</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">gt_table</span></span></code></pre></div>
@@ -159,20 +196,24 @@ groups, and row labels from the ARD; rescales <a href="https://github.com/insigh
 proportions to percentages; lays continuous summaries out as
 <code>Mean (SD)</code> / <code>Median</code> / <code>(Min, Max)</code>
 rows; and carries ARS footnotes through as GT source notes.</p>
-<p>To build the <code>tfrmt</code> spec without rendering – so you can
-tweak it before printing – use <code><a href="../reference/ars_to_tfrmt.html">ars_to_tfrmt()</a></code>. To get one
-spec per output at once, use <code><a href="../reference/ars_to_tfrmt_list.html">ars_to_tfrmt_list()</a></code>:</p>
+<p>To inspect or customise the underlying <a href="https://GSK-Biostatistics.github.io/tfrmt/" class="external-link">tfrmt</a> spec
+before printing:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">specs</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/ars_to_tfrmt_list.html">ars_to_tfrmt_list</a></span><span class="op">(</span><span class="st">"outputs/reporting_event.json"</span>, <span class="va">ard</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="co"># One output: get the tfrmt spec</span></span>
+<span><span class="va">spec</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/ars_to_tfrmt.html">ars_to_tfrmt</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">ars_path</span>, <span class="va">ard</span>, <span class="st">"T_14_1_1"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># All outputs at once</span></span>
+<span><span class="va">specs</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/ars_to_tfrmt_list.html">ars_to_tfrmt_list</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">ars_path</span>, <span class="va">ard</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">specs</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">all_tables</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">specs</span><span class="op">)</span>,</span>
-<span>  <span class="kw">function</span><span class="op">(</span><span class="va">oid</span><span class="op">)</span> <span class="fu"><a href="../reference/ars_render_tlf.html">ars_render_tlf</a></span><span class="op">(</span><span class="st">"outputs/reporting_event.json"</span>, <span class="va">ard</span>, <span class="va">oid</span><span class="op">)</span></span>
+<span>  <span class="kw">function</span><span class="op">(</span><span class="va">oid</span><span class="op">)</span> <span class="fu"><a href="../reference/ars_render_tlf.html">ars_render_tlf</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">ars_path</span>, <span class="va">ard</span>, <span class="va">oid</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
+<hr>
 </div>
 <div class="section level2">
-<h2 id="using-your-own-files">Using your own files<a class="anchor" aria-label="anchor" href="#using-your-own-files"></a>
+<h2 id="using-your-own-study-files">Using your own study files<a class="anchor" aria-label="anchor" href="#using-your-own-study-files"></a>
 </h2>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/spec_to_ars.html">spec_to_ars</a></span><span class="op">(</span></span>
@@ -184,19 +225,20 @@ spec per output at once, use <code><a href="../reference/ars_to_tfrmt_list.html"
 <span>  study_name     <span class="op">=</span> <span class="st">"ABC-123 Phase 3"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
 <p><code>adam_spec_path</code> accepts either <code>.xml</code> (ADaM
-define.xml – preferred when available) or
-<code>.xlsx</code>/<code>.xls</code> (ADaM spec Excel – used during
-development before define.xml exists). The SDTM spec is NOT a valid
-input – TLF annotations reference ADaM variables.</p>
+<code>define.xml</code>, preferred when available) or <code>.xlsx</code>
+/ <code>.xls</code> (ADaM spec Excel, used during development before
+<code>define.xml</code> exists). The SDTM spec is <strong>not</strong> a
+valid input: TLF annotations reference ADaM variables.</p>
+<hr>
 </div>
 <div class="section level2">
 <h2 id="the-bundled-example-file-by-file">The bundled example, file by file<a class="anchor" aria-label="anchor" href="#the-bundled-example-file-by-file"></a>
 </h2>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="../reference/arsbridge_example.html">arsbridge_example</a></span><span class="op">(</span><span class="op">)</span>                              <span class="co"># list bundle contents</span></span>
-<span><span class="fu"><a href="../reference/arsbridge_example.html">arsbridge_example</a></span><span class="op">(</span><span class="st">"annotated_shell.docx"</span><span class="op">)</span>        <span class="co"># absolute path</span></span>
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/arsbridge_example.html">arsbridge_example</a></span><span class="op">(</span><span class="op">)</span>                              <span class="co"># list all bundle contents</span></span>
+<span><span class="fu"><a href="../reference/arsbridge_example.html">arsbridge_example</a></span><span class="op">(</span><span class="st">"annotated_shell.docx"</span><span class="op">)</span>        <span class="co"># absolute path to a file</span></span>
 <span><span class="fu"><a href="../reference/arsbridge_example.html">arsbridge_example</a></span><span class="op">(</span><span class="st">"adam_spec.xlsx"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="../reference/arsbridge_example.html">arsbridge_example</a></span><span class="op">(</span><span class="st">"ADaM.zip"</span><span class="op">)</span>                    <span class="co"># for downstream siera</span></span></code></pre></div>
+<span><span class="fu"><a href="../reference/arsbridge_example.html">arsbridge_example</a></span><span class="op">(</span><span class="st">"ADaM.zip"</span><span class="op">)</span></span></code></pre></div>
 <table class="table">
 <colgroup>
 <col width="50%">
@@ -209,136 +251,174 @@ input – TLF annotations reference ADaM variables.</p>
 <tbody>
 <tr class="odd">
 <td><code>annotated_shell.docx</code></td>
-<td>The TLF shells with red ADaM annotations</td>
+<td>TLF shells with red ADaM annotations (the input)</td>
 </tr>
 <tr class="even">
 <td><code>adam_spec.xlsx</code></td>
-<td>The ADaM variable spec</td>
+<td>ADaM variable spec (the grounding truth)</td>
 </tr>
 <tr class="odd">
 <td><code>ADaM.zip</code></td>
-<td>60-subject simulated ADaM data – not consumed by arsbridge, but used
-by the downstream siera runner</td>
+<td>60-subject simulated ADaM datasets (for
+<code><a href="../reference/ars_to_ard.html">ars_to_ard()</a></code>)</td>
 </tr>
 </tbody>
 </table>
+<hr>
 </div>
 <div class="section level2">
-<h2 id="what-the-parser-actually-detects">What the parser actually detects<a class="anchor" aria-label="anchor" href="#what-the-parser-actually-detects"></a>
+<h2 id="what-the-shell-parser-actually-detects">What the shell parser actually detects<a class="anchor" aria-label="anchor" href="#what-the-shell-parser-actually-detects"></a>
 </h2>
-<p><code>arsbridge</code> uses a four-layer detection hierarchy and
-stops at the highest-confidence layer that produces a result:</p>
-<ol style="list-style-type: decimal">
-<li>
-<strong>Colour-based</strong> – red <code>#C00000</code> runs that
-match an ADaM pattern. HIGH confidence.</li>
-<li>
-<strong>Formatting-based</strong> – bold / italic / underline runs
-that match. MEDIUM confidence.</li>
-<li>
-<strong>Plain-text pattern</strong> – <code>DATASET.VARIABLE</code>
-strings recognised by regex alone, no formatting needed. HIGH confidence
-(the structure is unique).</li>
-<li>
-<strong>LLM fallback</strong> – only for cells where 1-3 produce
-nothing and context implies an annotation should exist. LOW
-confidence.</li>
-</ol>
+<p>arsbridge uses a four-layer detection hierarchy and stops at the
+highest-confidence layer that produces a result for each cell:</p>
+<table class="table">
+<colgroup>
+<col width="33%">
+<col width="33%">
+<col width="33%">
+</colgroup>
+<thead><tr class="header">
+<th>Layer</th>
+<th>Trigger</th>
+<th>Confidence</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>1. Colour-based</td>
+<td>Red <code>#C00000</code> runs matching an ADaM pattern</td>
+<td>HIGH</td>
+</tr>
+<tr class="even">
+<td>2. Formatting-based</td>
+<td>Bold / italic / underline runs matching a pattern</td>
+<td>MEDIUM</td>
+</tr>
+<tr class="odd">
+<td>3. Plain-text pattern</td>
+<td>
+<code>DATASET.VARIABLE</code> strings identified by regex alone</td>
+<td>HIGH</td>
+</tr>
+<tr class="even">
+<td>4. LLM pass</td>
+<td>Cells where layers 1-3 produce nothing and context implies an
+annotation</td>
+<td>Validated against spec</td>
+</tr>
+</tbody>
+</table>
 <p>In practice, the bundled <code>annotated_shell.docx</code> triggers
-Layer 1 for all 130 stub-row annotations – the convention is
-consistent.</p>
+Layer 1 for all 130 stub-row annotations. When shells use non-standard
+conventions, the LLM pass catches what the regex misses.</p>
+<hr>
 </div>
 <div class="section level2">
 <h2 id="listing-column-header-detection">Listing column-header detection<a class="anchor" aria-label="anchor" href="#listing-column-header-detection"></a>
 </h2>
-<p>Listings differ from tables: the variable lives in the column header,
-not the stub. Cells like</p>
+<p>Listings differ from summary tables: the variable lives in the column
+header, not the stub. A cell like:</p>
 <pre><code>Subject ID
 USUBJID</code></pre>
-<p>get split – “Subject ID” is the label, <code>USUBJID</code> becomes
-the annotation. The dataset prefix is resolved by combining a universal
-ADSL list (USUBJID, ARM, TRT01A, etc. always live in ADSL) with the
-TLF’s source dataset from the <code>Source: ADAE</code> line below the
-table.</p>
-</div>
-<div class="section level2">
-<h2 id="closing-the-loop-downstream-siera">Closing the loop – downstream siera<a class="anchor" aria-label="anchor" href="#closing-the-loop-downstream-siera"></a>
-</h2>
-<p>The package ships with a standalone runner at
-<code>siera_workflow/</code> in the project repository (not bundled in
-the package itself). It takes the ARS JSON arsbridge produces, runs it
-through <code><a href="https://clymbclinical.github.io/siera/reference/readARS.html" class="external-link">siera::readARS()</a></code> to generate R analysis code, and
-executes that code against the simulated <code>ADaM.zip</code>. See
-<code>siera_workflow/README.md</code> for the full chain.</p>
+<p>gets split automatically. “Subject ID” becomes the display label and
+<code>USUBJID</code> becomes the annotation. The dataset prefix is
+resolved by combining a universal ADSL list (variables like
+<code>USUBJID</code>, <code>ARM</code>, <code>TRT01A</code> always live
+in ADSL) with the TLF’s declared source dataset from a
+<code>Source: ADAE</code> line below the table.</p>
+<hr>
 </div>
 <div class="section level2">
 <h2 id="partial-tables-and-the-manual-fill-round-trip">Partial tables and the manual-fill round-trip<a class="anchor" aria-label="anchor" href="#partial-tables-and-the-manual-fill-round-trip"></a>
 </h2>
 <p>Some tables mix statistics arsbridge can compute (counts,
 percentages, summary statistics) with ones it cannot (a
-Cochran-Mantel-Haenszel p-value, an exact or Newcombe confidence
-interval, an NRI-imputed responder rate). arsbridge does not fabricate
-the latter. Instead it <strong>reserves a keyed cell</strong> for each:
-the ARD carries a <code>manual_pending</code> stub row
-(<code>stat = NA</code>) tied to the same output, analysis, and method
-as a real result, so nothing is ever an orphan value typed straight into
-the rendered table.</p>
-<p>List what is outstanding with <code><a href="../reference/ars_manual_worklist.html">ars_manual_worklist()</a></code>:</p>
+Cochran-Mantel-Haenszel p-value, an exact confidence interval, an
+NRI-imputed responder rate). arsbridge does not fabricate the latter or
+drop the whole table. Instead it <strong>reserves a keyed cell</strong>
+for each: the ARD carries a <code>manual_pending</code> stub row with
+<code>stat = NA</code>, tied to the same output, analysis, and method as
+a real result.</p>
+<p>List what is outstanding:</p>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ard</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/ars_to_ard.html">ars_to_ard</a></span><span class="op">(</span><span class="va">ars_path</span>, <span class="st">"inputs/ADaM"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="../reference/ars_manual_worklist.html">ars_manual_worklist</a></span><span class="op">(</span><span class="va">ard</span><span class="op">)</span>   <span class="co"># one row per reserved cell needing manual derivation</span></span></code></pre></div>
-<p>When the table is rendered, computed cells are filled and each
+<span><span class="fu"><a href="../reference/ars_manual_worklist.html">ars_manual_worklist</a></span><span class="op">(</span><span class="va">ard</span><span class="op">)</span>   <span class="co"># one row per reserved cell</span></span></code></pre></div>
+<p>When rendered, computed cells appear with their values and each
 reserved cell shows a loud <code>[‡ manual]</code> marker keyed to a
-footnote – never a blank, an <code>NA</code>, or a misleading zero. A
-table with <em>no</em> computable cell stays a numbered placeholder that
-names its reserved cells.</p>
-<p>To fill a reserved cell, compute it with a <strong>validated analysis
-script</strong>, then write the result back into the ARD row – the ARD
-is a data frame, so it is diffable, versioned, and auditable:</p>
+footnote. No blank cells, no <code>NA</code>, no misleading zeros.</p>
+<p>To fill a reserved cell, compute it with a validated analysis script,
+then write the result back into the ARD row:</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">i</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/which.html" class="external-link">which</a></span><span class="op">(</span><span class="va">ard</span><span class="op">$</span><span class="va">result_status</span> <span class="op">==</span> <span class="st">"manual_pending"</span><span class="op">)</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span></span>
-<span><span class="va">ard</span><span class="op">$</span><span class="va">stat</span><span class="op">[[</span><span class="va">i</span><span class="op">]</span><span class="op">]</span>         <span class="op">&lt;-</span> <span class="fl">0.012</span>            <span class="co"># the validated value</span></span>
+<span><span class="va">ard</span><span class="op">$</span><span class="va">stat</span><span class="op">[[</span><span class="va">i</span><span class="op">]</span><span class="op">]</span>         <span class="op">&lt;-</span> <span class="fl">0.012</span></span>
 <span><span class="va">ard</span><span class="op">$</span><span class="va">result_status</span><span class="op">[</span><span class="va">i</span><span class="op">]</span>  <span class="op">&lt;-</span> <span class="st">"manual_filled"</span></span>
 <span><span class="va">ard</span><span class="op">$</span><span class="va">value_source</span><span class="op">[</span><span class="va">i</span><span class="op">]</span>   <span class="op">&lt;-</span> <span class="st">"manual"</span></span>
-<span><span class="va">ard</span><span class="op">$</span><span class="va">derivation_ref</span><span class="op">[</span><span class="va">i</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="st">"programs/cmh_t1421.R"</span>   <span class="co"># the program that produced it</span></span></code></pre></div>
+<span><span class="va">ard</span><span class="op">$</span><span class="va">derivation_ref</span><span class="op">[</span><span class="va">i</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="st">"programs/cmh_t1421.R"</span></span></code></pre></div>
 <p><code>derivation_ref</code> is the audit trail: not “someone typed
-0.012” but “value from <code>cmh_t1421.R</code>”. Before rendering,
-arsbridge checks every manual fill – <code><a href="../reference/ars_render_all.html">ars_render_all()</a></code>
-raises a blocker for any <code>manual_filled</code> cell that has no
-<code>derivation_ref</code> or no value, so an untraceable number can
-never ship:</p>
+0.012” but “value from <code>cmh_t1421.R</code>.” Before rendering,
+arsbridge checks every manual fill:</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="../reference/ars_validate_manual_fills.html">ars_validate_manual_fills</a></span><span class="op">(</span><span class="va">ard</span><span class="op">)</span>   <span class="co"># zero rows = every manual fill is traceable</span></span></code></pre></div>
-<p>A filled cell then renders its value like any other; the design and
-the full phased rationale live in
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/ars_validate_manual_fills.html">ars_validate_manual_fills</a></span><span class="op">(</span><span class="va">ard</span><span class="op">)</span>   <span class="co"># zero rows = every fill is traceable</span></span></code></pre></div>
+<p><code><a href="../reference/ars_render_all.html">ars_render_all()</a></code> runs this automatically and blocks any
+untraceable value before it reaches the final document. The design and
+full rationale are in
 <code>adr/0002-partial-results-traceability.md</code>.</p>
+<hr>
 </div>
 <div class="section level2">
 <h2 id="what-arsbridge-will-not-do">What arsbridge will NOT do<a class="anchor" aria-label="anchor" href="#what-arsbridge-will-not-do"></a>
 </h2>
 <ul>
 <li>Invent variable names from shell row labels or titles</li>
-<li>Read or process ADaM data files (XPT, sas7bdat, CSV) – siera’s
-job</li>
-<li>Write Word documents (no shell annotation – arsbridge only
-reads)</li>
-<li>Generate analysis R code – siera’s job</li>
+<li>Write Word documents (it only reads shells, not annotates them)</li>
+<li>Generate R analysis code (that is <a href="https://clymbclinical.github.io/siera/" class="external-link">siera</a>’s job)</li>
+<li>Process SAS data files directly without conversion to
+<code>.xpt</code> or <code>.csv</code>
+</li>
 </ul>
+<hr>
 </div>
 <div class="section level2">
 <h2 id="where-to-look-when-something-goes-wrong">Where to look when something goes wrong<a class="anchor" aria-label="anchor" href="#where-to-look-when-something-goes-wrong"></a>
 </h2>
-<ul>
-<li>
+<table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
+<thead><tr class="header">
+<th>What to check</th>
+<th>Where to look</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>Per-annotation PASS / WARN / FAIL</td>
+<td>
 <code>res$validation</code> and
-<code>outputs/spec_validation_report.xlsx</code> – per-annotation
-PASS/WARN/FAIL</li>
-<li>
-<code><a href="https://cli.r-lib.org/reference/cli_alert.html" class="external-link">cli::cli_alert_warning</a></code> lines during the run – usually a
-TLF with an unexpected structure</li>
-<li>Bundled test fixtures at <code>tests/testthat/fixtures/</code> –
-minimal known-good shells to compare against</li>
-</ul>
+<code>outputs/spec_validation_report.xlsx</code>
+</td>
+</tr>
+<tr class="even">
+<td>Runtime warnings during extraction</td>
+<td>
+<code><a href="https://cli.r-lib.org/reference/cli_alert.html" class="external-link">cli::cli_alert_warning</a></code> lines printed during
+<code><a href="../reference/spec_to_ars.html">spec_to_ars()</a></code>
+</td>
+</tr>
+<tr class="odd">
+<td>Known-good minimal shells</td>
+<td>
+<code>tests/testthat/fixtures/</code> in the package source</td>
+</tr>
+<tr class="even">
+<td>Blocker-only view</td>
+<td><code>arsbridge::ars_blockers(res$diagnostics)</code></td>
+</tr>
+<tr class="odd">
+<td>Everything recorded</td>
+<td><code>arsbridge::ars_diagnostics(res$diagnostics)</code></td>
+</tr>
+</tbody>
+</table>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

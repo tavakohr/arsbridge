@@ -68,7 +68,8 @@ the user entirely within your package interface in RStudio:
 ## 3. Implementation Plan for `arsbridge` developers
 
 To implement this, add a new function
-[`ars_to_ard()`](reference/ars_to_ard.md) in the `arsbridge` package.
+[`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)
+in the `arsbridge` package.
 
 ### Step 1: Read the ARS JSON
 
