@@ -56,9 +56,9 @@ help you write a unit test, if needed).
 ## Architecture decisions
 
 Design-level decisions live as numbered Architecture Decision Records in
-[`adr/`](adr/). Read them before proposing a change to the engine’s
-scope or the ARD contract — they explain *why* the current boundaries
-exist:
+[`adr/`](https://tavakohr.github.io/arsbridge/adr/). Read them before
+proposing a change to the engine’s scope or the ARD contract — they
+explain *why* the current boundaries exist:
 
 - `0001-statistical-method-extensibility.md` — arsbridge bounds the
   *boundary*, not the *contents*, of the statistics space. New
@@ -81,5 +81,6 @@ the source of truth for layout.
 ## Code of Conduct
 
 Please note that the arsbridge project is released with a [Contributor
-Code of Conduct](CODE_OF_CONDUCT.md). By contributing to this project
-you agree to abide by its terms.
+Code of
+Conduct](https://tavakohr.github.io/arsbridge/CODE_OF_CONDUCT.md). By
+contributing to this project you agree to abide by its terms.

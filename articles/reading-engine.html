@@ -16,7 +16,7 @@
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
-    <nav class="navbar navbar-expand-lg fixed-top bg-light" data-bs-theme="light" aria-label="Site navigation"><div class="container">
+    <nav class="navbar navbar-expand-lg fixed-top bg-primary" data-bs-theme="dark" aria-label="Site navigation"><div class="container">
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
@@ -29,14 +29,15 @@
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto">
-<li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
+<li class="nav-item"><a class="nav-link" href="../articles/getting-started.html">Get started</a></li>
 <li class="active nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
-<li><a class="dropdown-item" href="../articles/reading-engine.html">How arsbridge reads an annotated shell</a></li>
-    <li><a class="dropdown-item" href="../articles/getting-started.html">Getting started with arsbridge</a></li>
+<li><a class="dropdown-item" href="../articles/getting-started.html">Getting started</a></li>
+    <li><a class="dropdown-item" href="../articles/reading-engine.html">How arsbridge reads the shell</a></li>
   </ul>
 </li>
+<li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul>
 <ul class="navbar-nav">
@@ -75,111 +76,156 @@ convention</strong>. Across studies, sponsors, and individuals you see
 the variable reference carried by:</p>
 <ul>
 <li>a coloured run (<code>ADSL.AGE</code> in red),</li>
-<li>bold / italic / underlined text,</li>
-<li>square or round brackets
+<li>bold, italic, or underlined text,</li>
+<li>square brackets
 (<code>[ADAE.AEDECOD WHERE AEREL='RELATED']</code>),</li>
 <li>plain text appended after the label
-(<code>Age (years) ADSL.AGE</code>),</li>
-<li>or a layout no regex has seen before – the variable on line 2 of the
-cell, in a sentence, split across runs, mixed-case, abbreviated.</li>
+(<code>Age (years) ADSL.AGE</code>), or</li>
+<li>a layout no regex has ever seen: the variable on line 2 of the cell,
+in a sentence, split across runs, mixed-case, abbreviated.</li>
 </ul>
 <p>A pure pattern matcher reads the conventions it was written for and
 silently misses the rest. arsbridge is built to <strong>extract as many
-annotation variants as possible</strong> – and to never ship a variable
+annotation variants as possible</strong> while never shipping a variable
 it cannot prove exists.</p>
+<hr>
 </div>
 <div class="section level2">
-<h2 id="the-engine-deterministic-regex-llm-together">The engine: deterministic regex + LLM, together<a class="anchor" aria-label="anchor" href="#the-engine-deterministic-regex-llm-together"></a>
+<h2 id="the-engine-deterministic-regex-plus-llm-together">The engine: deterministic regex plus LLM, together<a class="anchor" aria-label="anchor" href="#the-engine-deterministic-regex-plus-llm-together"></a>
 </h2>
-<p>arsbridge reads each shell <strong>twice</strong>, and takes the
-union.</p>
+<p>arsbridge reads each shell <strong>twice and takes the
+union.</strong></p>
 <pre><code>                 annotated shell (.docx)
-                          │
-        ┌─────────────────┴─────────────────┐
-        ▼                                   ▼
+                          |
+        +-----------------+-----------------+
+        |                                   |
+        v                                   v
 1. DETERMINISTIC PASS               2. LLM PASS (primary)
    parse_shell_docx()                  extract_shell_llm()
-   4-layer regex detector              re-reads each raw cell,
-   • colour                            separates label vs variable
-   • bold/italic/underline             in ANY layout
-   • plain-text DATASET.VAR
-   • (gap → handed to LLM)
-        │                                   │
-        └─────────────────┬─────────────────┘
-                          ▼
+   four-layer regex detector            re-reads each raw cell,
+   - colour                             separates label vs variable
+   - bold/italic/underline              in ANY layout
+   - plain-text DATASET.VAR
+   - bracket [DATASET.VAR]
+        |                                   |
+        +-----------------+-----------------+
+                          |
+                          v
             3. HARD ADaM-SPEC GATE
        every proposed DATASET.VARIABLE must
        exist in the ADaM spec, or it is
-       REJECTED and logged as a blocker
-                          ▼
-              validated annotations → ARS JSON</code></pre>
+       rejected and logged as a blocker
+                          |
+                          v
+              validated annotations -&gt; ARS JSON</code></pre>
+<hr>
 <div class="section level3">
-<h3 id="pass-1-deterministic-regex-fast-free-offline">Pass 1 – deterministic regex (fast, free, offline)<a class="anchor" aria-label="anchor" href="#pass-1-deterministic-regex-fast-free-offline"></a>
+<h3 id="pass-1-deterministic-regex-fast-free-offline">Pass 1: deterministic regex (fast, free, offline)<a class="anchor" aria-label="anchor" href="#pass-1-deterministic-regex-fast-free-offline"></a>
 </h3>
 <p><code>parse_shell_docx()</code> walks the document’s OOXML and runs a
 four-layer detector on every stub cell and listing header. It recognises
-the known conventions above with no API call. This pass alone fully
-handles shells that follow a standard annotation style, and it always
-runs – even with no API key.</p>
+the known annotation conventions above with no API call. This pass alone
+fully handles shells that follow a standard annotation style, and it
+always runs even with no API key.</p>
+<p>The four layers, in priority order:</p>
+<table class="table">
+<colgroup>
+<col width="33%">
+<col width="33%">
+<col width="33%">
+</colgroup>
+<thead><tr class="header">
+<th>Layer</th>
+<th>Signal</th>
+<th>Confidence</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>1. Colour</td>
+<td>Red <code>#C00000</code> runs matching a
+<code>DATASET.VARIABLE</code> pattern</td>
+<td>HIGH</td>
+</tr>
+<tr class="even">
+<td>2. Formatting</td>
+<td>Bold / italic / underline runs matching a pattern</td>
+<td>MEDIUM</td>
+</tr>
+<tr class="odd">
+<td>3. Plain-text</td>
+<td>
+<code>DATASET.VARIABLE</code> strings identified by regex alone</td>
+<td>HIGH</td>
+</tr>
+<tr class="even">
+<td>4. Handoff</td>
+<td>Cells where 1-3 produce nothing; passed to the LLM</td>
+<td>Validated</td>
+</tr>
+</tbody>
+</table>
+<hr>
 </div>
 <div class="section level3">
-<h3 id="pass-2-the-llm-as-primary-reader-handles-the-variants">Pass 2 – the LLM as primary reader (handles the variants)<a class="anchor" aria-label="anchor" href="#pass-2-the-llm-as-primary-reader-handles-the-variants"></a>
+<h3 id="pass-2-the-llm-as-primary-reader-handles-the-variants">Pass 2: the LLM as primary reader (handles the variants)<a class="anchor" aria-label="anchor" href="#pass-2-the-llm-as-primary-reader-handles-the-variants"></a>
 </h3>
 <p><code>extract_shell_llm()</code> re-reads the <strong>raw</strong>
 text of each cell and asks the model to separate the human display label
 from the machine variable reference, in whatever layout the shell
-happens to use. This is where the “as many variants as possible” power
-comes from: the LLM generalises to formats the regex was never written
-for. It returns structured output (via an <code>ellmer</code> type),
-never free text to parse.</p>
+happens to use. This is where the “any convention” power comes from: the
+LLM generalises to formats the regex was never written for.</p>
+<p>It returns structured output via an <code>ellmer</code> type, never
+free text to parse. The model is asked to produce <code>NULL</code> for
+cells with no variable, which means it does not hallucinate variables
+for row-label-only cells.</p>
+<hr>
 </div>
 <div class="section level3">
-<h3 id="pass-3-the-hard-spec-gate-the-seatbelt">Pass 3 – the hard spec gate (the seatbelt)<a class="anchor" aria-label="anchor" href="#pass-3-the-hard-spec-gate-the-seatbelt"></a>
+<h3 id="pass-3-the-hard-spec-gate-the-seatbelt">Pass 3: the hard spec gate (the seatbelt)<a class="anchor" aria-label="anchor" href="#pass-3-the-hard-spec-gate-the-seatbelt"></a>
 </h3>
-<p>The LLM is powerful but can hallucinate. So <strong>every</strong>
+<p>The LLM is powerful but it can hallucinate. So <strong>every</strong>
 proposed <code>DATASET.VARIABLE</code> is checked against your ADaM
 specification (<code>define.xml</code> or Excel). A proposal that is not
 in the spec is <strong>dropped, not shipped</strong>, and recorded as a
-blocking finding that names the row and the rejected token. The spec is
-the ground-truth oracle: the model can only pick variables that actually
-exist in your study.</p>
-<p>This preserves arsbridge’s founding promise – <em>it extracts and
-converts; it does not invent</em> – while letting the LLM read freely.
-The promise is now <strong>enforced by the gate</strong>, not by
-limiting the reader.</p>
+blocking finding that names the row and the rejected token.</p>
+<p>The spec is the ground-truth oracle: the model can only pick
+variables that actually exist in your study. This preserves arsbridge’s
+founding promise, that it extracts and converts rather than invents,
+while letting the LLM read freely.</p>
+<hr>
 </div>
 </div>
 <div class="section level2">
-<h2 id="how-the-two-passes-combine-coverage-table">How the two passes combine (coverage table)<a class="anchor" aria-label="anchor" href="#how-the-two-passes-combine-coverage-table"></a>
+<h2 id="how-the-two-passes-combine">How the two passes combine<a class="anchor" aria-label="anchor" href="#how-the-two-passes-combine"></a>
 </h2>
 <p>A row’s annotation is taken if <strong>either</strong> pass finds it.
 On a conflict, the LLM wins (it is the primary reader) and a warning
-flags the disagreement so a human can check it.</p>
+flags the disagreement for a human to check.</p>
 <table class="table">
 <colgroup>
-<col width="41%">
-<col width="7%">
-<col width="16%">
-<col width="34%">
+<col width="18%">
+<col width="31%">
+<col width="31%">
+<col width="18%">
 </colgroup>
 <thead><tr class="header">
-<th>Row situation</th>
+<th>Situation</th>
 <th align="center">Regex</th>
-<th align="center">LLM (in spec)</th>
+<th align="center">LLM</th>
 <th>Result</th>
 </tr></thead>
 <tbody>
 <tr class="odd">
-<td>Known convention</td>
+<td>Known annotation convention</td>
 <td align="center">✓</td>
 <td align="center">silent</td>
-<td><strong>regex kept</strong></td>
+<td>Regex result kept</td>
 </tr>
 <tr class="even">
-<td>Known convention</td>
+<td>Known convention, same read</td>
 <td align="center">✓</td>
 <td align="center">✓ same</td>
-<td>confirmed</td>
+<td>Confirmed</td>
 </tr>
 <tr class="odd">
 <td>Known convention, different reads</td>
@@ -190,30 +236,30 @@ flags the disagreement so a human can check it.</p>
 </td>
 </tr>
 <tr class="even">
-<td><strong>Variant layout regex can’t parse</strong></td>
+<td>Variant layout regex cannot parse</td>
 <td align="center">✗</td>
 <td align="center">✓</td>
-<td>
-<strong>LLM adds it</strong> (the win)</td>
+<td><strong>LLM adds the row</strong></td>
 </tr>
 <tr class="odd">
 <td>LLM proposes a non-spec variable</td>
 <td align="center">✗</td>
-<td align="center">✗ (rejected)</td>
-<td>dropped + <strong>blocker</strong>
+<td align="center">rejected</td>
+<td>Dropped + <strong>blocker logged</strong>
 </td>
 </tr>
 <tr class="even">
-<td>Genuinely no variable</td>
+<td>Row genuinely has no variable</td>
 <td align="center">✗</td>
 <td align="center">silent</td>
-<td>empty</td>
+<td>Empty</td>
 </tr>
 </tbody>
 </table>
-<p>Guards keep the regex catch safe: if the LLM returns an empty
-dataset/variable, omits a row, or no API key is set, the deterministic
-result stands.</p>
+<p>Guards keep the regex result safe in failure modes: if the LLM
+returns an empty dataset or variable, omits a row, or no API key is set,
+the deterministic result stands.</p>
+<hr>
 </div>
 <div class="section level2">
 <h2 id="degraded-mode-it-still-runs-with-no-key">Degraded mode: it still runs with no key<a class="anchor" aria-label="anchor" href="#degraded-mode-it-still-runs-with-no-key"></a>
@@ -221,47 +267,108 @@ result stands.</p>
 <p>No API key, or <code>extract_with_llm = FALSE</code>, means Pass 2 is
 skipped and arsbridge runs on the deterministic regex alone, emitting
 one warning that variant-format extraction is unavailable. The pipeline
-still produces ARS, ARD, and code for standard shells – offline and in
-CI.</p>
+still produces ARS, ARD, and rendered tables for standard shells:
+offline, in CI, and without a billing account.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu">arsbridge</span><span class="fu">::</span><span class="fu"><a href="../reference/spec_to_ars.html">spec_to_ars</a></span><span class="op">(</span></span>
-<span>  shell_path     <span class="op">=</span> <span class="st">"inputs/shells.docx"</span>,</span>
-<span>  adam_spec_path <span class="op">=</span> <span class="st">"inputs/adam_spec.xlsx"</span>,</span>
-<span>  extract_with_llm <span class="op">=</span> <span class="cn">TRUE</span>     <span class="co"># default; FALSE = regex only</span></span>
+<span>  shell_path       <span class="op">=</span> <span class="st">"inputs/shells.docx"</span>,</span>
+<span>  adam_spec_path   <span class="op">=</span> <span class="st">"inputs/adam_spec.xlsx"</span>,</span>
+<span>  extract_with_llm <span class="op">=</span> <span class="cn">TRUE</span>    <span class="co"># default; set FALSE for regex-only mode</span></span>
 <span><span class="op">)</span></span></code></pre></div>
+<hr>
 </div>
 <div class="section level2">
 <h2 id="every-gap-is-reported-in-plain-english">Every gap is reported in plain English<a class="anchor" aria-label="anchor" href="#every-gap-is-reported-in-plain-english"></a>
 </h2>
 <p>Nothing is dropped silently. Rejected variables, regex/LLM
 disagreements, LLM outages, and unparsed rows all land in the
-diagnostics and blockers, with the <strong>input document to
-fix</strong> named:</p>
+diagnostics with the <strong>input document location to fix</strong>
+named:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu">arsbridge</span><span class="fu">::</span><span class="fu"><a href="../reference/ars_diagnostics.html">ars_diagnostics</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">diagnostics</span><span class="op">)</span>  <span class="co"># everything recorded</span></span>
+<code class="sourceCode R"><span><span class="fu">arsbridge</span><span class="fu">::</span><span class="fu"><a href="../reference/ars_diagnostics.html">ars_diagnostics</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">diagnostics</span><span class="op">)</span>  <span class="co"># everything recorded during the run</span></span>
 <span><span class="fu">arsbridge</span><span class="fu">::</span><span class="fu"><a href="../reference/ars_blockers.html">ars_blockers</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">diagnostics</span><span class="op">)</span>     <span class="co"># only what blocks clean output</span></span></code></pre></div>
 <p>A blocker tells you <em>what</em> (rejected variable / missed row),
 <em>why</em> (not in spec / unknown convention), and <em>how to fix</em>
 (correct the shell annotation, or add the variable to the ADaM
 spec).</p>
+<hr>
+</div>
+<div class="section level2">
+<h2 id="how-the-listing-header-reader-works">How the listing header reader works<a class="anchor" aria-label="anchor" href="#how-the-listing-header-reader-works"></a>
+</h2>
+<p>Listings differ from summary tables: the variable reference lives in
+the column header, not the stub. A header cell like:</p>
+<pre><code>Subject ID
+USUBJID</code></pre>
+<p>gets split automatically. The first line becomes the display label
+and the second becomes the annotation. The dataset prefix is resolved by
+combining:</p>
+<ol style="list-style-type: decimal">
+<li>A universal list of variables that always live in ADSL
+(<code>USUBJID</code>, <code>ARM</code>, <code>TRT01A</code>,
+etc.).</li>
+<li>The source dataset declared in the TLF-level
+<code>Source: ADAE</code> line below the table.</li>
+</ol>
+<p>This means listing headers do not need a
+<code>DATASET.VARIABLE</code> bracket: the dataset is inferred from
+context.</p>
+<hr>
 </div>
 <div class="section level2">
 <h2 id="choosing-and-adding-a-model">Choosing and adding a model<a class="anchor" aria-label="anchor" href="#choosing-and-adding-a-model"></a>
 </h2>
-<p>The reader works with any provider in the registry – Anthropic,
-OpenAI, Gemini, or an OpenAI-compatible one such as GLM. For clinical
-text, Anthropic has the lowest false-positive content-filter rate; some
-providers block adverse-event terminology.</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<p>The reader works with any provider in the registry: Anthropic,
+OpenAI, Gemini, or an OpenAI-compatible provider such as GLM. For
+clinical text, Anthropic has the lowest false-positive content-filter
+rate. Some providers block adverse-event terminology outright.</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">arsbridge</span><span class="fu">::</span><span class="fu"><a href="../reference/set_anthropic_key.html">set_anthropic_key</a></span><span class="op">(</span><span class="op">)</span>                 <span class="co"># recommended for clinical text</span></span>
 <span><span class="fu">arsbridge</span><span class="fu">::</span><span class="fu"><a href="../reference/set_llm_key.html">set_llm_key</a></span><span class="op">(</span><span class="st">"glm"</span>, <span class="st">"your-glm-key"</span><span class="op">)</span>  <span class="co"># any registry provider</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>ARS_LLM_PROVIDER <span class="op">=</span> <span class="st">"anthropic"</span><span class="op">)</span>     <span class="co"># pick the active one</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>ARS_LLM_PROVIDER <span class="op">=</span> <span class="st">"anthropic"</span><span class="op">)</span>     <span class="co"># select the active provider</span></span>
 <span><span class="fu">arsbridge</span><span class="fu">::</span><span class="fu"><a href="../reference/show_active_llm.html">show_active_llm</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p>Adding a brand-new provider is a single entry in the provider
 registry (<code>R/llm_providers.R</code>): its key environment variable,
 default model, the <code>ellmer</code> chat constructor, and a
 <code>base_url</code> if it is OpenAI-compatible. No other code
 changes.</p>
+<hr>
+</div>
+<div class="section level2">
+<h2 id="what-the-spec-gate-catches-in-practice">What the spec gate catches in practice<a class="anchor" aria-label="anchor" href="#what-the-spec-gate-catches-in-practice"></a>
+</h2>
+<p>During extraction on the bundled APX-DRM-301 study, the spec gate
+produces a distribution like this:</p>
+<table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
+<thead><tr class="header">
+<th>Gate result</th>
+<th>Typical cause</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>Passed</td>
+<td>Variable exists in ADaM spec</td>
+</tr>
+<tr class="even">
+<td><code>WARN</code></td>
+<td>Regex and LLM disagree on the same row; human review resolves
+it</td>
+</tr>
+<tr class="odd">
+<td>Blocker</td>
+<td>Typo in the shell annotation, or variable added to shell before
+spec</td>
+</tr>
+</tbody>
+</table>
+<p>Blockers are not errors in the programming sense. They are
+intentional stops that name the exact annotation to fix: correct the
+shell or add the variable to the ADaM spec, then re-run. The pipeline is
+designed to be run iteratively.</p>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

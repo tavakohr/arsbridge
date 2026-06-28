@@ -39,7 +39,7 @@ A one-row ARD (`card`) with the CMH `p.value`; `stat` is `NA` and the
 
 ## See also
 
-[`ars_to_ard()`](ars_to_ard.md)
+[`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)
 
 ## Examples
 

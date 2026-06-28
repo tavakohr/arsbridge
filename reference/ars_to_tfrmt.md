@@ -1,14 +1,17 @@
 # Build a tfrmt specification for one ARS output
 
 Translates one output of a CDISC ARS v1.0 reporting event, together with
-the tidy ARD produced by [`ars_to_ard()`](ars_to_ard.md), into a
+the tidy ARD produced by
+[`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md),
+into a
 [`tfrmt::tfrmt()`](https://gsk-biostatistics.github.io/tfrmt/reference/tfrmt.html)
 specification. The returned object can be rendered with
 [`tfrmt::print_to_gt()`](https://gsk-biostatistics.github.io/tfrmt/reference/print_to_gt.html)
 or
 [`tfrmt::print_mock_gt()`](https://gsk-biostatistics.github.io/tfrmt/reference/print_mock_gt.html)
 – but the ARD must be flattened and rescaled first (see
-[`ars_render_tlf()`](ars_render_tlf.md), which does this for you).
+[`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md),
+which does this for you).
 
 ## Usage
 
@@ -28,11 +31,12 @@ ars_to_tfrmt(
 - ars_path:
 
   Path to the CDISC ARS v1.0 JSON (output of
-  [`spec_to_ars()`](spec_to_ars.md)).
+  [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)).
 
 - ard:
 
-  Tidy ARD data frame (output of [`ars_to_ard()`](ars_to_ard.md)).
+  Tidy ARD data frame (output of
+  [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)).
 
 - output_id:
 
@@ -47,8 +51,9 @@ ars_to_tfrmt(
 A
 [`tfrmt::tfrmt()`](https://gsk-biostatistics.github.io/tfrmt/reference/tfrmt.html)
 object. Extracted footnotes are attached as the attribute
-`"arsbridge_footnotes"`; [`ars_render_tlf()`](ars_render_tlf.md) applies
-them as GT source notes.
+`"arsbridge_footnotes"`;
+[`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md)
+applies them as GT source notes.
 
 ## Details
 
@@ -65,8 +70,8 @@ unless supplied explicitly:
 
 ## See also
 
-[`ars_render_tlf()`](ars_render_tlf.md),
-[`ars_to_tfrmt_list()`](ars_to_tfrmt_list.md)
+[`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md),
+[`ars_to_tfrmt_list()`](https://tavakohr.github.io/arsbridge/reference/ars_to_tfrmt_list.md)
 
 ## Examples
 

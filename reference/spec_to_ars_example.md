@@ -1,8 +1,8 @@
 # Run spec_to_ars() against the bundled example inputs
 
 Zero-argument entry point that runs the full
-[`spec_to_ars()`](spec_to_ars.md) pipeline against
-`arsbridge_example("annotated_shell.docx")` +
+[`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
+pipeline against `arsbridge_example("annotated_shell.docx")` +
 `arsbridge_example("adam_spec.xlsx")`. Useful as a first call after
 installation – you get a real ARS JSON and validation report from the
 APX-DRM-301 training shell without owning a study.
@@ -32,11 +32,14 @@ spec_to_ars_example(
 
 - ...:
 
-  Additional arguments forwarded to [`spec_to_ars()`](spec_to_ars.md).
+  Additional arguments forwarded to
+  [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md).
 
 ## Value
 
-Invisibly returns the [`spec_to_ars()`](spec_to_ars.md) result list.
+Invisibly returns the
+[`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
+result list.
 
 ## Examples
 

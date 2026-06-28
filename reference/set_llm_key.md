@@ -2,12 +2,13 @@
 
 Generic key setter driven by the provider registry. Use this for
 providers that have no dedicated `set_*_key()` helper (e.g. `"glm"`), or
-call the named wrappers ([`set_anthropic_key()`](set_anthropic_key.md),
-[`set_openai_key()`](set_openai_key.md),
-[`set_gemini_key()`](set_gemini_key.md)) for the common three. Sets the
-provider's API-key environment variable for the current session; in an
-interactive session you are then asked whether to also persist it to
-your `.Renviron`.
+call the named wrappers
+([`set_anthropic_key()`](https://tavakohr.github.io/arsbridge/reference/set_anthropic_key.md),
+[`set_openai_key()`](https://tavakohr.github.io/arsbridge/reference/set_openai_key.md),
+[`set_gemini_key()`](https://tavakohr.github.io/arsbridge/reference/set_gemini_key.md))
+for the common three. Sets the provider's API-key environment variable
+for the current session; in an interactive session you are then asked
+whether to also persist it to your `.Renviron`.
 
 ## Usage
 

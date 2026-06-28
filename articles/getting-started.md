@@ -1,42 +1,51 @@
 # Getting started with arsbridge
 
-## What `arsbridge` does
+## What arsbridge does
 
-`arsbridge` reads a lead programmer’s already-annotated TLF shell Word
-document plus the study’s ADaM specification, and produces a CDISC
-Analysis Results Standard (ARS) v1.0 ARM-TS JSON file. That JSON is
-consumed downstream by
-[`siera::readARS()`](https://pharmaverse.github.io/siera/) to generate
-the R analysis code that produces the actual TLFs.
+`arsbridge` reads a lead programmer’s annotated TLF shell Word document
+together with the study’s ADaM specification, and produces a CDISC
+Analysis Results Standard (ARS) v1.0 JSON file. That JSON drives the
+rest of the pipeline: it executes against real ADaM datasets using
+[cards](https://github.com/insightsengineering/cards) to produce a tidy
+ARD, then renders to a formatted GT clinical table with no manual
+formatting step.
 
-**Core principle:** the package extracts and converts – it does not
+**The core principle:** arsbridge extracts and converts. It does not
 invent. The shell is read by a deterministic regex detector *and* an LLM
 primary reader together, to capture as many annotation variants as
-possible; but every LLM-proposed variable is gated against the ADaM
+possible. Every LLM-proposed variable is then checked against the ADaM
 spec, so a variable absent from the spec is rejected and logged, never
 shipped. Every variable in the ARS output traces back to a real
-annotation grounded in the spec. For the full reading process see
-[`vignette("reading-engine")`](../articles/reading-engine.md).
+annotation grounded in the spec.
+
+For the full reading-engine detail, see
+[`vignette("reading-engine")`](https://tavakohr.github.io/arsbridge/articles/reading-engine.md).
+
+------------------------------------------------------------------------
 
 ## Prerequisites
 
 ``` r
 
-install.packages("arsbridge")            # or devtools::install_github(...)
+# Install from GitHub
+devtools::install_github("tavakohr/arsbridge")
 
-# One-time API key setup (interactive prompt)
+# One-time API key setup (interactive prompt; hides input when {askpass} is installed)
 arsbridge::set_anthropic_key()
-arsbridge::check_anthropic_key()         # confirm
+arsbridge::check_anthropic_key()   # confirm the key loaded
 ```
 
 `arsbridge` calls Claude once per TLF section for light semantic
-enrichment (analysis type, method name, row role). All variable names
-come from the shell annotations – never the LLM.
+enrichment: analysis type, method name, and row role. All variable names
+come from the shell annotations, never from the LLM.
+
+------------------------------------------------------------------------
 
 ## The fastest path: `spec_to_ars_example()`
 
-The package ships with a small bundled training example, so you can run
-the entire pipeline before you own a study:
+The package ships with a small bundled training example so you can run
+the entire pipeline before you own a study. This is the best way to get
+a feel for the output and the validation report.
 
 ``` r
 
@@ -44,38 +53,57 @@ library(arsbridge)
 
 res <- spec_to_ars_example()
 # ARS JSON and validation report land in tempdir(); paths are in res.
-res$n_tlfs        # 40
-res$n_analyses    # ~226
-res$n_warnings    # ~29
+res$n_tlfs        # 40 TLF shells
+res$n_analyses    # ~226 analyses
+res$n_warnings    # ~29 warnings to review
 ```
 
-Takes about six minutes (40 LLM calls).
+Takes about six minutes (40 LLM calls, one per TLF section).
+
+------------------------------------------------------------------------
 
 ## Inspecting the result
+
+Once
+[`spec_to_ars_example()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars_example.md)
+finishes, you have a structured `reporting_event` object and a row-level
+validation report.
 
 ``` r
 
 # Top-level shape of the ARS ReportingEvent
 str(res$reporting_event, max.level = 1)
 
-# Validation findings -- one row per annotation
+# Validation findings: one row per annotation
 table(res$validation$status)
 subset(res$validation, status %in% c("WARN", "FAIL"))
 
-# One output, end to end
+# Drill into one output
 out <- Filter(function(o) o$name == "T-14-1-2",
               res$reporting_event$outputs)[[1]]
 length(out$referencedAnalysisIds)
 ```
 
+The **PASS / WARN / FAIL** stamps tell you:
+
+| Status   | Meaning                                                         |
+|----------|-----------------------------------------------------------------|
+| **PASS** | Variable found in ADaM spec; annotation is clean.               |
+| **WARN** | Regex and LLM disagree; human review recommended.               |
+| **FAIL** | Variable not found in ADaM spec; will be rejected as a blocker. |
+
+------------------------------------------------------------------------
+
 ## From ARS to a formatted clinical table
 
-The ARS JSON plus the study ADaM data closes the loop:
-[`ars_to_ard()`](../reference/ars_to_ard.md) executes the analyses into
-a tidy ARD ([cards](https://github.com/insightsengineering/cards)
-format), and [`ars_render_tlf()`](../reference/ars_render_tlf.md)
-formats any output into a publication-ready GT table – no manual
-formatting step.
+With a valid ARS JSON in hand, two more functions close the loop.
+
+[`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)
+executes the ARS against ADaM datasets and returns a tidy ARD in
+[cards](https://github.com/insightsengineering/cards) format.
+[`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md)
+then formats any output from that ARD into a publication-ready GT table,
+with no manual formatting step.
 
 ``` r
 
@@ -85,43 +113,49 @@ unzip(arsbridge_example("ADaM.zip"), exdir = adam_dir)
 
 # Execute the ARS specification into a tidy ARD
 ard <- ars_to_ard(
-  ars_path = "outputs/reporting_event.json",
+  ars_path = res$ars_path,
   adam_dir = adam_dir
 )
 
-# Render one output straight to a formatted GT clinical table
+# Render the Subject Disposition table (T_14_1_1) as a GT clinical table
 gt_table <- ars_render_tlf(
-  ars_path  = "outputs/reporting_event.json",
+  ars_path  = res$ars_path,
   ard       = ard,
-  output_id = "T_14_1_1"      # Subject Disposition
+  output_id = "T_14_1_1"
 )
 
 gt_table
 ```
 
-[`ars_render_tlf()`](../reference/ars_render_tlf.md) auto-detects the
-treatment column, row groups, and row labels from the ARD; rescales
-[cards](https://github.com/insightsengineering/cards) proportions to
-percentages; lays continuous summaries out as `Mean (SD)` / `Median` /
-`(Min, Max)` rows; and carries ARS footnotes through as GT source notes.
+[`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md)
+auto-detects the treatment column, row groups, and row labels from the
+ARD; rescales [cards](https://github.com/insightsengineering/cards)
+proportions to percentages; lays continuous summaries out as `Mean (SD)`
+/ `Median` / `(Min, Max)` rows; and carries ARS footnotes through as GT
+source notes.
 
-To build the `tfrmt` spec without rendering – so you can tweak it before
-printing – use [`ars_to_tfrmt()`](../reference/ars_to_tfrmt.md). To get
-one spec per output at once, use
-[`ars_to_tfrmt_list()`](../reference/ars_to_tfrmt_list.md):
+To inspect or customise the underlying
+[tfrmt](https://GSK-Biostatistics.github.io/tfrmt/) spec before
+printing:
 
 ``` r
 
-specs <- ars_to_tfrmt_list("outputs/reporting_event.json", ard)
+# One output: get the tfrmt spec
+spec <- ars_to_tfrmt(res$ars_path, ard, "T_14_1_1")
+
+# All outputs at once
+specs <- ars_to_tfrmt_list(res$ars_path, ard)
 names(specs)
 
 all_tables <- lapply(
   names(specs),
-  function(oid) ars_render_tlf("outputs/reporting_event.json", ard, oid)
+  function(oid) ars_render_tlf(res$ars_path, ard, oid)
 )
 ```
 
-## Using your own files
+------------------------------------------------------------------------
+
+## Using your own study files
 
 ``` r
 
@@ -135,132 +169,131 @@ res <- spec_to_ars(
 )
 ```
 
-`adam_spec_path` accepts either `.xml` (ADaM define.xml – preferred when
-available) or `.xlsx`/`.xls` (ADaM spec Excel – used during development
-before define.xml exists). The SDTM spec is NOT a valid input – TLF
-annotations reference ADaM variables.
+`adam_spec_path` accepts either `.xml` (ADaM `define.xml`, preferred
+when available) or `.xlsx` / `.xls` (ADaM spec Excel, used during
+development before `define.xml` exists). The SDTM spec is **not** a
+valid input: TLF annotations reference ADaM variables.
+
+------------------------------------------------------------------------
 
 ## The bundled example, file by file
 
 ``` r
 
-arsbridge_example()                              # list bundle contents
-arsbridge_example("annotated_shell.docx")        # absolute path
+arsbridge_example()                              # list all bundle contents
+arsbridge_example("annotated_shell.docx")        # absolute path to a file
 arsbridge_example("adam_spec.xlsx")
-arsbridge_example("ADaM.zip")                    # for downstream siera
+arsbridge_example("ADaM.zip")
 ```
 
 | File | Purpose |
 |----|----|
-| `annotated_shell.docx` | The TLF shells with red ADaM annotations |
-| `adam_spec.xlsx` | The ADaM variable spec |
-| `ADaM.zip` | 60-subject simulated ADaM data – not consumed by arsbridge, but used by the downstream siera runner |
+| `annotated_shell.docx` | TLF shells with red ADaM annotations (the input) |
+| `adam_spec.xlsx` | ADaM variable spec (the grounding truth) |
+| `ADaM.zip` | 60-subject simulated ADaM datasets (for [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)) |
 
-## What the parser actually detects
+------------------------------------------------------------------------
 
-`arsbridge` uses a four-layer detection hierarchy and stops at the
-highest-confidence layer that produces a result:
+## What the shell parser actually detects
 
-1.  **Colour-based** – red `#C00000` runs that match an ADaM pattern.
-    HIGH confidence.
-2.  **Formatting-based** – bold / italic / underline runs that match.
-    MEDIUM confidence.
-3.  **Plain-text pattern** – `DATASET.VARIABLE` strings recognised by
-    regex alone, no formatting needed. HIGH confidence (the structure is
-    unique).
-4.  **LLM fallback** – only for cells where 1-3 produce nothing and
-    context implies an annotation should exist. LOW confidence.
+arsbridge uses a four-layer detection hierarchy and stops at the
+highest-confidence layer that produces a result for each cell:
+
+| Layer | Trigger | Confidence |
+|----|----|----|
+| 1\. Colour-based | Red `#C00000` runs matching an ADaM pattern | HIGH |
+| 2\. Formatting-based | Bold / italic / underline runs matching a pattern | MEDIUM |
+| 3\. Plain-text pattern | `DATASET.VARIABLE` strings identified by regex alone | HIGH |
+| 4\. LLM pass | Cells where layers 1-3 produce nothing and context implies an annotation | Validated against spec |
 
 In practice, the bundled `annotated_shell.docx` triggers Layer 1 for all
-130 stub-row annotations – the convention is consistent.
+130 stub-row annotations. When shells use non-standard conventions, the
+LLM pass catches what the regex misses.
+
+------------------------------------------------------------------------
 
 ## Listing column-header detection
 
-Listings differ from tables: the variable lives in the column header,
-not the stub. Cells like
+Listings differ from summary tables: the variable lives in the column
+header, not the stub. A cell like:
 
     Subject ID
     USUBJID
 
-get split – “Subject ID” is the label, `USUBJID` becomes the annotation.
-The dataset prefix is resolved by combining a universal ADSL list
-(USUBJID, ARM, TRT01A, etc. always live in ADSL) with the TLF’s source
-dataset from the `Source: ADAE` line below the table.
+gets split automatically. “Subject ID” becomes the display label and
+`USUBJID` becomes the annotation. The dataset prefix is resolved by
+combining a universal ADSL list (variables like `USUBJID`, `ARM`,
+`TRT01A` always live in ADSL) with the TLF’s declared source dataset
+from a `Source: ADAE` line below the table.
 
-## Closing the loop – downstream siera
-
-The package ships with a standalone runner at `siera_workflow/` in the
-project repository (not bundled in the package itself). It takes the ARS
-JSON arsbridge produces, runs it through
-[`siera::readARS()`](https://clymbclinical.github.io/siera/reference/readARS.html)
-to generate R analysis code, and executes that code against the
-simulated `ADaM.zip`. See `siera_workflow/README.md` for the full chain.
+------------------------------------------------------------------------
 
 ## Partial tables and the manual-fill round-trip
 
 Some tables mix statistics arsbridge can compute (counts, percentages,
 summary statistics) with ones it cannot (a Cochran-Mantel-Haenszel
-p-value, an exact or Newcombe confidence interval, an NRI-imputed
-responder rate). arsbridge does not fabricate the latter. Instead it
-**reserves a keyed cell** for each: the ARD carries a `manual_pending`
-stub row (`stat = NA`) tied to the same output, analysis, and method as
-a real result, so nothing is ever an orphan value typed straight into
-the rendered table.
+p-value, an exact confidence interval, an NRI-imputed responder rate).
+arsbridge does not fabricate the latter or drop the whole table. Instead
+it **reserves a keyed cell** for each: the ARD carries a
+`manual_pending` stub row with `stat = NA`, tied to the same output,
+analysis, and method as a real result.
 
-List what is outstanding with
-[`ars_manual_worklist()`](../reference/ars_manual_worklist.md):
+List what is outstanding:
 
 ``` r
 
 ard <- ars_to_ard(ars_path, "inputs/ADaM")
-ars_manual_worklist(ard)   # one row per reserved cell needing manual derivation
+ars_manual_worklist(ard)   # one row per reserved cell
 ```
 
-When the table is rendered, computed cells are filled and each reserved
-cell shows a loud `[‡ manual]` marker keyed to a footnote – never a
-blank, an `NA`, or a misleading zero. A table with *no* computable cell
-stays a numbered placeholder that names its reserved cells.
+When rendered, computed cells appear with their values and each reserved
+cell shows a loud `[‡ manual]` marker keyed to a footnote. No blank
+cells, no `NA`, no misleading zeros.
 
-To fill a reserved cell, compute it with a **validated analysis
-script**, then write the result back into the ARD row – the ARD is a
-data frame, so it is diffable, versioned, and auditable:
+To fill a reserved cell, compute it with a validated analysis script,
+then write the result back into the ARD row:
 
 ``` r
 
 i <- which(ard$result_status == "manual_pending")[1]
-ard$stat[[i]]         <- 0.012            # the validated value
+ard$stat[[i]]         <- 0.012
 ard$result_status[i]  <- "manual_filled"
 ard$value_source[i]   <- "manual"
-ard$derivation_ref[i] <- "programs/cmh_t1421.R"   # the program that produced it
+ard$derivation_ref[i] <- "programs/cmh_t1421.R"
 ```
 
 `derivation_ref` is the audit trail: not “someone typed 0.012” but
-“value from `cmh_t1421.R`”. Before rendering, arsbridge checks every
-manual fill – [`ars_render_all()`](../reference/ars_render_all.md)
-raises a blocker for any `manual_filled` cell that has no
-`derivation_ref` or no value, so an untraceable number can never ship:
+“value from `cmh_t1421.R`.” Before rendering, arsbridge checks every
+manual fill:
 
 ``` r
 
-ars_validate_manual_fills(ard)   # zero rows = every manual fill is traceable
+ars_validate_manual_fills(ard)   # zero rows = every fill is traceable
 ```
 
-A filled cell then renders its value like any other; the design and the
-full phased rationale live in
+[`ars_render_all()`](https://tavakohr.github.io/arsbridge/reference/ars_render_all.md)
+runs this automatically and blocks any untraceable value before it
+reaches the final document. The design and full rationale are in
 `adr/0002-partial-results-traceability.md`.
+
+------------------------------------------------------------------------
 
 ## What arsbridge will NOT do
 
 - Invent variable names from shell row labels or titles
-- Read or process ADaM data files (XPT, sas7bdat, CSV) – siera’s job
-- Write Word documents (no shell annotation – arsbridge only reads)
-- Generate analysis R code – siera’s job
+- Write Word documents (it only reads shells, not annotates them)
+- Generate R analysis code (that is
+  [siera](https://clymbclinical.github.io/siera/)’s job)
+- Process SAS data files directly without conversion to `.xpt` or `.csv`
+
+------------------------------------------------------------------------
 
 ## Where to look when something goes wrong
 
-- `res$validation` and `outputs/spec_validation_report.xlsx` –
-  per-annotation PASS/WARN/FAIL
-- [`cli::cli_alert_warning`](https://cli.r-lib.org/reference/cli_alert.html)
-  lines during the run – usually a TLF with an unexpected structure
-- Bundled test fixtures at `tests/testthat/fixtures/` – minimal
-  known-good shells to compare against
+| What to check | Where to look |
+|----|----|
+| Per-annotation PASS / WARN / FAIL | `res$validation` and `outputs/spec_validation_report.xlsx` |
+| Runtime warnings during extraction | [`cli::cli_alert_warning`](https://cli.r-lib.org/reference/cli_alert.html) lines printed during [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md) |
+| Known-good minimal shells | `tests/testthat/fixtures/` in the package source |
+| Blocker-only view | `arsbridge::ars_blockers(res$diagnostics)` |
+| Everything recorded | `arsbridge::ars_diagnostics(res$diagnostics)` |

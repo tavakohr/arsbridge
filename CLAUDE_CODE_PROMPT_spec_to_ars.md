@@ -2,9 +2,10 @@
 
 ## Exported Surface
 
-[`spec_to_ars()`](reference/spec_to_ars.md) is the **only exported
-function**. Any previously existing functions (`shell_to_ars`,
-`shell_annotate`) are deleted entirely and not replaced.
+[`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
+is the **only exported function**. Any previously existing functions
+(`shell_to_ars`, `shell_annotate`) are deleted entirely and not
+replaced.
 
 ------------------------------------------------------------------------
 

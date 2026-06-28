@@ -2,12 +2,15 @@
 
 Returns every fallback, parsing miss, skipped sheet, LLM failure,
 unknown analysis method, and dropped where-clause condition recorded
-during the most recent [`spec_to_ars()`](spec_to_ars.md) or
-[`ars_to_ard()`](ars_to_ard.md) call in this R session. The same records
-are written to the "Diagnostics" sheet of the validation report and
-returned in the `diagnostics` element of the
-[`spec_to_ars()`](spec_to_ars.md) result; this accessor exists for
-interactive inspection after the fact.
+during the most recent
+[`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
+or
+[`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)
+call in this R session. The same records are written to the
+"Diagnostics" sheet of the validation report and returned in the
+`diagnostics` element of the
+[`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
+result; this accessor exists for interactive inspection after the fact.
 
 ## Usage
 

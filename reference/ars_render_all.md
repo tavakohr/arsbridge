@@ -1,11 +1,14 @@
 # Render every output of a reporting event into one Word document
 
 Walks all outputs of an ARS reporting event, rendering tables with
-[`ars_render_tlf()`](ars_render_tlf.md), listings with
-[`ars_render_listing()`](ars_render_listing.md), and figures with
-[`ars_render_figure()`](ars_render_figure.md), and assembles them into a
-single landscape `.docx` (one output per page). Returns a manifest
-recording, for every output, whether it rendered and – if not – why.
+[`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md),
+listings with
+[`ars_render_listing()`](https://tavakohr.github.io/arsbridge/reference/ars_render_listing.md),
+and figures with
+[`ars_render_figure()`](https://tavakohr.github.io/arsbridge/reference/ars_render_figure.md),
+and assembles them into a single landscape `.docx` (one output per
+page). Returns a manifest recording, for every output, whether it
+rendered and – if not – why.
 
 ## Usage
 
@@ -30,7 +33,9 @@ ars_render_all(
 
 - ard:
 
-  Tidy ARD from [`ars_to_ard()`](ars_to_ard.md) (drives the tables).
+  Tidy ARD from
+  [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)
+  (drives the tables).
 
 - adam_dir:
 
@@ -57,7 +62,7 @@ ars_render_all(
 - max_rows:
 
   Row cap for listings (see
-  [`ars_render_listing()`](ars_render_listing.md)).
+  [`ars_render_listing()`](https://tavakohr.github.io/arsbridge/reference/ars_render_listing.md)).
 
 - progress:
 
@@ -70,9 +75,9 @@ invisibly carrying the written file path as attribute `"file"`.
 
 ## See also
 
-[`ars_render_tlf()`](ars_render_tlf.md),
-[`ars_render_listing()`](ars_render_listing.md),
-[`ars_render_figure()`](ars_render_figure.md)
+[`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md),
+[`ars_render_listing()`](https://tavakohr.github.io/arsbridge/reference/ars_render_listing.md),
+[`ars_render_figure()`](https://tavakohr.github.io/arsbridge/reference/ars_render_figure.md)
 
 ## Examples
 

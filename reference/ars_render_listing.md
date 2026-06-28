@@ -46,4 +46,5 @@ A `gt_tbl`.
 
 ## See also
 
-[`ars_render_tlf()`](ars_render_tlf.md), [`ars_to_ard()`](ars_to_ard.md)
+[`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md),
+[`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)
