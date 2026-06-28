@@ -1,17 +1,52 @@
-url: ~
+url: https://tavakohr.github.io/arsbridge/
+
 template:
   bootstrap: 5
+  bootswatch: flatly
+
+home:
+  title: "arsbridge: Annotated Shell to Clinical Table"
+  description: >
+    arsbridge reads an annotated Word TLF shell, validates every ADaM variable
+    against your study spec, generates a CDISC ARS JSON, executes it against
+    real ADaM datasets with {cards}, and renders a publication-ready GT clinical
+    table. One pipeline, no manual formatting step.
+  links:
+  - text: CDISC Analysis Results Standard
+    href: https://www.cdisc.org/standards/foundational/analysis-results-standard
+  - text: pharmaverse
+    href: https://pharmaverse.org
+  - text: Report an issue
+    href: https://github.com/tavakohr/arsbridge/issues
+
+navbar:
+  structure:
+    left:  [intro, articles, reference, news]
+    right: [search, github]
+  components:
+    intro:
+      text: Get started
+      href: articles/getting-started.html
+    articles:
+      text: Articles
+      menu:
+      - text: Getting started
+        href: articles/getting-started.html
+      - text: "How arsbridge reads the shell"
+        href: articles/reading-engine.html
 
 articles:
 - title: Articles
   navbar: ~
   contents:
-  - reading-engine
   - getting-started
+  - reading-engine
 
 reference:
 - title: Pipeline
-  desc: Convert an annotated shell + ADaM spec to ARS, ARD, and formatted TLFs.
+  desc: >
+    The end-to-end pipeline: annotated shell and ADaM spec in, formatted
+    clinical table out.
   contents:
   - spec_to_ars
   - spec_to_ars_example
@@ -22,22 +57,29 @@ reference:
   - ars_render_all
   - ars_render_listing
   - ars_render_figure
-- title: Inferential statistics & partial results
-  desc: >-
+
+- title: Inferential statistics and partial results
+  desc: >
     Executable descriptors for inferential statistics, and the manual-fill
-    round-trip for cells arsbridge cannot yet compute.
+    round-trip for cells arsbridge cannot yet compute automatically.
   contents:
   - ard_cmh_test
   - ard_proportion_ci_exact
   - ars_manual_worklist
   - ars_validate_manual_fills
+
 - title: Diagnostics
-  desc: Plain-English findings that point at the input document to fix.
+  desc: >
+    Plain-English findings that point at the exact location in the input
+    document to fix.
   contents:
   - ars_diagnostics
   - ars_blockers
+
 - title: LLM providers
-  desc: Configure and select the LLM that reads variant shells.
+  desc: >
+    Configure and select the LLM that reads variant shell layouts and
+    enriches ARS metadata.
   contents:
   - set_anthropic_key
   - set_openai_key
@@ -46,6 +88,8 @@ reference:
   - check_anthropic_key
   - get_active_llm
   - show_active_llm
+
 - title: Examples
+  desc: Access the bundled APX-DRM-301 study files for offline testing.
   contents:
   - arsbridge_example
