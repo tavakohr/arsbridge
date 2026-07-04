@@ -22,7 +22,7 @@ and reserved as keyed stub rows. This is the analyst's checklist: each row
 must be computed with a validated analysis script and written back into the
 ARD (set \code{stat}, \code{result_status = "manual_filled"}, \code{value_source},
 \code{derivation_ref}) before the table is final. See \code{vignette("getting-started")}
-and the ADRs under \verb{docs/adr/} for the round-trip.
+and the ADRs under \verb{adr/} for the round-trip.
 }
 \examples{
 \dontrun{

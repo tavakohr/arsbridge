@@ -177,6 +177,18 @@ extract_shell_llm <- function(section, spec_lookup = NULL,
         tlf_number = section$tlf_number, location = rows[[idx]]$label %||% "")
     }
 
+    ## A high-confidence deterministic binding (in-cell colour or a bound
+    ## below-table arrow line, ADR 0003) is authored ground truth -- the LLM
+    ## pass must not overwrite it: the rewrite typically drops the value
+    ## filter (ADSL.EOSSTT='COMPLETED' -> ADSL.EOSSTT), collapsing distinct
+    ## authored rows onto one variable. Disagreement is already logged above.
+    if (isTRUE(rows[[idx]]$has_annot) &&
+        identical(rows[[idx]]$detection_confidence, "high") &&
+        (rows[[idx]]$detection_method %||% "") %in%
+          c("colour", "below_table_arrow")) {
+      next
+    }
+
     rows[[idx]]$label                <- trimws(p$display_label %||% rows[[idx]]$label %||% "")
     rows[[idx]]$annotation           <- annotation
     rows[[idx]]$has_annot            <- TRUE

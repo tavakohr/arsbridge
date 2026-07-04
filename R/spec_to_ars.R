@@ -44,6 +44,12 @@
 #'   are rejected and logged as blockers, never shipped. With no API key the
 #'   pass degrades to the deterministic regex result and emits one warning.
 #'   Set `FALSE` to use deterministic parsing only.
+#' @param ship_annotations If `FALSE` (default), programmer annotation lines
+#'   found outside the stub cells (e.g. red `Label -> DATASET.VAR` paragraphs
+#'   below a table) are kept for row binding and the validation report but are
+#'   NEVER emitted into the ARS Footnote display section -- rendered footnotes
+#'   then contain only true footnotes. Set `TRUE` to append them to the
+#'   footnotes (debug escape hatch).
 #' @param validate       If `TRUE` (default), cross-reference annotations
 #'   against the ADaM spec and write a validation report.
 #' @param report_path    Path for the validation report `.xlsx`. Defaults to
@@ -107,6 +113,7 @@ spec_to_ars <- function(shell_path,
                         provider     = NULL,
                         spec_column_aliases = NULL,
                         extract_with_llm = TRUE,
+                        ship_annotations = FALSE,
                         validate     = TRUE,
                         report_path  = file.path(tempdir(), "spec_validation_report.xlsx"),
                         code_dir     = NULL,
@@ -283,7 +290,8 @@ spec_to_ars <- function(shell_path,
   if (verbose) cli::cli_alert_info("Building CDISC ARS v1.0 ReportingEvent...")
   re <- build_ars_json(enriched, study_id = study_id,
                        study_name = study_name %||% study_id,
-                       spec_lookup = spec$lookup)
+                       spec_lookup = spec$lookup,
+                       ship_annotations = ship_annotations)
 
   json_text <- jsonlite::toJSON(re, auto_unbox = TRUE, pretty = TRUE, null = "null")
   .write_text(json_text, output_path, "the ARS JSON", useBytes = TRUE)

@@ -9,7 +9,7 @@ ars_render_figure(
   adam_dir,
   output_id,
   type = c("auto", "mean_over_time", "responder_over_time", "km", "forest"),
-  dataset = "ADEFF",
+  dataset = NULL,
   value_var = "AVAL",
   time_var = NULL,
   by_var = NULL,
@@ -28,7 +28,9 @@ ars_render_figure(
 
 \item{type}{Figure type; \code{"auto"} infers from the title.}
 
-\item{dataset}{ADaM dataset to plot (default \code{"ADEFF"}).}
+\item{dataset}{ADaM dataset to plot. Default \code{NULL}: resolved from the
+shell's "Source: ..." line carried in the output's \verb{_meta.source_datasets}
+(falling back to \code{"ADEFF"} when the shell named no source).}
 
 \item{value_var}{Response value column (default \code{"AVAL"}).}
 

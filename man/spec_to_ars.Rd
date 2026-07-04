@@ -16,6 +16,7 @@ spec_to_ars(
   provider = NULL,
   spec_column_aliases = NULL,
   extract_with_llm = TRUE,
+  ship_annotations = FALSE,
   validate = TRUE,
   report_path = file.path(tempdir(), "spec_validation_report.xlsx"),
   code_dir = NULL,
@@ -69,6 +70,13 @@ from variable reference in variant layouts. Every proposed
 are rejected and logged as blockers, never shipped. With no API key the
 pass degrades to the deterministic regex result and emits one warning.
 Set \code{FALSE} to use deterministic parsing only.}
+
+\item{ship_annotations}{If \code{FALSE} (default), programmer annotation lines
+found outside the stub cells (e.g. red \code{Label -> DATASET.VAR} paragraphs
+below a table) are kept for row binding and the validation report but are
+NEVER emitted into the ARS Footnote display section -- rendered footnotes
+then contain only true footnotes. Set \code{TRUE} to append them to the
+footnotes (debug escape hatch).}
 
 \item{validate}{If \code{TRUE} (default), cross-reference annotations
 against the ADaM spec and write a validation report.}
