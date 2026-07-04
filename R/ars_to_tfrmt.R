@@ -82,6 +82,33 @@ extract_footnotes <- function(out_obj) {
   notes
 }
 
+## Authored shell layout persisted by build_ars_json (ADR 0003 Layer C).
+## Returns a data frame (order, label, indent, analysis_id, kind) or NULL
+## when the output carries no layout (older ARS files / listings / figures)
+## -- the caller then falls back to the pre-layout rendering path.
+.shell_layout <- function(out_obj) {
+  sl <- out_obj[["_meta"]][["shell_layout"]]
+  if (is.null(sl) || length(sl) == 0) return(NULL)
+  df <- data.frame(
+    order       = vapply(sl, function(e) as.integer(e[["order"]] %||% NA_integer_), integer(1)),
+    label       = vapply(sl, function(e) as.character(e[["label"]] %||% ""), character(1)),
+    indent      = vapply(sl, function(e) as.integer(e[["indent"]] %||% 0L), integer(1)),
+    analysis_id = vapply(sl, function(e) {
+      v <- e[["analysis_id"]]
+      if (is.null(v) || length(v) == 0 || is.na(v[[1]])) NA_character_ else as.character(v[[1]])
+    }, character(1)),
+    kind        = vapply(sl, function(e) as.character(e[["kind"]] %||% "row"), character(1)),
+    stringsAsFactors = FALSE
+  )
+  df[order(df$order), , drop = FALSE]
+}
+
+## Column names of the layout-driven display frame. Real data columns (not
+## synthetic tfrmt magic) so the flextable converter and tests can key on them.
+.ARS_SHELL_GRP <- ".arsbridge_shell_grp"
+.ARS_SHELL_LBL <- ".arsbridge_shell_lbl"
+.ARS_SHELL_ORD <- ".arsbridge_shell_ord"
+
 ## Names of fixed (dataDriven = FALSE) grouping variables in the spec. These
 ## are treatment / analysis-set style columns -- the column-variable candidates.
 .fixed_grouping_vars <- function(spec) {
@@ -221,10 +248,24 @@ detect_row_roles <- function(ard, col_var) {
 ## entries are scoped to the stat-line label they format (so they land on
 ## separate rows). Returns list(structures = <frmt_structure list>,
 ## params = <stat_names consumed>).
-.method_body_entries <- function(method_id, stat_names) {
+## `subject_n` renames the subject-count "n" param (layout path). Without the
+## rename, a table mixing MTH_SUBJECT_COUNT ("{n}") and
+## MTH_COUNT_AND_PERCENTAGE ("{n} ({p}%)") shares the "n" param across both
+## structures, and tfrmt's combine step errors on the n-only cells
+## ("Can't combine `stat` <double> and <character>").
+.method_body_entries <- function(method_id, stat_names, subject_n = "n") {
   has <- function(...) all(c(...) %in% stat_names)
   fs  <- function(label_val, frmt) tfrmt::frmt_structure(
     group_val = ".default", label_val = label_val, frmt)
+  ## Single-param structure bound to a NAMED param. tfrmt warns on a
+  ## one-parameter frmt_combine ("Unable to apply frmt_combine due to
+  ## uniqueness of column/row identifiers") -- the named plain frmt form
+  ## renders identically without the warning.
+  fs1 <- function(label_val, param, f) {
+    a <- list(group_val = ".default", label_val = label_val, f)
+    names(a)[3] <- param
+    do.call(tfrmt::frmt_structure, a)
+  }
   structs <- list()
   params  <- character(0)
 
@@ -249,13 +290,11 @@ detect_row_roles <- function(ard, col_var) {
       "{n} ({p}%)", n = tfrmt::frmt("xx"), p = tfrmt::frmt("xx.x")))))
     params <- c(params, "n", "p")
   } else if (method_id %in% count_like && has("n")) {
-    structs <- c(structs, list(fs(".default", tfrmt::frmt_combine(
-      "{n}", n = tfrmt::frmt("xx")))))
+    structs <- c(structs, list(fs1(".default", "n", tfrmt::frmt("xx"))))
     params <- c(params, "n")
   } else if (method_id == "MTH_SUBJECT_COUNT") {
-    structs <- c(structs, list(fs(".default", tfrmt::frmt_combine(
-      "{n}", n = tfrmt::frmt("xxx")))))
-    params <- c(params, "n")
+    structs <- c(structs, list(fs1(".default", subject_n, tfrmt::frmt("xxx"))))
+    params <- c(params, subject_n)
   } else if (.is_continuous_method(method_id)) {
     if (has("mean", "sd")) {
       structs <- c(structs, list(fs("Mean (SD)", tfrmt::frmt_combine(
@@ -263,8 +302,7 @@ detect_row_roles <- function(ard, col_var) {
       params <- c(params, "mean", "sd")
     }
     if (has("median")) {
-      structs <- c(structs, list(fs("Median", tfrmt::frmt_combine(
-        "{median}", median = tfrmt::frmt("xx.x")))))
+      structs <- c(structs, list(fs1("Median", "median", tfrmt::frmt("xx.x"))))
       params <- c(params, "median")
     }
     if (has("min", "max")) {
@@ -279,9 +317,7 @@ detect_row_roles <- function(ard, col_var) {
   if (length(structs) == 0) {
     leftover <- setdiff(stat_names, "N")
     structs <- lapply(leftover, function(sn) {
-      cargs <- list(paste0("{", sn, "}"))
-      cargs[[sn]] <- tfrmt::frmt("xx.x")
-      fs(.statline_for(sn), do.call(tfrmt::frmt_combine, cargs))
+      fs1(.statline_for(sn), sn, tfrmt::frmt("xx.x"))
     })
     params <- leftover
   }
@@ -289,19 +325,41 @@ detect_row_roles <- function(ard, col_var) {
   list(structures = structs, params = unique(params))
 }
 
+## Parameter name of the invisible filler cell behind an authored label-only
+## row (section header / spacer) on the layout-driven path.
+.ARS_SPACER_PARAM <- ".arsbridge_spacer"
+
+## Layout-path rename of the subject-count "n" param, so its body-plan
+## structure can never collide with a count-and-percentage "{n} ({p}%)"
+## structure in the same table (see .method_body_entries).
+.ARS_SUBJ_N_PARAM <- ".arsbridge_n_subj"
+
 ## Build the full body_plan + the set of params it consumes.
-build_body_plan <- function(ard_out) {
+## include_spacer = TRUE (layout-driven path) appends a structure that renders
+## the spacer param as a blank, so authored label-only rows print empty cells
+## rather than "NA".
+build_body_plan <- function(ard_out, include_spacer = FALSE) {
   method_col <- .flat_chr(ard_out[["method_id"]])
   stat_col   <- .flat_chr(ard_out[["stat_name"]])
   methods    <- unique(stats::na.omit(method_col))
+  subj_n     <- if (isTRUE(include_spacer)) .ARS_SUBJ_N_PARAM else "n"
 
   all_structs <- list()
   all_params  <- character(0)
   for (m in methods) {
     sn  <- unique(stats::na.omit(stat_col[method_col == m]))
-    ent <- .method_body_entries(m, sn)
+    ent <- .method_body_entries(m, sn, subject_n = subj_n)
     all_structs <- c(all_structs, ent$structures)
     all_params  <- c(all_params, ent$params)
+  }
+
+  if (isTRUE(include_spacer)) {
+    spacer_args <- list(group_val = ".default", label_val = ".default",
+                        tfrmt::frmt("x", missing = " "))
+    names(spacer_args)[3] <- .ARS_SPACER_PARAM
+    all_structs <- c(all_structs,
+                     list(do.call(tfrmt::frmt_structure, spacer_args)))
+    all_params  <- c(all_params, .ARS_SPACER_PARAM)
   }
 
   list(
@@ -310,14 +368,35 @@ build_body_plan <- function(ard_out) {
   )
 }
 
+## Per-method formatted-parameter sets (the same decisions .method_body_entries
+## makes for the body plan). The layout prep uses this so e.g. a subject-count
+## analysis keeps only its "n" while a count-and-percentage analysis in the
+## same table keeps "n" and "p".
+.method_params_map <- function(ard_out, subject_n = "n") {
+  method_col <- .flat_chr(ard_out[["method_id"]])
+  stat_col   <- .flat_chr(ard_out[["stat_name"]])
+  methods    <- unique(stats::na.omit(method_col))
+  stats::setNames(lapply(methods, function(m) {
+    .method_body_entries(m, unique(stats::na.omit(stat_col[method_col == m])),
+                         subject_n = subject_n)$params
+  }), methods)
+}
+
 ## ---------------------------------------------------------------------------
 ## Private helpers -- column plan + data preparation
 ## ---------------------------------------------------------------------------
 
 ## Ordered character vector of column (treatment) values. Tries the ARS display
 ## column definitions; falls back to ARD appearance order with a warning.
-build_col_levels <- function(out_obj, ard_out, col_var) {
-  ard_levels <- unique(stats::na.omit(.flat_chr(ard_out[[col_var]])))
+## `restrict = TRUE` (layout-driven path, ADR 0003 Layer D): ARD levels that
+## match no shell column header are EXCLUDED instead of appended -- a
+## population level like "Screen Failure" in TRT01A must not become a
+## treatment column. Falls back to append-all when nothing matches.
+build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
+                             ard_levels = NULL) {
+  if (is.null(ard_levels)) {
+    ard_levels <- unique(stats::na.omit(.flat_chr(ard_out[[col_var]])))
+  }
 
   ## ARS v1.0 outputs in this pipeline carry no explicit column definitions
   ## (displaySections hold only footnotes), so we order columns from the ARD.
@@ -334,19 +413,44 @@ build_col_levels <- function(out_obj, ard_out, col_var) {
   labels <- vapply(col_defs, function(c) .sc(c[["label"]]), character(1))
   labels <- labels[!is.na(labels) & nzchar(labels)]
   norm   <- function(x) tolower(gsub("\\s+", "", x))
+  ## Header "core": text before the first parenthesis (drops "(N=200)",
+  ## "n (%)") with any trailing stray "n" removed -- so a shortened header
+  ## like "Xanomeline Low" can match the fuller arm value
+  ## "Xanomeline Low Dose".
+  core <- function(lb) {
+    x <- sub("\\(.*$", "", lb)
+    x <- sub("(?i)\\bn\\s*%?\\s*$", "", x, perl = TRUE)
+    norm(x)
+  }
   ordered <- character(0)
   for (lb in labels) {
-    ## Tolerant match: a shell column header carries extra text the ARD arm
-    ## value does not (e.g. "UPADALIMIB 15 mg\n(N=200) n (%)" vs the level
-    ## "UPADALIMIB 15 mg"), so treat the arm value as a substring of the header.
+    ## Tolerant match, both directions: a shell column header carries extra
+    ## text the ARD arm value does not (e.g. "UPADALIMIB 15 mg\n(N=200) n (%)"
+    ## vs the level "UPADALIMIB 15 mg") -- OR the header abbreviates the arm
+    ## value (e.g. "Xanomeline Low" vs "Xanomeline Low Dose").
     nlb <- norm(lb)
+    crb <- core(lb)
     hit <- ard_levels[!ard_levels %in% ordered &
-                        vapply(ard_levels,
-                               function(a) grepl(norm(a), nlb, fixed = TRUE),
-                               logical(1))]
+                        vapply(ard_levels, function(a) {
+                          na_ <- norm(a)
+                          grepl(na_, nlb, fixed = TRUE) ||
+                            (nzchar(crb) && grepl(crb, na_, fixed = TRUE))
+                        }, logical(1))]
     if (length(hit)) ordered <- c(ordered, hit[1])
   }
-  ordered <- c(ordered, setdiff(ard_levels, ordered))
+  dropped <- setdiff(ard_levels, ordered)
+  if (isTRUE(restrict) && length(ordered) > 0) {
+    if (length(dropped) > 0) {
+      diag_add(
+        stage = "render", severity = "INFO",
+        problem = sprintf("ARD level(s) not in the shell column headers: %s",
+                          paste(dropped, collapse = ", ")),
+        action = "Excluded from the treatment columns (shell layout is authoritative); counted in stub rows where annotated"
+      )
+    }
+    return(ordered)
+  }
+  ordered <- c(ordered, dropped)
   if (length(ordered) == 0) ordered <- ard_levels
   ordered
 }
@@ -405,6 +509,137 @@ build_col_levels <- function(out_obj, ard_out, col_var) {
 
   ## Keep only stat_names the body plan formats (drops the N denominator etc.).
   out[out[["stat_name"]] %in% keep_params, , drop = FALSE]
+}
+
+## Effective column (treatment) values of an ARD under the layout path. A
+## subject-count analysis tabulates the treatment variable itself
+## (ard_categorical(variables = by)), so its column value sits in
+## variable_level with no group column -- include those.
+.layout_col_values <- function(ard_out, col_var, fixed_vars) {
+  n    <- nrow(ard_out)
+  vals <- if (col_var %in% names(ard_out)) .flat_chr(ard_out[[col_var]]) else
+    rep(NA_character_, n)
+  varc <- if ("variable" %in% names(ard_out)) .flat_chr(ard_out[["variable"]]) else
+    rep(NA_character_, n)
+  lvlc <- if ("variable_level" %in% names(ard_out)) .flat_chr(ard_out[["variable_level"]]) else
+    rep(NA_character_, n)
+  swing <- is.na(vals) & !is.na(varc) & toupper(varc) %in% toupper(fixed_vars)
+  vals[swing] <- lvlc[swing]
+  unique(stats::na.omit(vals))
+}
+
+## Layout-driven data preparation (ADR 0003 Layer E). Left-joins the ordered
+## authored layout to the ARD stats by analysis_id, so every authored row
+## appears in order with its authored label. A row whose analysis produced
+## nothing renderable becomes a blank line (spacer param) -- never dropped,
+## never silently reordered. Categorical / continuous analyses expand to
+## level / stat-line rows under their authored label.
+.tfrmt_prep_ard_layout <- function(ard, output_id, layout, col_var,
+                                   keep_params, col_levels, fixed_vars,
+                                   params_map = list()) {
+  oid <- .flat_chr(ard[["output_id"]])
+  ard_out <- ard[!is.na(oid) & oid == output_id, , drop = FALSE]
+  if (nrow(ard_out) == 0) {
+    cli::cli_abort("ARD has zero rows for output {.val {output_id}}.")
+  }
+
+  n <- nrow(ard_out)
+  fc <- function(cn) if (cn %in% names(ard_out)) .flat_chr(ard_out[[cn]]) else
+    rep(NA_character_, n)
+  flat <- data.frame(
+    analysis_id    = fc("analysis_id"),
+    method         = fc("method_id"),
+    variable       = fc("variable"),
+    variable_level = fc("variable_level"),
+    stat_name      = .flat_chr(ard_out[["stat_name"]]),
+    stat           = .flat_num(ard_out[["stat"]]),
+    colv           = fc(col_var),
+    stringsAsFactors = FALSE
+  )
+
+  ## Subject-count rows: treatment value arrives in variable_level (see
+  ## .layout_col_values) -- move it into the column slot.
+  swing <- is.na(flat$colv) & !is.na(flat$variable) &
+    toupper(flat$variable) %in% toupper(fixed_vars) &
+    !is.na(flat$variable_level)
+  flat$colv[swing]           <- flat$variable_level[swing]
+  flat$variable_level[swing] <- NA_character_
+  flat$colv[is.na(flat$colv) | !nzchar(flat$colv)] <- "Total"
+
+  ## Subject-count "n" renamed so its structure never collides with a
+  ## count-and-percentage "{n} ({p}%)" structure (see .method_body_entries).
+  subj <- !is.na(flat$method) & flat$method == "MTH_SUBJECT_COUNT" &
+    flat$stat_name == "n"
+  flat$stat_name[subj] <- .ARS_SUBJ_N_PARAM
+
+  ## Rescale proportion stats (cards stores p in [0, 1]) to percentages.
+  pct <- flat$stat_name %in% c("p", "pct", "percent")
+  if (any(pct)) {
+    pv <- flat$stat[pct]
+    if (all(is.na(pv) | (pv >= 0 & pv <= 1.0000001))) flat$stat[pct] <- pv * 100
+  }
+
+  ## Column restriction: only shell columns (plus the ungrouped Total pass).
+  ## Param restriction: each analysis keeps its own method's formatted params.
+  keep_cols <- unique(c(col_levels, "Total"))
+  p_ok <- vapply(seq_len(nrow(flat)), function(j) {
+    ps <- if (!is.na(flat$method[j])) params_map[[flat$method[j]]] else NULL
+    if (is.null(ps)) flat$stat_name[j] %in% keep_params else flat$stat_name[j] %in% ps
+  }, logical(1))
+  flat <- flat[p_ok & flat$colv %in% keep_cols, , drop = FALSE]
+
+  first_col <- if (length(col_levels) > 0) col_levels[1] else "Total"
+  blank_row <- function(le, ordv) data.frame(
+    grp = le$label, lbl = le$label, colv = first_col,
+    stat_name = .ARS_SPACER_PARAM, stat = NA_real_, ordv = ordv,
+    stringsAsFactors = FALSE)
+
+  rows <- list()
+  for (i in seq_len(nrow(layout))) {
+    le  <- layout[i, , drop = FALSE]
+    ord <- le$order * 1000L
+    dat <- if (!is.na(le$analysis_id)) {
+      flat[!is.na(flat$analysis_id) & flat$analysis_id == le$analysis_id, ,
+           drop = FALSE]
+    } else flat[0, , drop = FALSE]
+
+    if (nrow(dat) == 0) {
+      ## Authored label-only row, or an analysis with nothing renderable in
+      ## the shell columns: keep the authored line, blank (never dropped).
+      rows[[length(rows) + 1L]] <- blank_row(le, ord)
+      next
+    }
+
+    if (!le$kind %in% c("categorical", "continuous", "manual")) {
+      ## Scalar row (subject / filtered count): one line, authored label.
+      rows[[length(rows) + 1L]] <- data.frame(
+        grp = le$label, lbl = le$label, colv = dat$colv,
+        stat_name = dat$stat_name, stat = dat$stat, ordv = ord,
+        stringsAsFactors = FALSE)
+      next
+    }
+
+    ## Grouped row: authored label as a header line, then one line per
+    ## category level (categorical) / stat line (continuous, manual).
+    rows[[length(rows) + 1L]] <- blank_row(le, ord)
+    sub_lbl <- if (identical(le$kind, "categorical")) {
+      ifelse(is.na(dat$variable_level) | !nzchar(dat$variable_level),
+             "Total", dat$variable_level)
+    } else {
+      vapply(dat$stat_name, .statline_for, character(1), USE.NAMES = FALSE)
+    }
+    sub_ord <- ord + as.integer(factor(sub_lbl, levels = unique(sub_lbl)))
+    rows[[length(rows) + 1L]] <- data.frame(
+      grp = le$label, lbl = sub_lbl, colv = dat$colv,
+      stat_name = dat$stat_name, stat = dat$stat, ordv = sub_ord,
+      stringsAsFactors = FALSE)
+  }
+
+  out <- do.call(rbind, rows)
+  names(out) <- c(.ARS_SHELL_GRP, .ARS_SHELL_LBL, col_var,
+                  "stat_name", "stat", .ARS_SHELL_ORD)
+  rownames(out) <- NULL
+  out[order(out[[.ARS_SHELL_ORD]]), , drop = FALSE]
 }
 
 ## ---------------------------------------------------------------------------
@@ -479,14 +714,36 @@ ars_to_tfrmt <- function(ars_path, ard, output_id,
     cli::cli_abort("ARD has zero rows for output {.val {output_id}}.")
   }
 
-  if (is.null(col_var))   col_var   <- detect_col_var(ard_out, spec)
-  roles <- detect_row_roles(ard_out, col_var)
+  ## Authored shell layout (ADR 0003): when present it drives row labels,
+  ## row order, and the column restriction; otherwise the pre-layout
+  ## ARD-derived path below is used unchanged.
+  layout     <- .shell_layout(out_obj)
+  fixed_vars <- .fixed_grouping_vars(spec)
+
+  if (is.null(col_var)) {
+    col_var <- if (!is.null(layout)) {
+      ## An all-scalar table (every row a subject count) can produce an ARD
+      ## with no group*_level columns at all; the layout prep still builds
+      ## the column from variable_level, under a synthetic name.
+      tryCatch(detect_col_var(ard_out, spec),
+               error = function(e) ".arsbridge_col")
+    } else {
+      detect_col_var(ard_out, spec)
+    }
+  }
+  roles <- if (is.null(layout)) detect_row_roles(ard_out, col_var) else
+    list(label_var = .ARS_SHELL_LBL, group_vars = .ARS_SHELL_GRP)
   if (is.null(label_var))  label_var  <- roles[["label_var"]]
   if (is.null(group_vars)) group_vars <- roles[["group_vars"]]
   group_vars <- setdiff(group_vars, c(col_var, label_var))
 
-  bp        <- build_body_plan(ard_out)
-  col_lvls  <- build_col_levels(out_obj, ard_out, col_var)
+  bp        <- build_body_plan(ard_out, include_spacer = !is.null(layout))
+  col_lvls  <- if (!is.null(layout)) {
+    build_col_levels(out_obj, ard_out, col_var, restrict = TRUE,
+                     ard_levels = .layout_col_values(ard_out, col_var, fixed_vars))
+  } else {
+    build_col_levels(out_obj, ard_out, col_var)
+  }
   title     <- extract_title(out_obj)
   footnotes <- extract_footnotes(out_obj)
 
@@ -516,6 +773,14 @@ ars_to_tfrmt <- function(ars_path, ard, output_id,
     body_plan = bp[["body_plan"]]
   )
   if (length(title) == 1 && nzchar(title)) tf_args[["title"]] <- title
+  if (!is.null(layout)) {
+    ## Pin row order to the authored layout and keep the (identity-only)
+    ## group column out of the printed stub.
+    tf_args[["sorting_cols"]] <- do.call(dplyr::vars,
+                                         list(as.name(.ARS_SHELL_ORD)))
+    tf_args[["row_grp_plan"]] <- tfrmt::row_grp_plan(
+      label_loc = tfrmt::element_row_grp_loc(location = "noprint"))
+  }
 
   ## Lock column order when we have it.
   if (length(col_lvls) > 0) {
@@ -534,6 +799,11 @@ ars_to_tfrmt <- function(ars_path, ard, output_id,
   attr(tf, "arsbridge_col_var")     <- col_var
   attr(tf, "arsbridge_label_var")   <- label_var
   attr(tf, "arsbridge_group_vars")  <- group_vars
+  attr(tf, "arsbridge_layout")      <- layout
+  attr(tf, "arsbridge_col_levels")  <- col_lvls
+  attr(tf, "arsbridge_fixed_vars")  <- fixed_vars
+  attr(tf, "arsbridge_params_map")  <- .method_params_map(
+    ard_out, subject_n = if (!is.null(layout)) .ARS_SUBJ_N_PARAM else "n")
   tf
 }
 
@@ -582,15 +852,29 @@ ars_render_tlf <- function(ars_path, ard, output_id,
   out_obj <- find_output(spec, output_id)
   out_id  <- .sc(out_obj[["id"]])
 
-  data_prepped <- .tfrmt_prep_ard(ard, out_id, col_var, label_var,
-                                  group_vars, keep_params)
+  layout <- attr(tf, "arsbridge_layout")
+  data_prepped <- if (!is.null(layout)) {
+    .tfrmt_prep_ard_layout(
+      ard, out_id, layout, col_var, keep_params,
+      col_levels = attr(tf, "arsbridge_col_levels"),
+      fixed_vars = attr(tf, "arsbridge_fixed_vars"),
+      params_map = attr(tf, "arsbridge_params_map") %||% list())
+  } else {
+    .tfrmt_prep_ard(ard, out_id, col_var, label_var,
+                    group_vars, keep_params)
+  }
   stopifnot(label_var %in% names(data_prepped))
 
   gt_tbl <- tfrmt::print_to_gt(tf, .data = data_prepped)
   ## Blank the synthetic row-label column header.
-  if (identical(label_var, .ARS_ROW_LABEL) &&
+  if (label_var %in% c(.ARS_ROW_LABEL, .ARS_SHELL_LBL) &&
       label_var %in% names(gt_tbl[["_data"]])) {
     gt_tbl <- gt::cols_label(gt_tbl, .list = stats::setNames(list(""), label_var))
+  }
+  ## The layout ordering column is identity-only -- never displayed.
+  if (.ARS_SHELL_ORD %in% names(gt_tbl[["_data"]])) {
+    gt_tbl <- tryCatch(gt::cols_hide(gt_tbl, columns = dplyr::all_of(.ARS_SHELL_ORD)),
+                       error = function(e) gt_tbl)
   }
   if (length(footnotes) > 0) {
     for (fn in footnotes) {

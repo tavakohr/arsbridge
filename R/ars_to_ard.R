@@ -675,6 +675,32 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     })
 
     if (!is.null(ard)) {
+      ## Re-key a subject-count card that tabulated the grouping variable
+      ## itself (ard_categorical(variables = by) when the analysis variable
+      ## is the subject key). Its rows carry no distinguishing identity, so
+      ## several such analyses in one output (a disposition table's
+      ## enrolled / safety / completed / discontinued rows) would collide in
+      ## cards::bind_ard, which drops or refuses duplicated identities. Move
+      ## the treatment value into group1/group1_level and key the row by the
+      ## analysis id.
+      if (!is_stub && identical(method_id, "MTH_SUBJECT_COUNT") &&
+          !is.null(by_arg) && "variable" %in% names(ard)) {
+        g1 <- if ("group1" %in% names(ard)) ard[["group1"]] else
+          rep(NA_character_, nrow(ard))
+        sel <- !is.na(ard[["variable"]]) & ard[["variable"]] == by_arg[1] &
+          is.na(g1)
+        if (any(sel)) {
+          if (!"group1" %in% names(ard)) {
+            ard[["group1"]]       <- NA_character_
+            ard[["group1_level"]] <- rep(list(NULL), nrow(ard))
+          }
+          ard[["group1"]][sel]       <- by_arg[1]
+          ard[["group1_level"]][sel] <- ard[["variable_level"]][sel]
+          ard[["variable"]][sel]       <- analysis_var
+          ard[["variable_level"]][sel] <- as.list(rep(analysis_id, sum(sel)))
+        }
+      }
+
       # Add traceability metadata. analysis_descr carries the analysis's
       # human label (e.g. "EASI75 at Week 16") so the rendering layer can
       # disambiguate rows when several analyses summarise the same variable
@@ -753,8 +779,16 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     return(NULL)
   }
 
-  # Combine all analyses
-  final_ard <- cards::bind_ard(!!!ard_list)
+  # Combine all analyses. .distinct = FALSE: two analyses can legitimately
+  # produce identical {cards} identity rows -- e.g. several subject-count
+  # rows of a disposition table all tabulate the treatment variable under
+  # different subset filters -- and the default dedup would silently drop
+  # every analysis but one (their analysis_id column is not part of the
+  # cards identity). Rows are keyed by analysis_id below, so true duplicates
+  # cannot arise within one run.
+  final_ard <- tryCatch(
+    cards::bind_ard(!!!ard_list, .distinct = FALSE),
+    error = function(e) cards::bind_ard(!!!ard_list))
 
   ## Stamp the run timestamp once (ADR 0002), not inside the per-analysis loop:
   ## keeps resolve/emit pure and gives every row of one run an identical value.

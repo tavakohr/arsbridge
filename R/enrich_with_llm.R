@@ -186,6 +186,18 @@ enrich_with_llm <- function(section,
       )
     }
   }
+  ## Deterministic column-axis annotation (ADR 0003 Layer A): a bound
+  ## "Treatment columns -> DS.VAR" shell line is authored ground truth, so it
+  ## takes the outermost grouping slot over any LLM guess.
+  col_ann <- toupper(section$column_annotation %||% "")
+  if (section$analysis_type %in% c("LISTING", "FIGURE")) col_ann <- ""
+  if (nzchar(col_ann) && grepl(".", col_ann, fixed = TRUE)) {
+    parts <- strsplit(col_ann, ".", fixed = TRUE)[[1]]
+    det   <- list(variable = parts[2], dataset = parts[1], in_spec = TRUE)
+    groupings <- c(list(det), Filter(function(g)
+      !identical(toupper(g$variable %||% ""), det$variable), groupings))
+  }
+
   section$groupings     <- groupings
   section$include_total <- isTRUE(as.logical(parsed$include_total %||% FALSE))
   ## Back-compat single-grouping fields = outermost grouping.

@@ -21,8 +21,22 @@
 ## analysis needs statistics beyond arsbridge's descriptive {cards} scope, and
 ## the placeholder must read as an intentional boundary, not a bug. `gate =
 ## FALSE` marks an actual render failure, where the reason is an error message.
+## Make a string safe for OOXML text nodes: strip ANSI escape sequences
+## (cli/rlang error messages carry them in interactive sessions -- ESC is an
+## invalid XML character and officer's read_xml aborts on it: "PCDATA invalid
+## Char value 27") and any other control characters except tab/newline.
+.xml_safe <- function(x) {
+  x <- as.character(x %||% "")
+  x <- gsub("\033\\[[0-9;]*[A-Za-z]", "", x)
+  gsub("[\001-\010\013\014\016-\037\177]", "", x, perl = TRUE)
+}
+
 .add_placeholder <- function(doc, heading, title, reason, first, gate = TRUE,
                              detail = NULL) {
+  heading <- .xml_safe(heading)
+  title   <- .xml_safe(title)
+  reason  <- .xml_safe(reason)
+  detail  <- if (is.null(detail)) NULL else .xml_safe(detail)
   if (!first) doc <- officer::body_add_break(doc)
   doc <- officer::body_add_par(doc, heading)
   if (nzchar(title %||% "")) doc <- officer::body_add_par(doc, title)
@@ -80,7 +94,9 @@
   grp_col  <- intersect(c("..tfrmt_row_grp_lbl", ".tfrmt_row_grp_lbl"), names(d))
   grp_flag <- if (length(grp_col)) as.logical(d[[grp_col[1]]]) else rep(FALSE, nrow(d))
   grp_flag[is.na(grp_flag)] <- FALSE
-  d <- d[, !names(d) %in% c("..tfrmt_row_grp_lbl", ".tfrmt_row_grp_lbl"), drop = FALSE]
+  d <- d[, !names(d) %in% c("..tfrmt_row_grp_lbl", ".tfrmt_row_grp_lbl",
+                            ".arsbridge_shell_ord", ".arsbridge_shell_grp"),
+         drop = FALSE]
 
   ## Keep the row-label (and group) column on the LEFT. tfrmt's col_plan only
   ## names the treatment columns, so with .drop=FALSE the label column can be
@@ -116,10 +132,10 @@
   ft <- flextable::flextable(d)
   ft <- flextable::set_header_labels(ft, values = stats::setNames(as.list(header_vals), names(d)))
   hdr <- c(oid_name, if (length(title)) title[1] else NULL)
-  hdr <- hdr[nzchar(hdr)]
+  hdr <- .xml_safe(hdr[nzchar(hdr)])
   ft <- flextable::add_header_lines(ft, values = hdr)
   if (length(footnotes)) {
-    ft <- flextable::add_footer_lines(ft, values = footnotes)
+    ft <- flextable::add_footer_lines(ft, values = .xml_safe(footnotes))
     ft <- flextable::fontsize(ft, size = 8, part = "footer")
     ft <- flextable::italic(ft, part = "footer")
   }

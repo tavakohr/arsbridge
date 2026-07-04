@@ -25,7 +25,9 @@
 #' @param adam_dir Directory of ADaM datasets (.xpt/.csv).
 #' @param output_id Figure output id or name.
 #' @param type Figure type; `"auto"` infers from the title.
-#' @param dataset ADaM dataset to plot (default `"ADEFF"`).
+#' @param dataset ADaM dataset to plot. Default `NULL`: resolved from the
+#'   shell's "Source: ..." line carried in the output's `_meta.source_datasets`
+#'   (falling back to `"ADEFF"` when the shell named no source).
 #' @param value_var Response value column (default `"AVAL"`).
 #' @param time_var Visit/time column; default auto (`AVISITN` then `AVISIT`).
 #' @param by_var Grouping column; default auto (`TRT01A` then `TRTP`).
@@ -39,7 +41,7 @@
 ars_render_figure <- function(ars_path, adam_dir, output_id,
                               type = c("auto", "mean_over_time",
                                        "responder_over_time", "km", "forest"),
-                              dataset = "ADEFF", value_var = "AVAL",
+                              dataset = NULL, value_var = "AVAL",
                               time_var = NULL, by_var = NULL, paramcd = NULL,
                               responder_flag = NULL, time_event = NULL,
                               subject_key = "USUBJID") {
@@ -49,6 +51,16 @@ ars_render_figure <- function(ars_path, adam_dir, output_id,
   title   <- extract_title(out_obj)
   footns  <- extract_footnotes(out_obj)
   ttl     <- tolower(paste(title, collapse = " "))
+
+  ## Dataset default: the shell's "Source: ..." line, persisted per output in
+  ## _meta.source_datasets (ADR 0003) -- e.g. a vital-signs figure sourced
+  ## from ADVS must not silently plot ADEFF.
+  if (is.null(dataset)) {
+    src <- unlist(out_obj[["_meta"]][["source_datasets"]] %||% list())
+    src <- trimws(sub("\\s*\\(.*$", "", as.character(src)))
+    src <- src[nzchar(src)]
+    dataset <- if (length(src) > 0) src[1] else "ADEFF"
+  }
 
   if (type == "auto") {
     type <- if (grepl("forest", ttl)) "forest"

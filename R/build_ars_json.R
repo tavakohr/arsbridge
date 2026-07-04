@@ -241,6 +241,49 @@
   )
 )
 
+#' Infer the analysis method for one stub row from its bound annotation form
+#' (ADR 0003 Layer C). Deterministic: the annotation is authored ground truth,
+#' so it overrides the section-level LLM method for this row.
+#'
+#' @param row  Stub row (needs `annotation`).
+#' @param var_is_categorical NA/TRUE/FALSE -- the spec's verdict on the row's
+#'   primary variable (from `.var_is_categorical`).
+#' @return list(method = standard-catalogue name, kind = layout kind), or
+#'   NULL when the form is unrecognised (caller keeps the section default).
+#' @noRd
+.infer_row_method <- function(row, var_is_categorical = NA) {
+  ann <- as.character(row$annotation %||% "")
+  if (!nzchar(trimws(ann))) return(NULL)
+  ## Count expression or a bare USUBJID reference -> distinct subject count.
+  if (grepl("(?i)\\bcount\\s+of\\b|(?i)\\bunique\\s+USUBJID\\b", ann, perl = TRUE) ||
+      grepl(paste0("\\b", .ADAM_DS, "\\.USUBJID\\b"), ann, perl = TRUE)) {
+    return(list(method = "Subject Count", kind = "subject_count"))
+  }
+  ## Value filter present. A filter ON the primary variable itself
+  ## ("ADSL.SAFFL='Y'") means "count subjects in this state" -> subject count
+  ## within the subset. A filter on ANOTHER variable
+  ## ("ADEX.AVAL WHERE PARAMCD='DURD'") only scopes the data -- the primary
+  ## variable is still summarised by its own type below.
+  if (grepl("=\\s*'[^']*'", ann) || grepl("(?i)\\bwhere\\b", ann, perl = TRUE)) {
+    primary <- extract_annotation_vars(ann)
+    primary <- if (length(primary) > 0) sub("^.*\\.", "", primary[1]) else ""
+    fs <- flat_data_subset(ann)
+    filter_var <- toupper(fs$variable %||% "")
+    if (!nzchar(filter_var) || identical(filter_var, toupper(primary))) {
+      return(list(method = "Subject Count", kind = "filtered_count"))
+    }
+    ## fall through: subset on another variable; type decides the method
+  }
+  ## Primary variable type (from the ADaM spec) decides the method.
+  if (isTRUE(var_is_categorical)) {
+    return(list(method = "Count and Percentage", kind = "categorical"))
+  }
+  if (identical(var_is_categorical, FALSE)) {
+    return(list(method = "Summary Statistics - Continuous", kind = "continuous"))
+  }
+  NULL
+}
+
 #' Build a CDISC ARS v1.0 ReportingEvent list from enriched sections.
 #'
 #' Emits a JSON-ready structure that satisfies BOTH the CDISC ARS v1.0
@@ -251,6 +294,10 @@
 #'   `enrich_with_llm()` applied to each section).
 #' @param study_id   Study identifier.
 #' @param study_name Human-readable study name.
+#' @param ship_annotations When `TRUE`, programmer annotation lines captured
+#'   below the shell tables are appended to each output's Footnote display
+#'   section (debug escape hatch). Default `FALSE`: annotations are kept in
+#'   the parsed sections / validation report only and never shipped.
 #'
 #' @return Named list ready for [jsonlite::toJSON()] (use
 #'   `auto_unbox = TRUE, pretty = TRUE, null = "null"`).
@@ -260,7 +307,8 @@
 build_ars_json <- function(sections,
                            study_id   = "STUDY-001",
                            study_name = NULL,
-                           spec_lookup = NULL) {
+                           spec_lookup = NULL,
+                           ship_annotations = FALSE) {
   if (length(sections) == 0) {
     cli::cli_abort("Cannot build ReportingEvent: no TLF sections provided.")
   }
@@ -376,26 +424,75 @@ build_ars_json <- function(sections,
 
     ## --- AnalysisMethod (standard catalogue, or declarative-unsupported) ---
     ## A wholesale-gated section's descriptive rows are reserved; a partial
-    ## section's descriptive rows compute with the normal method.
-    mth_obj <- if (gated_generic) .build_unsupported_method(sec) else
+    ## section's descriptive rows compute with the normal method. A LISTING
+    ## section's method is structural, not statistical -- force MTH_LISTING
+    ## regardless of the LLM's analysis-type guess, otherwise the listing
+    ## renderer finds no MTH_LISTING columns and the output degrades to a
+    ## placeholder (ADR 0003 Phase 5).
+    mth_obj <- if (gated_generic) {
+      .build_unsupported_method(sec)
+    } else if (identical(sec$tlf_type, "LISTING")) {
+      .with_op_self_rels(.STANDARD_METHODS[["Listing"]])
+    } else {
       .build_method(sec)
+    }
     if (!mth_obj$id %in% seen_mth) {
       methods[[length(methods) + 1L]] <- mth_obj
       seen_mth <- c(seen_mth, mth_obj$id)
     }
 
-    ## --- One Analysis per annotated row ---
-    annotated_rows <- Filter(function(r) isTRUE(r$has_annot), sec$stub_rows)
+    ## --- One Analysis per annotated row; layout entry per authored row ---
+    ## For a plain TABLE section every authored stub row is walked in order:
+    ## annotated rows become analyses (method inferred from the annotation
+    ## form when it is recognisable), label-only rows become layout entries
+    ## with no analysis, and no annotated row is ever dropped (an
+    ## unresolvable one is reserved as manual_pending). Gated sections and
+    ## listings/figures keep the previous annotated-rows-only path.
+    build_layout <- identical(sec$tlf_type %||% "TABLE", "TABLE") &&
+      !sec_unsupported
+    rows_iter <- if (build_layout) sec$stub_rows %||% list() else
+      Filter(function(r) isTRUE(r$has_annot), sec$stub_rows)
     enriched_rows  <- sec$enriched_rows %||% list()
     er_by_label    <- setNames(
       enriched_rows,
       vapply(enriched_rows, function(e) e$label %||% "", character(1))
     )
 
+    shell_layout <- list()
     analysis_ids <- character()
-    for (idx in seq_along(annotated_rows)) {
-      row <- annotated_rows[[idx]]
+    for (ridx in seq_along(rows_iter)) {
+      row <- rows_iter[[ridx]]
+      raw <- as.character(row$raw_text %||% "")
+      indent <- nchar(regmatches(raw, regexpr("^ *", raw))[[1]] %||% "")
+
+      if (!isTRUE(row$has_annot)) {
+        ## Authored label-only row (section header / spacer): persisted in
+        ## the layout so the renderer keeps it, but it has no analysis.
+        shell_layout[[length(shell_layout) + 1L]] <- list(
+          order = length(shell_layout) + 1L,
+          label = row$label %||% "", indent = indent,
+          analysis_id = NA_character_, kind = "label")
+        next
+      }
+
+      idx <- length(analysis_ids) + 1L
       er  <- er_by_label[[row$label]] %||% list()
+      ## Deterministic safety net: when the LLM enrichment omitted this row,
+      ## derive dataset/variable and the subset filter straight from the
+      ## bound annotation so the authored row still computes.
+      if (!nzchar(er$primary_variable %||% "")) {
+        refs <- extract_annotation_vars(row$annotation)
+        if (length(refs) > 0) {
+          pieces <- strsplit(refs[1], ".", fixed = TRUE)[[1]]
+          er$label            <- er$label %||% row$label
+          er$primary_dataset  <- pieces[1]
+          er$primary_variable <- if (length(pieces) >= 2) pieces[2] else ""
+          er$variable_role    <- er$variable_role %||% "ANALYSIS"
+        }
+      }
+      if (is.null(er$data_subset) || length(er$data_subset) == 0) {
+        er$data_subset <- flat_data_subset(row$annotation)
+      }
       ds_obj <- .build_data_subset(er, sec$tlf_number, idx)
       if (!is.null(ds_obj) && !ds_obj$id %in% seen_ds) {
         ds_obj$order <- length(data_subsets) + 1L
@@ -403,15 +500,67 @@ build_ars_json <- function(sections,
         data_subsets[[length(data_subsets) + 1L]] <- ds_obj
         seen_ds <- c(seen_ds, ds_obj$id)
       }
-      ## Per-row method correction: a section classified as continuous may
-      ## still contain categorical rows (e.g. SEX, RACE in a demographics
-      ## table). Summarising those with continuous stats yields NaN -- so when
-      ## the ADaM spec marks the row variable as categorical, route it to the
-      ## count-and-percentage method instead.
+
       row_method_id <- mth_obj$id
-      if (!gated_generic &&
-          identical(mth_obj$id, "MTH_SUMMARY_STATISTICS_CONTINUOUS") &&
-          isTRUE(.var_is_categorical(er$primary_dataset, er$primary_variable))) {
+      row_kind      <- "row"
+      cat_verdict   <- .var_is_categorical(er$primary_dataset,
+                                           er$primary_variable)
+      ## Annotation-form inference applies to TABLE rows only: a listing
+      ## column annotated "ADAE.AEDECOD" is a passthrough column, never a
+      ## count analysis.
+      inferred <- if (build_layout) .infer_row_method(row, cat_verdict) else NULL
+
+      if (build_layout &&
+          !nzchar(er$primary_variable %||% "") &&
+          !nzchar(er$primary_dataset %||% "")) {
+        ## Annotated row whose variable never resolved (ADR 0003 no-drop):
+        ## reserve a traceable manual_pending cell instead of dropping the
+        ## row. ADSL.USUBJID keys the stub so the engine's dataset/variable
+        ## guards pass.
+        er$primary_dataset  <- "ADSL"
+        er$primary_variable <- "USUBJID"
+        row_method_id <- "MTH_UNSUPPORTED_ANALYSIS"
+        row_kind      <- "manual"
+        if (!"MTH_UNSUPPORTED_ANALYSIS" %in% seen_mth) {
+          methods[[length(methods) + 1L]] <- .build_unsupported_method(sec)
+          seen_mth <- c(seen_mth, "MTH_UNSUPPORTED_ANALYSIS")
+        }
+        diag_add(
+          stage = "build_ars", severity = "WARN",
+          problem = sprintf("Annotated row '%s' has no resolvable variable",
+                            row$label %||% "?"),
+          tlf_number = sec$tlf_number,
+          action = "Reserved as manual_pending so the authored row is kept -- see ars_manual_worklist()"
+        )
+      } else if (!is.null(inferred)) {
+        ## Deterministic method from the annotation form -- overrides the
+        ## section-level (LLM) method for this row.
+        row_kind <- inferred$kind
+        cand <- .STANDARD_METHODS[[inferred$method]]
+        if (!is.null(cand)) {
+          if (!cand$id %in% seen_mth) {
+            methods[[length(methods) + 1L]] <- .with_op_self_rels(cand)
+            seen_mth <- c(seen_mth, cand$id)
+          }
+          if (!identical(cand$id, mth_obj$id)) {
+            diag_add(
+              stage = "build_ars", severity = "INFO",
+              problem = sprintf("Row '%s': annotation form implies %s (section method was %s)",
+                                row$label %||% "?", cand$id, mth_obj$id),
+              tlf_number = sec$tlf_number,
+              action = "Used the annotation-inferred method for this row"
+            )
+          }
+          row_method_id <- cand$id
+        }
+      } else if (!gated_generic &&
+                 identical(mth_obj$id, "MTH_SUMMARY_STATISTICS_CONTINUOUS") &&
+                 isTRUE(cat_verdict)) {
+        ## Per-row method correction: a section classified as continuous may
+        ## still contain categorical rows (e.g. SEX, RACE in a demographics
+        ## table). Summarising those with continuous stats yields NaN -- so when
+        ## the ADaM spec marks the row variable as categorical, route it to the
+        ## count-and-percentage method instead.
         row_method_id <- count_method_id
         if (!count_method_id %in% seen_mth) {
           methods[[length(methods) + 1L]] <-
@@ -426,6 +575,7 @@ build_ars_json <- function(sections,
           action = "Routed this row to Count and Percentage instead of continuous summary"
         )
       }
+
       an_obj <- .build_analysis(
         section = sec, row = row, enrichment = er,
         index = idx, as_id = as_obj$id,
@@ -435,7 +585,17 @@ build_ars_json <- function(sections,
       )
       analyses[[length(analyses) + 1L]] <- an_obj
       analysis_ids <- c(analysis_ids, an_obj$id)
+      shell_layout[[length(shell_layout) + 1L]] <- list(
+        order = length(shell_layout) + 1L,
+        label = row$label %||% "", indent = indent,
+        analysis_id = an_obj$id,
+        kind = if (identical(row_method_id, "MTH_COUNT_AND_PERCENTAGE") &&
+                     identical(row_kind, "row")) "categorical"
+               else if (identical(row_method_id, "MTH_SUMMARY_STATISTICS_CONTINUOUS") &&
+                          identical(row_kind, "row")) "continuous"
+               else row_kind)
     }
+    if (!build_layout) shell_layout <- list()
 
     ## Executable inferential methods (ADR 0001): one analysis each on the
     ## section's primary response variable, carrying any operand (e.g. CMH
@@ -477,7 +637,9 @@ build_ars_json <- function(sections,
       analysis_ids <- c(analysis_ids, an$id)
     }
 
-    outputs[[length(outputs) + 1L]] <- .build_output(sec, analysis_ids)
+    outputs[[length(outputs) + 1L]] <-
+      .build_output(sec, analysis_ids, ship_annotations = ship_annotations,
+                    shell_layout = shell_layout)
   }
 
   ## Siera iterates `seq_len(nrow(JSON_DataSubsets))` and
@@ -782,7 +944,25 @@ build_ars_json <- function(sections,
   )
 }
 
-.build_output <- function(section, analysis_ids) {
+.build_output <- function(section, analysis_ids, ship_annotations = FALSE,
+                          shell_layout = NULL) {
+  ## Shipped footnotes are the true footnotes only; programmer annotation
+  ## lines are mapping instructions, not display text (ADR 0003 Layer B).
+  ## ship_annotations = TRUE re-attaches them for debugging.
+  shipped_notes <- as.character(section$footnotes %||% character())
+  if (isTRUE(ship_annotations)) {
+    shipped_notes <- c(shipped_notes,
+                       as.character(section$programmer_annotations %||% character()))
+  }
+  ## Output-private metadata (ADR 0003 Layer C). ARS v1.0 has no first-class
+  ## stub model, so the authored layout travels in an arsbridge `_meta` block
+  ## that standard consumers ignore and the renderer keys on.
+  out_meta <- list(
+    source_datasets = as.list(as.character(section$source_datasets %||% character()))
+  )
+  if (length(shell_layout %||% list()) > 0) {
+    out_meta$shell_layout <- shell_layout
+  }
   list(
     id                    = make_output_id(section$tlf_number),
     name                  = section$tlf_number,
@@ -800,7 +980,7 @@ build_ars_json <- function(sections,
         function(h) list(label = h)),
       displaySections = list(list(
         sectionType = "Footnote",
-        subSections = lapply(section$footnotes %||% list(),
+        subSections = lapply(as.list(shipped_notes),
                              function(f) list(text = f))
       ))
     )),
@@ -808,7 +988,8 @@ build_ars_json <- function(sections,
       name     = paste0(section$tlf_number, ".rtf"),
       fileType = "rtf"
     )),
-    referencedAnalysisIds = as.list(analysis_ids)
+    referencedAnalysisIds = as.list(analysis_ids),
+    `_meta`               = out_meta
   )
 }
 

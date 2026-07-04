@@ -25,6 +25,10 @@
 ## Accepts "Source:", "Sources:", "Data Source:", "Source datasets:", and
 ## "=" in place of ":".
 .SOURCE_LINE_RE <- "^\\s*(?:Data\\s+)?Sources?(?:\\s+datasets?)?\\s*[:=]\\s*(.+?)\\.?\\s*$"
+## Below-table annotation convention: "Label -> DATASET.VAR ..." (ASCII arrow
+## or U+2192). The left side names one or more stub rows / the column axis;
+## the right side is the annotation. Read by bind_annotations().
+.ARROW_ANNOT_RE <- "^\\s*.+?\\s*(?:->|→)\\s*.+$"
 .TOC_FIRST_CELL_HINTS <- c("number", "table number", "tlf number", "tlf #")
 
 ## Multi-pattern union for annotation detection (Layer 3 + validation gate
@@ -124,6 +128,7 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
           population_text  = "",
           population_annot = "",
           footnotes        = character(),
+          programmer_annotations = character(),
           source_datasets  = character(),
           col_headers      = character(),
           n_data_cols      = 0L,
@@ -158,6 +163,18 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
       ## Source line without grey -- still accept based on text pattern.
       if (length(src) == 2 && !nzchar(paste(current$source_datasets, collapse = ""))) {
         current$source_datasets <- .split_source_list(src[2])
+        next
+      }
+      ## Programmer annotation (ADR 0003 Layer B): a body paragraph that
+      ## carries an annotation-coloured run, matches the ADaM annotation
+      ## pattern, or uses the "Label -> DATASET.VAR" arrow form is a mapping
+      ## instruction for the programmer -- route it to
+      ## programmer_annotations, never into the shipped footnotes.
+      if (.has_annotation_colour(child) ||
+          grepl(.ANNOTATION_PATTERN, stripped, perl = TRUE) ||
+          grepl(.ARROW_ANNOT_RE, stripped, perl = TRUE)) {
+        current$programmer_annotations <-
+          c(current$programmer_annotations, stripped)
         next
       }
       ## Footnote markers or longer prose -> footnote bucket.
@@ -238,6 +255,16 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
         action = "Source datasets unknown; listing header dataset resolution falls back to ADSL"
       )
     }
+    if (length(sec$programmer_annotations) > 0) {
+      diag_add(
+        stage = "parse_shell", severity = "INFO", input = INPUT_SHELL,
+        problem = sprintf("%d programmer annotation line(s) captured outside the table stub",
+                          length(sec$programmer_annotations)),
+        tlf_number = sec$tlf_number,
+        location = sec$title %||% "",
+        action = "Kept for row binding and the validation report -- never shipped as footnotes"
+      )
+    }
   }
 
   sections
@@ -297,6 +324,164 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
   current
 }
 
+## ---------------------------------------------------------------------------
+## Convention-agnostic annotation binding (ADR 0003 Layer A)
+## ---------------------------------------------------------------------------
+
+#' Normalise a label for fuzzy matching: lowercase, punctuation and
+#' indentation stripped, whitespace collapsed.
+#' @noRd
+.norm_label <- function(x) {
+  x <- tolower(trimws(as.character(x %||% "")))
+  x <- gsub("[[:punct:]]+", " ", x)
+  trimws(gsub("\\s+", " ", x))
+}
+
+#' Index of the stub row whose label matches `lhs_norm`: exact normalised
+#' match first, then prefix (either direction), then substring containment.
+#' Returns NA when nothing matches.
+#' @noRd
+.match_stub_label <- function(lhs_norm, labels_norm) {
+  if (!nzchar(lhs_norm)) return(NA_integer_)
+  hit <- which(labels_norm == lhs_norm)
+  if (length(hit)) return(hit[1])
+  hit <- which(nzchar(labels_norm) &
+                 (startsWith(labels_norm, lhs_norm) |
+                    startsWith(lhs_norm, labels_norm)))
+  if (length(hit)) return(hit[1])
+  hit <- which(vapply(labels_norm, function(l) {
+    nzchar(l) && (grepl(lhs_norm, l, fixed = TRUE) ||
+                    grepl(l, lhs_norm, fixed = TRUE))
+  }, logical(1)))
+  if (length(hit)) return(hit[1])
+  NA_integer_
+}
+
+## Left-side phrases that name the column (treatment) axis rather than a row.
+.COLUMN_AXIS_PHRASES <- c(
+  "treatment column", "treatment columns", "column", "columns",
+  "treatment group", "treatment groups", "treatment arm", "treatment arms",
+  "treatment"
+)
+
+#' Bind programmer annotations to their stub rows regardless of placement.
+#'
+#' Reads the `Label -> annotation` lines collected in
+#' `sec$programmer_annotations` and binds each to the stub row whose label
+#' fuzzy-matches the left side; sets that row's `annotation`,
+#' `has_annot = TRUE`, `detection_method = "below_table_arrow"`. A left side
+#' naming the column axis is stored as `sec$column_annotation`
+#' ("DATASET.VARIABLE"); one matching the population line fills
+#' `population_annot` when empty. In-cell detections always win: only rows
+#' still `has_annot = FALSE` are bound. Unmatched lines stay in
+#' `programmer_annotations` untouched (they still reach the validation
+#' report). A multi-label left side ("Completed / Discontinued") splits on
+#' "/" and, when the right side is `DS.VAR (v1 / v2)` with matching
+#' cardinality, each row binds to its own `DS.VAR='v_i'`.
+#'
+#' @noRd
+bind_annotations <- function(sec) {
+  anns <- as.character(sec$programmer_annotations %||% character())
+  if (length(anns) == 0) return(sec)
+
+  labels_norm <- vapply(sec$stub_rows %||% list(),
+                        function(r) .norm_label(r$label), character(1))
+  pop_norm    <- .norm_label(sec$population_text)
+  var_ref_re  <- paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR, "\\b")
+
+  ## Compound lines carry several clauses separated by ";":
+  ## "Subject -> ADAE.USUBJID ; Treatment -> ADAE.TRT01A".
+  clauses <- unlist(lapply(anns, function(line)
+    trimws(strsplit(line, ";", fixed = TRUE)[[1]])))
+  clauses <- clauses[nzchar(clauses)]
+
+  for (clause in clauses) {
+    ## Split on the first arrow; fall back to the first colon ONLY when the
+    ## left side matches something (a stub row / the column axis / the
+    ## population line) -- a plain "Note: ..." must not bind.
+    pos <- regexpr("->|→", clause)
+    if (pos > 0) {
+      lhs <- substr(clause, 1, pos - 1)
+      rhs <- substr(clause, pos + attr(pos, "match.length"), nchar(clause))
+    } else {
+      cpos <- regexpr(":", clause, fixed = TRUE)
+      if (cpos <= 1) next
+      lhs <- substr(clause, 1, cpos - 1)
+      rhs <- substr(clause, cpos + 1, nchar(clause))
+    }
+    rhs <- trimws(rhs)
+    if (!nzchar(rhs)) next
+    lhs_full_norm <- .norm_label(lhs)
+    if (!nzchar(lhs_full_norm)) next
+
+    ## Left-side row candidates: the full label first (so "Start/Stop"
+    ## matches its own row), then the "/"-split pieces (so
+    ## "Completed / Discontinued" binds two rows).
+    lhs_labels <- trimws(strsplit(lhs, "/", fixed = TRUE)[[1]])
+    lhs_labels <- lhs_labels[nzchar(lhs_labels)]
+    full_hit <- .match_stub_label(lhs_full_norm, labels_norm)
+    if (!is.na(full_hit) || length(lhs_labels) == 0) {
+      lhs_labels <- lhs
+    }
+
+    ## Multi-label left side + "DS.VAR (v1 / v2 ...)" right side with the
+    ## same cardinality -> one value-filter annotation per label.
+    per_values <- NULL
+    pm <- regmatches(rhs, regexec(
+      paste0("^\\s*(", .ADAM_DS, "\\.", .ADAM_VAR, ")\\s*\\(([^)]+)\\)\\s*$"),
+      rhs, perl = TRUE))[[1]]
+    if (length(pm) == 3 && length(lhs_labels) > 1) {
+      vals <- trimws(strsplit(pm[3], "[/,]")[[1]])
+      vals <- vals[nzchar(vals)]
+      if (length(vals) == length(lhs_labels)) {
+        per_values <- list(var = pm[2], vals = vals)
+      }
+    }
+
+    ## 1. Stub rows claim the left side first.
+    matched_any <- FALSE
+    for (k in seq_along(lhs_labels)) {
+      idx <- .match_stub_label(.norm_label(lhs_labels[k]), labels_norm)
+      if (is.na(idx)) next
+      matched_any <- TRUE
+      if (isTRUE(sec$stub_rows[[idx]]$has_annot)) next   ## in-cell wins
+      ann_k <- if (!is.null(per_values)) {
+        paste0(per_values$var, "='", per_values$vals[k], "'")
+      } else rhs
+      sec$stub_rows[[idx]]$annotation           <- ann_k
+      sec$stub_rows[[idx]]$has_annot            <- TRUE
+      sec$stub_rows[[idx]]$detection_method     <- "below_table_arrow"
+      sec$stub_rows[[idx]]$detection_confidence <- "high"
+    }
+    if (matched_any) next
+
+    ## 2. Column-axis annotation: "Treatment columns -> ADSL.TRT01A",
+    ## "Column N and treatment -> ...", or an exact column-header match.
+    is_col_lhs <- lhs_full_norm %in% .COLUMN_AXIS_PHRASES ||
+      grepl("\\b(column|columns|treatment)\\b", lhs_full_norm) ||
+      any(vapply(sec$col_headers %||% character(), function(h) {
+        hn <- .norm_label(h)
+        nzchar(hn) && identical(hn, lhs_full_norm)
+      }, logical(1)))
+    if (is_col_lhs) {
+      ref <- regmatches(rhs, regexpr(var_ref_re, rhs, perl = TRUE))
+      if (length(ref) == 1 && is.null(sec$column_annotation)) {
+        sec$column_annotation <- toupper(ref)
+      }
+      next
+    }
+
+    ## 3. Population annotation.
+    if (nzchar(pop_norm) &&
+        !is.na(.match_stub_label(lhs_full_norm, pop_norm)) &&
+        !nzchar(sec$population_annot %||% "")) {
+      sec$population_annot <- rhs
+    }
+  }
+
+  sec
+}
+
 #' Resolve deferred listing-header detection now that the section is complete.
 #'
 #' By the time a section is pushed to `sections`, the entire body of the TLF
@@ -307,6 +492,10 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
 #'
 #' @noRd
 .finalize_section <- function(sec, spec_lookup = NULL) {
+  ## Bind below-table / arrow-form annotations to their rows first, so the
+  ## per-section "no annotations detected" diagnostic and everything
+  ## downstream see the bound rows (ADR 0003 Layer A).
+  sec <- bind_annotations(sec)
   pending <- sec$.pending_header_cells
   if (length(pending %||% list()) == 0) return(sec)
   if (!identical(sec$tlf_type, "LISTING")) {
@@ -353,6 +542,19 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
         location = substr(gsub("\n", " | ", p$text), 1, 80),
         action = "Header skipped -- variable may use a convention the token extractor does not recognise"
       )
+    }
+  }
+  ## Listing shells may annotate their columns as below-table arrow lines
+  ## ("Subject -> ADAE.USUBJID ; Treatment -> ADAE.TRT01A") instead of inside
+  ## the header cells -- bind those against the header rows (ADR 0003
+  ## Layer A) before deciding which headers carry annotations.
+  if (length(sec$programmer_annotations %||% character()) > 0) {
+    tmp <- sec
+    tmp$stub_rows <- hdr_rows
+    tmp <- bind_annotations(tmp)
+    hdr_rows <- tmp$stub_rows
+    if (is.null(sec$column_annotation)) {
+      sec$column_annotation <- tmp$column_annotation
     }
   }
   sec$header_rows <- hdr_rows
@@ -402,6 +604,18 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
                      italic = italic, underline = underline)
   }
   out
+}
+
+#' TRUE if any non-empty run of a paragraph carries an annotation colour
+#' (anything that is not grey, black, white, or automatic).
+#' @noRd
+.has_annotation_colour <- function(p_node) {
+  meta <- .runs_metadata(p_node)
+  any(vapply(meta, function(m) {
+    !is.na(m$color_hex) &&
+      !m$color_hex %in% c(.GREY_HEX, .BLACK_HEXES) &&
+      nzchar(m$text)
+  }, logical(1)))
 }
 
 #' TRUE if a paragraph has every non-empty run coloured grey 808080.
