@@ -105,6 +105,13 @@
 #'
 #' @keywords internal
 #' @noRd
+## Normalised stub labels that are statistic sub-lines of the row above,
+## never analyses of their own (compared after .norm_label()).
+.STATLINE_ROW_LABELS <- c(
+  "mean sd", "mean", "sd", "median", "min max", "min", "max",
+  "q1 q3", "q1", "q3", "n", "se", "cv", "geometric mean", "n missing"
+)
+
 extract_shell_llm <- function(section, spec_lookup = NULL,
                               provider = NULL, model = NULL, api_key = NULL,
                               call_fn = .enrich_structured) {
@@ -128,6 +135,21 @@ extract_shell_llm <- function(section, spec_lookup = NULL,
   api_key <- api_key %||% Sys.getenv(.llm_env_var(provider))
 
   spec_keys <- toupper(names(spec_lookup %||% list()))
+
+  ## Variables already bound to a row by a HIGH-confidence deterministic
+  ## detection (in-cell colour / below-table arrow). An LLM proposal that
+  ## re-reads one of these onto an UNANNOTATED row without any filter is a
+  ## duplicate of the same shell annotation (e.g. the parenthesised
+  ## "(End-of-study status)" caption re-annotated with the EOSSTT variable
+  ## already carried by the Completed/Discontinued rows) -- it would expand
+  ## a block the authored rows already show.
+  det_refs <- unique(toupper(unlist(lapply(rows, function(r) {
+    if (!isTRUE(r$has_annot)) return(NULL)
+    if (!identical(r$detection_confidence, "high")) return(NULL)
+    v <- extract_annotation_vars(r$annotation %||% "")
+    if (length(v) > 0) v[1] else NULL
+  }))))
+
   prompt    <- .render_extract_prompt(section, spec_keys)
 
   parsed <- call_fn(prompt, .extract_type(), provider = provider,
@@ -143,6 +165,13 @@ extract_shell_llm <- function(section, spec_lookup = NULL,
   for (p in proposals) {
     idx <- suppressWarnings(as.integer(p$row_index %||% NA))
     if (is.na(idx) || idx < 1 || idx > length(rows)) next
+
+    ## A stub row whose label is a bare statistic line ("Mean (SD)",
+    ## "Median", "Min, Max", ...) is a layout sub-row of the analysis row
+    ## above it, not an analysis of its own -- annotating it would create a
+    ## duplicate analysis block (ADR 0003). Leave it label-only; the
+    ## layout-driven renderer fills it from the parent analysis.
+    if (.norm_label(rows[[idx]]$label %||% "") %in% .STATLINE_ROW_LABELS) next
 
     ds  <- toupper(trimws(p$dataset  %||% ""))
     var <- toupper(trimws(p$variable %||% ""))
@@ -164,6 +193,22 @@ extract_shell_llm <- function(section, spec_lookup = NULL,
     ## Build the annotation string (variable + optional where-clause).
     where <- trimws(p$where_clause %||% "")
     annotation <- if (nzchar(where)) paste0(ref, " WHERE ", where) else ref
+
+    ## Bare re-read of a variable another row already carries with high
+    ## deterministic confidence -> duplicate annotation, not a new analysis.
+    ## (A proposal WITH a filter -- e.g. SEX='M' for a "Male" row -- is a
+    ## genuine distinct analysis and is kept.)
+    if (!nzchar(where) && !isTRUE(rows[[idx]]$has_annot) &&
+        ref %in% det_refs) {
+      diag_add(
+        stage = "extract_llm", severity = "INFO", input = INPUT_SHELL,
+        problem = sprintf("Row '%s': proposed %s duplicates a variable already bound to another row; left label-only",
+                          rows[[idx]]$label %||% "", ref),
+        tlf_number = section$tlf_number,
+        action = "Caption/spacer rows keep their layout position without their own analysis"
+      )
+      next
+    }
 
     ## --- CROSS-CHECK vs the deterministic regex result. ---------------------
     regex_annot <- toupper(trimws(rows[[idx]]$annotation %||% ""))

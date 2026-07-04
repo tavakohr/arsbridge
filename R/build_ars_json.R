@@ -460,6 +460,7 @@ build_ars_json <- function(sections,
 
     shell_layout <- list()
     analysis_ids <- character()
+    seen_row_sig <- character()
     for (ridx in seq_along(rows_iter)) {
       row <- rows_iter[[ridx]]
       raw <- as.character(row$raw_text %||% "")
@@ -575,6 +576,28 @@ build_ars_json <- function(sections,
           action = "Routed this row to Count and Percentage instead of continuous summary"
         )
       }
+
+      ## Duplicate-template dedup (nested AE shells author example blocks:
+      ## "<Preferred Term>" placeholder rows plus repeated "Preferred Term"
+      ## mock rows all annotated AEDECOD). Two rows resolving to the same
+      ## method + variable + subset would expand the SAME distribution twice
+      ## and collide in the renderer -- keep the first, collapse the rest.
+      row_sig <- paste(row_method_id,
+                       toupper(er$primary_dataset  %||% ""),
+                       toupper(er$primary_variable %||% ""),
+                       if (!is.null(ds_obj)) ds_obj$id else "",
+                       sep = "|")
+      if (build_layout && row_sig %in% seen_row_sig) {
+        diag_add(
+          stage = "build_ars", severity = "INFO",
+          problem = sprintf("Row '%s' duplicates an earlier row's analysis (%s); collapsed",
+                            row$label %||% "?", row_sig),
+          tlf_number = sec$tlf_number,
+          action = "Template/example rows expand once -- the first matching row carries the analysis"
+        )
+        next
+      }
+      seen_row_sig <- c(seen_row_sig, row_sig)
 
       an_obj <- .build_analysis(
         section = sec, row = row, enrichment = er,

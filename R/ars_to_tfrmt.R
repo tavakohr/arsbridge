@@ -590,14 +590,25 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
 
   first_col <- if (length(col_levels) > 0) col_levels[1] else "Total"
   blank_row <- function(le, ordv) data.frame(
-    grp = le$label, lbl = le$label, colv = first_col,
+    grp = le$label_grp %||% le$label, lbl = le$label, colv = first_col,
     stat_name = .ARS_SPACER_PARAM, stat = NA_real_, ordv = ordv,
     stringsAsFactors = FALSE)
 
   rows <- list()
+  consumed <- rep(FALSE, nrow(layout))
   for (i in seq_len(nrow(layout))) {
+    if (consumed[i]) next
     le  <- layout[i, , drop = FALSE]
     ord <- le$order * 1000L
+    ## The group column is row identity, never printed (noprint plan). An
+    ## authored row with an EMPTY stub label (annotation-only rows in nested
+    ## AE shells) must still be unique, or several analyses' expanded rows
+    ## collide into tfrmt pivot list-cols.
+    if (!nzchar(le$label)) {
+      le$label_grp <- sprintf(".arsbridge_row_%03d", le$order)
+    } else {
+      le$label_grp <- le$label
+    }
     dat <- if (!is.na(le$analysis_id)) {
       flat[!is.na(flat$analysis_id) & flat$analysis_id == le$analysis_id, ,
            drop = FALSE]
@@ -613,7 +624,7 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
     if (!le$kind %in% c("categorical", "continuous", "manual")) {
       ## Scalar row (subject / filtered count): one line, authored label.
       rows[[length(rows) + 1L]] <- data.frame(
-        grp = le$label, lbl = le$label, colv = dat$colv,
+        grp = le$label_grp, lbl = le$label, colv = dat$colv,
         stat_name = dat$stat_name, stat = dat$stat, ordv = ord,
         stringsAsFactors = FALSE)
       next
@@ -628,9 +639,36 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
     } else {
       vapply(dat$stat_name, .statline_for, character(1), USE.NAMES = FALSE)
     }
-    sub_ord <- ord + as.integer(factor(sub_lbl, levels = unique(sub_lbl)))
+
+    ## When the shell authors its own sub-rows right after the analysis row
+    ## ("Mean (SD)" / "Median" / "Min, Max" as label-only lines, or the
+    ## category levels of a categorical block), fill THOSE authored rows
+    ## instead of appending a duplicate block: matched sub-lines take the
+    ## authored row's position and the authored spacer is consumed.
+    trail <- integer(0)
+    j <- i + 1L
+    while (j <= nrow(layout) &&
+             identical(layout$kind[j], "label") && !consumed[j]) {
+      trail <- c(trail, j)
+      j <- j + 1L
+    }
+    trail_norm <- vapply(layout$label[trail], .norm_label, character(1),
+                         USE.NAMES = FALSE)
+    uniq <- unique(sub_lbl)
+    sub_ord_map <- stats::setNames(ord + seq_along(uniq), uniq)
+    for (u in uniq) {
+      hit <- which(!is.na(trail_norm) & trail_norm == .norm_label(u))
+      if (length(hit) > 0) {
+        jj <- trail[hit[1]]
+        sub_ord_map[[u]]     <- layout$order[jj] * 1000L
+        consumed[jj]         <- TRUE
+        trail_norm[hit[1]]   <- NA_character_
+      }
+    }
+    sub_ord <- unname(sub_ord_map[sub_lbl])
+
     rows[[length(rows) + 1L]] <- data.frame(
-      grp = le$label, lbl = sub_lbl, colv = dat$colv,
+      grp = le$label_grp, lbl = sub_lbl, colv = dat$colv,
       stat_name = dat$stat_name, stat = dat$stat, ordv = sub_ord,
       stringsAsFactors = FALSE)
   }
