@@ -20,6 +20,7 @@ spec_to_ars(
   provider = NULL,
   spec_column_aliases = NULL,
   extract_with_llm = TRUE,
+  ship_annotations = FALSE,
   validate = TRUE,
   report_path = file.path(tempdir(), "spec_validation_report.xlsx"),
   code_dir = NULL,
@@ -97,6 +98,15 @@ spec_to_ars(
   proposals are rejected and logged as blockers, never shipped. With no
   API key the pass degrades to the deterministic regex result and emits
   one warning. Set `FALSE` to use deterministic parsing only.
+
+- ship_annotations:
+
+  If `FALSE` (default), programmer annotation lines found outside the
+  stub cells (e.g. red `Label -> DATASET.VAR` paragraphs below a table)
+  are kept for row binding and the validation report but are NEVER
+  emitted into the ARS Footnote display section – rendered footnotes
+  then contain only true footnotes. Set `TRUE` to append them to the
+  footnotes (debug escape hatch).
 
 - validate:
 

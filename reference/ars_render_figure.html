@@ -56,7 +56,7 @@ here; only the title and footnotes are taken from the spec.</p>
 <span>  <span class="va">adam_dir</span>,</span>
 <span>  <span class="va">output_id</span>,</span>
 <span>  type <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"auto"</span>, <span class="st">"mean_over_time"</span>, <span class="st">"responder_over_time"</span>, <span class="st">"km"</span>, <span class="st">"forest"</span><span class="op">)</span>,</span>
-<span>  dataset <span class="op">=</span> <span class="st">"ADEFF"</span>,</span>
+<span>  dataset <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  value_var <span class="op">=</span> <span class="st">"AVAL"</span>,</span>
 <span>  time_var <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  by_var <span class="op">=</span> <span class="cn">NULL</span>,</span>
@@ -88,7 +88,9 @@ here; only the title and footnotes are taken from the spec.</p>
 
 
 <dt id="arg-dataset">dataset<a class="anchor" aria-label="anchor" href="#arg-dataset"></a></dt>
-<dd><p>ADaM dataset to plot (default <code>"ADEFF"</code>).</p></dd>
+<dd><p>ADaM dataset to plot. Default <code>NULL</code>: resolved from the
+shell's "Source: ..." line carried in the output's <code>_meta.source_datasets</code>
+(falling back to <code>"ADEFF"</code> when the shell named no source).</p></dd>
 
 
 <dt id="arg-value-var">value_var<a class="anchor" aria-label="anchor" href="#arg-value-var"></a></dt>
