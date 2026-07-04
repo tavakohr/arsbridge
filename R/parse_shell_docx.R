@@ -28,7 +28,7 @@
 ## Below-table annotation convention: "Label -> DATASET.VAR ..." (ASCII arrow
 ## or U+2192). The left side names one or more stub rows / the column axis;
 ## the right side is the annotation. Read by bind_annotations().
-.ARROW_ANNOT_RE <- "^\\s*.+?\\s*(?:->|→)\\s*.+$"
+.ARROW_ANNOT_RE <- "^\\s*.+?\\s*(?:->|\u2192)\\s*.+$"
 .TOC_FIRST_CELL_HINTS <- c("number", "table number", "tlf number", "tlf #")
 
 ## Multi-pattern union for annotation detection (Layer 3 + validation gate
@@ -399,7 +399,7 @@ bind_annotations <- function(sec) {
     ## Split on the first arrow; fall back to the first colon ONLY when the
     ## left side matches something (a stub row / the column axis / the
     ## population line) -- a plain "Note: ..." must not bind.
-    pos <- regexpr("->|→", clause)
+    pos <- regexpr("->|\u2192", clause)
     if (pos > 0) {
       lhs <- substr(clause, 1, pos - 1)
       rhs <- substr(clause, pos + attr(pos, "match.length"), nchar(clause))
