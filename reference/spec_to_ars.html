@@ -66,6 +66,7 @@ Results Standard (ARS) v1.0 ARM-TS JSON file consumable by
 <span>  provider <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  spec_column_aliases <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  extract_with_llm <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  ship_annotations <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  validate <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  report_path <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"spec_validation_report.xlsx"</span><span class="op">)</span>,</span>
 <span>  code_dir <span class="op">=</span> <span class="cn">NULL</span>,</span>
@@ -140,6 +141,15 @@ from variable reference in variant layouts. Every proposed
 are rejected and logged as blockers, never shipped. With no API key the
 pass degrades to the deterministic regex result and emits one warning.
 Set <code>FALSE</code> to use deterministic parsing only.</p></dd>
+
+
+<dt id="arg-ship-annotations">ship_annotations<a class="anchor" aria-label="anchor" href="#arg-ship-annotations"></a></dt>
+<dd><p>If <code>FALSE</code> (default), programmer annotation lines
+found outside the stub cells (e.g. red <code>Label -&gt; DATASET.VAR</code> paragraphs
+below a table) are kept for row binding and the validation report but are
+NEVER emitted into the ARS Footnote display section – rendered footnotes
+then contain only true footnotes. Set <code>TRUE</code> to append them to the
+footnotes (debug escape hatch).</p></dd>
 
 
 <dt id="arg-validate">validate<a class="anchor" aria-label="anchor" href="#arg-validate"></a></dt>

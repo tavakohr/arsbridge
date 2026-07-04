@@ -2,6 +2,53 @@
 
 ## arsbridge 0.1.0
 
+- Shell layout fidelity (ADR 0003, phases 1-5). arsbridge now carries a
+  first-class model of the authored table layout from the annotated
+  shell all the way to the rendered output:
+  - *Footnote/annotation split.* Programmer annotation lines outside the
+    stub cells (coloured runs, ADaM-pattern text, or
+    `Label -> DATASET.VAR` arrow paragraphs below a table) are routed to
+    `programmer_annotations` and never shipped as footnotes.
+    `spec_to_ars(ship_annotations = FALSE)` is the default; `TRUE`
+    re-attaches them for debugging.
+  - *Convention-agnostic binding.* New `bind_annotations()`
+    fuzzy-matches each below-table `Label -> annotation` line back to
+    its stub row (in-cell detections still win), splits multi-label
+    lines
+    (`Completed / Discontinued -> ADSL.EOSSTT (COMPLETED / DISCONTINUED)`)
+    into per-row value filters, and captures a
+    `Treatment columns -> ADSL.TRT01A` line as the authoritative
+    column-axis grouping.
+  - *Layout persistence + no-drop.* `build_ars_json()` walks every
+    authored stub row in order: annotated rows become analyses whose
+    method is inferred deterministically from the annotation form (count
+    expression -\> subject count; `VAR='val'` -\> filtered subject
+    count; bare variable -\> categorical or continuous per the ADaM
+    spec), label-only rows are kept as layout entries, and an annotated
+    row whose variable cannot resolve is reserved as a traceable
+    `manual_pending` analysis instead of being dropped. The ordered
+    layout is persisted per output as arsbridge-private
+    `_meta.shell_layout`, alongside `_meta.source_datasets`.
+  - *Layout-driven rendering + column restriction.* When
+    `_meta.shell_layout` is present,
+    [`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md)
+    builds the stub from the authored labels (joined to the ARD by
+    `analysis_id`), pins the authored row order, expands
+    categorical/continuous analyses beneath their authored label,
+    renders missing rows blank (never dropped), and restricts the
+    treatment columns to the arm levels named in the shell headers – a
+    population level like “Screen Failure” in `TRT01A` no longer leaks
+    in as a treatment column. Outputs without the layout metadata render
+    exactly as before.
+  - *Listings/figures.* A LISTING section always emits `MTH_LISTING`
+    analyses regardless of the LLM’s analysis-type guess, and
+    [`ars_render_figure()`](https://tavakohr.github.io/arsbridge/reference/ars_render_figure.md)
+    now resolves its default dataset from the shell’s `Source:` line
+    (`_meta.source_datasets`) instead of assuming `ADEFF`.
+  - Fixed a tfrmt warning (“Unable to apply `frmt_combine` due to
+    uniqueness of column/row identifiers”) by using named
+    single-parameter formats instead of one-parameter `frmt_combine()`
+    in generated body plans.
 - Initial release.
 - Classification wiring (ADR 0001): a capability-gated table is no
   longer reserved wholesale. `build_ars_json()` now classifies which of

@@ -9,7 +9,7 @@ with a validated analysis script and written back into the ARD (set
 `stat`, `result_status = "manual_filled"`, `value_source`,
 `derivation_ref`) before the table is final. See
 [`vignette("getting-started")`](https://tavakohr.github.io/arsbridge/articles/getting-started.md)
-and the ADRs under `docs/adr/` for the round-trip.
+and the ADRs under `adr/` for the round-trip.
 
 ## Usage
 
