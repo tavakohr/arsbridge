@@ -779,16 +779,21 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     return(NULL)
   }
 
-  # Combine all analyses. .distinct = FALSE: two analyses can legitimately
-  # produce identical {cards} identity rows -- e.g. several subject-count
-  # rows of a disposition table all tabulate the treatment variable under
-  # different subset filters -- and the default dedup would silently drop
-  # every analysis but one (their analysis_id column is not part of the
-  # cards identity). Rows are keyed by analysis_id below, so true duplicates
-  # cannot arise within one run.
+  # Combine all analyses. Two analyses can legitimately produce identical
+  # {cards} identity rows -- e.g. two continuous analyses that resolve to the
+  # same variable and grouping, or several disposition subject counts -- and
+  # the analysis_id column that distinguishes them is not part of the cards
+  # identity. bind_ard's default dedup would then silently drop every
+  # analysis but one, and .distinct = FALSE errors on the duplicates instead.
+  # So: bind_ard when identities are unique (keeps cards' checks), plain
+  # row-bind preserving every analysis when they are not.
   final_ard <- tryCatch(
     cards::bind_ard(!!!ard_list, .distinct = FALSE),
-    error = function(e) cards::bind_ard(!!!ard_list))
+    error = function(e) {
+      out <- dplyr::bind_rows(ard_list)
+      if (!inherits(out, "card")) class(out) <- union("card", class(out))
+      out
+    })
 
   ## Stamp the run timestamp once (ADR 0002), not inside the per-analysis loop:
   ## keeps resolve/emit pure and gives every row of one run an identical value.

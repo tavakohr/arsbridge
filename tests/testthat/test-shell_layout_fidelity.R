@@ -309,6 +309,54 @@ test_that("T_14_1_1 renders the 6 authored rows in order with shell columns only
   expect_false(any(grepl("->", fns, fixed = TRUE)))
 })
 
+test_that("continuous stat lines fill authored sub-rows instead of duplicating them", {
+  ## Shell authors its own "Mean (SD)" / "Median" / "Min, Max" rows under a
+  ## continuous analysis row (T_14_2_1 pattern): the expanded stat lines
+  ## must land ON those authored rows, not append a second block.
+  layout <- data.frame(
+    order = 1:5,
+    label = c("Duration of exposure (days)", "Mean (SD)", "Median",
+              "Min, Max", "Average daily dose"),
+    indent = 0L,
+    analysis_id = c("AN1", NA, NA, NA, "AN2"),
+    kind = c("continuous", "label", "label", "label", "continuous"),
+    stringsAsFactors = FALSE)
+  ard <- data.frame(
+    output_id    = "OUT",
+    analysis_id  = rep(c("AN1", "AN2"), each = 4),
+    method_id    = "MTH_SUMMARY_STATISTICS_CONTINUOUS",
+    variable     = rep(c("TRTDURD", "AVGDD"), each = 4),
+    variable_level = NA_character_,
+    group1_level = "Placebo",
+    stat_name    = rep(c("mean", "sd", "median", "min"), 2),
+    stat         = c(149.5, 60.3, 182, 7, 5.2, 1.1, 5.0, 2.1),
+    stringsAsFactors = FALSE)
+
+  prep <- .tfrmt_prep_ard_layout(
+    ard, "OUT", layout, col_var = "group1_level",
+    keep_params = c("mean", "sd", "median", "min"),
+    col_levels = "Placebo", fixed_vars = "TRT01A",
+    params_map = list(
+      MTH_SUMMARY_STATISTICS_CONTINUOUS = c("mean", "sd", "median", "min")))
+
+  lbls <- prep[[.ARS_SHELL_LBL]]
+  ## authored sub-rows consumed: exactly ONE "Mean (SD)" line per analysis
+  ## block, no leftover blank spacer duplicates for AN1's stat lines
+  an1 <- prep[prep[[.ARS_SHELL_GRP]] == "Duration of exposure (days)", ]
+  expect_setequal(unique(an1[[.ARS_SHELL_LBL]]),
+                  c("Duration of exposure (days)", "Mean (SD)", "Median",
+                    "(Min, Max)"))
+  ## the merged stat lines took the authored rows' positions (orders 2-4)
+  ms <- an1[an1[[.ARS_SHELL_LBL]] == "Mean (SD)", .ARS_SHELL_ORD][1]
+  expect_equal(as.numeric(ms), 2000)
+  ## no duplicated blank "Mean (SD)" spacer remains anywhere
+  spacers <- prep[prep$stat_name == .ARS_SPACER_PARAM, .ARS_SHELL_LBL]
+  expect_false(any(c("Mean (SD)", "Median", "Min, Max") %in% spacers))
+  ## AN2 has no authored sub-rows -> keeps its own appended block
+  an2 <- prep[prep[[.ARS_SHELL_GRP]] == "Average daily dose", ]
+  expect_true("Mean (SD)" %in% an2[[.ARS_SHELL_LBL]])
+})
+
 test_that("ars_to_ard keeps every analysis when several tabulate the same grouping variable", {
   skip_if_not(file.exists(fixture_shell))
   skip_if_not_installed("cards")
