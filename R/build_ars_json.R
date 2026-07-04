@@ -284,6 +284,27 @@
   NULL
 }
 
+#' Subset filter from an annotation string, tolerating the
+#' "DATASET.VAR WHERE OTHERVAR='v'" form that flat_data_subset() cannot
+#' parse (the WHERE tail is parsed with the head reference's dataset as
+#' context when it carries no dataset prefix of its own).
+#' @noRd
+.subset_from_annotation <- function(ann) {
+  ann <- as.character(ann %||% "")
+  if (!nzchar(trimws(ann))) return(NULL)
+  fs <- flat_data_subset(ann)
+  if (!is.null(fs)) return(fs)
+  p <- regmatches(ann, regexec(
+    paste0("^\\s*(", .ADAM_DS, ")\\.(", .ADAM_VAR, ")\\s+(?i:where)\\s+(.+)$"),
+    ann, perl = TRUE))[[1]]
+  if (length(p) != 4) return(NULL)
+  tail <- trimws(p[4])
+  if (!grepl(paste0("^", .ADAM_DS, "\\."), tail, perl = TRUE)) {
+    tail <- paste0(p[2], ".", tail)
+  }
+  flat_data_subset(tail)
+}
+
 #' Build a CDISC ARS v1.0 ReportingEvent list from enriched sections.
 #'
 #' Emits a JSON-ready structure that satisfies BOTH the CDISC ARS v1.0
@@ -461,6 +482,9 @@ build_ars_json <- function(sections,
     shell_layout <- list()
     analysis_ids <- character()
     seen_row_sig <- character()
+    ## Last categorical analysis emitted -- candidate parent for authored
+    ## level rows that follow it (option A of the level-row model).
+    cat_parent <- NULL
     for (ridx in seq_along(rows_iter)) {
       row <- rows_iter[[ridx]]
       raw <- as.character(row$raw_text %||% "")
@@ -469,6 +493,8 @@ build_ars_json <- function(sections,
       if (!isTRUE(row$has_annot)) {
         ## Authored label-only row (section header / spacer): persisted in
         ## the layout so the renderer keeps it, but it has no analysis.
+        ## A spacer also ends any categorical block above it.
+        cat_parent <- NULL
         shell_layout[[length(shell_layout) + 1L]] <- list(
           order = length(shell_layout) + 1L,
           label = row$label %||% "", indent = indent,
@@ -492,8 +518,35 @@ build_ars_json <- function(sections,
         }
       }
       if (is.null(er$data_subset) || length(er$data_subset) == 0) {
-        er$data_subset <- flat_data_subset(row$annotation)
+        er$data_subset <- .subset_from_annotation(row$annotation)
       }
+
+      ## Authored LEVEL row of the categorical block above it: the row's
+      ## subset filters the parent's own variable ("18-64" under
+      ## "Age group, n (%)" -> AGEGR1='18-64'). The parent analysis already
+      ## computes every level once, so this row gets NO analysis of its own;
+      ## it becomes a level slot the renderer fills from the parent's
+      ## computed levels -- authored label and order win, values come from
+      ## the single parent computation.
+      fs_child <- er$data_subset
+      if (build_layout && !is.null(cat_parent) && !is.null(fs_child) &&
+          identical(toupper(fs_child$variable %||% ""), cat_parent$var)) {
+        lv <- fs_child$value %||% list()
+        lv <- if (length(lv) > 0) as.character(lv[[1]]) else ""
+        shell_layout[[length(shell_layout) + 1L]] <- list(
+          order = length(shell_layout) + 1L,
+          label = row$label %||% "", indent = indent,
+          analysis_id = cat_parent$aid, kind = "level", level = lv)
+        diag_add(
+          stage = "build_ars", severity = "INFO",
+          problem = sprintf("Row '%s' is a level of the categorical block above (%s='%s')",
+                            row$label %||% "?", cat_parent$var, lv),
+          tlf_number = sec$tlf_number,
+          action = "Rendered from the parent analysis's computed levels -- no duplicate analysis emitted"
+        )
+        next
+      }
+
       ds_obj <- .build_data_subset(er, sec$tlf_number, idx)
       if (!is.null(ds_obj) && !ds_obj$id %in% seen_ds) {
         ds_obj$order <- length(data_subsets) + 1L
@@ -608,15 +661,24 @@ build_ars_json <- function(sections,
       )
       analyses[[length(analyses) + 1L]] <- an_obj
       analysis_ids <- c(analysis_ids, an_obj$id)
+      layout_kind <- if (identical(row_method_id, "MTH_COUNT_AND_PERCENTAGE") &&
+                           identical(row_kind, "row")) "categorical"
+                     else if (identical(row_method_id, "MTH_SUMMARY_STATISTICS_CONTINUOUS") &&
+                                identical(row_kind, "row")) "continuous"
+                     else row_kind
       shell_layout[[length(shell_layout) + 1L]] <- list(
         order = length(shell_layout) + 1L,
         label = row$label %||% "", indent = indent,
         analysis_id = an_obj$id,
-        kind = if (identical(row_method_id, "MTH_COUNT_AND_PERCENTAGE") &&
-                     identical(row_kind, "row")) "categorical"
-               else if (identical(row_method_id, "MTH_SUMMARY_STATISTICS_CONTINUOUS") &&
-                          identical(row_kind, "row")) "continuous"
-               else row_kind)
+        kind = layout_kind)
+      ## This analysis becomes (or clears) the candidate parent for authored
+      ## level rows that follow.
+      cat_parent <- if (identical(layout_kind, "categorical") &&
+                          nzchar(er$primary_variable %||% "")) {
+        list(var = toupper(er$primary_variable), aid = an_obj$id)
+      } else {
+        NULL
+      }
     }
     if (!build_layout) shell_layout <- list()
 

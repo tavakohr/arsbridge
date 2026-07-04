@@ -357,6 +357,66 @@ test_that("continuous stat lines fill authored sub-rows instead of duplicating t
   expect_true("Mean (SD)" %in% an2[[.ARS_SHELL_LBL]])
 })
 
+test_that("authored level rows of a categorical block become level slots, not duplicate analyses", {
+  ## Demographics pattern: shell authors "Sex, n (%)" AND its level rows
+  ## "Female"/"Male"; the level rows must not spawn their own analyses.
+  sec <- list(
+    tlf_number = "T-1", tlf_type = "TABLE", title = "Demo",
+    population_text = "All", population_annot = "",
+    footnotes = character(), source_datasets = "ADSL",
+    col_headers = c("", "Placebo"), n_data_cols = 1L,
+    ars_method_name = "Count and Percentage",
+    groupings = list(list(variable = "TRT01A", dataset = "ADSL")),
+    by_variable = "TRT01A", by_variable_dataset = "ADSL",
+    stub_rows = list(
+      list(label = "Sex, n (%)", annotation = "ADSL.SEX", has_annot = TRUE),
+      list(label = "Female", annotation = "ADSL.SEX WHERE SEX='FEMALE'",
+           has_annot = TRUE),
+      list(label = "Male", annotation = "ADSL.SEX WHERE SEX='MALE'",
+           has_annot = TRUE)),
+    enriched_rows = list(
+      list(label = "Sex, n (%)", primary_dataset = "ADSL",
+           primary_variable = "SEX", data_subset = NULL,
+           variable_role = "ANALYSIS")))
+  ## spec marks SEX categorical so the parent infers count-and-percentage
+  lookup <- list(`ADSL.SEX` = list(dataset = "ADSL", variable = "SEX",
+                                   type = "char", codelist = "SEXCD"))
+  re <- suppressMessages(suppressWarnings(
+    build_ars_json(list(sec), spec_lookup = lookup)))
+  o  <- re$outputs[[1]]
+  sl <- o$`_meta`$shell_layout
+
+  expect_length(o$referencedAnalysisIds, 1)   # only the parent
+  expect_identical(vapply(sl, function(e) e$kind, character(1)),
+                   c("categorical", "level", "level"))
+  parent_aid <- sl[[1]]$analysis_id
+  expect_identical(sl[[2]]$analysis_id, parent_aid)
+  expect_identical(sl[[2]]$level, "FEMALE")
+  expect_identical(sl[[3]]$level, "MALE")
+
+  ## Renderer: slots fill from the parent's computed levels; the mismatched
+  ## LLM value strings (FEMALE vs data 'F') match by prefix.
+  layout <- .shell_layout(o)
+  ard <- data.frame(
+    output_id = o$id, analysis_id = parent_aid,
+    method_id = "MTH_COUNT_AND_PERCENTAGE",
+    variable = "SEX", variable_level = c("F", "M"),
+    group1_level = "Placebo",
+    stat_name = "n", stat = c(53, 33), stringsAsFactors = FALSE)
+  prep <- .tfrmt_prep_ard_layout(
+    ard, o$id, layout, col_var = "group1_level", keep_params = "n",
+    col_levels = "Placebo", fixed_vars = "TRT01A",
+    params_map = list(MTH_COUNT_AND_PERCENTAGE = "n"))
+  female <- prep[prep[[.ARS_SHELL_LBL]] == "Female", ]
+  male   <- prep[prep[[.ARS_SHELL_LBL]] == "Male", ]
+  expect_equal(female$stat, 53)
+  expect_equal(male$stat, 33)
+  ## no leftover F/M expansion under the parent header
+  expect_false(any(prep[[.ARS_SHELL_LBL]] %in% c("F", "M")))
+  ## authored order pinned: header, Female, Male
+  expect_true(all(diff(prep[[.ARS_SHELL_ORD]]) >= 0))
+})
+
 test_that("ars_to_ard keeps every analysis when several tabulate the same grouping variable", {
   skip_if_not(file.exists(fixture_shell))
   skip_if_not_installed("cards")
