@@ -98,6 +98,10 @@ extract_footnotes <- function(out_obj) {
       if (is.null(v) || length(v) == 0 || is.na(v[[1]])) NA_character_ else as.character(v[[1]])
     }, character(1)),
     kind        = vapply(sl, function(e) as.character(e[["kind"]] %||% "row"), character(1)),
+    level       = vapply(sl, function(e) {
+      v <- e[["level"]]
+      if (is.null(v) || length(v) == 0) NA_character_ else as.character(v[[1]])
+    }, character(1)),
     stringsAsFactors = FALSE
   )
   df[order(df$order), , drop = FALSE]
@@ -528,6 +532,27 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
   unique(stats::na.omit(vals))
 }
 
+## Match an authored level-slot value to one of the parent analysis's data
+## levels. Tolerant: exact (case-insensitive), then prefix either way (the
+## LLM writes 'FEMALE' where the data codes 'F'), then substring.
+.match_level <- function(slot, pool) {
+  if (is.na(slot) || !nzchar(trimws(slot)) || length(pool) == 0) {
+    return(NA_character_)
+  }
+  s <- toupper(trimws(slot))
+  p <- toupper(trimws(pool))
+  hit <- which(p == s)
+  if (length(hit) == 0) hit <- which(startsWith(s, p))
+  if (length(hit) == 0) hit <- which(startsWith(p, s))
+  if (length(hit) == 0) {
+    hit <- which(vapply(p, function(x) {
+      grepl(x, s, fixed = TRUE) || grepl(s, x, fixed = TRUE)
+    }, logical(1)))
+  }
+  if (length(hit) == 0) return(NA_character_)
+  pool[hit[1]]
+}
+
 ## Layout-driven data preparation (ADR 0003 Layer E). Left-joins the ordered
 ## authored layout to the ARD stats by analysis_id, so every authored row
 ## appears in order with its authored label. A row whose analysis produced
@@ -633,6 +658,52 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
     ## Grouped row: authored label as a header line, then one line per
     ## category level (categorical) / stat line (continuous, manual).
     rows[[length(rows) + 1L]] <- blank_row(le, ord)
+
+    ## Authored LEVEL slots (kind "level" entries following this categorical
+    ## parent, option A): each takes its authored label and position, filled
+    ## from the parent's computed levels; matched levels leave the parent's
+    ## own expansion so nothing renders twice.
+    if (identical(le$kind, "categorical")) {
+      slots <- integer(0)
+      j <- i + 1L
+      while (j <= nrow(layout) && identical(layout$kind[j], "level") &&
+               identical(layout$analysis_id[j], le$analysis_id)) {
+        slots <- c(slots, j)
+        j <- j + 1L
+      }
+      if (length(slots) > 0) {
+        lvl_all <- ifelse(is.na(dat$variable_level) | !nzchar(dat$variable_level),
+                          "Total", dat$variable_level)
+        pool <- unique(lvl_all)
+        for (jj in slots) {
+          consumed[jj] <- TRUE
+          slot_lbl <- layout$label[jj]
+          slot_grp <- if (nzchar(slot_lbl)) slot_lbl else
+            sprintf(".arsbridge_row_%03d", layout$order[jj])
+          slot_ord <- layout$order[jj] * 1000L
+          hit <- .match_level(layout$level[jj], pool)
+          if (is.na(hit)) {
+            rows[[length(rows) + 1L]] <- data.frame(
+              grp = slot_grp, lbl = slot_lbl, colv = first_col,
+              stat_name = .ARS_SPACER_PARAM, stat = NA_real_,
+              ordv = slot_ord, stringsAsFactors = FALSE)
+          } else {
+            sel <- lvl_all == hit
+            rows[[length(rows) + 1L]] <- data.frame(
+              grp = slot_grp, lbl = slot_lbl, colv = dat$colv[sel],
+              stat_name = dat$stat_name[sel], stat = dat$stat[sel],
+              ordv = slot_ord, stringsAsFactors = FALSE)
+            pool    <- setdiff(pool, hit)
+            dat     <- dat[!sel, , drop = FALSE]
+            lvl_all <- lvl_all[!sel]
+          }
+        }
+        ## Every computed level claimed by an authored slot -> no leftover
+        ## expansion under the parent header.
+        if (nrow(dat) == 0) next
+      }
+    }
+
     sub_lbl <- if (identical(le$kind, "categorical")) {
       ifelse(is.na(dat$variable_level) | !nzchar(dat$variable_level),
              "Total", dat$variable_level)
@@ -656,16 +727,32 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
                          USE.NAMES = FALSE)
     uniq <- unique(sub_lbl)
     sub_ord_map <- stats::setNames(ord + seq_along(uniq), uniq)
+    sub_lbl_map <- stats::setNames(uniq, uniq)
     for (u in uniq) {
-      hit <- which(!is.na(trail_norm) & trail_norm == .norm_label(u))
+      un  <- .norm_label(u)
+      hit <- which(!is.na(trail_norm) & trail_norm == un)
+      if (length(hit) == 0 && nzchar(un)) {
+        ## Tolerant fallback: a data level may abbreviate the authored
+        ## sub-row or vice versa ("F" vs "Female", "WHITE" vs "White").
+        hit <- which(!is.na(trail_norm) &
+                       (startsWith(trail_norm, un) |
+                          startsWith(un, trail_norm)))
+      }
       if (length(hit) > 0) {
         jj <- trail[hit[1]]
         sub_ord_map[[u]]     <- layout$order[jj] * 1000L
         consumed[jj]         <- TRUE
         trail_norm[hit[1]]   <- NA_character_
+        ## Category levels display the AUTHORED text ("Female", "White");
+        ## continuous stat lines keep their exact statline label, which the
+        ## body-plan structures key on ("Mean (SD)").
+        if (identical(le$kind, "categorical")) {
+          sub_lbl_map[[u]] <- layout$label[jj]
+        }
       }
     }
     sub_ord <- unname(sub_ord_map[sub_lbl])
+    sub_lbl <- unname(sub_lbl_map[sub_lbl])
 
     rows[[length(rows) + 1L]] <- data.frame(
       grp = le$label_grp, lbl = sub_lbl, colv = dat$colv,
