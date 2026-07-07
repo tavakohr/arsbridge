@@ -21,6 +21,8 @@ docs/
 inputs/ADaM/
 outputs/
 .align_backup/
+inputs/.shell_backup/
+graphify-out/
 ~$*
 scratch_*.R
 run_*.R
