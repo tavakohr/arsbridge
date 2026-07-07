@@ -63,10 +63,10 @@ subset so the result binds cleanly across {cards} versions.'></head><body>
 <code>conf.high</code>). arsbridge emits a call to this function for a
 <code>MTH_PROPORTION_CI_EXACT</code> analysis (ADR 0001), so the deliverable script and
 the executed ARD are the same code. Wraps
-<code><a href="https://insightsengineering.github.io/cardx/latest-tag/reference/ard_categorical_ci.html" class="external-link">cardx::ard_categorical_ci()</a></code> with <code>method = "clopper-pearson"</code>; the n / N /
+<code><a href="https://rdrr.io/pkg/cardx/man/ard_categorical_ci.html" class="external-link">cardx::ard_categorical_ci()</a></code> with <code>method = "clopper-pearson"</code>; the n / N /
 estimate rows cardx also returns are dropped (a paired count analysis
 supplies them, and duplicate statistic identities would make
-<code><a href="https://insightsengineering.github.io/cards/latest-tag/reference/bind_ard.html" class="external-link">cards::bind_ard()</a></code> error). The <code>"card"</code> class is re-asserted after the
+<code><a href="https://rdrr.io/pkg/cards/man/bind_ard.html" class="external-link">cards::bind_ard()</a></code> error). The <code>"card"</code> class is re-asserted after the
 subset so the result binds cleanly across <code>{cards}</code> versions.</p>
     </div>
 

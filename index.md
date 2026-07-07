@@ -422,11 +422,11 @@ whole table.
 
 | Statistic | Status | Engine |
 |----|----|----|
-| Summary statistics (mean, SD, median, min, max) | Computed | [`cards::ard_continuous()`](https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html) |
-| Counts and percentages | Computed | [`cards::ard_categorical()`](https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html) |
-| AE frequencies (distinct subjects per event) | Computed | dedup then [`cards::ard_categorical()`](https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html) |
-| Subject counts (N) | Computed | [`cards::ard_total_n()`](https://insightsengineering.github.io/cards/latest-tag/reference/ard_total_n.html) |
-| Exact Clopper-Pearson CI | Computed (requires [cardx](https://github.com/insightsengineering/cardx)) | [`cardx::ard_categorical_ci()`](https://insightsengineering.github.io/cardx/latest-tag/reference/ard_categorical_ci.html) |
+| Summary statistics (mean, SD, median, min, max) | Computed | [`cards::ard_continuous()`](https://rdrr.io/pkg/cards/man/deprecated.html) |
+| Counts and percentages | Computed | [`cards::ard_categorical()`](https://rdrr.io/pkg/cards/man/deprecated.html) |
+| AE frequencies (distinct subjects per event) | Computed | dedup then [`cards::ard_categorical()`](https://rdrr.io/pkg/cards/man/deprecated.html) |
+| Subject counts (N) | Computed | [`cards::ard_total_n()`](https://rdrr.io/pkg/cards/man/ard_total_n.html) |
+| Exact Clopper-Pearson CI | Computed (requires [cardx](https://github.com/insightsengineering/cardx)) | [`cardx::ard_categorical_ci()`](https://rdrr.io/pkg/cardx/man/ard_categorical_ci.html) |
 | Cochran-Mantel-Haenszel p-value | Computed | Base R [`mantelhaen.test()`](https://rdrr.io/r/stats/mantelhaen.test.html) |
 | Newcombe difference interval | Reserved: `[‡ manual]` | Manual fill round-trip |
 | Odds ratio / hazard ratio | Reserved: `[‡ manual]` | Manual fill round-trip |
@@ -478,10 +478,10 @@ The ARS method identifier in each analysis maps to a specific
 
 | Method ID | Function called |
 |----|----|
-| `MTH_SUMMARY_STATISTICS_CONTINUOUS` | [`cards::ard_continuous()`](https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html) |
-| `MTH_COUNT_AND_PERCENTAGE` | [`cards::ard_categorical()`](https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html) |
-| `MTH_AE_FREQUENCY_COUNT` | Distinct-subject dedup, then [`cards::ard_categorical()`](https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html) |
-| `MTH_SUBJECT_COUNT` | [`cards::ard_total_n()`](https://insightsengineering.github.io/cards/latest-tag/reference/ard_total_n.html) or [`cards::ard_categorical()`](https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html) |
+| `MTH_SUMMARY_STATISTICS_CONTINUOUS` | [`cards::ard_continuous()`](https://rdrr.io/pkg/cards/man/deprecated.html) |
+| `MTH_COUNT_AND_PERCENTAGE` | [`cards::ard_categorical()`](https://rdrr.io/pkg/cards/man/deprecated.html) |
+| `MTH_AE_FREQUENCY_COUNT` | Distinct-subject dedup, then [`cards::ard_categorical()`](https://rdrr.io/pkg/cards/man/deprecated.html) |
+| `MTH_SUBJECT_COUNT` | [`cards::ard_total_n()`](https://rdrr.io/pkg/cards/man/ard_total_n.html) or [`cards::ard_categorical()`](https://rdrr.io/pkg/cards/man/deprecated.html) |
 | `MTH_PROPORTION_CI_EXACT` | [`arsbridge::ard_proportion_ci_exact()`](https://tavakohr.github.io/arsbridge/reference/ard_proportion_ci_exact.md) |
 | `MTH_CMH_TEST` | [`arsbridge::ard_cmh_test()`](https://tavakohr.github.io/arsbridge/reference/ard_cmh_test.md) |
 

@@ -91,7 +91,7 @@ Inside R, write a mapper that translates the method ID into a
 #### 1. Continuous Summaries (`MTH_SUMMARY_STATISTICS_CONTINUOUS`)
 
 Maps directly to
-[`cards::ard_continuous()`](https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html):
+[`cards::ard_continuous()`](https://rdrr.io/pkg/cards/man/deprecated.html):
 
 ``` r
 
@@ -106,7 +106,7 @@ cards::ard_continuous(
 #### 2. Categorical Counts & Percentages (`MTH_COUNT_AND_PERCENTAGE` or `MTH_AE_FREQUENCY_COUNT`)
 
 Maps directly to
-[`cards::ard_categorical()`](https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html):
+[`cards::ard_categorical()`](https://rdrr.io/pkg/cards/man/deprecated.html):
 
 ``` r
 
@@ -122,7 +122,7 @@ cards::ard_categorical(
 #### 3. Subject Counts (`MTH_SUBJECT_COUNT`)
 
 Maps directly to
-[`cards::ard_categorical()`](https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html)
+[`cards::ard_categorical()`](https://rdrr.io/pkg/cards/man/deprecated.html)
 or a custom summary:
 
 ``` r
@@ -138,7 +138,7 @@ cards::ard_categorical(
 ### Step 4: Bind and Return the ARD
 
 Collect all the individual ARD tables and merge them using
-[`cards::bind_ard()`](https://insightsengineering.github.io/cards/latest-tag/reference/bind_ard.html).
+[`cards::bind_ard()`](https://rdrr.io/pkg/cards/man/bind_ard.html).
 
 ``` r
 

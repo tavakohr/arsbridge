@@ -102,10 +102,10 @@
 <p>Inside R, write a mapper that translates the method ID into a <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> function call.</p>
 <div class="section level4">
 <h4 id="id_1-continuous-summaries-mth_summary_statistics_continuous">1. Continuous Summaries (<code>MTH_SUMMARY_STATISTICS_CONTINUOUS</code>)<a class="anchor" aria-label="anchor" href="#id_1-continuous-summaries-mth_summary_statistics_continuous"></a></h4>
-<p>Maps directly to <code><a href="https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html" class="external-link">cards::ard_continuous()</a></code>:</p>
+<p>Maps directly to <code><a href="https://rdrr.io/pkg/cards/man/deprecated.html" class="external-link">cards::ard_continuous()</a></code>:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Example translation code:</span></span>
-<span><span class="fu">cards</span><span class="fu">::</span><span class="fu"><a href="https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html" class="external-link">ard_continuous</a></span><span class="op">(</span></span>
+<span><span class="fu">cards</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/cards/man/deprecated.html" class="external-link">ard_continuous</a></span><span class="op">(</span></span>
 <span>  data <span class="op">=</span> <span class="va">df_filtered</span>,</span>
 <span>  by <span class="op">=</span> <span class="op">!</span><span class="op">!</span><span class="fu">rlang</span><span class="fu">::</span><span class="fu"><a href="https://rlang.r-lib.org/reference/sym.html" class="external-link">sym</a></span><span class="op">(</span><span class="va">grouping_var</span><span class="op">)</span>,</span>
 <span>  variables <span class="op">=</span> <span class="op">!</span><span class="op">!</span><span class="fu">rlang</span><span class="fu">::</span><span class="fu"><a href="https://rlang.r-lib.org/reference/sym.html" class="external-link">sym</a></span><span class="op">(</span><span class="va">analysis_var</span><span class="op">)</span></span>
@@ -113,10 +113,10 @@
 </div>
 <div class="section level4">
 <h4 id="id_2-categorical-counts--percentages-mth_count_and_percentage-or-mth_ae_frequency_count">2. Categorical Counts &amp; Percentages (<code>MTH_COUNT_AND_PERCENTAGE</code> or <code>MTH_AE_FREQUENCY_COUNT</code>)<a class="anchor" aria-label="anchor" href="#id_2-categorical-counts--percentages-mth_count_and_percentage-or-mth_ae_frequency_count"></a></h4>
-<p>Maps directly to <code><a href="https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html" class="external-link">cards::ard_categorical()</a></code>:</p>
+<p>Maps directly to <code><a href="https://rdrr.io/pkg/cards/man/deprecated.html" class="external-link">cards::ard_categorical()</a></code>:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Example translation code:</span></span>
-<span><span class="fu">cards</span><span class="fu">::</span><span class="fu"><a href="https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html" class="external-link">ard_categorical</a></span><span class="op">(</span></span>
+<span><span class="fu">cards</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/cards/man/deprecated.html" class="external-link">ard_categorical</a></span><span class="op">(</span></span>
 <span>  data <span class="op">=</span> <span class="va">df_filtered</span>,</span>
 <span>  by <span class="op">=</span> <span class="op">!</span><span class="op">!</span><span class="fu">rlang</span><span class="fu">::</span><span class="fu"><a href="https://rlang.r-lib.org/reference/sym.html" class="external-link">sym</a></span><span class="op">(</span><span class="va">grouping_var</span><span class="op">)</span>,</span>
 <span>  variables <span class="op">=</span> <span class="op">!</span><span class="op">!</span><span class="fu">rlang</span><span class="fu">::</span><span class="fu"><a href="https://rlang.r-lib.org/reference/sym.html" class="external-link">sym</a></span><span class="op">(</span><span class="va">analysis_var</span><span class="op">)</span>,</span>
@@ -125,9 +125,9 @@
 </div>
 <div class="section level4">
 <h4 id="id_3-subject-counts-mth_subject_count">3. Subject Counts (<code>MTH_SUBJECT_COUNT</code>)<a class="anchor" aria-label="anchor" href="#id_3-subject-counts-mth_subject_count"></a></h4>
-<p>Maps directly to <code><a href="https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html" class="external-link">cards::ard_categorical()</a></code> or a custom summary:</p>
+<p>Maps directly to <code><a href="https://rdrr.io/pkg/cards/man/deprecated.html" class="external-link">cards::ard_categorical()</a></code> or a custom summary:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu">cards</span><span class="fu">::</span><span class="fu"><a href="https://insightsengineering.github.io/cards/latest-tag/reference/deprecated.html" class="external-link">ard_categorical</a></span><span class="op">(</span></span>
+<code class="sourceCode R"><span><span class="fu">cards</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/cards/man/deprecated.html" class="external-link">ard_categorical</a></span><span class="op">(</span></span>
 <span>  data <span class="op">=</span> <span class="va">df_filtered</span>,</span>
 <span>  by <span class="op">=</span> <span class="op">!</span><span class="op">!</span><span class="fu">rlang</span><span class="fu">::</span><span class="fu"><a href="https://rlang.r-lib.org/reference/sym.html" class="external-link">sym</a></span><span class="op">(</span><span class="va">grouping_var</span><span class="op">)</span>,</span>
 <span>  variables <span class="op">=</span> <span class="op">!</span><span class="op">!</span><span class="fu">rlang</span><span class="fu">::</span><span class="fu"><a href="https://rlang.r-lib.org/reference/sym.html" class="external-link">sym</a></span><span class="op">(</span><span class="va">analysis_var</span><span class="op">)</span></span>
@@ -137,7 +137,7 @@
 </div>
 <div class="section level3">
 <h3 id="step-4-bind-and-return-the-ard">Step 4: Bind and Return the ARD<a class="anchor" aria-label="anchor" href="#step-4-bind-and-return-the-ard"></a></h3>
-<p>Collect all the individual ARD tables and merge them using <code><a href="https://insightsengineering.github.io/cards/latest-tag/reference/bind_ard.html" class="external-link">cards::bind_ard()</a></code>.</p>
+<p>Collect all the individual ARD tables and merge them using <code><a href="https://rdrr.io/pkg/cards/man/bind_ard.html" class="external-link">cards::bind_ard()</a></code>.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co">#' Execute ARS JSON and return an ARD object</span></span>
 <span><span class="co">#'</span></span>
@@ -162,7 +162,7 @@
 <span>  <span class="op">}</span></span>
 <span>  </span>
 <span>  <span class="co"># 4. Bind results into a single tidy ARD object</span></span>
-<span>  <span class="va">final_ard</span> <span class="op">&lt;-</span> <span class="fu">cards</span><span class="fu">::</span><span class="fu"><a href="https://insightsengineering.github.io/cards/latest-tag/reference/bind_ard.html" class="external-link">bind_ard</a></span><span class="op">(</span><span class="op">!</span><span class="op">!</span><span class="op">!</span><span class="va">ard_list</span><span class="op">)</span></span>
+<span>  <span class="va">final_ard</span> <span class="op">&lt;-</span> <span class="fu">cards</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/cards/man/bind_ard.html" class="external-link">bind_ard</a></span><span class="op">(</span><span class="op">!</span><span class="op">!</span><span class="op">!</span><span class="va">ard_list</span><span class="op">)</span></span>
 <span>  <span class="kw"><a href="https://rdrr.io/r/base/function.html" class="external-link">return</a></span><span class="op">(</span><span class="va">final_ard</span><span class="op">)</span></span>
 <span><span class="op">}</span></span></code></pre></div>
 <p>This workflow enables clinical programmers to perform metadata-driven table generation in a robust, standardized way.</p>
