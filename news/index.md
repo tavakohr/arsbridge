@@ -77,7 +77,7 @@
   0001). When [cardx](https://github.com/insightsengineering/cardx) is
   installed, the `MTH_PROPORTION_CI_EXACT` method is no longer reserved
   as a manual cell – arsbridge emits a
-  [`cardx::ard_categorical_ci()`](https://insightsengineering.github.io/cardx/latest-tag/reference/ard_categorical_ci.html)
+  [`cardx::ard_categorical_ci()`](https://rdrr.io/pkg/cardx/man/ard_categorical_ci.html)
   call and computes the per-arm CIs like any other result
   (`value_source = "cardx"`). It needs no operand beyond the response
   variable and the treatment grouping. Without

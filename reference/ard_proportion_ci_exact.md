@@ -5,11 +5,11 @@ Per-group exact binomial CIs for a categorical response, returned as a
 `conf.high`). arsbridge emits a call to this function for a
 `MTH_PROPORTION_CI_EXACT` analysis (ADR 0001), so the deliverable script
 and the executed ARD are the same code. Wraps
-[`cardx::ard_categorical_ci()`](https://insightsengineering.github.io/cardx/latest-tag/reference/ard_categorical_ci.html)
+[`cardx::ard_categorical_ci()`](https://rdrr.io/pkg/cardx/man/ard_categorical_ci.html)
 with `method = "clopper-pearson"`; the n / N / estimate rows cardx also
 returns are dropped (a paired count analysis supplies them, and
 duplicate statistic identities would make
-[`cards::bind_ard()`](https://insightsengineering.github.io/cards/latest-tag/reference/bind_ard.html)
+[`cards::bind_ard()`](https://rdrr.io/pkg/cards/man/bind_ard.html)
 error). The `"card"` class is re-asserted after the subset so the result
 binds cleanly across `{cards}` versions.
 
