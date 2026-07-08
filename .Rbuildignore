@@ -9,6 +9,13 @@
 ^\.github$
 ^CLAUDE_CODE_PROMPT.*\.md$
 ^CLAUDE_.*\.md$
+^HANDOFF_.*\.md$
+^IMPROVEMENTS_.*\.md$
+^REVIEW_.*\.md$
+^REEVALUATION_.*\.md$
+^evaluation$
+^codecov\.yml$
+^probe_.*\.R$
 ^tmp_.*$
 ^\.claude$
 ^inputs$

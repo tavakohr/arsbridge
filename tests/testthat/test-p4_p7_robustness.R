@@ -21,8 +21,11 @@ test_that("spec abort names the sheets and why they were skipped", {
 ## --- P5: heading regex flexibility -------------------------------------------
 
 .match_heading <- function(x) {
+  ## .TLF_HEADING_RE now carries a 4th group for an optional inline title
+  ## ("Table 14.1.1: Title") -- see F1 in parse_shell_docx.R. These tests
+  ## only care about word/number, so the inline-title group is ignored.
   m <- regmatches(x, regexec(.TLF_HEADING_RE, x, perl = TRUE))[[1]]
-  if (length(m) == 3) list(word = m[2], number = m[3]) else NULL
+  if (length(m) == 4) list(word = m[2], number = m[3]) else NULL
 }
 
 test_that("heading regex is case-insensitive and accepts suffix letters", {
