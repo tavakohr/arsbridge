@@ -8,6 +8,12 @@
 .env
 .claude/
 
+# Evaluation / review working docs (not part of the package)
+evaluation/
+IMPROVEMENTS_shell_spec_robustness.md
+REVIEW_p0-parsing_branch.md
+REEVALUATION_p0-parsing_premerge.md
+
 # Build artifacts
 inst/doc/
 docs/

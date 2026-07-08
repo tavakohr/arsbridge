@@ -1,5 +1,36 @@
 # arsbridge 0.1.0
 
+* Shell-parsing robustness for cross-sponsor variation
+  (`R/parse_shell_docx.R`, robustness findings F1-F4). The shell reader now
+  tolerates inline headings (`Table 14.1.1: Title`), two-line titles, listings
+  with no population line, page-header-stored titles/populations,
+  `gridSpan`/`vMerge` merged cells and multi-row headers, and Word comments,
+  highlights, tracked changes, and text boxes as annotation channels.
+  Pre-merge hardening:
+  - A page-header title/population is adopted only when the header's TLF
+    number matches the body section's; a mismatch (stale template header,
+    or a header belonging to another TLF) is refused with a WARN instead of
+    silently mislabelling the section.
+  - A multi-row nested header with no `<w:tblHeader/>` flag is inferred from
+    the spanned first row (so the subcolumn labels survive and no ghost stub
+    row is produced), with a WARN that the header was a heuristic guess.
+  - A treatment-column mapping line (`Treatment columns -> ADSL.TRT01A`)
+    placed right after the title is no longer misread as the population; it
+    now reaches `bind_annotations()` as the column-axis grouping. A paragraph
+    with no population wording counts as the population only when its
+    annotation is a population-flag reference (`...FL='Y'`).
+  - A pre-table footnote (`Note: ...`) between title and table is kept as a
+    footnote instead of being glued onto the title.
+  - A Word comment carrying an annotation is bound even when it is anchored
+    to a data cell rather than the stub cell.
+  - Fuzzy stub-label matching no longer lets a one/two-character label (`n`,
+    `%`) substring-match an unrelated longer phrase.
+  - Known limitations, consciously deferred: page headers are read only for
+    single-section documents (a multi-section docx with per-section headers
+    is not attempted); the annotation highlight-exclusion list is
+    `none`/`black` only; the text-box fixture uses the direct
+    `w:txbxContent` shape rather than Word's `mc:AlternateContent` wrapper.
+
 * Shell layout fidelity (ADR 0003, phases 1-5). arsbridge now carries a
   first-class model of the authored table layout from the annotated shell all
   the way to the rendered output:
