@@ -40,7 +40,16 @@
 
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.1.0" id="arsbridge-010">arsbridge 0.1.0<a class="anchor" aria-label="anchor" href="#arsbridge-010"></a></h2>
-<ul><li>Shell layout fidelity (ADR 0003, phases 1-5). arsbridge now carries a first-class model of the authored table layout from the annotated shell all the way to the rendered output:
+<ul><li>Shell-parsing robustness for cross-sponsor variation (<code>R/parse_shell_docx.R</code>, robustness findings F1-F4). The shell reader now tolerates inline headings (<code>Table 14.1.1: Title</code>), two-line titles, listings with no population line, page-header-stored titles/populations, <code>gridSpan</code>/<code>vMerge</code> merged cells and multi-row headers, and Word comments, highlights, tracked changes, and text boxes as annotation channels. Pre-merge hardening:
+<ul><li>A page-header title/population is adopted only when the header’s TLF number matches the body section’s; a mismatch (stale template header, or a header belonging to another TLF) is refused with a WARN instead of silently mislabelling the section.</li>
+<li>A multi-row nested header with no <code>&lt;w:tblHeader/&gt;</code> flag is inferred from the spanned first row (so the subcolumn labels survive and no ghost stub row is produced), with a WARN that the header was a heuristic guess.</li>
+<li>A treatment-column mapping line (<code>Treatment columns -&gt; ADSL.TRT01A</code>) placed right after the title is no longer misread as the population; it now reaches <code>bind_annotations()</code> as the column-axis grouping. A paragraph with no population wording counts as the population only when its annotation is a population-flag reference (<code>...FL='Y'</code>).</li>
+<li>A pre-table footnote (<code>Note: ...</code>) between title and table is kept as a footnote instead of being glued onto the title.</li>
+<li>A Word comment carrying an annotation is bound even when it is anchored to a data cell rather than the stub cell.</li>
+<li>Fuzzy stub-label matching no longer lets a one/two-character label (<code>n</code>, <code>%</code>) substring-match an unrelated longer phrase.</li>
+<li>Known limitations, consciously deferred: page headers are read only for single-section documents (a multi-section docx with per-section headers is not attempted); the annotation highlight-exclusion list is <code>none</code>/<code>black</code> only; the text-box fixture uses the direct <code>w:txbxContent</code> shape rather than Word’s <code>mc:AlternateContent</code> wrapper.</li>
+</ul></li>
+<li>Shell layout fidelity (ADR 0003, phases 1-5). arsbridge now carries a first-class model of the authored table layout from the annotated shell all the way to the rendered output:
 <ul><li>
 <em>Footnote/annotation split.</em> Programmer annotation lines outside the stub cells (coloured runs, ADaM-pattern text, or <code>Label -&gt; DATASET.VAR</code> arrow paragraphs below a table) are routed to <code>programmer_annotations</code> and never shipped as footnotes. <code>spec_to_ars(ship_annotations = FALSE)</code> is the default; <code>TRUE</code> re-attaches them for debugging.</li>
 <li>
@@ -83,7 +92,7 @@
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer></div>
