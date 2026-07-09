@@ -39,7 +39,11 @@ jobs:
 
       - uses: codecov/codecov-action@v4
         with:
-          fail_ci_if_error: ${{ github.event_name != 'pull_request' }}
+          # Never fail CI on a Codecov-side upload hiccup (e.g. GPG signature
+          # verification of the uploader binary). Test failures already fail
+          # the coverage run itself; a flaky report upload must not turn a
+          # green build red -- previously this was true on push to main.
+          fail_ci_if_error: false
           file: ./cobertura.xml
           plugin: noop
           disable_search: true
