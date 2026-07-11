@@ -22,6 +22,7 @@ active LLM provider (Anthropic, OpenAI, or Gemini) and their corresponding keys.
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/getting-started.html">Getting started</a></li>
     <li><a class="dropdown-item" href="../articles/reading-engine.html">How arsbridge reads the shell</a></li>
+    <li><a class="dropdown-item" href="../articles/no-api-access.html">Using arsbridge without API access</a></li>
   </ul></li>
 <li class="active nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -72,6 +73,11 @@ active LLM provider (Anthropic, OpenAI, or Gemini) and their corresponding keys.
     <p>If multiple API keys are set, it prioritizes the provider specified in the
 <code>ARS_LLM_PROVIDER</code> environment variable or global option. If that is not set,
 it defaults to the first available key in the order of: Anthropic, OpenAI, Gemini.</p>
+    </div>
+    <div class="section level2">
+    <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
+    <div class="dont-index"><p>No API key available? <code><a href="ars_copilot_instructions.html">ars_copilot_instructions()</a></code> sets up the
+no-API supplement workflow – see <code><a href="../articles/no-api-access.html">vignette("no-api-access")</a></code>.</p></div>
     </div>
 
     <div class="section level2">

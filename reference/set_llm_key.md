@@ -38,6 +38,13 @@ set_llm_key(provider, key = NULL, scope = c("user", "project"))
 Invisibly returns the path to the `.Renviron` that would be / was
 written.
 
+## See also
+
+No API key available?
+[`ars_copilot_instructions()`](https://tavakohr.github.io/arsbridge/reference/ars_copilot_instructions.md)
+sets up the no-API supplement workflow – see
+[`vignette("no-api-access")`](https://tavakohr.github.io/arsbridge/articles/no-api-access.md).
+
 ## Examples
 
 ``` r

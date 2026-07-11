@@ -35,6 +35,7 @@
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><a class="dropdown-item" href="../articles/getting-started.html">Getting started</a></li>
     <li><a class="dropdown-item" href="../articles/reading-engine.html">How arsbridge reads the shell</a></li>
+    <li><a class="dropdown-item" href="../articles/no-api-access.html">Using arsbridge without API access</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
@@ -100,6 +101,14 @@ traces back to a real annotation grounded in the spec.</p>
 <p><code>arsbridge</code> calls Claude once per TLF section for light
 semantic enrichment: analysis type, method name, and row role. All
 variable names come from the shell annotations, never from the LLM.</p>
+<blockquote>
+<p><strong>No API key, or it’s blocked?</strong> You can still run at
+near-LLM accuracy with no API call. Start with
+<code><a href="../reference/ars_copilot_instructions.html">ars_copilot_instructions()</a></code>, which sets up a workflow where
+a chat assistant (Copilot/ChatGPT) produces a supplement file
+<code><a href="../reference/spec_to_ars.html">spec_to_ars()</a></code> consumes. See
+<code><a href="../articles/no-api-access.html">vignette("no-api-access")</a></code>.</p>
+</blockquote>
 <hr>
 </div>
 <div class="section level2">

@@ -39,6 +39,15 @@ arsbridge::check_anthropic_key()   # confirm the key loaded
 enrichment: analysis type, method name, and row role. All variable names
 come from the shell annotations, never from the LLM.
 
+> **No API key, or it’s blocked?** You can still run at near-LLM
+> accuracy with no API call. Start with
+> [`ars_copilot_instructions()`](https://tavakohr.github.io/arsbridge/reference/ars_copilot_instructions.md),
+> which sets up a workflow where a chat assistant (Copilot/ChatGPT)
+> produces a supplement file
+> [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
+> consumes. See
+> [`vignette("no-api-access")`](https://tavakohr.github.io/arsbridge/articles/no-api-access.md).
+
 ------------------------------------------------------------------------
 
 ## The fastest path: `spec_to_ars_example()`
