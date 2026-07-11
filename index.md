@@ -97,6 +97,13 @@ rather than erroring.
 install.packages("cardx")
 ```
 
+> **No LLM API key?** You do not need one. `arsbridge` runs on regex +
+> heuristics alone, and
+> [`ars_copilot_instructions()`](https://tavakohr.github.io/arsbridge/reference/ars_copilot_instructions.md)
+> sets up a no-API workflow that reaches near-LLM accuracy through a
+> chat assistant. See [No API key? Three tiers, always
+> runs](#no-api-key-three-tiers-always-runs).
+
 ------------------------------------------------------------------------
 
 ## Quick start with the bundled example
@@ -403,13 +410,49 @@ token. The spec is the ground-truth oracle.
 | LLM proposes a variable not in spec | ✗ | rejected | Dropped + **blocker logged** |
 | Row has no variable | ✗ | silent | Empty |
 
-With no API key, or with `extract_with_llm = FALSE`, the LLM pass is
-skipped and arsbridge runs on the regex alone. Standard shells still
-produce valid ARS, ARD, and rendered output.
-
 See
 [`vignette("reading-engine")`](https://tavakohr.github.io/arsbridge/articles/reading-engine.md)
 for the complete parsing detail.
+
+------------------------------------------------------------------------
+
+## No API key? Three tiers, always runs
+
+The reading engine has three tiers. Only the first is required — a
+missing key or missing supplement never stops the run; it degrades and
+says so.
+
+| Tier | You supply | How to run | Accuracy |
+|----|----|----|----|
+| **Deterministic** | shell + spec | `spec_to_ars(shell, spec)` | Regex + heuristics. Standard shells still produce valid ARS/ARD/output; variant layouts, groupings, Total columns, and analysis typing degrade (one `WARN` records the mode). |
+| **Supplement** | \+ a file from a chat assistant | `spec_to_ars(shell, spec, supplement = "supplement.json")` | Near-LLM. No API call — you use Copilot/ChatGPT by hand. |
+| **LLM** | \+ an API key | [`set_anthropic_key()`](https://tavakohr.github.io/arsbridge/reference/set_anthropic_key.md) then `spec_to_ars(shell, spec)` | Full. |
+
+**Supplement workflow** (for environments where the LLM API is blocked
+but a chat assistant is allowed):
+
+``` r
+
+ars_copilot_instructions()   # writes arsbridge_copilot_instructions.md + prints the steps
+# Upload that file + your shell.docx + your adam_spec.xlsx to Copilot/ChatGPT.
+# Save its JSON reply as supplement.json, then:
+ars_validate_supplement("supplement.json", "adam_spec.xlsx")   # optional pre-flight
+spec_to_ars("shell.docx", "adam_spec.xlsx", supplement = "supplement.json")
+```
+
+The instruction file ships inside the installed package;
+[`ars_copilot_instructions()`](https://tavakohr.github.io/arsbridge/reference/ars_copilot_instructions.md)
+copies it from there into your working directory, so you never need to
+know the internal package path (pass a `dir` to write it elsewhere).
+
+The supplement fills only the annotations the regex could not find —
+your authored shell annotations always win a disagreement — and every
+variable it proposes passes the same hard ADaM-spec gate as a live LLM
+answer, so a hallucinated variable is rejected, never shipped.
+`_meta.extraction_mode` in the ARS JSON records which tier produced the
+run. See
+[`vignette("no-api-access")`](https://tavakohr.github.io/arsbridge/articles/no-api-access.md)
+for the full walkthrough and the data-governance note.
 
 ------------------------------------------------------------------------
 

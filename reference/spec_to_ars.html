@@ -26,6 +26,7 @@ siera::readARS()."></head><body>
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/getting-started.html">Getting started</a></li>
     <li><a class="dropdown-item" href="../articles/reading-engine.html">How arsbridge reads the shell</a></li>
+    <li><a class="dropdown-item" href="../articles/no-api-access.html">Using arsbridge without API access</a></li>
   </ul></li>
 <li class="active nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -64,6 +65,7 @@ Results Standard (ARS) v1.0 ARM-TS JSON file consumable by
 <span>  model <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  api_key <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  provider <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  supplement <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  spec_column_aliases <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  extract_with_llm <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  ship_annotations <span class="op">=</span> <span class="cn">FALSE</span>,</span>
@@ -126,6 +128,23 @@ somewhere permanent.</p></dd>
 Defaults to the active provider.</p></dd>
 
 
+<dt id="arg-supplement">supplement<a class="anchor" aria-label="anchor" href="#arg-supplement"></a></dt>
+<dd><p>Optional path to a supplement <code>.json</code> produced by a
+chat assistant from the instruction file written by
+<code><a href="ars_copilot_instructions.html">ars_copilot_instructions()</a></code>. When supplied, NO live LLM calls are made
+(even if a key is set): the supplement's bindings fill only the rows the
+deterministic pass left unannotated (shell annotations always win;
+disagreements are WARN findings) and its per-TLF fields feed the same
+enrichment path a live LLM answer would. Every supplement variable
+passes the hard ADaM-spec gate. Pre-flight a file with
+<code><a href="ars_validate_supplement.html">ars_validate_supplement()</a></code>.</p>
+<p>The three tiers are all optional except the deterministic baseline:
+with neither a supplement nor an API key the pipeline still runs
+end-to-end on regex + keyword heuristics (reduced accuracy for variant
+layouts, groupings, and analysis typing; one WARN finding records the
+mode).</p></dd>
+
+
 <dt id="arg-spec-column-aliases">spec_column_aliases<a class="anchor" aria-label="anchor" href="#arg-spec-column-aliases"></a></dt>
 <dd><p>Optional named list of extra column-name
 aliases for the ADaM spec Excel (see <code>parse_adam_spec()</code>); useful when
@@ -183,6 +202,11 @@ engine <code><a href="ars_to_ard.html">ars_to_ard()</a></code> sources to build 
     <p>Invisibly returns a named list:</p><dl><dt><code>ars_path</code></dt>
 <dd><p>Path to the generated ARS JSON file.</p></dd>
 
+<dt><code>extraction_mode</code></dt>
+<dd><p>Which tier ran: <code>"llm"</code>, <code>"supplement"</code>, or
+<code>"deterministic"</code>. Also stored in the JSON as
+<code>_meta.extraction_mode</code>.</p></dd>
+
 <dt><code>report_path</code></dt>
 <dd><p>Path to the validation report (if validate=TRUE).</p></dd>
 
@@ -230,6 +254,12 @@ validation report and retrievable via <code><a href="ars_diagnostics.html">ars_d
 <p>The generated ARS JSON is a draft. A qualified clinical programmer MUST
 review it before downstream use. The JSON includes a
 <code>_meta.requires_human_review = TRUE</code> field that consumers can key on.</p>
+    </div>
+    <div class="section level2">
+    <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
+    <div class="dont-index"><p><code><a href="ars_copilot_instructions.html">ars_copilot_instructions()</a></code> and <code><a href="ars_validate_supplement.html">ars_validate_supplement()</a></code> for
+the no-API <code>supplement =</code> workflow; <code><a href="set_llm_key.html">set_llm_key()</a></code> to configure a live
+LLM. Background: <code><a href="../articles/no-api-access.html">vignette("no-api-access")</a></code>.</p></div>
     </div>
 
     <div class="section level2">

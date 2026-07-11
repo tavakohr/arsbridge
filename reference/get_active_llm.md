@@ -39,6 +39,13 @@ the `ARS_LLM_PROVIDER` environment variable or global option. If that is
 not set, it defaults to the first available key in the order of:
 Anthropic, OpenAI, Gemini.
 
+## See also
+
+No API key available?
+[`ars_copilot_instructions()`](https://tavakohr.github.io/arsbridge/reference/ars_copilot_instructions.md)
+sets up the no-API supplement workflow – see
+[`vignette("no-api-access")`](https://tavakohr.github.io/arsbridge/articles/no-api-access.md).
+
 ## Examples
 
 ``` r

@@ -68,6 +68,17 @@ enriches ARS metadata.
 - [`show_active_llm()`](https://tavakohr.github.io/arsbridge/reference/show_active_llm.md)
   : Show the active LLM provider and API key status
 
+## Working without an API key
+
+Boost accuracy with no LLM API by ferrying the work through a chat
+assistant (Copilot/ChatGPT). See the “Using arsbridge without API
+access” article.
+
+- [`ars_copilot_instructions()`](https://tavakohr.github.io/arsbridge/reference/ars_copilot_instructions.md)
+  : Write the Copilot instruction file for the supplement workflow
+- [`ars_validate_supplement()`](https://tavakohr.github.io/arsbridge/reference/ars_validate_supplement.md)
+  : Validate a Copilot supplement file before running spec_to_ars()
+
 ## Examples
 
 Access the bundled APX-DRM-301 study files for offline testing.

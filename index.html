@@ -39,6 +39,7 @@
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><a class="dropdown-item" href="articles/getting-started.html">Getting started</a></li>
     <li><a class="dropdown-item" href="articles/reading-engine.html">How arsbridge reads the shell</a></li>
+    <li><a class="dropdown-item" href="articles/no-api-access.html">Using arsbridge without API access</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="reference/index.html">Reference</a></li>
@@ -162,6 +163,9 @@
 <p>For exact Clopper-Pearson confidence intervals, also install the optional <a href="https://github.com/insightsengineering/cardx" class="external-link">cardx</a>. Without it, those cells degrade gracefully to <code>manual_pending</code> placeholders rather than erroring.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"cardx"</span><span class="op">)</span></span></code></pre></div>
+<blockquote>
+<p><strong>No LLM API key?</strong> You do not need one. <code>arsbridge</code> runs on regex + heuristics alone, and <code><a href="reference/ars_copilot_instructions.html">ars_copilot_instructions()</a></code> sets up a no-API workflow that reaches near-LLM accuracy through a chat assistant. See <a href="#no-api-key-three-tiers-always-runs">No API key? Three tiers, always runs</a>.</p>
+</blockquote>
 <hr>
 </div>
 <div class="section level2">
@@ -437,8 +441,58 @@
 </tr>
 </tbody>
 </table>
-<p>With no API key, or with <code>extract_with_llm = FALSE</code>, the LLM pass is skipped and arsbridge runs on the regex alone. Standard shells still produce valid ARS, ARD, and rendered output.</p>
 <p>See <code><a href="articles/reading-engine.html">vignette("reading-engine")</a></code> for the complete parsing detail.</p>
+<hr>
+</div>
+<div class="section level2">
+<h2 id="no-api-key-three-tiers-always-runs">No API key? Three tiers, always runs<a class="anchor" aria-label="anchor" href="#no-api-key-three-tiers-always-runs"></a>
+</h2>
+<p>The reading engine has three tiers. Only the first is required — a missing key or missing supplement never stops the run; it degrades and says so.</p>
+<table class="table">
+<colgroup>
+<col width="25%">
+<col width="25%">
+<col width="25%">
+<col width="25%">
+</colgroup>
+<thead><tr>
+<th>Tier</th>
+<th>You supply</th>
+<th>How to run</th>
+<th>Accuracy</th>
+</tr></thead>
+<tbody>
+<tr>
+<td><strong>Deterministic</strong></td>
+<td>shell + spec</td>
+<td><code>spec_to_ars(shell, spec)</code></td>
+<td>Regex + heuristics. Standard shells still produce valid ARS/ARD/output; variant layouts, groupings, Total columns, and analysis typing degrade (one <code>WARN</code> records the mode).</td>
+</tr>
+<tr>
+<td><strong>Supplement</strong></td>
+<td>+ a file from a chat assistant</td>
+<td><code>spec_to_ars(shell, spec, supplement = "supplement.json")</code></td>
+<td>Near-LLM. No API call — you use Copilot/ChatGPT by hand.</td>
+</tr>
+<tr>
+<td><strong>LLM</strong></td>
+<td>+ an API key</td>
+<td>
+<code><a href="reference/set_anthropic_key.html">set_anthropic_key()</a></code> then <code>spec_to_ars(shell, spec)</code>
+</td>
+<td>Full.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Supplement workflow</strong> (for environments where the LLM API is blocked but a chat assistant is allowed):</p>
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="reference/ars_copilot_instructions.html">ars_copilot_instructions</a></span><span class="op">(</span><span class="op">)</span>   <span class="co"># writes arsbridge_copilot_instructions.md + prints the steps</span></span>
+<span><span class="co"># Upload that file + your shell.docx + your adam_spec.xlsx to Copilot/ChatGPT.</span></span>
+<span><span class="co"># Save its JSON reply as supplement.json, then:</span></span>
+<span><span class="fu"><a href="reference/ars_validate_supplement.html">ars_validate_supplement</a></span><span class="op">(</span><span class="st">"supplement.json"</span>, <span class="st">"adam_spec.xlsx"</span><span class="op">)</span>   <span class="co"># optional pre-flight</span></span>
+<span><span class="fu"><a href="reference/spec_to_ars.html">spec_to_ars</a></span><span class="op">(</span><span class="st">"shell.docx"</span>, <span class="st">"adam_spec.xlsx"</span>, supplement <span class="op">=</span> <span class="st">"supplement.json"</span><span class="op">)</span></span></code></pre></div>
+<p>The instruction file ships inside the installed package; <code><a href="reference/ars_copilot_instructions.html">ars_copilot_instructions()</a></code> copies it from there into your working directory, so you never need to know the internal package path (pass a <code>dir</code> to write it elsewhere).</p>
+<p>The supplement fills only the annotations the regex could not find — your authored shell annotations always win a disagreement — and every variable it proposes passes the same hard ADaM-spec gate as a live LLM answer, so a hallucinated variable is rejected, never shipped. <code>_meta.extraction_mode</code> in the ARS JSON records which tier produced the run. See <code><a href="articles/no-api-access.html">vignette("no-api-access")</a></code> for the full walkthrough and the data-governance note.</p>
 <hr>
 </div>
 <div class="section level2">

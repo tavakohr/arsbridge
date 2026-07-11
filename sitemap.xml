@@ -8,6 +8,7 @@
 <url><loc>https://tavakohr.github.io/arsbridge/LICENSE.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/articles/getting-started.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/articles/index.html</loc></url>
+<url><loc>https://tavakohr.github.io/arsbridge/articles/no-api-access.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/articles/reading-engine.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/authors.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/index.html</loc></url>
@@ -15,6 +16,7 @@
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ard_cmh_test.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ard_proportion_ci_exact.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_blockers.html</loc></url>
+<url><loc>https://tavakohr.github.io/arsbridge/reference/ars_copilot_instructions.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_diagnostics.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_manual_worklist.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_render_all.html</loc></url>
@@ -25,6 +27,7 @@
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_to_tfrmt.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_to_tfrmt_list.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_validate_manual_fills.html</loc></url>
+<url><loc>https://tavakohr.github.io/arsbridge/reference/ars_validate_supplement.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/arsbridge-package.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/arsbridge_example.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/check_anthropic_key.html</loc></url>

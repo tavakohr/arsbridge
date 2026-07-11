@@ -2,6 +2,46 @@
 
 ## arsbridge 0.1.0
 
+- Three-tier reading engine; the LLM API key is now optional
+  (`R/spec_to_ars.R`, `R/supplement.R`).
+  [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
+  no longer aborts without a key: it resolves a mode from what you have
+  —
+
+  - **deterministic** (shell + spec only): regex + keyword heuristics,
+    one `WARN` recording the reduced accuracy;
+  - **supplement** (`spec_to_ars(supplement = "supplement.json")`): a
+    JSON file produced by a chat assistant from the uploaded shell +
+    spec fills the annotations the regex could not find and supplies
+    per-TLF enrichment, with **no API call**;
+  - **llm** (API key set): unchanged live behaviour.
+
+  New exports:
+  [`ars_copilot_instructions()`](https://tavakohr.github.io/arsbridge/reference/ars_copilot_instructions.md)
+  writes the static, versioned instruction file to upload to
+  Copilot/ChatGPT alongside the shell and spec;
+  [`ars_validate_supplement()`](https://tavakohr.github.io/arsbridge/reference/ars_validate_supplement.md)
+  pre-flights the reply. Supplement bindings fill gaps only — authored
+  shell annotations win any disagreement (`WARN`) — and every proposed
+  variable passes the same hard ADaM-spec gate as a live LLM proposal.
+  The tier is recorded in `_meta.extraction_mode` of the ARS JSON and in
+  the
+  [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
+  result. See
+  [`vignette("no-api-access")`](https://tavakohr.github.io/arsbridge/articles/no-api-access.md).
+
+  [`ars_copilot_instructions()`](https://tavakohr.github.io/arsbridge/reference/ars_copilot_instructions.md)
+  copies the instruction file shipped inside the installed package
+  (`inst/copilot/`) into the working directory (creating the target
+  folder if needed), so users never touch the internal package path. The
+  no-API path is now cross-referenced from
+  [`?arsbridge`](https://tavakohr.github.io/arsbridge/reference/arsbridge-package.md),
+  [`?spec_to_ars`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md),
+  every `?set_*_key` /
+  [`?get_active_llm`](https://tavakohr.github.io/arsbridge/reference/get_active_llm.md)
+  help page, the README (including an install-time pointer), and the
+  `getting-started` vignette.
+
 - Shell-parsing robustness for cross-sponsor variation
   (`R/parse_shell_docx.R`, robustness findings F1-F4). The shell reader
   now tolerates inline headings (`Table 14.1.1: Title`), two-line
@@ -9,6 +49,7 @@
   titles/populations, `gridSpan`/`vMerge` merged cells and multi-row
   headers, and Word comments, highlights, tracked changes, and text
   boxes as annotation channels. Pre-merge hardening:
+
   - A page-header title/population is adopted only when the header’s TLF
     number matches the body section’s; a mismatch (stale template
     header, or a header belonging to another TLF) is refused with a WARN
@@ -34,9 +75,11 @@
     is `none`/`black` only; the text-box fixture uses the direct
     `w:txbxContent` shape rather than Word’s `mc:AlternateContent`
     wrapper.
+
 - Shell layout fidelity (ADR 0003, phases 1-5). arsbridge now carries a
   first-class model of the authored table layout from the annotated
   shell all the way to the rendered output:
+
   - *Footnote/annotation split.* Programmer annotation lines outside the
     stub cells (coloured runs, ADaM-pattern text, or
     `Label -> DATASET.VAR` arrow paragraphs below a table) are routed to
@@ -81,7 +124,9 @@
     uniqueness of column/row identifiers”) by using named
     single-parameter formats instead of one-parameter `frmt_combine()`
     in generated body plans.
+
 - Initial release.
+
 - Classification wiring (ADR 0001): a capability-gated table is no
   longer reserved wholesale. `build_ars_json()` now classifies which of
   its statistics arsbridge can compute (deterministic keyword scan of
@@ -89,6 +134,7 @@
   section – the descriptive rows compute, and each detected executable
   method (a Clopper-Pearson CI; a CMH p-value when “stratified by
   `” names a strata variable) is appended as its own analysis with operands. Only the residual indicators it still cannot compute (e.g. a Newcombe difference) are reserved as ``manual_pending`` and named on the placeholder. With no residual, the table is no longer flagged unsupported at all – it renders with the computed CI / CMH cells. An LLM enrichment can supersede the keyword layer later.`
+
 - Second executable descriptor: Cochran-Mantel-Haenszel p-value (ADR
   0001). New exported
   [`ard_cmh_test()`](https://tavakohr.github.io/arsbridge/reference/ard_cmh_test.md)
@@ -105,6 +151,7 @@
   `value_source` plus an `available(res)` predicate per method),
   replacing the cardx-only flag. `resolve_analysis()` carries the new
   `strata` operand.
+
 - First executable descriptor: exact (Clopper-Pearson) binomial CI (ADR
   0001). When [cardx](https://github.com/insightsengineering/cardx) is
   installed, the `MTH_PROPORTION_CI_EXACT` method is no longer reserved
@@ -120,6 +167,7 @@
   through the spec.
   [cardx](https://github.com/insightsengineering/cardx) is a soft
   dependency (Suggests).
+
 - Manual-fill round-trip + guard (ADR 0002, phase 5). After computing a
   reserved `manual_pending` cell with a validated script, the analyst
   writes the value back into the ARD row (`stat`,
@@ -134,6 +182,7 @@
   other. See
   [`vignette("getting-started")`](https://tavakohr.github.io/arsbridge/articles/getting-started.md)
   for the round-trip. ADR 0002 is now fully implemented (phases 1-5).
+
 - Partial table rendering (ADR 0002, phase 4). An output that arsbridge
   can compute only in part now renders: the computable cells are filled
   and each reserved `manual_pending` cell renders as a loud `[‡ manual]`
@@ -142,6 +191,7 @@
   numbered placeholder, which now also names the reserved cells. The
   render manifest flags a partial table as
   `partial -- manual cells reserved`.
+
 - Partial-results traceability (ADR 0002, phases 1-3).
   [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)
   now stamps every row with provenance columns (`result_status`,
@@ -163,6 +213,7 @@
   cell for it. The renderer still emits a numbered placeholder until
   partial rendering (phase 4) lands. Additive only – computed results
   are unchanged.
+
 - Architecture decision records under `adr/`: ADR 0001 sets the
   statistical-method extensibility boundary (bound the boundary, not the
   contents – descriptor contract on the shared ARD shape, tiered honest
@@ -171,6 +222,7 @@
   stub ARD rows + provenance columns so a cell arsbridge cannot compute
   keeps a keyed slot for a validated manual fill, never an orphan
   value). ADR 0002 is a plan, not yet implemented.
+
 - Capability gate: tables needing inferential or model-based methods
   (Cochran-Mantel-Haenszel, Clopper-Pearson / Newcombe intervals,
   p-values, odds/hazard ratios, regression, ANCOVA/MMRM, NRI imputation)
@@ -182,6 +234,7 @@
   *failures* emit a distinct placeholder clearly labelled as an error,
   not a gate. The rationale and the path to extending coverage are
   recorded in `adr/0001-statistical-method-extensibility.md`.
+
 - Hybrid shell reading: a deterministic four-layer regex detector and an
   LLM primary reader (`extract_shell_llm()`) run together and take the
   union, to extract as many annotation variants as possible. Every
@@ -190,27 +243,33 @@
   shipped. With no API key the reader degrades to the deterministic
   pass. See
   [`vignette("reading-engine")`](https://tavakohr.github.io/arsbridge/articles/reading-engine.md).
+
 - Provider registry (`R/llm_providers.R`): Anthropic, OpenAI, Gemini,
   and OpenAI-compatible providers such as GLM are defined in one place.
   Adding a provider is a single entry. New generic
   [`set_llm_key()`](https://tavakohr.github.io/arsbridge/reference/set_llm_key.md)
   setter; select the active provider with `ARS_LLM_PROVIDER`.
+
 - [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md):
   parse an annotated TLF shell `.docx` plus an ADaM specification
   (`define.xml` or Excel) into CDISC Analysis Results Standard (ARS)
   v1.0 JSON.
+
 - [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md):
   execute an ARS JSON natively into a tidy Analysis Results Data (ARD)
   object via [cards](https://github.com/insightsengineering/cards),
   applying `analysisSets` and `dataSubsets` filters against `.xpt` /
   `.csv` datasets.
+
 - [`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md),
   [`ars_render_all()`](https://tavakohr.github.io/arsbridge/reference/ars_render_all.md),
   [`ars_to_tfrmt()`](https://tavakohr.github.io/arsbridge/reference/ars_to_tfrmt.md):
   render ARS outputs to publication-ready GT and Word tables via
   [tfrmt](https://GSK-Biostatistics.github.io/tfrmt/).
+
 - Multi-provider LLM enrichment (Anthropic, OpenAI, Gemini) with a
   keyword-heuristic fallback so the pipeline runs without an API key.
+
 - [`ars_diagnostics()`](https://tavakohr.github.io/arsbridge/reference/ars_diagnostics.md)
   /
   [`ars_blockers()`](https://tavakohr.github.io/arsbridge/reference/ars_blockers.md):

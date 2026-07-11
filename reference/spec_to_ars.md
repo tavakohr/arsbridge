@@ -18,6 +18,7 @@ spec_to_ars(
   model = NULL,
   api_key = NULL,
   provider = NULL,
+  supplement = NULL,
   spec_column_aliases = NULL,
   extract_with_llm = TRUE,
   ship_annotations = FALSE,
@@ -82,6 +83,25 @@ spec_to_ars(
   LLM provider: `"anthropic"`, `"openai"`, or `"gemini"`. Defaults to
   the active provider.
 
+- supplement:
+
+  Optional path to a supplement `.json` produced by a chat assistant
+  from the instruction file written by
+  [`ars_copilot_instructions()`](https://tavakohr.github.io/arsbridge/reference/ars_copilot_instructions.md).
+  When supplied, NO live LLM calls are made (even if a key is set): the
+  supplement's bindings fill only the rows the deterministic pass left
+  unannotated (shell annotations always win; disagreements are WARN
+  findings) and its per-TLF fields feed the same enrichment path a live
+  LLM answer would. Every supplement variable passes the hard ADaM-spec
+  gate. Pre-flight a file with
+  [`ars_validate_supplement()`](https://tavakohr.github.io/arsbridge/reference/ars_validate_supplement.md).
+
+  The three tiers are all optional except the deterministic baseline:
+  with neither a supplement nor an API key the pipeline still runs
+  end-to-end on regex + keyword heuristics (reduced accuracy for variant
+  layouts, groupings, and analysis typing; one WARN finding records the
+  mode).
+
 - spec_column_aliases:
 
   Optional named list of extra column-name aliases for the ADaM spec
@@ -144,6 +164,11 @@ Invisibly returns a named list:
 
   Path to the generated ARS JSON file.
 
+- `extraction_mode`:
+
+  Which tier ran: `"llm"`, `"supplement"`, or `"deterministic"`. Also
+  stored in the JSON as `_meta.extraction_mode`.
+
 - `report_path`:
 
   Path to the validation report (if validate=TRUE).
@@ -194,6 +219,16 @@ Invisibly returns a named list:
 The generated ARS JSON is a draft. A qualified clinical programmer MUST
 review it before downstream use. The JSON includes a
 `_meta.requires_human_review = TRUE` field that consumers can key on.
+
+## See also
+
+[`ars_copilot_instructions()`](https://tavakohr.github.io/arsbridge/reference/ars_copilot_instructions.md)
+and
+[`ars_validate_supplement()`](https://tavakohr.github.io/arsbridge/reference/ars_validate_supplement.md)
+for the no-API `supplement =` workflow;
+[`set_llm_key()`](https://tavakohr.github.io/arsbridge/reference/set_llm_key.md)
+to configure a live LLM. Background:
+[`vignette("no-api-access")`](https://tavakohr.github.io/arsbridge/articles/no-api-access.md).
 
 ## Examples
 
