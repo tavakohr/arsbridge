@@ -23,28 +23,24 @@ test_that("spec_to_ars errors on missing spec file", {
   )
 })
 
-test_that("spec_to_ars errors when API key is missing", {
-  # Temporarily clear LLM env vars to guarantee no keys are detected
-  orig_anthropic <- Sys.getenv("ANTHROPIC_API_KEY", unset = NA_character_)
-  orig_openai <- Sys.getenv("OPENAI_API_KEY", unset = NA_character_)
-  orig_gemini <- Sys.getenv("GEMINI_API_KEY", unset = NA_character_)
-  Sys.unsetenv("ANTHROPIC_API_KEY")
-  Sys.unsetenv("OPENAI_API_KEY")
-  Sys.unsetenv("GEMINI_API_KEY")
-  on.exit({
-    if (!is.na(orig_anthropic)) Sys.setenv(ANTHROPIC_API_KEY = orig_anthropic)
-    if (!is.na(orig_openai)) Sys.setenv(OPENAI_API_KEY = orig_openai)
-    if (!is.na(orig_gemini)) Sys.setenv(GEMINI_API_KEY = orig_gemini)
-  })
-
-  expect_error(
-    spec_to_ars(
+test_that("spec_to_ars without any API key runs in deterministic mode", {
+  ## A missing key must never stop the run: the pipeline degrades to
+  ## regex + keyword heuristics and says so once (see also test-supplement.R).
+  res <- withr::with_envvar(
+    c(ANTHROPIC_API_KEY = "", OPENAI_API_KEY = "", GEMINI_API_KEY = "",
+      GLM_API_KEY = "", ARS_LLM_PROVIDER = ""),
+    suppressMessages(spec_to_ars(
       shell_path     = test_path("fixtures/annotated_shell_2tlf_minimal.docx"),
       adam_spec_path = test_path("fixtures/adam_spec_minimal.xlsx"),
-      api_key        = ""
-    ),
-    "active LLM API key|API key.*not set"
+      api_key        = "",
+      output_path    = tempfile(fileext = ".json"),
+      report_path    = tempfile(fileext = ".xlsx"),
+      verbose        = FALSE
+    ))
   )
+  expect_equal(res$extraction_mode, "deterministic")
+  expect_true(file.exists(res$ars_path))
+  expect_gt(res$n_analyses, 0)
 })
 
 test_that("spec_to_ars rejects wrong shell extension", {
