@@ -13,3 +13,7 @@ Invisibly returns \code{TRUE} if the key is set, \code{FALSE} otherwise.
 Reports whether \code{ANTHROPIC_API_KEY} is visible to the current R session,
 without printing the key itself.
 }
+\seealso{
+No API key available? \code{\link[=ars_copilot_instructions]{ars_copilot_instructions()}} sets up the
+no-API supplement workflow -- see \code{vignette("no-api-access")}.
+}

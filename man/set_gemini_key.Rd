@@ -23,3 +23,7 @@ Sets \code{GEMINI_API_KEY} for the current R session. In an interactive session
 you are then asked whether to also persist it to your \code{.Renviron}; no file is
 written without that confirmation.
 }
+\seealso{
+No API key available? \code{\link[=ars_copilot_instructions]{ars_copilot_instructions()}} sets up the
+no-API supplement workflow -- see \code{vignette("no-api-access")}.
+}

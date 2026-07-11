@@ -20,6 +20,8 @@
 #'     \item{`keys_set`}{A character vector listing the providers that currently have keys set.}
 #'     \item{`active_key_masked`}{A masked version of the active API key (showing only first 7 and last 3 characters), or `NULL`.}
 #'   }
+#' @seealso No API key available? [ars_copilot_instructions()] sets up the
+#'   no-API supplement workflow -- see `vignette("no-api-access")`.
 #' @export
 #' @examples
 #' get_active_llm()
@@ -81,6 +83,8 @@ get_active_llm <- function() {
 #' and the set/missing status of API keys for Anthropic, OpenAI, and Gemini.
 #'
 #' @return Invisibly returns the active provider name (character), or `NULL`.
+#' @seealso No API key available? [ars_copilot_instructions()] sets up the
+#'   no-API supplement workflow -- see `vignette("no-api-access")`.
 #' @export
 #' @examples
 #' show_active_llm()
@@ -143,6 +147,8 @@ show_active_llm <- function() {
 #'
 #' @return Invisibly returns the path to the `.Renviron` that would be / was
 #'   written.
+#' @seealso No API key available? [ars_copilot_instructions()] sets up the
+#'   no-API supplement workflow -- see `vignette("no-api-access")`.
 #' @export
 set_anthropic_key <- function(key = NULL, scope = c("user", "project")) {
   set_llm_key("anthropic", key = key, scope = scope)
@@ -166,6 +172,8 @@ set_anthropic_key <- function(key = NULL, scope = c("user", "project")) {
 #'
 #' @return Invisibly returns the path to the `.Renviron` that would be / was
 #'   written.
+#' @seealso No API key available? [ars_copilot_instructions()] sets up the
+#'   no-API supplement workflow -- see `vignette("no-api-access")`.
 #' @export
 #' @examples
 #' \dontrun{
@@ -199,6 +207,8 @@ set_llm_key <- function(provider, key = NULL, scope = c("user", "project")) {
 #'
 #' @return Invisibly returns the path to the `.Renviron` that would be / was
 #'   written.
+#' @seealso No API key available? [ars_copilot_instructions()] sets up the
+#'   no-API supplement workflow -- see `vignette("no-api-access")`.
 #' @export
 set_openai_key <- function(key = NULL, scope = c("user", "project")) {
   set_llm_key("openai", key = key, scope = scope)
@@ -218,6 +228,8 @@ set_openai_key <- function(key = NULL, scope = c("user", "project")) {
 #'
 #' @return Invisibly returns the path to the `.Renviron` that would be / was
 #'   written.
+#' @seealso No API key available? [ars_copilot_instructions()] sets up the
+#'   no-API supplement workflow -- see `vignette("no-api-access")`.
 #' @export
 set_gemini_key <- function(key = NULL, scope = c("user", "project")) {
   set_llm_key("gemini", key = key, scope = scope)
@@ -229,6 +241,8 @@ set_gemini_key <- function(key = NULL, scope = c("user", "project")) {
 #' without printing the key itself.
 #'
 #' @return Invisibly returns `TRUE` if the key is set, `FALSE` otherwise.
+#' @seealso No API key available? [ars_copilot_instructions()] sets up the
+#'   no-API supplement workflow -- see `vignette("no-api-access")`.
 #' @export
 check_anthropic_key <- function() {
   key <- Sys.getenv("ANTHROPIC_API_KEY", unset = "")

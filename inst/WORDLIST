@@ -10,6 +10,8 @@ ADR
 ADaM
 AE
 CMH
+Copilot
+ChatGPT
 ANCOVA
 APX
 Clopper
@@ -56,6 +58,7 @@ csv
 customise
 deliverables
 ellmer
+enums
 ggplot
 natively
 readARS
@@ -81,7 +84,9 @@ generalising
 matcher
 recognises
 reimport
+unannotated
 unexecutable
 unparsed
 untraceable
+walkthrough
 worklist

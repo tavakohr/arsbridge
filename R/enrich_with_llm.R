@@ -14,6 +14,14 @@
 #' @param spec_lookup The `lookup` element of `parse_adam_spec()` (or NULL).
 #' @param model       Anthropic model id (default `"claude-sonnet-4-6"`).
 #' @param api_key     API key (default reads `ANTHROPIC_API_KEY`).
+#' @param offline     `TRUE` = deterministic mode: skip the LLM entirely and
+#'   run every heuristic fallback. The caller (spec_to_ars) emits ONE
+#'   run-level finding for the mode, so this function stays quiet about it.
+#' @param courier_answers Pre-computed enrichment answer for THIS section, in
+#'   the same shape `.enrich_structured()` returns (supplement mode maps it
+#'   via `.supplement_enrich_answer()`). An empty `list()` means "the
+#'   auxiliary file had nothing for this TLF": heuristics run and one WARN
+#'   is logged. `NULL` means no auxiliary source at all (live/offline path).
 #'
 #' @return The input section with these fields added:
 #'   `analysis_type`, `ars_method_name`, `by_variable`,
@@ -29,59 +37,70 @@ enrich_with_llm <- function(section,
                             spec_lookup = NULL,
                             model       = NULL,
                             api_key     = NULL,
-                            provider    = NULL) {
-  active <- get_active_llm()
-  if (is.null(provider)) {
-    provider <- active$provider
-  }
-  if (is.null(provider)) {
-    cli::cli_abort(c(
-      "No active LLM API key found.",
-      "i" = "Please set up an API key for Anthropic, OpenAI, or Gemini."
-    ))
-  }
-
-  if (is.null(model)) {
-    model <- active$model
-  }
-  if (is.null(api_key)) {
-    api_key <- Sys.getenv(.llm_env_var(provider))
-  }
-
-  if (is.null(api_key) || !nzchar(api_key)) {
-    cli::cli_abort(c(
-      "API key for {.val {provider}} is not set.",
-      "i" = "Please configure your API key."
-    ))
-  }
-
+                            provider    = NULL,
+                            offline     = FALSE,
+                            courier_answers = NULL) {
   annotated_rows <- Filter(function(r) isTRUE(r$has_annot), section$stub_rows)
 
-  tlf_payload <- list(
-    tlf_number            = section$tlf_number,
-    tlf_type              = section$tlf_type,
-    title                 = section$title,
-    population            = section$population_text,
-    population_annotation = section$population_annot,
-    col_headers           = section$col_headers,
-    annotated_rows        = lapply(annotated_rows, function(r) list(
-      label      = r$label,
-      annotation = r$annotation
-    )),
-    available_variables   = if (!is.null(spec_lookup)) names(spec_lookup) else character()
-  )
+  if (!is.null(courier_answers)) {
+    ## Supplement / courier mode: the answer was produced by a chat
+    ## assistant outside this process. Same shape as a chat_structured()
+    ## response, so everything downstream applies unchanged.
+    parsed <- courier_answers
+    if (length(parsed) == 0) {
+      diag_add(
+        stage = "enrich_llm", severity = "WARN", input = INPUT_LLM,
+        problem = "Supplement file has no entry for this TLF",
+        tlf_number = section$tlf_number,
+        action = "Section enriched with keyword heuristics -- add this TLF to the supplement to cover it"
+      )
+    }
+  } else if (isTRUE(offline)) {
+    ## Deterministic mode: no key, the user accepted degraded accuracy. The
+    ## run-level finding is emitted once by spec_to_ars(); every %||%
+    ## fallback below does the actual work.
+    parsed <- list()
+  } else {
+    active <- get_active_llm()
+    if (is.null(provider)) {
+      provider <- active$provider
+    }
+    if (is.null(provider)) {
+      cli::cli_abort(c(
+        "No active LLM API key found.",
+        "i" = "Please set up an API key for Anthropic, OpenAI, or Gemini."
+      ))
+    }
 
-  prompt <- .render_enrich_prompt(tlf_payload)
-  parsed <- .enrich_structured(prompt, .enrich_type(), provider = provider,
-                               model = model, api_key = api_key) %||% list()
+    if (is.null(model)) {
+      model <- active$model
+    }
+    if (is.null(api_key)) {
+      api_key <- Sys.getenv(.llm_env_var(provider))
+    }
+
+    if (is.null(api_key) || !nzchar(api_key)) {
+      cli::cli_abort(c(
+        "API key for {.val {provider}} is not set.",
+        "i" = "Please configure your API key."
+      ))
+    }
+
+    prompt <- .render_enrich_prompt(.enrich_payload(section, annotated_rows,
+                                                    spec_lookup))
+    parsed <- .enrich_structured(prompt, .enrich_type(), provider = provider,
+                                 model = model, api_key = api_key) %||% list()
+  }
 
   ## Record degraded-enrichment diagnostics: whole-response failure first,
   ## then per-field fallbacks. These feed the validation report so a study
   ## team can see exactly which TLFs ran on heuristics instead of the LLM.
+  ## A deliberately-offline run and a supplement miss are reported above --
+  ## only a LIVE whole-response failure counts as an LLM outage.
   if (length(parsed) == 0) {
     ## Whole-response failure: count it (the caller emits ONE summary finding
     ## for all affected TLFs) rather than logging an identical row per section.
-    .diag_llm_fail_bump()
+    if (!isTRUE(offline) && is.null(courier_answers)) .diag_llm_fail_bump()
   } else {
     if (is.null(parsed$analysis_type) || !nzchar(parsed$analysis_type %||% "")) {
       diag_add(
@@ -210,6 +229,30 @@ enrich_with_llm <- function(section,
 
 
 ## --- Internal helpers ------------------------------------------------------
+
+#' Build the enrichment payload for one section. Kept as its own function so
+#' the live path here and the (planned) courier packet exporter render from
+#' the same payload and can never drift. `available_variables` overrides the
+#' spec-derived list when the caller wants a pointer string instead of
+#' thousands of repeated names.
+#' @noRd
+.enrich_payload <- function(section, annotated_rows, spec_lookup,
+                            available_variables = NULL) {
+  list(
+    tlf_number            = section$tlf_number,
+    tlf_type              = section$tlf_type,
+    title                 = section$title,
+    population            = section$population_text,
+    population_annotation = section$population_annot,
+    col_headers           = section$col_headers,
+    annotated_rows        = lapply(annotated_rows, function(r) list(
+      label      = r$label,
+      annotation = r$annotation
+    )),
+    available_variables   = available_variables %||%
+      (if (!is.null(spec_lookup)) names(spec_lookup) else character())
+  )
+}
 
 #' Read the prompt template from inst/prompts/ and substitute the payload.
 #' Uses `<<` / `>>` glue delimiters so literal `{` / `}` characters in the

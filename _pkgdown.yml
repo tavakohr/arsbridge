@@ -34,6 +34,8 @@ navbar:
         href: articles/getting-started.html
       - text: "How arsbridge reads the shell"
         href: articles/reading-engine.html
+      - text: "Using arsbridge without API access"
+        href: articles/no-api-access.html
 
 articles:
 - title: Articles
@@ -41,6 +43,7 @@ articles:
   contents:
   - getting-started
   - reading-engine
+  - no-api-access
 
 reference:
 - title: Pipeline
@@ -88,6 +91,15 @@ reference:
   - check_anthropic_key
   - get_active_llm
   - show_active_llm
+
+- title: Working without an API key
+  desc: >
+    Boost accuracy with no LLM API by ferrying the work through a chat
+    assistant (Copilot/ChatGPT). See the "Using arsbridge without API
+    access" article.
+  contents:
+  - ars_copilot_instructions
+  - ars_validate_supplement
 
 - title: Examples
   desc: Access the bundled APX-DRM-301 study files for offline testing.

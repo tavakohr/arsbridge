@@ -24,3 +24,7 @@ Sets \code{ANTHROPIC_API_KEY} for the current R session so you can call
 whether to also persist it to your \code{.Renviron} (so it loads automatically in
 future sessions); no file is written without that confirmation.
 }
+\seealso{
+No API key available? \code{\link[=ars_copilot_instructions]{ars_copilot_instructions()}} sets up the
+no-API supplement workflow -- see \code{vignette("no-api-access")}.
+}

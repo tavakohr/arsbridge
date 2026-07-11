@@ -27,3 +27,7 @@ it defaults to the first available key in the order of: Anthropic, OpenAI, Gemin
 \examples{
 get_active_llm()
 }
+\seealso{
+No API key available? \code{\link[=ars_copilot_instructions]{ars_copilot_instructions()}} sets up the
+no-API supplement workflow -- see \code{vignette("no-api-access")}.
+}

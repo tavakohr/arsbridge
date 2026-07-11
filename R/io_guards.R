@@ -21,6 +21,7 @@ INPUT_DATA  <- "ADaM dataset"
 INPUT_ARS   <- "ARS JSON"
 INPUT_LLM   <- "LLM provider / API key"
 INPUT_CAPABILITY <- "arsbridge capability (manual table)"
+INPUT_SUPPLEMENT <- "Copilot supplement (.json)"
 
 #' Append the file's basename to a document label, e.g.
 #' "ARS JSON 'reporting_event.json'". Falls back to the bare label when the

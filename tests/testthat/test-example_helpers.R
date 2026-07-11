@@ -23,6 +23,18 @@ test_that("arsbridge_example(unknown_file) errors with the available list", {
   expect_error(arsbridge_example("nope.docx"), "not in the bundle")
 })
 
-test_that("spec_to_ars_example errors clearly when API key missing", {
-  expect_error(spec_to_ars_example(api_key = ""), "active LLM API key|API key.*not set")
+test_that("spec_to_ars_example runs deterministically when no API key is set", {
+  ## A missing key no longer aborts: the run degrades to regex + heuristics.
+  res <- withr::with_envvar(
+    c(ANTHROPIC_API_KEY = "", OPENAI_API_KEY = "", GEMINI_API_KEY = "",
+      GLM_API_KEY = "", ARS_LLM_PROVIDER = ""),
+    suppressMessages(spec_to_ars_example(
+      api_key     = "",
+      output_path = tempfile(fileext = ".json"),
+      report_path = tempfile(fileext = ".xlsx"),
+      verbose     = FALSE
+    ))
+  )
+  expect_equal(res$extraction_mode, "deterministic")
+  expect_true(file.exists(res$ars_path))
 })

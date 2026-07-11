@@ -14,6 +14,7 @@ spec_to_ars(
   model = NULL,
   api_key = NULL,
   provider = NULL,
+  supplement = NULL,
   spec_column_aliases = NULL,
   extract_with_llm = TRUE,
   ship_annotations = FALSE,
@@ -58,6 +59,22 @@ somewhere permanent.}
 \item{provider}{LLM provider: \code{"anthropic"}, \code{"openai"}, or \code{"gemini"}.
 Defaults to the active provider.}
 
+\item{supplement}{Optional path to a supplement \code{.json} produced by a
+chat assistant from the instruction file written by
+\code{\link[=ars_copilot_instructions]{ars_copilot_instructions()}}. When supplied, NO live LLM calls are made
+(even if a key is set): the supplement's bindings fill only the rows the
+deterministic pass left unannotated (shell annotations always win;
+disagreements are WARN findings) and its per-TLF fields feed the same
+enrichment path a live LLM answer would. Every supplement variable
+passes the hard ADaM-spec gate. Pre-flight a file with
+\code{\link[=ars_validate_supplement]{ars_validate_supplement()}}.
+
+The three tiers are all optional except the deterministic baseline:
+with neither a supplement nor an API key the pipeline still runs
+end-to-end on regex + keyword heuristics (reduced accuracy for variant
+layouts, groupings, and analysis typing; one WARN finding records the
+mode).}
+
 \item{spec_column_aliases}{Optional named list of extra column-name
 aliases for the ADaM spec Excel (see \code{parse_adam_spec()}); useful when
 a workbook uses non-standard or non-English headers. Example:
@@ -98,6 +115,9 @@ engine \code{ars_to_ard()} sources to build the ARD.}
 Invisibly returns a named list:
 \describe{
 \item{\code{ars_path}}{Path to the generated ARS JSON file.}
+\item{\code{extraction_mode}}{Which tier ran: \code{"llm"}, \code{"supplement"}, or
+\code{"deterministic"}. Also stored in the JSON as
+\verb{_meta.extraction_mode}.}
 \item{\code{report_path}}{Path to the validation report (if validate=TRUE).}
 \item{\code{code_dir}}{Directory holding the emitted per-TLF \code{{cards}} \code{.R}
 deliverables.}
@@ -142,4 +162,9 @@ spec_to_ars(
   report_path    = "outputs/spec_validation_report.xlsx"
 )
 }
+}
+\seealso{
+\code{\link[=ars_copilot_instructions]{ars_copilot_instructions()}} and \code{\link[=ars_validate_supplement]{ars_validate_supplement()}} for
+the no-API \verb{supplement =} workflow; \code{\link[=set_llm_key]{set_llm_key()}} to configure a live
+LLM. Background: \code{vignette("no-api-access")}.
 }

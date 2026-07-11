@@ -33,6 +33,21 @@
 #' @param api_key        LLM API key. Defaults to the active provider's key.
 #' @param provider       LLM provider: `"anthropic"`, `"openai"`, or `"gemini"`.
 #'   Defaults to the active provider.
+#' @param supplement     Optional path to a supplement `.json` produced by a
+#'   chat assistant from the instruction file written by
+#'   [ars_copilot_instructions()]. When supplied, NO live LLM calls are made
+#'   (even if a key is set): the supplement's bindings fill only the rows the
+#'   deterministic pass left unannotated (shell annotations always win;
+#'   disagreements are WARN findings) and its per-TLF fields feed the same
+#'   enrichment path a live LLM answer would. Every supplement variable
+#'   passes the hard ADaM-spec gate. Pre-flight a file with
+#'   [ars_validate_supplement()].
+#'
+#'   The three tiers are all optional except the deterministic baseline:
+#'   with neither a supplement nor an API key the pipeline still runs
+#'   end-to-end on regex + keyword heuristics (reduced accuracy for variant
+#'   layouts, groupings, and analysis typing; one WARN finding records the
+#'   mode).
 #' @param spec_column_aliases Optional named list of extra column-name
 #'   aliases for the ADaM spec Excel (see `parse_adam_spec()`); useful when
 #'   a workbook uses non-standard or non-English headers. Example:
@@ -65,6 +80,9 @@
 #' @return Invisibly returns a named list:
 #'   \describe{
 #'     \item{`ars_path`}{Path to the generated ARS JSON file.}
+#'     \item{`extraction_mode`}{Which tier ran: `"llm"`, `"supplement"`, or
+#'       `"deterministic"`. Also stored in the JSON as
+#'       `_meta.extraction_mode`.}
 #'     \item{`report_path`}{Path to the validation report (if validate=TRUE).}
 #'     \item{`code_dir`}{Directory holding the emitted per-TLF `{cards}` `.R`
 #'       deliverables.}
@@ -92,6 +110,10 @@
 #' review it before downstream use. The JSON includes a
 #' `_meta.requires_human_review = TRUE` field that consumers can key on.
 #'
+#' @seealso [ars_copilot_instructions()] and [ars_validate_supplement()] for
+#'   the no-API `supplement =` workflow; [set_llm_key()] to configure a live
+#'   LLM. Background: `vignette("no-api-access")`.
+#'
 #' @examples
 #' \dontrun{
 #' spec_to_ars(
@@ -111,6 +133,7 @@ spec_to_ars <- function(shell_path,
                         model        = NULL,
                         api_key      = NULL,
                         provider     = NULL,
+                        supplement   = NULL,
                         spec_column_aliases = NULL,
                         extract_with_llm = TRUE,
                         ship_annotations = FALSE,
@@ -133,30 +156,33 @@ spec_to_ars <- function(shell_path,
     ))
   }
 
-  active <- get_active_llm()
-  if (is.null(provider)) {
-    provider <- active$provider
-  }
-  if (is.null(provider)) {
-    cli::cli_abort(c(
-      "No active LLM API key found.",
-      "i" = "Please set up an API key for Anthropic, OpenAI, or Gemini.",
-      " " = "You can run {.code arsbridge::set_anthropic_key()}, {.code arsbridge::set_openai_key()}, or {.code arsbridge::set_gemini_key()}."
-    ))
-  }
-
-  if (is.null(model)) {
-    model <- active$model
-  }
-  if (is.null(api_key)) {
-    api_key <- Sys.getenv(.llm_env_var(provider))
-  }
-
-  if (is.null(api_key) || !nzchar(api_key)) {
-    cli::cli_abort(c(
-      "API key for {.val {provider}} is not set.",
-      "i" = "Please configure your API key using the appropriate set function (e.g. {.code set_openai_key()})."
-    ))
+  ## --- Mode resolution: supplement > live LLM > deterministic ---------------
+  ## All tiers are optional except the deterministic regex baseline -- a
+  ## missing key or missing supplement must NEVER stop the run.
+  supp <- NULL
+  if (!is.null(supplement)) {
+    supp <- read_supplement(supplement)
+    extraction_mode <- "supplement"
+  } else {
+    active <- get_active_llm()
+    if (is.null(provider)) {
+      provider <- active$provider
+    }
+    if (!is.null(provider)) {
+      if (is.null(model)) {
+        model <- active$model
+      }
+      if (is.null(api_key)) {
+        api_key <- Sys.getenv(.llm_env_var(provider))
+      }
+    }
+    if (is.null(provider) || is.null(api_key) || !nzchar(api_key)) {
+      extraction_mode <- "deterministic"
+      provider <- NULL
+      api_key  <- NULL
+    } else {
+      extraction_mode <- "llm"
+    }
   }
 
   if (verbose) cli::cli_h1("arsbridge::spec_to_ars")
@@ -164,6 +190,24 @@ spec_to_ars <- function(shell_path,
   ## Fresh diagnostics for this run -- every parser/LLM/builder fallback is
   ## recorded and lands on the "Diagnostics" sheet of the validation report.
   diag_reset()
+
+  if (identical(extraction_mode, "deterministic")) {
+    cli::cli_alert_warning(paste(
+      "No LLM API key and no supplement -- running in deterministic mode",
+      "(regex + keyword heuristics). Accuracy is reduced for variant shell",
+      "layouts, grouping detection, Total columns, and analysis typing."))
+    cli::cli_alert_info(paste(
+      "TIP: no API key? {.code ars_copilot_instructions()} writes a file you",
+      "can upload to Copilot/ChatGPT together with your shell and spec; pass",
+      "the reply back via {.code spec_to_ars(supplement = ...)}."))
+    .diag_gap(
+      stage = "setup", severity = "WARN", input = INPUT_LLM,
+      problem = "Run executed in deterministic mode (no LLM API key, no supplement).",
+      why = "Variant annotation layouts, multi-level groupings, Total columns, and analysis-type classification rely on keyword heuristics in this mode.",
+      fix = "Set an API key (set_anthropic_key() / set_llm_key()) for full accuracy, or use the supplement workflow: ars_copilot_instructions().")
+  } else if (identical(extraction_mode, "supplement") && verbose) {
+    cli::cli_alert_info("Using supplement {.path {basename(supplement)}} -- no live LLM calls will be made.")
+  }
 
   ## --- Parse inputs --------------------------------------------------
   ## Spec first: the shell parser uses the spec lookup to validate listing
@@ -177,15 +221,33 @@ spec_to_ars <- function(shell_path,
     cli::cli_abort("No TLF sections found in {.path {shell_path}}.")
   }
 
-  ## --- LLM-primary extraction (with deterministic + spec cross-check) -------
-  ## The LLM re-reads each section's raw cells to separate label from variable
-  ## in variant layouts. Every proposed variable passes a hard ADaM-spec gate;
-  ## hallucinations are rejected and logged. Keyless => degraded regex-only.
-  if (isTRUE(extract_with_llm)) {
+  ## --- Annotation gap-filling on top of the deterministic pass --------------
+  ## llm mode: the LLM re-reads each section's raw cells to separate label
+  ##   from variable in variant layouts.
+  ## supplement mode: the chat-assistant supplement's label-keyed bindings
+  ##   land only on rows the regex left unannotated.
+  ## Either way every proposed variable passes a hard ADaM-spec gate;
+  ## hallucinations are rejected and logged. Deterministic mode skips this.
+  if (identical(extraction_mode, "llm") && isTRUE(extract_with_llm)) {
     if (verbose) cli::cli_alert_info("Extracting annotations with {toupper(provider)} (spec-gated)...")
     sections <- lapply(sections, function(sec)
       extract_shell_llm(sec, spec_lookup = spec$lookup,
                         provider = provider, model = model, api_key = api_key))
+  } else if (identical(extraction_mode, "supplement")) {
+    if (verbose) cli::cli_alert_info("Applying supplement bindings (spec-gated, shell annotations win)...")
+    sections <- lapply(sections, function(sec)
+      .apply_supplement_bindings(sec, .match_supplement_tlf(supp, sec$tlf_number),
+                                 spec$lookup))
+    ## Supplement entries whose TLF number matches no parsed section are
+    ## almost always a numbering typo -- surface each one.
+    sec_ids <- vapply(sections, function(s) s$tlf_number %||% "", character(1))
+    for (key in .supplement_unmatched_tlfs(supp, sec_ids)) {
+      diag_add(
+        stage = "supplement", severity = "WARN", input = INPUT_SUPPLEMENT,
+        problem = sprintf("Supplement entry '%s' matches no TLF in the shell", key),
+        action = "Entry ignored -- key each TLF by the number in its shell heading (e.g. '14.1.1')"
+      )
+    }
   }
 
   ## --- Validation ----------------------------------------------------
@@ -203,16 +265,30 @@ spec_to_ars <- function(shell_path,
     }
   }
 
-  ## --- LLM enrichment, one call per TLF -----------------------------
-  if (verbose) cli::cli_alert_info("Enriching {length(sections)} TLF section{?s} with {toupper(provider)} ({model})...")
+  ## --- Semantic enrichment, one unit per TLF -------------------------
+  ## llm: one live call per section; supplement: the per-TLF answer from the
+  ## supplement through the same path; deterministic: heuristics only.
+  if (verbose) {
+    src_label <- switch(extraction_mode,
+      llm        = sprintf("with %s (%s)", toupper(provider), model),
+      supplement = "from the supplement",
+      "with keyword heuristics")
+    cli::cli_alert_info("Enriching {length(sections)} TLF section{?s} {src_label}...")
+  }
   enriched <- vector("list", length(sections))
   for (i in seq_along(sections)) {
     sec <- sections[[i]]
     if (verbose) {
       cli::cli_alert("  [{i}/{length(sections)}] {.val {sec$tlf_number}}: {substr(sec$title, 1, 60)}")
     }
-    enriched[[i]] <- enrich_with_llm(sec, spec_lookup = spec$lookup,
-                                     model = model, api_key = api_key, provider = provider)
+    enriched[[i]] <- switch(extraction_mode,
+      llm = enrich_with_llm(sec, spec_lookup = spec$lookup,
+                            model = model, api_key = api_key,
+                            provider = provider),
+      supplement = enrich_with_llm(sec, spec_lookup = spec$lookup,
+                                   courier_answers = .supplement_enrich_answer(
+                                     .match_supplement_tlf(supp, sec$tlf_number))),
+      enrich_with_llm(sec, spec_lookup = spec$lookup, offline = TRUE))
   }
 
   ## One summary finding for a wholesale LLM outage (almost always a bad/expired
@@ -291,7 +367,8 @@ spec_to_ars <- function(shell_path,
   re <- build_ars_json(enriched, study_id = study_id,
                        study_name = study_name %||% study_id,
                        spec_lookup = spec$lookup,
-                       ship_annotations = ship_annotations)
+                       ship_annotations = ship_annotations,
+                       extraction_mode = extraction_mode)
 
   json_text <- jsonlite::toJSON(re, auto_unbox = TRUE, pretty = TRUE, null = "null")
   .write_text(json_text, output_path, "the ARS JSON", useBytes = TRUE)
@@ -343,6 +420,7 @@ spec_to_ars <- function(shell_path,
 
   result <- list(
     ars_path        = output_path,
+    extraction_mode = extraction_mode,
     report_path     = if (isTRUE(validate)) report_path else NULL,
     code_dir        = code_dir,
     code_paths      = code_paths,

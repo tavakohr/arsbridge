@@ -35,3 +35,7 @@ set_llm_key("glm", "your-glm-key")
 Sys.setenv(ARS_LLM_PROVIDER = "glm")  # make it the active provider
 }
 }
+\seealso{
+No API key available? \code{\link[=ars_copilot_instructions]{ars_copilot_instructions()}} sets up the
+no-API supplement workflow -- see \code{vignette("no-api-access")}.
+}

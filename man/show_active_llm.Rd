@@ -16,3 +16,7 @@ and the set/missing status of API keys for Anthropic, OpenAI, and Gemini.
 \examples{
 show_active_llm()
 }
+\seealso{
+No API key available? \code{\link[=ars_copilot_instructions]{ars_copilot_instructions()}} sets up the
+no-API supplement workflow -- see \code{vignette("no-api-access")}.
+}
