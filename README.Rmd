@@ -101,6 +101,8 @@ For exact Clopper-Pearson confidence intervals, also install the optional `{card
 install.packages("cardx")
 ```
 
+> **No LLM API key?** You do not need one. `arsbridge` runs on regex + heuristics alone, and `ars_copilot_instructions()` sets up a no-API workflow that reaches near-LLM accuracy through a chat assistant (Copilot/ChatGPT) — see `vignette("no-api-access")`.
+
 ---
 
 ## Quick start with the bundled example

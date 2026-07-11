@@ -1,5 +1,32 @@
 # arsbridge 0.1.0
 
+* Three-tier reading engine; the LLM API key is now optional
+  (`R/spec_to_ars.R`, `R/supplement.R`). `spec_to_ars()` no longer aborts
+  without a key: it resolves a mode from what you have —
+  * **deterministic** (shell + spec only): regex + keyword heuristics, one
+    `WARN` recording the reduced accuracy;
+  * **supplement** (`spec_to_ars(supplement = "supplement.json")`): a JSON
+    file produced by a chat assistant from the uploaded shell + spec fills
+    the annotations the regex could not find and supplies per-TLF
+    enrichment, with **no API call**;
+  * **llm** (API key set): unchanged live behaviour.
+
+  New exports: `ars_copilot_instructions()` writes the static, versioned
+  instruction file to upload to Copilot/ChatGPT alongside the shell and
+  spec; `ars_validate_supplement()` pre-flights the reply. Supplement
+  bindings fill gaps only — authored shell annotations win any disagreement
+  (`WARN`) — and every proposed variable passes the same hard ADaM-spec gate
+  as a live LLM proposal. The tier is recorded in
+  `_meta.extraction_mode` of the ARS JSON and in the `spec_to_ars()` result.
+  See `vignette("no-api-access")`.
+
+  `ars_copilot_instructions()` copies the instruction file shipped inside the
+  installed package (`inst/copilot/`) into the working directory (creating the
+  target folder if needed), so users never touch the internal package path.
+  The no-API path is now cross-referenced from `?arsbridge`, `?spec_to_ars`,
+  every `?set_*_key` / `?get_active_llm` help page, the README (including an
+  install-time pointer), and the `getting-started` vignette.
+
 * Shell-parsing robustness for cross-sponsor variation
   (`R/parse_shell_docx.R`, robustness findings F1-F4). The shell reader now
   tolerates inline headings (`Table 14.1.1: Title`), two-line titles, listings

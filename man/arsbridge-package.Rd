@@ -26,6 +26,17 @@ never shipped. Every variable in the ARS output traces back to a real
 annotation grounded in the study's ADaM spec. See the "How arsbridge reads
 an annotated shell" vignette.
 }
+\section{Working without an API key}{
+
+The LLM is optional. \code{spec_to_ars()} runs in one of three tiers, resolved
+from what you have: \strong{deterministic} (shell + spec only -- regex plus
+heuristics), \strong{supplement} (a JSON file a chat assistant such as Copilot
+produces from the uploaded shell + spec, fed via \code{spec_to_ars(supplement =)}
+with no API call), or \strong{llm} (an API key is set). A missing key never stops
+a run. Start the no-API path with \code{\link[=ars_copilot_instructions]{ars_copilot_instructions()}}; see
+\code{vignette("no-api-access")}.
+}
+
 \seealso{
 Useful links:
 \itemize{

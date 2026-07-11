@@ -329,7 +329,8 @@ build_ars_json <- function(sections,
                            study_id   = "STUDY-001",
                            study_name = NULL,
                            spec_lookup = NULL,
-                           ship_annotations = FALSE) {
+                           ship_annotations = FALSE,
+                           extraction_mode = "llm") {
   if (length(sections) == 0) {
     cli::cli_abort("Cannot build ReportingEvent: no TLF sections provided.")
   }
@@ -765,6 +766,10 @@ build_ars_json <- function(sections,
       generator             = paste0("arsbridge ", utils::packageVersion("arsbridge")),
       generated_at_utc      = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
       ars_model_version     = "1.0",
+      ## Which tier produced the semantic metadata: "llm" (live API),
+      ## "supplement" (chat-assistant supplement file), or "deterministic"
+      ## (regex + keyword heuristics only, reduced accuracy).
+      extraction_mode       = extraction_mode,
       requires_human_review = TRUE,
       ## TLFs where no grouping variable could be resolved (built
       ## ungrouped) -- start the human review here.

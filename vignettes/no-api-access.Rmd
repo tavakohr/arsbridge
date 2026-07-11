@@ -1,0 +1,143 @@
+---
+title: "Using arsbridge without API access"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Using arsbridge without API access}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment  = "#>",
+  eval     = FALSE     # Vignette is documentation; calls are illustrative.
+)
+```
+
+## Three tiers, one required
+
+`arsbridge` has an LLM in the loop for two jobs: reading variable annotations
+in shell layouts a regex was never designed for, and classifying each table
+(analysis type, grouping columns, method). Neither is required. The reading
+engine has three tiers and only the first is mandatory:
+
+| Tier | You supply | Accuracy |
+|---|---|---|
+| **Deterministic** | shell + spec | Regex + keyword heuristics |
+| **Supplement** | + a JSON file from a chat assistant | Near-LLM, no API call |
+| **LLM** | + an API key | Full |
+
+A missing key and a missing supplement never stop the run. With neither,
+`spec_to_ars()` completes on regex plus heuristics and records the fact:
+
+```{r}
+res <- spec_to_ars("shell.docx", "adam_spec.xlsx")
+res$extraction_mode
+#> "deterministic"
+```
+
+Standard shells (variables in red text, `Label -> DATASET.VAR` lines,
+bracketed `DATASET.VARIABLE` after a label) still bind correctly with no LLM
+at all. What degrades in deterministic mode is variant annotation layouts,
+multi-level groupings, the Total column, and analysis-type classification for
+unusual tables — each recorded as a `WARN` in the diagnostics sheet.
+
+## The supplement tier: use a chat assistant by hand
+
+Many regulated or enterprise environments block LLM APIs but allow an
+interactive chat assistant (GitHub Copilot, ChatGPT, an internal portal)
+where you can upload files. The supplement tier turns that into near-LLM
+accuracy with zero API calls: you ferry the work through the chat UI, and the
+package consumes the assistant's reply as an auxiliary file.
+
+### Step 1 — get the instruction file
+
+```{r}
+ars_copilot_instructions()
+```
+
+This writes `arsbridge_copilot_instructions.md` into your working directory
+and prints the workflow. The file is static and versioned — it tells the
+assistant exactly what to read and, critically, the exact JSON shape to
+reply with, so the package can validate the answer.
+
+### Step 2 — upload to the assistant
+
+Upload **three files together** to your chat assistant:
+
+* `arsbridge_copilot_instructions.md` (from step 1),
+* your annotated TLF shell `.docx`,
+* your ADaM specification `.xlsx`.
+
+Save the assistant's reply — one JSON block — as `supplement.json`.
+
+### Step 3 — pre-flight (optional but recommended)
+
+```{r}
+ars_validate_supplement("supplement.json", "adam_spec.xlsx")
+```
+
+This checks the format version, every binding's shape and variable syntax,
+the analysis-type enums, and — when you pass the spec — that every proposed
+variable actually exists in your ADaM spec. Any `FAIL` line is worded so you
+can paste it straight back to the assistant to regenerate the file, e.g.
+*"regenerate: ADSL.WEIGHTBL is not in the ADaM spec"*.
+
+### Step 4 — run
+
+```{r}
+res <- spec_to_ars(
+  shell_path     = "shell.docx",
+  adam_spec_path = "adam_spec.xlsx",
+  supplement     = "supplement.json"
+)
+res$extraction_mode
+#> "supplement"
+```
+
+## What the supplement can and cannot do
+
+The supplement is an **assistant, not an override**. Two guarantees make it
+safe to trust a draft it produced:
+
+* **The regex wins.** A supplement binding lands only on a row the
+  deterministic pass left unannotated. If the shell already annotated a row,
+  the shell's annotation stands and any disagreement is logged as a `WARN`
+  for you to review — the assistant can never silently rewrite an authored
+  annotation.
+* **The spec is the gate.** Every `DATASET.VARIABLE` the supplement proposes
+  is checked against your ADaM spec. One that is not in the spec is dropped
+  and logged as a blocking `FAIL`, exactly as a live LLM's proposal would be.
+  The assistant cannot invent a variable into your output.
+
+Statistic sub-rows (`Mean (SD)`, `Median`, `Q1, Q3`, `Min, Max`) are never
+bound from the supplement: they belong to the analysis row above them, and
+the layout-driven renderer fills them from that parent.
+
+Everything downstream is unchanged — the ARS JSON is built, validated, and
+emitted as per-TLF `{cards}` scripts the same way in every tier. The JSON's
+`_meta.extraction_mode` field records which tier produced it, and
+`_meta.requires_human_review` stays `TRUE`: whichever tier you used, a
+qualified programmer must review the draft.
+
+## Data governance
+
+Uploading your shell and spec to a chat assistant transmits their **text** —
+TLF titles, stub labels, footnotes, and the variable *names* from your spec —
+to that provider. It does **not** transmit any patient data: shells are mock
+by definition, and `spec_to_ars()` never reads ADaM datasets at this stage
+(data are only touched later, locally, by `ars_to_ard()`). Even so, shell
+wording and a study's variable inventory can be sponsor-confidential —
+**confirm your organisation's policy before uploading.**
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `Supplement file is not valid JSON` | assistant wrapped the reply in prose, or used smart quotes | the reader strips a ```` ```json ```` fence and smart double-quotes automatically; if it still fails, ask the assistant to "reply with only one fenced strict-JSON block" |
+| `Supplement version mismatch` | file made with a different package version | rerun `ars_copilot_instructions()` from the installed version and regenerate |
+| `binding label 'X' matched no stub row` (`WARN`) | the `label` is not the stub text verbatim | ensure `label` is copied exactly from the shell, footnote markers and all |
+| `is not in the ADaM spec` (`FAIL`) | assistant proposed a variable your spec does not have | fix the binding or add the variable to the spec |
+| `entry 'X' matches no TLF in the shell` (`WARN`) | TLF numbering typo in the reply | key each TLF by its shell heading number (e.g. `"14.1.1"`) |
+| a TLF ran on heuristics (`WARN`) | that TLF is missing from the supplement | add it to `tlfs` and rerun |
