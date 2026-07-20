@@ -315,14 +315,14 @@ spec_to_ars <- function(shell_path,
     sections <- lapply(sections, function(sec)
       .apply_supplement_bindings(sec, .match_supplement_tlf(supp, sec$tlf_number),
                                  spec$lookup))
-    ## Supplement entries whose TLF number matches no parsed section are
-    ## almost always a numbering typo -- surface each one.
-    sec_ids <- vapply(sections, function(s) s$tlf_number %||% "", character(1))
-    for (key in .supplement_unmatched_tlfs(supp, sec_ids)) {
+    ## Cross-check the supplement's table inventory against what was parsed:
+    ## supplement entries with no matching table, tables the supplement never
+    ## mentions, and title disagreements -- so the user can confirm arsbridge
+    ## is using the correct set of tables. All non-blocking.
+    for (f in .supplement_crosscheck(supp, sections)) {
       diag_add(
-        stage = "supplement", severity = "WARN", input = INPUT_SUPPLEMENT,
-        problem = sprintf("Supplement entry '%s' matches no TLF in the shell", key),
-        action = "Entry ignored -- key each TLF by the number in its shell heading (e.g. '14.1.1')"
+        stage = "supplement", severity = f$severity, input = INPUT_SUPPLEMENT,
+        problem = f$problem, tlf_number = f$tlf_number, action = f$action
       )
     }
   }

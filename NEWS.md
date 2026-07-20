@@ -1,5 +1,17 @@
 # arsbridge (development version)
 
+* **The supplement now confirms the correct set of tables.** A Copilot
+  supplement may carry a `title` per TLF (the instruction file now asks the
+  assistant to enumerate every output with its exact title). `spec_to_ars()`
+  cross-checks that inventory against what it parsed and records non-blocking
+  WARNs for a supplement entry that matches no parsed table, a parsed table the
+  supplement never mentions, and a title that disagrees between the two -- so a
+  wrong or incomplete table set surfaces for review. When the shell heading
+  gave no title but the supplement has one, the parsed section adopts it
+  (INFO). `title` is optional and backward compatible (no version bump); a
+  supplement without one still runs, and `ars_validate_supplement()` suggests
+  adding it.
+
 * **One-line TLF headings are now read deterministically.** The shell parser
   previously recognised an inline title only after a literal colon
   (`Table 14.1.1: Title`). It now also reads a colon-less one-line heading

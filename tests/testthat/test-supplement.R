@@ -77,6 +77,7 @@ test_that("read_supplement aborts on malformed JSON, bad version, missing tlfs",
 
 test_that("validator passes a clean supplement and flags bad fields", {
   clean <- .write_supp(.supp_minimal(list(`14.1.1` = list(
+    title = "Demographics",
     bindings = list(list(label = "Age (years)", variable = "ADSL.AGE")),
     analysis_type = "CONTINUOUS"))))
   out <- suppressMessages(ars_validate_supplement(clean))
@@ -333,4 +334,80 @@ test_that("spec_to_ars(supplement=) binds gaps and records the mode", {
   expect_true(any(recs$stage == "supplement" & grepl("applied", recs$problem)))
   ## No 'deterministic mode' setup WARN in supplement mode.
   expect_false(any(recs$stage == "setup"))
+})
+
+## --- title: known field, fill, and the table-set cross-check ---------------
+
+test_that("a 'title' field is recognised (not flagged as unknown)", {
+  path <- .write_supp(.supp_minimal(list(`14.1.1` = list(
+    title = "Summary of Disposition",
+    bindings = list(list(label = "Age (years)", variable = "ADSL.AGE"))
+  ))))
+  out <- ars_validate_supplement(path)
+  expect_false(any(out$where == "fields" & grepl("title", out$problem)))
+})
+
+test_that("ars_validate_supplement suggests adding a missing title (INFO)", {
+  path <- .write_supp(.supp_minimal(list(`14.1.1` = list(
+    bindings = list(list(label = "Age (years)", variable = "ADSL.AGE"))
+  ))))
+  out <- ars_validate_supplement(path)
+  expect_true(any(out$severity == "INFO" & out$where == "title"))
+})
+
+test_that("an empty parsed title is filled from the supplement, with an INFO", {
+  diag_reset()
+  sec <- .mk_supp_section()
+  sec$title <- ""                                   # shell gave no title
+  out <- .apply_supplement_bindings(
+    sec, list(title = "Summary of Disposition"), .supp_spec)
+  expect_equal(out$title, "Summary of Disposition")
+  recs <- diag_records()
+  expect_true(any(recs$severity == "INFO" & grepl("title sourced from the supplement", recs$problem)))
+})
+
+test_that("a parsed title is never overwritten by the supplement", {
+  sec <- .mk_supp_section()                          # title = "Demographics"
+  out <- .apply_supplement_bindings(
+    sec, list(title = "Something Else Entirely"), .supp_spec)
+  expect_equal(out$title, "Demographics")
+})
+
+test_that(".titles_agree tolerates trimming but flags real differences", {
+  expect_true(.titles_agree("Summary of Disposition",
+                            "Summary of Disposition - Safety Population"))
+  expect_true(.titles_agree("Summary of Disposition", "summary of disposition"))
+  expect_false(.titles_agree("Summary of Disposition", "Baseline Characteristics"))
+  expect_true(.titles_agree("", "anything"))         # nothing to compare
+})
+
+test_that(".supplement_crosscheck flags extra, missing, and mismatched-title TLFs", {
+  sections <- list(
+    list(tlf_number = "T-14-1-1", title = "Summary of Disposition"),
+    list(tlf_number = "T-14-1-2", title = "Demographics"),
+    list(tlf_number = "T-14-1-3", title = "Adverse Events")
+  )
+  supp <- .supp_minimal(list(
+    `14.1.1` = list(title = "Summary of Disposition"),        # agrees
+    `14.1.2` = list(title = "Baseline Characteristics"),      # title mismatch
+    `14.9.9` = list(title = "Ghost")                          # extra
+    ## 14.1.3 deliberately absent -> coverage gap
+  ))
+  f <- .supplement_crosscheck(supp, sections)
+  probs <- vapply(f, function(x) x$problem, character(1))
+  expect_true(all(vapply(f, function(x) x$severity, character(1)) == "WARN"))
+  expect_true(any(grepl("14.9.9", probs) & grepl("no TLF parsed", probs)))
+  expect_true(any(grepl("T-14-1-3", probs) & grepl("no entry", probs)))
+  expect_true(any(grepl("T-14-1-2", probs) & grepl("supplement says", probs)))
+  ## The agreeing pair produces nothing.
+  expect_false(any(grepl("T-14-1-1", probs)))
+})
+
+test_that(".supplement_crosscheck is silent when titles are absent and coverage is complete", {
+  sections <- list(
+    list(tlf_number = "T-14-1-1", title = "Demographics"),
+    list(tlf_number = "T-14-1-2", title = "Adverse Events")
+  )
+  supp <- .supp_minimal(list(`14.1.1` = list(), `14.1.2` = list()))
+  expect_length(.supplement_crosscheck(supp, sections), 0)
 })
