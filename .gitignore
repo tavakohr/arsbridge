@@ -24,6 +24,7 @@ docs/
 # Study-specific working dirs (NEVER commit client data)
 # inputs/ is shared for user practice; only the extracted loose XPT
 # folder is ignored (ADaM.zip itself IS tracked).
+RWE_error/
 inputs/ADaM/
 outputs/
 .align_backup/

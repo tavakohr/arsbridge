@@ -290,3 +290,131 @@ test_that("a comment anchored to a data cell supplies the row annotation", {
   expect_equal(row$annotation, "ADSL.WEIGHT")
   expect_equal(row$detection_method, "data_cell_comment")
 })
+
+## --- RWE-style one-line headings (number + title + population + inline
+##     annotation + [PROGRAMMING DATASETS USED: ...] on one paragraph) -------
+
+test_that(".normalize_docx_text straightens quotes and spaces but keeps dashes", {
+  ## Non-breaking space -> plain, smart quotes -> straight, zero-width gone.
+  expect_equal(
+    .normalize_docx_text("Table 14.1.1 “Y”​"),
+    "Table 14.1.1 \"Y\"")
+  ## En/em dashes are display characters and must survive normalization.
+  expect_equal(.normalize_docx_text("A – B — C"), "A – B — C")
+})
+
+test_that(".match_tlf_heading accepts a colon-less one-line RWE heading", {
+  h <- .normalize_docx_text(paste0(
+    "Table 14.1.1 Summary of Subject Status – Screened Subjects ",
+    "ADSL.SCRNFL=“Y” [PROGRAMMING DATASETS USED: ADSL]"))
+  res <- .match_tlf_heading(h)
+  expect_false(is.null(res$hit))
+  expect_equal(res$hit$type_word, "Table")
+  expect_equal(res$hit$number, "14.1.1")
+})
+
+test_that(".match_tlf_heading still rejects prose, cross-refs, TOC, and section numbers", {
+  reject <- c(
+    "Table 14.1.1 shows the demographic summary",
+    "See Table 14.1.1 for details",
+    "14.1 Demographic and Baseline Tables",
+    "Table 14.1.1 Demographics ........ 12")
+  for (txt in reject) {
+    expect_true(is.null(.match_tlf_heading(txt)$hit), info = txt)
+  }
+  ## A designator-first line that matched the colon-less grammar and was
+  ## then rejected carries an explanation; a line that never matched any
+  ## grammar (a cross-reference, a bare section number) does not -- the
+  ## near-miss diagnostics classify those separately.
+  expect_match(.match_tlf_heading(reject[1])$reject_reason, "prose")
+  expect_match(.match_tlf_heading(reject[4])$reject_reason, "contents")
+})
+
+test_that(".match_tlf_heading keeps the legacy bare/colon/uppercase forms", {
+  keep <- c("Table 14.1.1", "Table 14.1.1: Summary of Demographics",
+            "TABLE 14.1.1 Summary of Enrolment",
+            "Table No. 14.1.1 Summary of Enrolment", "Listing 16.2.1a")
+  for (txt in keep) {
+    expect_false(is.null(.match_tlf_heading(txt)$hit), info = txt)
+  }
+})
+
+test_that(".decompose_heading_tail splits title, population, annotation, source", {
+  tail <- .normalize_docx_text(paste0(
+    "Summary of Subject Status – Screened Subjects ",
+    "ADSL.SCRNFL=“Y” [PROGRAMMING DATASETS USED: ADSL]"))
+  parts <- .decompose_heading_tail(tail)
+  expect_equal(parts$title, "Summary of Subject Status")
+  expect_match(parts$population_text, "Screened Subjects")
+  expect_equal(parts$population_annot, "ADSL.SCRNFL='Y'")
+  expect_equal(parts$source_datasets, "ADSL")
+})
+
+test_that("the RWE-style fixture parses into 2 sections with decomposed fields", {
+  secs <- parse_shell_docx(test_path("fixtures/annotated_shell_rwe_style.docx"))
+  expect_length(secs, 2)
+
+  s1 <- secs[[1]]
+  expect_equal(s1$tlf_number, "T-14-1-1")
+  expect_equal(s1$title, "Summary of Subject Status and Subject Disposition")
+  expect_match(s1$population_text, "Screened Subjects")
+  expect_equal(s1$population_annot, "ADSL.SCRNFL='Y'")
+  expect_equal(s1$source_datasets, "ADSL")
+  expect_match(s1$raw_heading, "^Table 14.1.1")
+
+  ## Spaced "=" and smart double quotes are canonicalized to single quotes.
+  expect_equal(secs[[2]]$tlf_number, "T-14-1-3")
+  expect_equal(secs[[2]]$population_annot, "ADSL.COMPLFL = 'Y'")
+})
+
+test_that("a numbered section heading and an e-signature banner never start a section", {
+  secs <- parse_shell_docx(test_path("fixtures/annotated_shell_rwe_style.docx"))
+  numbers <- vapply(secs, `[[`, character(1), "tlf_number")
+  expect_setequal(numbers, c("T-14-1-1", "T-14-1-3"))
+})
+
+test_that("tracked-change deletions do not leak into RWE stub-cell text", {
+  secs <- parse_shell_docx(test_path("fixtures/annotated_shell_rwe_style.docx"))
+  leaked <- any(vapply(secs[[1]]$stub_rows,
+                       function(r) grepl("TRACKDEL", r$raw_text %||% ""),
+                       logical(1)))
+  expect_false(leaked)
+})
+
+test_that("split_label_annotation handles double-quoted and unquoted-numeric values", {
+  a <- split_label_annotation('Completed  ADSL.COMPLFL = "Y"')
+  expect_equal(a$label, "Completed")
+  expect_equal(a$annotation, "ADSL.COMPLFL = 'Y'")
+
+  b <- split_label_annotation("Cohort 1 ADSL.COHORTN=1")
+  expect_equal(b$annotation, "ADSL.COHORTN=1")
+})
+
+test_that("zero-section parse reports classified heading near-misses", {
+  expect_warning(
+    secs <- parse_shell_docx(test_path("fixtures/annotated_shell_near_miss.docx")),
+    "No TLF sections found")
+  expect_length(secs, 0)
+  nm <- attr(secs, "near_misses")
+  expect_gte(length(nm), 2)
+  reasons <- vapply(nm, `[[`, character(1), "reason")
+  expect_true(any(grepl("prose", reasons)))
+  expect_true(any(grepl("section heading", reasons)))
+})
+
+test_that("a custom heading_patterns grammar parses an otherwise-unknown heading", {
+  cp <- "^(?i)Output\\s+(?<number>\\d+(?:\\.\\d+)*)\\s*:\\s*(?<title>.*)$"
+  secs <- parse_shell_docx(
+    test_path("fixtures/annotated_shell_custom_heading.docx"),
+    heading_patterns = cp)
+  expect_length(secs, 1)
+  expect_equal(secs[[1]]$tlf_number, "T-14-1-1")
+  expect_equal(secs[[1]]$title, "Summary of Demographics")
+})
+
+test_that("heading_patterns without a (?<number>) group is rejected early", {
+  expect_error(
+    parse_shell_docx(test_path("fixtures/annotated_shell_custom_heading.docx"),
+                     heading_patterns = "^Output (.*)$"),
+    "number")
+})

@@ -1,4 +1,58 @@
+# arsbridge (development version)
+
+* **One-line TLF headings are now read deterministically.** The shell parser
+  previously recognised an inline title only after a literal colon
+  (`Table 14.1.1: Title`). It now also reads a colon-less one-line heading
+  that packs the number, title, a dash-separated population, an inline
+  annotation, and a `[PROGRAMMING DATASETS USED: ...]` suffix into a single
+  paragraph -- e.g.
+  `Table 14.1.1 Summary of Disposition - Screened Subjects ADSL.SCRNFL='Y' [PROGRAMMING DATASETS USED: ADSL]`.
+  The title, population, population annotation, and source datasets are split
+  out of that line. Recognition stays conservative: ordinary prose that
+  mentions a table number (`Table 14.1.1 shows the summary`), cross-references
+  (`See Table 14.1.1 ...`), table-of-contents entries, and bare section
+  numbers (`14.1 Demographic and Baseline Tables`) are still not headings.
+
+* Annotation values written with straight or smart **double quotes**
+  (`ADSL.SCRNFL="Y"`) and **unquoted numeric equality** (`ADSL.COHORTN=1`,
+  common in column headers) are now detected. Captured values are
+  canonicalized to single quotes so the emitted ARS JSON stays uniform
+  regardless of the shell's quote style. Text is Unicode-normalized before
+  matching (non-breaking spaces, zero-width characters, and smart quotes),
+  while en/em dashes are preserved as meaningful title separators.
+
+* New `spec_to_ars(heading_patterns = ...)` escape hatch: a character vector
+  of PCRE patterns (with named `number`/`type`/`title` groups) tried before
+  the built-in grammars, for sponsor shells whose headings the built-ins do
+  not recognise -- no package edit required.
+
+* When no TLF sections are found, the warning and the `spec_to_ars()` abort
+  now list the heading-shaped lines that were seen and rejected, with the
+  reason for each, and point at `heading_patterns`.
+
+* The cosmetic "Undefined namespace prefix" warning that `officer` emits while
+  reading `docProps/core.xml` in some e-signed (DocuSign) shells is now
+  muffled; every other warning still surfaces.
+
 # arsbridge 0.1.0
+
+* **The LLM tier is now opt-in.** `spec_to_ars()` gains `use_llm` (default
+  `FALSE`): by default the pipeline runs regex-only (deterministic) and makes
+  NO live LLM call, *even when an API key is configured*. Pass `use_llm = TRUE`
+  to use the LLM for extraction and enrichment when a key is available. This
+  makes regex the first-class default and the LLM an explicit choice -- ideal
+  for CI, automation, and regex baselines. (A `supplement` still takes
+  precedence; it also makes no live LLM calls.) **Breaking:** callers that
+  relied on a configured key auto-selecting the LLM must now pass
+  `use_llm = TRUE`.
+
+* Deterministic (regex) and supplement (Copilot) runs are fully silent about
+  API keys: `spec_to_ars()` never asks for a key nor raises a key-related
+  error or warning in those modes. The old "running in
+  deterministic mode" WARN is now a neutral INFO provenance note, and the
+  "no API key?" console nudge is gone. Genuine, table-specific findings
+  (e.g. a capability blocker for an inferential table) are unaffected and
+  still surface in every mode.
 
 * Three-tier reading engine; the LLM API key is now optional
   (`R/spec_to_ars.R`, `R/supplement.R`). `spec_to_ars()` no longer aborts
