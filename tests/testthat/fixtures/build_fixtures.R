@@ -860,3 +860,23 @@ doc_custom <- read_docx() |>
 out_custom <- file.path(here, "annotated_shell_custom_heading.docx")
 print(doc_custom, target = out_custom)
 cat("Wrote:", out_custom, "\n")
+
+## A heading whose number is found but that has NO title text and no page
+## header to recover one from: the table follows the heading directly. Drives
+## the "heading number found but no title" WARN.
+doc_no_title <- read_docx() |>
+  body_add_par("Table 14.9.1", style = "heading 2") |>
+  body_add_table(
+    value = data.frame(
+      Characteristic = c("Age (years)  ADSL.AGE", "  n", "  Mean (SD)"),
+      `Treatment A` = rep("", 3),
+      `Placebo`     = rep("", 3),
+      check.names = FALSE,
+      stringsAsFactors = FALSE
+    ),
+    style = "table_template"
+  ) |>
+  body_add_par("Source: ADSL")
+out_no_title <- file.path(here, "annotated_shell_no_title.docx")
+print(doc_no_title, target = out_no_title)
+cat("Wrote:", out_no_title, "\n")

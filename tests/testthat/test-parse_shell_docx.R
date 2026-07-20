@@ -418,3 +418,25 @@ test_that("heading_patterns without a (?<number>) group is rejected early", {
                      heading_patterns = "^Output (.*)$"),
     "number")
 })
+
+## --- Identifiable-heading guidance in messages -----------------------------
+
+test_that("a heading with no title text emits a WARN with how-to guidance", {
+  diag_reset()
+  secs <- parse_shell_docx(test_path("fixtures/annotated_shell_no_title.docx"))
+  expect_length(secs, 1)
+  expect_equal(secs[[1]]$title, "")
+
+  d <- ars_diagnostics()
+  hit <- d[d$severity == "WARN" & grepl("no title text", d$problem), , drop = FALSE]
+  expect_gte(nrow(hit), 1)
+  ## The action carries the shared recommended-heading guidance.
+  expect_match(hit$action[[1]], "Table, Figure, or Listing")
+})
+
+test_that("the no-heading warning repeats the recommended heading guidance", {
+  expect_warning(
+    parse_shell_docx(test_path("fixtures/annotated_shell_near_miss.docx")),
+    "begins with Table"
+  )
+})

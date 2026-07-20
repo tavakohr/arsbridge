@@ -126,6 +126,34 @@
 #'       validation report and retrievable via [ars_diagnostics()].}
 #'   }
 #'
+#' @section Writing identifiable TLF headings:
+#' arsbridge splits the shell into outputs by finding TLF heading paragraphs.
+#' For a heading to be recognised reliably, write it as **its own ordinary
+#' paragraph** (not inside a text box, shape, table cell, or field code)
+#' that **begins with `Table`, `Figure`, or `Listing` followed by the output
+#' number**. A title should follow the number. All of these are read:
+#'
+#' \preformatted{Table 14.1.1
+#' Table 14.1.1: Summary of Demographics
+#' Table 14.1.1 Summary of Demographics
+#' Table 14.1.1 Summary of Demographics - Safety Population ADSL.SAFFL='Y'
+#' Table 14.1.1 Demographics - Screened Subjects ADSL.SCRNFL='Y' [PROGRAMMING DATASETS USED: ADSL]}
+#'
+#' The population, an inline annotation, and a
+#' `[PROGRAMMING DATASETS USED: ...]` suffix may all ride on the same line;
+#' annotation values may use single quotes, double quotes, or an unquoted
+#' number (`ADSL.COHORTN=1`). The **recommended** form for a clean, portable
+#' shell is the explicit colon title -- `Table 14.1.1: Descriptive Title` --
+#' with the population on the next line.
+#'
+#' These are deliberately **not** treated as headings, to avoid false splits:
+#' prose that mentions a number (`Table 14.1.1 shows ...`), cross-references
+#' (`See Table 14.1.1 ...`), table-of-contents lines, and bare section
+#' numbers with no designator (`14.1 Demographic and Baseline Tables`). When
+#' the parser finds no heading, or finds a number but no title, it says so
+#' and repeats this guidance. For a sponsor template whose headings genuinely
+#' differ, pass `heading_patterns` rather than reformatting the shell.
+#'
 #' @section Human review:
 #' The generated ARS JSON is a draft. A qualified clinical programmer MUST
 #' review it before downstream use. The JSON includes a
@@ -264,7 +292,8 @@ spec_to_ars <- function(shell_path,
     cli::cli_abort(c(
       "No TLF sections found in {.path {shell_path}}.",
       miss_bullets,
-      "i" = "If one of these IS a real heading, pass a custom {.arg heading_patterns} pattern (see {.code ?spec_to_ars})."
+      "i" = .RECOMMENDED_HEADING_HINT,
+      "i" = "If one of these IS a real heading in an unusual format, pass a custom {.arg heading_patterns} pattern (see {.code ?spec_to_ars})."
     ))
   }
 

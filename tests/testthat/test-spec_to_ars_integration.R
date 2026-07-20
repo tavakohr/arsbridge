@@ -198,8 +198,8 @@ test_that("spec_to_ars threads heading_patterns through to the parser", {
   expect_equal(res$n_tlfs, 1)
 })
 
-test_that("the zero-section abort lists near-candidates and points at heading_patterns", {
-  expect_error(
+test_that("the zero-section abort lists near-candidates, gives heading guidance, and points at heading_patterns", {
+  err <- tryCatch(
     suppressWarnings(spec_to_ars(
       shell_path     = test_path("fixtures/annotated_shell_near_miss.docx"),
       adam_spec_path = test_path("fixtures/adam_spec_minimal.xlsx"),
@@ -207,6 +207,9 @@ test_that("the zero-section abort lists near-candidates and points at heading_pa
       report_path    = tempfile(fileext = ".xlsx"),
       verbose        = FALSE
     )),
-    "heading_patterns"
+    error = function(e) e
   )
+  msg <- conditionMessage(err)
+  expect_match(msg, "begins with Table")     # recommended heading guidance
+  expect_match(msg, "heading_patterns")      # the escape hatch
 })
