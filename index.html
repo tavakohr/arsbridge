@@ -276,6 +276,48 @@
 <h3 id="step-3-review-the-validation-report">Step 3: Review the validation report<a class="anchor" aria-label="anchor" href="#step-3-review-the-validation-report"></a>
 </h3>
 <p>The Excel report cross-references every shell annotation against the ADaM spec and stamps each one <strong>PASS</strong>, <strong>WARN</strong>, or <strong>FAIL</strong>. This is your opportunity to catch typos and missing ADaM variables before any analysis code runs.</p>
+<p>Each row is tinted by its status, and the workbook’s <strong>Legend</strong> sheet spells this out. The colors (and their exact fill hex codes) are:</p>
+<table class="table">
+<colgroup>
+<col width="25%">
+<col width="25%">
+<col width="25%">
+<col width="25%">
+</colgroup>
+<thead><tr>
+<th>Status</th>
+<th>Fill</th>
+<th>Hex</th>
+<th>Meaning</th>
+</tr></thead>
+<tbody>
+<tr>
+<td><strong>PASS</strong></td>
+<td>green</td>
+<td><code>E2EFDA</code></td>
+<td>Annotation matched a dataset + variable in the ADaM spec. No action needed.</td>
+</tr>
+<tr>
+<td><strong>WARN</strong></td>
+<td>amber</td>
+<td><code>FFF2CC</code></td>
+<td>Needs review (e.g. an uncertain mapping). The ARS JSON is still generated.</td>
+</tr>
+<tr>
+<td><strong>FAIL</strong></td>
+<td>red</td>
+<td><code>FCE4D6</code></td>
+<td>Could not be validated (invalid dataset/variable, or a blocking gap). Fix before use.</td>
+</tr>
+<tr>
+<td><strong>INFO</strong></td>
+<td>blue</td>
+<td><code>DDEBF7</code></td>
+<td>Informational note (mainly the Diagnostics sheet). Not a validation failure.</td>
+</tr>
+</tbody>
+</table>
+<p>WARN and FAIL are review signals, not automatic blockers — the JSON is written even when they are present, so a qualified programmer can triage them. A cell with no tint simply carries no status.</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Counts by status</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/table.html" class="external-link">table</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">validation</span><span class="op">$</span><span class="va">status</span><span class="op">)</span></span>
