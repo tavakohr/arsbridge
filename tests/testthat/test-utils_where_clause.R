@@ -36,3 +36,17 @@ test_that("empty / NULL input returns NULL", {
   expect_null(parse_where_clause(""))
   expect_null(parse_where_clause(NULL))
 })
+
+test_that("unquoted numeric equality parses (ADSL.COHORTN=1)", {
+  wc <- parse_where_clause("ADSL.COHORTN=1")
+  expect_equal(wc$condition$dataset, "ADSL")
+  expect_equal(wc$condition$variable, "COHORTN")
+  expect_equal(wc$condition$comparator, "EQ")
+  expect_equal(unlist(wc$condition$value), "1")
+})
+
+test_that("a quoted value still wins over the numeric-equality branch", {
+  wc <- parse_where_clause("ADSL.SAFFL='Y'")
+  expect_equal(wc$condition$comparator, "EQ")
+  expect_equal(unlist(wc$condition$value), "Y")
+})

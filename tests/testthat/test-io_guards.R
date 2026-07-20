@@ -92,6 +92,14 @@ test_that(".read_docx aborts on a file that is not a real .docx", {
   expect_error(.read_docx(bad), regexp = "could not be opened")
 })
 
+test_that(".read_docx muffles the DocuSign core.xml namespace warning", {
+  ## The RWE fixture ships a docProps/core.xml with an off-standard
+  ## namespace, the way some e-signature tools write it. officer's reader
+  ## warns "Undefined namespace prefix"; arsbridge muffles just that one.
+  expect_no_warning(
+    .read_docx(test_path("fixtures/annotated_shell_rwe_style.docx")))
+})
+
 test_that(".read_lines aborts on a missing file", {
   expect_error(.read_lines(tempfile("missing_"), "prompt template"),
                regexp = "Could not read")

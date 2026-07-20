@@ -272,7 +272,7 @@ test_that("the copied file is byte-identical to the shipped source", {
 
 ## --- spec_to_ars 3-tier integration (fully offline) --------------------------
 
-test_that("keyless spec_to_ars completes in deterministic mode with one WARN", {
+test_that("keyless spec_to_ars runs deterministically with NO key-related error/warning", {
   out_json <- tempfile(fileext = ".json")
   res <- suppressMessages(no_llm_keys(spec_to_ars(
     shell_path     = test_path("fixtures/annotated_shell_2tlf_minimal.docx"),
@@ -284,9 +284,21 @@ test_that("keyless spec_to_ars completes in deterministic mode with one WARN", {
   expect_equal(res$extraction_mode, "deterministic")
   expect_true(file.exists(res$ars_path))
   expect_equal(res$reporting_event$`_meta`$extraction_mode, "deterministic")
-  setup_warns <- res$diagnostics[res$diagnostics$stage == "setup", ]
-  expect_equal(nrow(setup_warns), 1)
-  expect_match(setup_warns$problem, "deterministic mode")
+
+  d <- res$diagnostics
+  ## Deterministic is a first-class mode: the mode is recorded as a neutral
+  ## INFO, never a WARN or blocker.
+  setup <- d[d$stage == "setup", ]
+  expect_equal(nrow(setup), 1)
+  expect_equal(setup$severity, "INFO")
+  expect_match(setup$problem, "deterministic mode")
+
+  ## The package must NEVER ask for a key or raise a key-related error/warning
+  ## in deterministic (or supplement) mode.
+  key_noise <- d[d$severity %in% c("WARN", "FAIL") &
+                   grepl("API key|LLM key|no LLM key|provider not|set_.*_key",
+                         d$problem, ignore.case = TRUE), ]
+  expect_equal(nrow(key_noise), 0)
 })
 
 test_that("spec_to_ars(supplement=) binds gaps and records the mode", {
