@@ -6,6 +6,15 @@
 ## Sheet 2 "Diagnostics" (when records exist): every pipeline fallback,
 ## parsing miss, LLM failure, and dropped condition collected by the
 ## diagnostics collector (R/diagnostics.R), tinted by severity.
+## A final "Legend" sheet documents what each tint means.
+
+## Row-tint fill colours, keyed by status / severity. Single source of truth
+## for the tinting AND the Legend sheet, so a colour change can never make the
+## two disagree.
+.REPORT_STATUS_FILL <- c(PASS = "E2EFDA",   # light green
+                         WARN = "FFF2CC",   # light amber
+                         FAIL = "FCE4D6",   # light red
+                         INFO = "DDEBF7")   # light blue
 
 #' Write a validation report data frame to a styled Excel file.
 #'
@@ -53,8 +62,40 @@ write_validation_report <- function(report_df, output_path, diagnostics = NULL,
     .write_styled_sheet(wb, "Diagnostics", diagnostics, tint_col = "severity")
   }
 
+  ## Always last: explain what the row tints on every sheet mean.
+  .write_legend_sheet(wb)
+
   openxlsx2::wb_save(wb, file = output_path, overwrite = TRUE)
   invisible(output_path)
+}
+
+#' Write the "Legend" worksheet: one tinted row per status/severity, so the
+#' reader sees the colour and reads its meaning + exact hex code. Uses the same
+#' `.REPORT_STATUS_FILL` palette and the same styled-sheet renderer as the
+#' tinting itself, so the key can never drift from the report.
+#' @noRd
+.write_legend_sheet <- function(wb) {
+  legend <- data.frame(
+    Status = c("PASS", "WARN", "FAIL", "INFO"),
+    Meaning = c(
+      "Annotation matched a dataset + variable in the ADaM spec. No action needed.",
+      "Needs review (e.g. an uncertain mapping). The ARS JSON is still generated.",
+      "Could not be validated (invalid dataset/variable, or a blocking gap). Fix before use.",
+      "Informational note (mainly the Diagnostics sheet). Not a validation failure."),
+    `Fill (hex)` = unname(.REPORT_STATUS_FILL[c("PASS", "WARN", "FAIL", "INFO")]),
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+  wb$add_worksheet("Legend")
+  .write_styled_sheet(wb, "Legend", legend, tint_col = "Status")
+  ## A cell with no tint simply carries no status (e.g. a header).
+  wb$add_data(
+    sheet = "Legend", start_row = nrow(legend) + 3L,
+    x = data.frame(
+      Note = "An untinted cell carries no status (headers, or a row with no finding).",
+      check.names = FALSE, stringsAsFactors = FALSE)
+  )
+  invisible(wb)
 }
 
 #' Write one data frame to a worksheet with the shared header style,
@@ -100,10 +141,8 @@ write_validation_report <- function(report_df, output_path, diagnostics = NULL,
 
 .tint_status_rows <- function(wb, df, status_col, sheet = "Validation") {
   status_vals <- df[[status_col]]
-  pal <- c(PASS = "E2EFDA", WARN = "FFF2CC", FAIL = "FCE4D6",
-           INFO = "DDEBF7")
   for (i in seq_along(status_vals)) {
-    colr <- unname(pal[status_vals[i]])
+    colr <- unname(.REPORT_STATUS_FILL[status_vals[i]])
     if (is.na(colr) || !nzchar(colr)) next
     wb$add_fill(
       sheet = sheet,

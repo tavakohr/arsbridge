@@ -65,14 +65,24 @@ each TLF report:
    emit bindings for them.
 4. **Row filters.** When a row represents one value of a variable (e.g. row
    `Completed` for `ADSL.EOSSTT`), put the condition in `where`, e.g.
-   `"where": "EOSSTT='COMPLETED'"`. Use single quotes around values.
-5. **Key each TLF by its number** exactly as in the shell heading,
+   `"where": "EOSSTT='COMPLETED'"`.
+5. **Single quotes inside values — NEVER double quotes.** A double quote `"`
+   is reserved for JSON structure. Every literal value INSIDE any string (a
+   `where` condition, a `population`, a `title`) MUST use a single quote `'`.
+   A raw double quote inside a value breaks the whole file and the run aborts
+   with "invalid char in json text". This is the single most common mistake —
+   check it before you reply.
+   - WRONG: `"where": "MHSCAT=\"UNDERLYING CONDITIONS\""`
+   - WRONG: `"where": "MHSCAT="UNDERLYING CONDITIONS""`
+   - RIGHT: `"where": "MHSCAT='UNDERLYING CONDITIONS'"`
+   - RIGHT (compound): `"where": "MHTERM not null and MHSCAT='UNDERLYING CONDITIONS'"`
+6. **Key each TLF by its number** exactly as in the shell heading,
    whatever the heading style: `"14.1.1"` for "Table 14.1.1: Title", and
    also `"14.1.1"` for a one-line heading like "Table 14.1.1 Title -
    Screened Subjects ADSL.SCRNFL='Y' [PROGRAMMING DATASETS USED: ADSL]".
-6. Every field except `bindings` is optional — omit what you cannot
+7. Every field except `bindings` is optional — omit what you cannot
    determine rather than guessing.
-7. **Cover every table.** List EVERY Table/Listing/Figure in the shell — do
+8. **Cover every table.** List EVERY Table/Listing/Figure in the shell — do
    not skip any. Before you finish, re-scan the shell and confirm each number
    maps to its correct `title`. A complete, correctly-titled inventory is how
    arsbridge verifies it is using the right set of tables; a table you omit is
@@ -110,3 +120,17 @@ quotes, no trailing commas, no comments) and NO prose before or after it:
 The `"supplement_version": 1` field is required — echo it exactly. If you
 cannot process a TLF at all, omit it from `tlfs` rather than emitting an
 empty or invented entry.
+
+## Before you send — check the JSON parses
+
+Re-read your reply as strict JSON before sending it:
+
+- It is exactly ONE fenced ```` ```json ```` block, no prose around it.
+- Every `"` is a JSON delimiter. NO value contains a raw double quote — every
+  literal value (`where`, `population`, `title`) uses single quotes `'`.
+- No trailing commas, no comments, no `...` placeholders, no line breaks
+  inside a string value.
+- Every key is unique within its object.
+
+If any check fails, fix it and re-emit the whole block. A single stray double
+quote makes the entire file unreadable ("invalid char in json text").

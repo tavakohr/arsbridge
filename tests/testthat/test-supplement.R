@@ -73,6 +73,19 @@ test_that("read_supplement aborts on malformed JSON, bad version, missing tlfs",
   expect_error(read_supplement(no_tlfs), "tlfs")
 })
 
+test_that("a double-quoted value breaks JSON and the error names the single-quote fix", {
+  ## The classic Copilot mistake: a where-value quoted with double quotes,
+  ## which closes the JSON string early ("invalid char in json text").
+  dq <- tempfile(fileext = ".json")
+  writeLines(
+    paste0('{"supplement_version":1,"tlfs":{"14.1.1":{"bindings":',
+           '[{"label":"Underlying","variable":"ADMH.MHTERM",',
+           '"where":"MHSCAT="UNDERLYING CONDITIONS""}]}}}'),
+    dq)
+  expect_error(read_supplement(dq), "not valid JSON")
+  expect_error(read_supplement(dq), "single quote")
+})
+
 ## --- ars_validate_supplement ----------------------------------------------
 
 test_that("validator passes a clean supplement and flags bad fields", {
