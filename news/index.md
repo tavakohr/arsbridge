@@ -2,6 +2,21 @@
 
 ## arsbridge (development version)
 
+- **The validation report now carries a `Legend` sheet.**
+  `spec_validation_report.xlsx` gains a final worksheet that names each
+  status/severity, its meaning, and the exact fill hex it is tinted with
+  (PASS `E2EFDA`, WARN `FFF2CC`, FAIL `FCE4D6`, INFO `DDEBF7`). The same
+  legend is documented in the README. The tint palette is now a single
+  constant so the key can never drift from the report.
+
+- **The Copilot supplement workflow is hardened against invalid JSON.**
+  The most common failure – a value quoted with double quotes (e.g.
+  `MHSCAT="UNDERLYING CONDITIONS"`), which breaks the JSON – is now
+  called out explicitly in the instruction file (single quotes inside
+  every value, plus a “before you send” self-check), and
+  `read_supplement()`’s error now names that cause and the single-quote
+  fix.
+
 - **The supplement now confirms the correct set of tables.** A Copilot
   supplement may carry a `title` per TLF (the instruction file now asks
   the assistant to enumerate every output with its exact title).
