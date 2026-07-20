@@ -387,7 +387,14 @@ arsbridge reads each shell **twice and takes the union.**
 **Pass 1: deterministic regex** (`parse_shell_docx()`) walks the
 document OOXML and runs a four-layer detector on every stub cell and
 listing header. It handles known conventions with no API call. This pass
-always runs, even with no API key.
+always runs, even with no API key. It reads TLF headings in several
+styles: a bare `Table 14.1.1`, a colon inline title
+`Table 14.1.1: Title`, and a one-line heading that carries the title, a
+dash-separated population, an inline annotation, and a
+`[PROGRAMMING DATASETS USED: ...]` suffix together. Annotation values in
+single quotes, double quotes, or unquoted numerics (`ADSL.COHORTN=1`)
+are all detected. For a sponsor style the built-ins miss, pass
+`spec_to_ars(heading_patterns = ...)`.
 
 **Pass 2: LLM as primary reader** (`extract_shell_llm()`) re-reads the
 raw text of each cell and separates the human display label from the
@@ -480,6 +487,51 @@ Reserved cells are never blank or coerced to a misleading zero. Each
 carries a unique key (`analysis_id`, `method_id`, `output_id`) and
 renders as a visible marker until a programmer supplies the value from a
 validated script.
+
+------------------------------------------------------------------------
+
+## TLF heading format
+
+arsbridge splits the shell into outputs by finding TLF **heading
+paragraphs**, so the single most important thing you can do to make a
+shell parse cleanly is to write each heading in an identifiable way.
+
+**Do:** give every output its own ordinary paragraph that begins with
+`Table`, `Figure`, or `Listing`, followed by the output number and a
+title. All of these are read:
+
+    Table 14.1.1
+    Table 14.1.1: Summary of Demographics
+    Table 14.1.1 Summary of Demographics
+    Table 14.1.1 Summary of Demographics - Safety Population ADSL.SAFFL='Y'
+    Table 14.1.1 Demographics - Screened Subjects ADSL.SCRNFL='Y' [PROGRAMMING DATASETS USED: ADSL]
+
+The population, an inline annotation, and a
+`[PROGRAMMING DATASETS USED: ...]` suffix may all ride on the same line;
+annotation values may use single quotes, double quotes, or an unquoted
+number (`ADSL.COHORTN=1`). The **recommended** form for a clean,
+portable shell is the explicit colon title —
+`Table 14.1.1: Descriptive Title` — with the population on the next
+line.
+
+**Avoid:** these are deliberately *not* treated as headings, so a title
+hidden this way will be missed:
+
+- the heading placed inside a **text box, shape, table cell, or
+  field/content control** (keep it a normal body paragraph — page
+  headers are also read);
+- prose that merely mentions a number (`Table 14.1.1 shows ...`),
+  cross-references (`See Table 14.1.1 ...`), or table-of-contents lines;
+- a bare section number with no designator word
+  (`14.1 Demographic and Baseline Tables`).
+
+When arsbridge finds no heading — or finds a number but no title — it
+says so, lists the lines it looked at, and repeats this guidance. For a
+sponsor template whose headings genuinely follow a different convention,
+pass `spec_to_ars(heading_patterns = ...)` (a PCRE pattern with named
+`number`/`type`/`title` groups; see
+[`?spec_to_ars`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md))
+rather than reformatting the shell.
 
 ------------------------------------------------------------------------
 

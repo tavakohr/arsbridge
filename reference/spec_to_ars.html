@@ -66,9 +66,11 @@ Results Standard (ARS) v1.0 ARM-TS JSON file consumable by
 <span>  api_key <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  provider <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  supplement <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  use_llm <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  spec_column_aliases <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  extract_with_llm <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  ship_annotations <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  heading_patterns <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  validate <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  report_path <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"spec_validation_report.xlsx"</span><span class="op">)</span>,</span>
 <span>  code_dir <span class="op">=</span> <span class="cn">NULL</span>,</span>
@@ -138,11 +140,21 @@ disagreements are WARN findings) and its per-TLF fields feed the same
 enrichment path a live LLM answer would. Every supplement variable
 passes the hard ADaM-spec gate. Pre-flight a file with
 <code><a href="ars_validate_supplement.html">ars_validate_supplement()</a></code>.</p>
-<p>The three tiers are all optional except the deterministic baseline:
-with neither a supplement nor an API key the pipeline still runs
-end-to-end on regex + keyword heuristics (reduced accuracy for variant
-layouts, groupings, and analysis typing; one WARN finding records the
-mode).</p></dd>
+<p>Regex is the always-on baseline and the default; the LLM is opt-in (see
+<code>use_llm</code>). Deterministic and supplement are first-class modes – the
+function never asks for a key nor raises a key-related error or warning in
+them; the mode that ran is recorded as a neutral INFO note and in
+<code>extraction_mode</code> / <code>_meta.extraction_mode</code>.</p></dd>
+
+
+<dt id="arg-use-llm">use_llm<a class="anchor" aria-label="anchor" href="#arg-use-llm"></a></dt>
+<dd><p>Opt in to the live LLM tier. Default <code>FALSE</code> – the pipeline
+runs regex-only (deterministic) and makes NO live LLM call, <em>even when an
+API key is configured</em>. Set <code>TRUE</code> to use the LLM for annotation
+extraction and semantic enrichment when a key is available; with <code>TRUE</code>
+but no key, the run still degrades silently to deterministic (never an
+error). Ignored when <code>supplement</code> is given (that path makes no live LLM
+calls either).</p></dd>
 
 
 <dt id="arg-spec-column-aliases">spec_column_aliases<a class="anchor" aria-label="anchor" href="#arg-spec-column-aliases"></a></dt>
@@ -157,9 +169,9 @@ a workbook uses non-standard or non-English headers. Example:
 raw shell cells as the primary annotation reader, separating display label
 from variable reference in variant layouts. Every proposed
 <code>DATASET.VARIABLE</code> is gated against the ADaM spec – out-of-spec proposals
-are rejected and logged as blockers, never shipped. With no API key the
-pass degrades to the deterministic regex result and emits one warning.
-Set <code>FALSE</code> to use deterministic parsing only.</p></dd>
+are rejected and logged as blockers, never shipped. This is a sub-control
+of the <code>llm</code> tier: it only has any effect when <code>use_llm = TRUE</code>. Set
+<code>FALSE</code> to keep the LLM enrichment pass but skip the LLM extraction pass.</p></dd>
 
 
 <dt id="arg-ship-annotations">ship_annotations<a class="anchor" aria-label="anchor" href="#arg-ship-annotations"></a></dt>
@@ -169,6 +181,23 @@ below a table) are kept for row binding and the validation report but are
 NEVER emitted into the ARS Footnote display section – rendered footnotes
 then contain only true footnotes. Set <code>TRUE</code> to append them to the
 footnotes (debug escape hatch).</p></dd>
+
+
+<dt id="arg-heading-patterns">heading_patterns<a class="anchor" aria-label="anchor" href="#arg-heading-patterns"></a></dt>
+<dd><p>Optional character vector of PCRE patterns tried
+BEFORE the built-in TLF heading grammars, for sponsor shells whose
+headings the built-ins do not recognise. Each pattern must use named
+capture groups: <code>(?&lt;number&gt;...)</code> (required – the dotted TLF number),
+<code>(?&lt;type&gt;...)</code> (optional, matching Table/Figure/Listing; defaults to
+Table), and <code>(?&lt;title&gt;...)</code> (optional inline title; the title tail is
+then decomposed into title/population/source datasets the same way
+built-in headings are). Custom patterns are accepted as-is – the
+built-in prose/TOC rejection rules are not applied to them. Not needed
+for the built-in formats – a bare <code>"Table 14.1.1"</code>, a colon inline
+title <code>"Table 14.1.1: Title"</code>, and one-line headings that carry the
+title, a dash-separated population, an inline annotation, and a
+programming-datasets suffix together.
+Example: <code>"^(?i)Output\\s+(?&lt;number&gt;\\d+(?:\\.\\d+)*)\\s*:\\s*(?&lt;title&gt;.*)$"</code>.</p></dd>
 
 
 <dt id="arg-validate">validate<a class="anchor" aria-label="anchor" href="#arg-validate"></a></dt>
@@ -247,6 +276,35 @@ validation report and retrievable via <code><a href="ars_diagnostics.html">ars_d
 
 
 </dl></div>
+    <div class="section level2">
+    <h2 id="writing-identifiable-tlf-headings">Writing identifiable TLF headings<a class="anchor" aria-label="anchor" href="#writing-identifiable-tlf-headings"></a></h2>
+
+
+<p>arsbridge splits the shell into outputs by finding TLF heading paragraphs.
+For a heading to be recognised reliably, write it as <strong>its own ordinary
+paragraph</strong> (not inside a text box, shape, table cell, or field code)
+that <strong>begins with <code>Table</code>, <code>Figure</code>, or <code>Listing</code> followed by the output
+number</strong>. A title should follow the number. All of these are read:</p>
+<div class="sourceCode"><pre><code>Table 14.1.1
+Table 14.1.1: Summary of Demographics
+Table 14.1.1 Summary of Demographics
+Table 14.1.1 Summary of Demographics - Safety Population ADSL.SAFFL='Y'
+Table 14.1.1 Demographics - Screened Subjects ADSL.SCRNFL='Y' [PROGRAMMING DATASETS USED: ADSL]</code></pre></div>
+
+<p>The population, an inline annotation, and a
+<code>[PROGRAMMING DATASETS USED: ...]</code> suffix may all ride on the same line;
+annotation values may use single quotes, double quotes, or an unquoted
+number (<code>ADSL.COHORTN=1</code>). The <strong>recommended</strong> form for a clean, portable
+shell is the explicit colon title – <code>Table 14.1.1: Descriptive Title</code> –
+with the population on the next line.</p>
+<p>These are deliberately <strong>not</strong> treated as headings, to avoid false splits:
+prose that mentions a number (<code>Table 14.1.1 shows ...</code>), cross-references
+(<code>See Table 14.1.1 ...</code>), table-of-contents lines, and bare section
+numbers with no designator (<code>14.1 Demographic and Baseline Tables</code>). When
+the parser finds no heading, or finds a number but no title, it says so
+and repeats this guidance. For a sponsor template whose headings genuinely
+differ, pass <code>heading_patterns</code> rather than reformatting the shell.</p>
+    </div>
     <div class="section level2">
     <h2 id="human-review">Human review<a class="anchor" aria-label="anchor" href="#human-review"></a></h2>
 

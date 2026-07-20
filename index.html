@@ -383,7 +383,7 @@
                     |
                     v
        validated annotations -&gt; ARS JSON</code></pre>
-<p><strong>Pass 1: deterministic regex</strong> (<code>parse_shell_docx()</code>) walks the document OOXML and runs a four-layer detector on every stub cell and listing header. It handles known conventions with no API call. This pass always runs, even with no API key.</p>
+<p><strong>Pass 1: deterministic regex</strong> (<code>parse_shell_docx()</code>) walks the document OOXML and runs a four-layer detector on every stub cell and listing header. It handles known conventions with no API call. This pass always runs, even with no API key. It reads TLF headings in several styles: a bare <code>Table 14.1.1</code>, a colon inline title <code>Table 14.1.1: Title</code>, and a one-line heading that carries the title, a dash-separated population, an inline annotation, and a <code>[PROGRAMMING DATASETS USED: ...]</code> suffix together. Annotation values in single quotes, double quotes, or unquoted numerics (<code>ADSL.COHORTN=1</code>) are all detected. For a sponsor style the built-ins miss, pass <code>spec_to_ars(heading_patterns = ...)</code>.</p>
 <p><strong>Pass 2: LLM as primary reader</strong> (<code>extract_shell_llm()</code>) re-reads the raw text of each cell and separates the human display label from the machine variable reference, in whatever layout the shell uses. This is where the “any convention” power comes from: the LLM generalises to formats the regex was never designed for. It returns structured output via an <code>ellmer</code> type, never free text to parse.</p>
 <p><strong>Pass 3: spec gate</strong> checks every proposed <code>DATASET.VARIABLE</code> against your ADaM spec. A proposal not in the spec is dropped, not shipped, and recorded as a blocking finding that names the row and the rejected token. The spec is the ground-truth oracle.</p>
 <table class="table">
@@ -570,6 +570,26 @@
 </tbody>
 </table>
 <p>Reserved cells are never blank or coerced to a misleading zero. Each carries a unique key (<code>analysis_id</code>, <code>method_id</code>, <code>output_id</code>) and renders as a visible marker until a programmer supplies the value from a validated script.</p>
+<hr>
+</div>
+<div class="section level2">
+<h2 id="tlf-heading-format">TLF heading format<a class="anchor" aria-label="anchor" href="#tlf-heading-format"></a>
+</h2>
+<p>arsbridge splits the shell into outputs by finding TLF <strong>heading paragraphs</strong>, so the single most important thing you can do to make a shell parse cleanly is to write each heading in an identifiable way.</p>
+<p><strong>Do:</strong> give every output its own ordinary paragraph that begins with <code>Table</code>, <code>Figure</code>, or <code>Listing</code>, followed by the output number and a title. All of these are read:</p>
+<pre><code>Table 14.1.1
+Table 14.1.1: Summary of Demographics
+Table 14.1.1 Summary of Demographics
+Table 14.1.1 Summary of Demographics - Safety Population ADSL.SAFFL='Y'
+Table 14.1.1 Demographics - Screened Subjects ADSL.SCRNFL='Y' [PROGRAMMING DATASETS USED: ADSL]</code></pre>
+<p>The population, an inline annotation, and a <code>[PROGRAMMING DATASETS USED: ...]</code> suffix may all ride on the same line; annotation values may use single quotes, double quotes, or an unquoted number (<code>ADSL.COHORTN=1</code>). The <strong>recommended</strong> form for a clean, portable shell is the explicit colon title — <code>Table 14.1.1: Descriptive Title</code> — with the population on the next line.</p>
+<p><strong>Avoid:</strong> these are deliberately <em>not</em> treated as headings, so a title hidden this way will be missed:</p>
+<ul>
+<li>the heading placed inside a <strong>text box, shape, table cell, or field/content control</strong> (keep it a normal body paragraph — page headers are also read);</li>
+<li>prose that merely mentions a number (<code>Table 14.1.1 shows ...</code>), cross-references (<code>See Table 14.1.1 ...</code>), or table-of-contents lines;</li>
+<li>a bare section number with no designator word (<code>14.1 Demographic and Baseline Tables</code>).</li>
+</ul>
+<p>When arsbridge finds no heading — or finds a number but no title — it says so, lists the lines it looked at, and repeats this guidance. For a sponsor template whose headings genuinely follow a different convention, pass <code>spec_to_ars(heading_patterns = ...)</code> (a PCRE pattern with named <code>number</code>/<code>type</code>/<code>title</code> groups; see <code><a href="reference/spec_to_ars.html">?spec_to_ars</a></code>) rather than reformatting the shell.</p>
 <hr>
 </div>
 <div class="section level2">
