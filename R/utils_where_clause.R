@@ -21,6 +21,13 @@
   "(", .ADAM_DS, ")\\.(", .ADAM_VAR, ")",
   "\\s+(EQ|NE|GT|GE|LT|LE)\\s+([-+]?\\d+(?:\\.\\d+)?)\\b"
 )
+## Unquoted numeric equality: "ADSL.COHORTN=1" (the usual column-header
+## annotation form). The quoted form must win when both could apply, so
+## .one_condition() tries this only after .RE_CONDITION_EQ.
+.RE_CONDITION_EQ_NUM <- paste0(
+  "(", .ADAM_DS, ")\\.(", .ADAM_VAR, ")",
+  "\\s*=\\s*([-+]?\\d+(?:\\.\\d+)?)\\b"
+)
 ## Multi-value list: "ADSL.RACE IN ('WHITE','ASIAN')" / "NOT IN (...)".
 .RE_CONDITION_IN_LIST <- paste0(
   "(", .ADAM_DS, ")\\.(", .ADAM_VAR, ")",
@@ -63,6 +70,7 @@
 #'   "ADSL.SFENRLFL='Y' or ADSL.WTHTYP='Withdrawal Prior to Treatment'"
 #'   "ADSL.PARAMCD EQ 'OS'"
 #'   "ADSL.AGE GE 65"                       (unquoted numeric)
+#'   "ADSL.COHORTN=1"                        (unquoted numeric equality)
 #'   "ADSL.RACE IN ('WHITE','ASIAN')"        (multi-value list)
 #'   "ADSL.AGE between 18 and 65"            (-> GE/LE compound)
 #'   "ADAE.AETERM contains 'rash'"           (CONTAINS extension)
@@ -179,6 +187,11 @@ parse_where_clause <- function(expr) {
   }
   ## Equality: DATASET.VARIABLE='value'
   m <- regmatches(part, regexec(.RE_CONDITION_EQ, part, perl = TRUE))[[1]]
+  if (length(m) == 4) {
+    return(.cond(m[2], m[3], "EQ", m[4]))
+  }
+  ## Unquoted numeric equality: DATASET.VARIABLE=1
+  m <- regmatches(part, regexec(.RE_CONDITION_EQ_NUM, part, perl = TRUE))[[1]]
   if (length(m) == 4) {
     return(.cond(m[2], m[3], "EQ", m[4]))
   }

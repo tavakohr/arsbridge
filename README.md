@@ -366,7 +366,14 @@ arsbridge reads each shell **twice and takes the union.**
 **Pass 1: deterministic regex** (`parse_shell_docx()`) walks the
 document OOXML and runs a four-layer detector on every stub cell and
 listing header. It handles known conventions with no API call. This pass
-always runs, even with no API key.
+always runs, even with no API key. It reads TLF headings in several
+styles: a bare `Table 14.1.1`, a colon inline title
+`Table 14.1.1: Title`, and a one-line heading that carries the title, a
+dash-separated population, an inline annotation, and a
+`[PROGRAMMING DATASETS USED: ...]` suffix together. Annotation values in
+single quotes, double quotes, or unquoted numerics (`ADSL.COHORTN=1`) are
+all detected. For a sponsor style the built-ins miss, pass
+`spec_to_ars(heading_patterns = ...)`.
 
 **Pass 2: LLM as primary reader** (`extract_shell_llm()`) re-reads the
 raw text of each cell and separates the human display label from the

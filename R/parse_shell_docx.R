@@ -27,6 +27,52 @@
 ## number ("Table 14.1.1 shows the demographic summary" must NOT match): a
 ## trailing title is only ever recognised when it follows a literal ":".
 .TLF_HEADING_RE <- "^(?i)(Table|Figure|Listing)\\s+(\\d{1,3}(?:\\.\\d+)*[a-z]?)\\s*(?::\\s*(.*))?\\s*$"
+
+## Colon-less inline title ("Table 14.1.1 Summary of Subject Status ...").
+## Some sponsor shells -- RWE shells especially -- put the number, title,
+## population, and even the population annotation on ONE heading paragraph
+## with no colon after the number. Same designator and number shape as
+## .TLF_HEADING_RE, plus an optional "No."/"#" before the number and an
+## optional stray "." after it; the third group is everything after the
+## number. Acceptance is NOT regex-only: .match_tlf_heading() applies
+## prose/TOC rejection rules on that tail so body text mentioning a table
+## number ("Table 14.1.1 shows ...") still never starts a section.
+.TLF_HEADING_NOCOLON_RE <-
+  "^(?i)(Table|Figure|Listing)\\s+(?:No\\.?\\s*|#\\s*)?(\\d{1,3}(?:\\.\\d+)*[a-z]?)\\.?\\s+(\\S.*)$"
+
+## First word after the number that marks the line as PROSE, not a heading
+## ("Table 14.1.1 shows ..."). Real TLF titles start with a noun phrase
+## ("Summary of ...", "Demographics -", "Kaplan-Meier ..."), never with one
+## of these verbs/auxiliaries.
+.HEADING_PROSE_WORDS <- c(
+  "shows", "show", "showed", "shown", "presents", "present", "presented",
+  "displays", "display", "displayed", "summarizes", "summarises",
+  "summarized", "summarised", "lists", "listed", "contains", "contained",
+  "provides", "provided", "includes", "included", "include", "excludes",
+  "excluded", "describes", "described", "reports", "reported", "gives",
+  "refers", "uses", "used", "is", "are", "was", "were", "will", "has",
+  "have", "had", "may", "can", "must", "should", "does", "did",
+  "below", "above"
+)
+
+## "[PROGRAMMING DATASETS USED: ADSL, ADAE]" -- a source-datasets suffix
+## some sponsors carry inside the heading paragraph itself instead of a
+## "Source: ..." line under the table.
+.PROGRAMMING_DATASETS_RE <-
+  "(?i)\\[\\s*PROGRAMMING\\s+DATASETS?\\s+USED\\s*:\\s*([^\\]]+)\\]"
+
+## Title/population separator inside a one-line heading: an en/em dash
+## (spaces optional -- Word authors drop them), or a spaced ASCII hyphen.
+## The spaces around the plain hyphen are REQUIRED so hyphenated words in a
+## title ("Follow-up", "Post-hoc") are never split.
+.HEADING_SEP_RE <- "\\s*[\u2013\u2014]\\s*|\\s+-\\s+"
+
+## Population wording that only counts inside a heading tail ("... - Part A
+## Completed Cohort"). Kept OUT of .POPULATION_LEXICON_RE deliberately: the
+## NEED_POP state machine uses that lexicon on whole paragraphs, and adding
+## "cohort"/"group" there would misfile a second title line like "by Dose
+## Cohort" as the population.
+.HEADING_POP_HINT_RE <- "(?i)\\bcohorts?\\b|\\bgroups?\\b|\\bparticipants\\b"
 ## Accepts "Source:", "Sources:", "Data Source:", "Source datasets:", and
 ## "=" in place of ":".
 .SOURCE_LINE_RE <- "^\\s*(?:Data\\s+)?Sources?(?:\\s+datasets?)?\\s*[:=]\\s*(.+?)\\.?\\s*$"
@@ -48,6 +94,10 @@
 .ARROW_ANNOT_RE <- "^\\s*.+?\\s*(?:->|\u2192)\\s*.+$"
 .TOC_FIRST_CELL_HINTS <- c("number", "table number", "tlf number", "tlf #")
 
+## A quoted comparison value. Smart quotes are straightened to ASCII quotes
+## at ingestion (.normalize_docx_text), so only ' and " can reach a regex.
+.QUOTED_VALUE <- "(?:'[^']*'|\"[^\"]*\")"
+
 ## Multi-pattern union for annotation detection (Layer 3 + validation gate
 ## for Layers 1 and 2). Order matters: PCRE alternation returns the leftmost
 ## match of the leftmost branch that fits, so MORE-SPECIFIC patterns must
@@ -57,12 +107,16 @@
 .ANNOTATION_PATTERN <- paste(
   ## DATASET.VAR WHERE OTHERVAR='val'  (longest -- match first)
   paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR,
-         "\\s+(?i:where)\\s+", .ADAM_VAR, "\\s*=\\s*'[^']*'"),
+         "\\s+(?i:where)\\s+", .ADAM_VAR, "\\s*=\\s*", .QUOTED_VALUE),
   ## DATASET.VAR EQ 'val' / NE 'val' / ... (ARS comparator form)
   paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR,
-         "\\s+(?:EQ|NE|IN|NOTIN|GT|GE|LT|LE)\\s+'[^']*'"),
+         "\\s+(?:EQ|NE|IN|NOTIN|GT|GE|LT|LE)\\s+", .QUOTED_VALUE),
   ## DATASET.VAR='val'  (most common shell-annotation form)
-  paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR, "\\s*=\\s*'[^']*'"),
+  paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR, "\\s*=\\s*", .QUOTED_VALUE),
+  ## DATASET.VAR=1  (unquoted numeric equality -- the usual convention for
+  ## column-header annotations like "Cohort 1 (N=XX) ADSL.COHORTN=1")
+  paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR,
+         "\\s*=\\s*[-+]?\\d+(?:\\.\\d+)?\\b"),
   ## DATASET.VAR not null / not missing
   paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR,
          "\\s+(?i:not\\s+(?:null|missing))"),
@@ -72,6 +126,267 @@
   paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR, "\\b"),
   sep = "|"
 )
+
+#' Rewrite double-quoted comparison values to the package-canonical single
+#' quotes (ADSL.SCRNFL="Y" becomes ADSL.SCRNFL='Y') so downstream where-
+#' clause parsing -- whose grammar is single-quote only -- and the emitted
+#' ARS JSON stay uniform no matter which quote style the shell author used.
+#' Applied to captured annotation strings only, never to display text.
+#' @noRd
+.canon_annotation <- function(x) {
+  gsub("\"([^\"]*)\"", "'\\1'", x)
+}
+
+## ---------------------------------------------------------------------------
+## Heading recognition
+## ---------------------------------------------------------------------------
+
+#' Extract the named capture groups of a `regexpr(perl = TRUE)` match as a
+#' named character vector (unmatched groups come back as "").
+#' @noRd
+.regex_named_groups <- function(text, match) {
+  starts  <- attr(match, "capture.start")
+  lengths <- attr(match, "capture.length")
+  names_v <- attr(match, "capture.names")
+  if (is.null(starts) || is.null(names_v)) return(character())
+
+  out <- character(length(names_v))
+  names(out) <- names_v
+  for (i in seq_along(names_v)) {
+    if (starts[1, i] > 0) {
+      out[[i]] <- substr(text, starts[1, i], starts[1, i] + lengths[1, i] - 1L)
+    }
+  }
+  out
+}
+
+#' Abort unless every custom heading pattern is usable: a character vector
+#' whose every element carries the required `(?<number>...)` named group.
+#' @noRd
+.validate_heading_patterns <- function(heading_patterns) {
+  if (is.null(heading_patterns)) return(invisible(NULL))
+  if (!is.character(heading_patterns) || length(heading_patterns) == 0) {
+    cli::cli_abort("{.arg heading_patterns} must be a character vector of PCRE patterns.")
+  }
+  missing_number <- !grepl("(?<number>", heading_patterns, fixed = TRUE)
+  if (any(missing_number)) {
+    cli::cli_abort(c(
+      "Every {.arg heading_patterns} pattern needs a {.code (?<number>...)} named group.",
+      "x" = "Missing in: {.val {heading_patterns[missing_number]}}",
+      "i" = "Optional named groups: {.code (?<type>...)} (Table/Figure/Listing, defaults to Table) and {.code (?<title>...)}."
+    ))
+  }
+  invisible(NULL)
+}
+
+#' Decide whether one paragraph is a TLF heading.
+#'
+#' Single entry point for every place that used to test .TLF_HEADING_RE
+#' directly (body pre-scan, body walker, page-header reader), so all of
+#' them agree on what a heading is. Tries, in order:
+#'
+#'   1. Caller-supplied `heading_patterns` (the sponsor escape hatch) --
+#'      named groups `number` (required), `type`/`title` (optional). No
+#'      rejection rules: the pattern author owns the grammar.
+#'   2. .TLF_HEADING_RE -- the historical grammar (bare heading, or inline
+#'      title after a colon), byte-identical semantics.
+#'   3. .TLF_HEADING_NOCOLON_RE -- colon-less inline title, accepted only
+#'      when the tail survives three rejection rules: its first word is not
+#'      a prose verb (.HEADING_PROSE_WORDS), it does not start lowercase
+#'      (real titles are Title Case; prose continuations are not), and it
+#'      does not end like a table-of-contents entry (dot leader + page
+#'      number).
+#'
+#' @return list(hit, reject_reason). `hit` is NULL or
+#'   list(type_word, number, tail); `reject_reason` is NA or a short human
+#'   explanation of why a heading-shaped line was rejected (surfaced by the
+#'   zero-section near-miss diagnostics).
+#' @noRd
+.match_tlf_heading <- function(text, heading_patterns = NULL) {
+  no_match <- list(hit = NULL, reject_reason = NA_character_)
+
+  for (pattern in heading_patterns %||% character()) {
+    m <- regexpr(pattern, text, perl = TRUE)
+    if (m > 0) {
+      groups <- .regex_named_groups(text, m)
+      number <- if ("number" %in% names(groups)) groups[["number"]] else ""
+      if (nzchar(number)) {
+        type_word <- unname(groups["type"])
+        if (is.na(type_word) || !nzchar(type_word)) type_word <- "Table"
+        title <- unname(groups["title"])
+        if (is.na(title)) title <- ""
+        return(list(
+          hit = list(type_word = type_word, number = unname(number),
+                     tail = trimws(title)),
+          reject_reason = NA_character_
+        ))
+      }
+    }
+  }
+
+  m <- regmatches(text, regexec(.TLF_HEADING_RE, text, perl = TRUE))[[1]]
+  if (length(m) == 4) {
+    return(list(
+      hit = list(type_word = m[2], number = m[3], tail = trimws(m[4])),
+      reject_reason = NA_character_
+    ))
+  }
+
+  m <- regmatches(text, regexec(.TLF_HEADING_NOCOLON_RE, text, perl = TRUE))[[1]]
+  if (length(m) == 4) {
+    tail <- trimws(m[4])
+    first_word <- tolower(sub("^([[:alpha:]]+).*$", "\\1", tail))
+    if (first_word %in% .HEADING_PROSE_WORDS) {
+      return(list(hit = NULL, reject_reason = sprintf(
+        "the first word after the number (%s) reads as prose, not a title",
+        dQuote(first_word, q = FALSE))))
+    }
+    if (grepl("^[a-z]", tail)) {
+      return(list(hit = NULL, reject_reason =
+        "the text after the number starts lowercase, which reads as prose, not a title"))
+    }
+    if (grepl("\\.{2,}\\s*\\d+\\s*$", tail)) {
+      return(list(hit = NULL, reject_reason =
+        "the line ends like a table-of-contents entry (dot leader and page number)"))
+    }
+    return(list(
+      hit = list(type_word = m[2], number = m[3], tail = tail),
+      reject_reason = NA_character_
+    ))
+  }
+
+  no_match
+}
+
+#' Trailing separators/spaces left behind when a heading tail is cut.
+#' @noRd
+.clean_heading_title <- function(x) {
+  trimws(gsub("[-\u2013\u2014[:space:]]+$", "", x, perl = TRUE))
+}
+
+#' Split the text that follows the TLF number on a one-line heading into
+#' its parts.
+#'
+#' RWE-style shells pack everything into the heading paragraph:
+#'
+#'   `Table 5.1.1 Summary of Disposition - Screened Subjects
+#'    ADSL.SCRNFL="Y" [PROGRAMMING DATASETS USED: ADSL]`
+#'
+#' Steps, in order:
+#'   1. The `[PROGRAMMING DATASETS USED: ...]` suffix is cut out into
+#'      source_datasets.
+#'   2. The RIGHTMOST dash separator whose right side reads as a population
+#'      (population lexicon, a *FL flag annotation, or the heading-only
+#'      cohort/group wording) splits title from population. Rightmost-first
+#'      keeps a dash inside the title ("Summary - Part A - Safety
+#'      Population") intact.
+#'   3. With no dash population, a trailing annotation still splits off the
+#'      title; a *FL flag is stored as the population filter, anything else
+#'      is returned as extra_annot for programmer_annotations.
+#'   4. Otherwise the whole tail is the title.
+#'
+#' @return list(title, population_text, population_annot, source_datasets,
+#'   extra_annot). population_text keeps the annotation inline (same
+#'   convention as a separate population paragraph); population_annot and
+#'   extra_annot are quote-canonicalized.
+#' @noRd
+.decompose_heading_tail <- function(tail) {
+  out <- list(title = "", population_text = "", population_annot = "",
+              source_datasets = character(), extra_annot = "")
+  tail <- trimws(tail %||% "")
+  if (!nzchar(tail)) return(out)
+
+  prog <- regmatches(tail, gregexpr(.PROGRAMMING_DATASETS_RE, tail, perl = TRUE))[[1]]
+  if (length(prog) > 0) {
+    inner <- sub(.PROGRAMMING_DATASETS_RE, "\\1", prog, perl = TRUE)
+    out$source_datasets <- unique(unlist(lapply(inner, .split_source_list)))
+    tail <- trimws(gsub(.PROGRAMMING_DATASETS_RE, "", tail, perl = TRUE))
+    if (!nzchar(tail)) return(out)
+  }
+
+  seps <- gregexpr(.HEADING_SEP_RE, tail, perl = TRUE)[[1]]
+  if (seps[1] != -1) {
+    sep_lengths <- attr(seps, "match.length")
+    for (i in rev(seq_along(seps))) {
+      rhs <- trimws(substr(tail, seps[i] + sep_lengths[i], nchar(tail)))
+      if (!nzchar(rhs)) next
+      if (.looks_like_population(rhs) ||
+          grepl(.HEADING_POP_HINT_RE, rhs, perl = TRUE)) {
+        out$title           <- .clean_heading_title(substr(tail, 1, seps[i] - 1L))
+        out$population_text <- rhs
+        annots <- regmatches(rhs, gregexpr(.ANNOTATION_PATTERN, rhs, perl = TRUE))[[1]]
+        if (length(annots) > 0) {
+          out$population_annot <- .canon_annotation(paste(annots, collapse = " and "))
+        }
+        return(out)
+      }
+    }
+  }
+
+  am <- regexpr(.ANNOTATION_PATTERN, tail, perl = TRUE)
+  if (am > 0) {
+    annot_end <- am + attr(am, "match.length") - 1L
+    trailing  <- substr(tail, annot_end + 1L, nchar(tail))
+    ## Only treat it as a heading-line annotation when nothing of substance
+    ## follows it -- an annotation mid-title would mean this is not the
+    ## simple "Title ANNOTATION" shape and is left for the body layers.
+    if (!grepl("[[:alnum:]]", trailing)) {
+      annot <- substr(tail, am, annot_end)
+      out$title <- .clean_heading_title(
+        sub("[\\s\\(\\[]+$", "", substr(tail, 1, am - 1L), perl = TRUE))
+      if (grepl(.POPULATION_FLAG_RE, annot, perl = TRUE)) {
+        out$population_annot <- .canon_annotation(annot)
+      } else {
+        out$extra_annot <- .canon_annotation(annot)
+      }
+      return(out)
+    }
+  }
+
+  out$title <- .clean_heading_title(tail)
+  out
+}
+
+#' Collect heading-shaped paragraphs that did NOT become sections, with the
+#' reason each was rejected. Only called when the walk produced zero
+#' sections, to turn the bare "No TLF sections found" into an actionable
+#' message: the usual causes are a heading format the grammars do not
+#' recognise, or headings living somewhere the body walker cannot see.
+#' @noRd
+.heading_near_misses <- function(children, heading_patterns = NULL,
+                                 max_misses = 8L) {
+  out <- list()
+  for (ch in children) {
+    if (length(out) >= max_misses) break
+    if (.local_name(ch) != "p") next
+    txt <- trimws(.paragraph_text(ch))
+    if (!nzchar(txt)) next
+
+    has_designator <- grepl("(?i)\\b(table|figure|listing)\\b", txt, perl = TRUE) &&
+      grepl("\\d+\\.\\d+", txt)
+    number_first <- grepl("^\\d{1,3}(?:\\.\\d+)+\\s+\\S", txt)
+    if (!has_designator && !number_first) next
+
+    res <- .match_tlf_heading(txt, heading_patterns)
+    if (!is.null(res$hit)) next
+
+    starts_with_designator <-
+      grepl("(?i)^(table|figure|listing)\\b", txt, perl = TRUE)
+    reason <- if (!is.na(res$reject_reason)) {
+      res$reject_reason
+    } else if (!starts_with_designator && number_first) {
+      "number-first line with no Table/Figure/Listing designator (a section heading?)"
+    } else if (!starts_with_designator) {
+      "the Table/Figure/Listing designator is not at the start of the paragraph"
+    } else {
+      "the line does not fit any supported heading shape"
+    }
+
+    quoted <- if (nchar(txt) > 80) paste0(substr(txt, 1, 77), "...") else txt
+    out[[length(out) + 1L]] <- list(text = quoted, reason = reason)
+  }
+  out
+}
 
 ## ---------------------------------------------------------------------------
 ## Section object constructor
@@ -89,6 +404,7 @@
     tlf_number             = tlf_number,
     tlf_type               = tlf_type,
     title                  = title,
+    raw_heading            = "",
     population_text        = population_text,
     population_annot       = population_annot,
     footnotes              = character(),
@@ -119,12 +435,16 @@
 #'   column-header variable candidates are validated against the spec
 #'   (tolerating mixed-case names) instead of relying on the ALL-CAPS
 #'   token heuristic and its blocklist.
+#' @param heading_patterns Optional character vector of PCRE patterns tried
+#'   BEFORE the built-in heading grammars (see `.match_tlf_heading()`).
 #'
 #' @return List of TLF section objects (see top of file for full schema).
 #'
 #' @keywords internal
 #' @noRd
-parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
+parse_shell_docx <- function(docx_path, spec_lookup = NULL,
+                             heading_patterns = NULL) {
+  .validate_heading_patterns(heading_patterns)
   doc      <- .read_docx(docx_path)
   root_xml <- doc$doc_obj$get()
   body_xml <- xml2::xml_find_first(root_xml, ".//*[local-name()='body']")
@@ -151,7 +471,7 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
   ## odd / even), so dedupe by content before deciding whether there is
   ## exactly one usable heading to draw from.
   header_headings <- .dedupe_by_signature(
-    .read_header_headings(docx_dir),
+    .read_header_headings(docx_dir, heading_patterns),
     function(h) paste(h$tlf_number, h$title, h$population_text, sep = "|")
   )
 
@@ -200,8 +520,7 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
   body_has_heading <- any(vapply(children, function(ch) {
     if (.local_name(ch) != "p") return(FALSE)
     txt <- trimws(.paragraph_text(ch))
-    nzchar(txt) &&
-      length(regmatches(txt, regexec(.TLF_HEADING_RE, txt, perl = TRUE))[[1]]) == 4
+    nzchar(txt) && !is.null(.match_tlf_heading(txt, heading_patterns)$hit)
   }, logical(1)))
   body_has_table <- !inherits(
     xml2::xml_find_first(body_xml, ".//*[local-name()='tbl']"), "xml_missing")
@@ -238,28 +557,45 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
       if (!nzchar(stripped)) next
 
       ## TLF heading begins a new section.
-      m <- regmatches(stripped, regexec(.TLF_HEADING_RE, stripped, perl = TRUE))[[1]]
-      if (length(m) == 4) {
+      hit <- .match_tlf_heading(stripped, heading_patterns)$hit
+      if (!is.null(hit)) {
         if (!is.null(current)) {
           sections[[length(sections) + 1]] <- .finalize_section(current, spec_lookup)
         }
-        word         <- tools::toTitleCase(tolower(m[2]))
-        number       <- m[3]
-        prefix       <- substr(toupper(word), 1, 1)
-        inline_title <- trimws(m[4])
-        tlf_type     <- switch(tolower(word),
-                               table   = "TABLE",
-                               figure  = "FIGURE",
-                               listing = "LISTING",
-                               "TABLE")
+        word     <- tools::toTitleCase(tolower(hit$type_word))
+        number   <- hit$number
+        prefix   <- substr(toupper(word), 1, 1)
+        tlf_type <- switch(tolower(word),
+                           table   = "TABLE",
+                           figure  = "FIGURE",
+                           listing = "LISTING",
+                           "TABLE")
+        ## Whatever follows the number on the heading line -- an inline
+        ## title, and possibly a dash-separated population, an annotation,
+        ## and a [PROGRAMMING DATASETS USED: ...] suffix -- is split into
+        ## its parts here.
+        parts <- .decompose_heading_tail(hit$tail)
         current <- .new_section(
           tlf_number = paste0(prefix, "-", gsub("\\.", "-", number)),
           tlf_type   = tlf_type,
-          title      = inline_title
+          title      = parts$title
         )
-        ## A heading with its title already on the same line ("Table
-        ## 14.1.1: Summary...") skips straight to waiting for population.
-        if (nzchar(inline_title)) {
+        current$raw_heading <- stripped
+        if (length(parts$source_datasets) > 0) {
+          current$source_datasets <- parts$source_datasets
+        }
+        if (nzchar(parts$extra_annot)) {
+          current$programmer_annotations <- c(current$programmer_annotations,
+                                              parts$extra_annot)
+        }
+        ## A heading that already carries its population skips straight to
+        ## the body; one with only a title waits for the population line;
+        ## a bare heading waits for the title.
+        if (nzchar(parts$population_text) || nzchar(parts$population_annot)) {
+          current$population_text  <- parts$population_text
+          current$population_annot <- parts$population_annot
+          state <- "IN_BODY"
+        } else if (nzchar(parts$title)) {
           state <- "NEED_POP"
         } else {
           state <- "NEED_TITLE"
@@ -375,16 +711,34 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
   }
 
   if (length(sections) == 0) {
+    near_misses <- .heading_near_misses(children, heading_patterns)
+    miss_bullets <- vapply(near_misses, function(nm) {
+      sprintf("%s -- %s", dQuote(nm$text, q = FALSE), nm$reason)
+    }, character(1))
+    ## Document text goes through cli's glue interpolation -- escape any
+    ## braces it happens to contain.
+    cli_bullets <- gsub("}", "}}", gsub("{", "{{", miss_bullets, fixed = TRUE),
+                        fixed = TRUE)
+    if (length(cli_bullets) > 0) {
+      names(cli_bullets) <- rep("x", length(cli_bullets))
+    }
     cli::cli_warn(c(
       "No TLF sections found in {.path {docx_path}}.",
-      "i" = "Expected paragraphs matching {.val Table X.X.X}, {.val Figure X.X.X}, or {.val Listing X.X.X}."
+      "i" = "Expected paragraphs matching {.val Table X.X.X}, {.val Figure X.X.X}, or {.val Listing X.X.X} (a title, dash-separated population, and annotation may follow on the same line).",
+      cli_bullets
     ))
     diag_add(
       stage = "parse_shell", severity = "FAIL", input = INPUT_SHELL,
       problem = "No TLF sections found in shell document",
       location = basename(docx_path),
-      action = "Nothing parsed -- check heading format (expected 'Table X.X.X' / 'Figure X.X.X' / 'Listing X.X.X')"
+      action = if (length(miss_bullets) > 0) {
+        paste0("Nothing parsed. Heading-shaped lines were seen but rejected: ",
+               paste(miss_bullets, collapse = " | "))
+      } else {
+        "Nothing parsed -- check heading format (expected 'Table X.X.X' / 'Figure X.X.X' / 'Listing X.X.X')"
+      }
     )
+    attr(sections, "near_misses") <- near_misses
   } else {
     cli::cli_inform("Parsed {length(sections)} TLF section{?s} from {.path {basename(docx_path)}}")
   }
@@ -781,7 +1135,7 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
   matches <- regmatches(comment_text,
                         gregexpr(.ANNOTATION_PATTERN, comment_text, perl = TRUE))[[1]]
   if (length(matches) == 0) return("")
-  paste(matches, collapse = " and ")
+  .canon_annotation(paste(matches, collapse = " and "))
 }
 
 ## ---------------------------------------------------------------------------
@@ -826,7 +1180,7 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
 #' -- most page headers carry no TLF-shaped text). `docx_dir` is an
 #' already-unzipped docx directory (see `.unzip_docx()`).
 #' @noRd
-.read_header_headings <- function(docx_dir) {
+.read_header_headings <- function(docx_dir, heading_patterns = NULL) {
   header_paths <- list.files(file.path(docx_dir, "word"),
                              pattern = "^header\\d*\\.xml$",
                              full.names = TRUE)
@@ -838,37 +1192,39 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
 
     ## Find the first paragraph that looks like a TLF heading.
     heading_at <- NULL
-    m <- NULL
+    hit <- NULL
     for (i in seq_along(paras)) {
       txt <- trimws(.paragraph_text(paras[[i]]))
-      mm  <- regmatches(txt, regexec(.TLF_HEADING_RE, txt, perl = TRUE))[[1]]
-      if (length(mm) == 4) {
+      h   <- .match_tlf_heading(txt, heading_patterns)$hit
+      if (!is.null(h)) {
         heading_at <- i
-        m          <- mm
+        hit        <- h
         break
       }
     }
     if (is.null(heading_at)) next
 
-    word         <- tools::toTitleCase(tolower(m[2]))
-    prefix       <- substr(toupper(word), 1, 1)
-    tlf_type     <- switch(tolower(word), table = "TABLE", figure = "FIGURE",
-                           listing = "LISTING", "TABLE")
-    inline_title <- trimws(m[4])
+    word     <- tools::toTitleCase(tolower(hit$type_word))
+    prefix   <- substr(toupper(word), 1, 1)
+    tlf_type <- switch(tolower(word), table = "TABLE", figure = "FIGURE",
+                       listing = "LISTING", "TABLE")
+    parts    <- .decompose_heading_tail(hit$tail)
 
     ## Title: inline on the heading line itself, else the next paragraph.
     next_at <- heading_at + 1L
-    title <- inline_title
+    title <- parts$title
     if (!nzchar(title) && next_at <= length(paras)) {
       title   <- trimws(.paragraph_text(paras[[next_at]]))
       next_at <- next_at + 1L
     }
 
-    ## Population: the paragraph after the title, only if it actually
-    ## looks like one (reusing the same check the body walker uses).
-    population_text  <- ""
-    population_annot <- ""
-    if (next_at <= length(paras)) {
+    ## Population: already on the heading line, else the paragraph after
+    ## the title -- only if it actually looks like one (reusing the same
+    ## check the body walker uses).
+    population_text  <- parts$population_text
+    population_annot <- parts$population_annot
+    if (!nzchar(population_text) && !nzchar(population_annot) &&
+        next_at <= length(paras)) {
       pop_node <- paras[[next_at]]
       pop_text <- trimws(.paragraph_text(pop_node))
       if (.looks_like_population(pop_text)) {
@@ -878,7 +1234,7 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL) {
     }
 
     headings[[length(headings) + 1L]] <- list(
-      tlf_number       = paste0(prefix, "-", gsub("\\.", "-", m[3])),
+      tlf_number       = paste0(prefix, "-", gsub("\\.", "-", hit$number)),
       tlf_type         = tlf_type,
       title            = title,
       population_text  = population_text,
@@ -1158,12 +1514,27 @@ bind_annotations <- function(sec) {
 .EXCLUDED_TEXT_ANCESTORS_XPATH <-
   "not(ancestor::*[local-name()='del']) and not(ancestor::*[local-name()='txbxContent'])"
 
+#' Normalize Word-flavoured Unicode before any regex sees the text: strip
+#' zero-width characters, turn non-breaking space variants into plain
+#' spaces, and straighten smart quotes (an annotation typed in Word usually
+#' reads ADSL.SCRNFL="Y" with curly quotes, which the annotation grammar
+#' would otherwise miss). En/em dashes are deliberately left alone -- they
+#' are meaningful display characters in titles, and the heading decomposer
+#' treats them explicitly as title/population separators.
+#' @noRd
+.normalize_docx_text <- function(x) {
+  x <- gsub("[\u200B\uFEFF]", "", x, perl = TRUE)
+  chartr("\u00A0\u2007\u202F\u2018\u2019\u201C\u201D",
+         "   ''\"\"",
+         x)
+}
+
 #' Concatenate all text under a paragraph/cell node, preserving order.
 #' @noRd
 .paragraph_text <- function(p_node) {
   t_nodes <- xml2::xml_find_all(
     p_node, paste0(".//*[local-name()='t'][", .EXCLUDED_TEXT_ANCESTORS_XPATH, "]"))
-  paste(xml2::xml_text(t_nodes), collapse = "")
+  .normalize_docx_text(paste(xml2::xml_text(t_nodes), collapse = ""))
 }
 
 .cell_text <- function(cell_node) .paragraph_text(cell_node)
@@ -1178,7 +1549,7 @@ bind_annotations <- function(sec) {
   for (i in seq_along(runs)) {
     r <- runs[[i]]
     t_nodes <- xml2::xml_find_all(r, ".//*[local-name()='t']")
-    txt <- paste(xml2::xml_text(t_nodes), collapse = "")
+    txt <- .normalize_docx_text(paste(xml2::xml_text(t_nodes), collapse = ""))
 
     color_node <- xml2::xml_find_first(r, "./*[local-name()='rPr']/*[local-name()='color']")
     color <- if (inherits(color_node, "xml_missing")) NA_character_
@@ -1327,14 +1698,16 @@ bind_annotations <- function(sec) {
   if (length(coloured) > 0) {
     out <- paste(vapply(coloured, function(m) m$text, character(1)), collapse = "")
     out <- trimws(out)
-    if (grepl(.ANNOTATION_PATTERN, out, perl = TRUE)) return(out)
+    if (grepl(.ANNOTATION_PATTERN, out, perl = TRUE)) {
+      return(.canon_annotation(out))
+    }
   }
   ## Layer 3 on the population paragraph text.
   if (grepl(.ANNOTATION_PATTERN, full_text, perl = TRUE)) {
     ## Extract just the matching ADaM segment(s).
     m <- regmatches(full_text,
                     gregexpr(.ANNOTATION_PATTERN, full_text, perl = TRUE))[[1]]
-    if (length(m) > 0) return(paste(m, collapse = " and "))
+    if (length(m) > 0) return(.canon_annotation(paste(m, collapse = " and ")))
   }
   ""
 }
@@ -1356,7 +1729,7 @@ bind_annotations <- function(sec) {
                               collapse = ""))
     if (grepl(.ANNOTATION_PATTERN, candidate, perl = TRUE)) {
       label <- trimws(.strip_annotation_from_text(cell_text, candidate))
-      return(list(label = label, annotation = candidate,
+      return(list(label = label, annotation = .canon_annotation(candidate),
                   method = "colour", confidence = "high"))
     }
   }
@@ -1372,7 +1745,7 @@ bind_annotations <- function(sec) {
                               collapse = ""))
     if (grepl(.ANNOTATION_PATTERN, candidate, perl = TRUE)) {
       label <- trimws(.strip_annotation_from_text(cell_text, candidate))
-      return(list(label = label, annotation = candidate,
+      return(list(label = label, annotation = .canon_annotation(candidate),
                   method = "format", confidence = "medium"))
     }
   }
@@ -1427,7 +1800,7 @@ split_label_annotation <- function(cell_text) {
 
   annotation <- substr(cell_text, start, nchar(cell_text))
   annotation <- sub("\\s*[\\]\\)]\\s*$", "", annotation, perl = TRUE)
-  annotation <- trimws(annotation)
+  annotation <- .canon_annotation(trimws(annotation))
 
   list(label = label, annotation = annotation)
 }

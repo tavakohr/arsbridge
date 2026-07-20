@@ -43,11 +43,18 @@
 #'   passes the hard ADaM-spec gate. Pre-flight a file with
 #'   [ars_validate_supplement()].
 #'
-#'   The three tiers are all optional except the deterministic baseline:
-#'   with neither a supplement nor an API key the pipeline still runs
-#'   end-to-end on regex + keyword heuristics (reduced accuracy for variant
-#'   layouts, groupings, and analysis typing; one WARN finding records the
-#'   mode).
+#'   Regex is the always-on baseline and the default; the LLM is opt-in (see
+#'   `use_llm`). Deterministic and supplement are first-class modes -- the
+#'   function never asks for a key nor raises a key-related error or warning in
+#'   them; the mode that ran is recorded as a neutral INFO note and in
+#'   `extraction_mode` / `_meta.extraction_mode`.
+#' @param use_llm Opt in to the live LLM tier. Default `FALSE` -- the pipeline
+#'   runs regex-only (deterministic) and makes NO live LLM call, *even when an
+#'   API key is configured*. Set `TRUE` to use the LLM for annotation
+#'   extraction and semantic enrichment when a key is available; with `TRUE`
+#'   but no key, the run still degrades silently to deterministic (never an
+#'   error). Ignored when `supplement` is given (that path makes no live LLM
+#'   calls either).
 #' @param spec_column_aliases Optional named list of extra column-name
 #'   aliases for the ADaM spec Excel (see `parse_adam_spec()`); useful when
 #'   a workbook uses non-standard or non-English headers. Example:
@@ -56,15 +63,29 @@
 #'   raw shell cells as the primary annotation reader, separating display label
 #'   from variable reference in variant layouts. Every proposed
 #'   `DATASET.VARIABLE` is gated against the ADaM spec -- out-of-spec proposals
-#'   are rejected and logged as blockers, never shipped. With no API key the
-#'   pass degrades to the deterministic regex result and emits one warning.
-#'   Set `FALSE` to use deterministic parsing only.
+#'   are rejected and logged as blockers, never shipped. This is a sub-control
+#'   of the `llm` tier: it only has any effect when `use_llm = TRUE`. Set
+#'   `FALSE` to keep the LLM enrichment pass but skip the LLM extraction pass.
 #' @param ship_annotations If `FALSE` (default), programmer annotation lines
 #'   found outside the stub cells (e.g. red `Label -> DATASET.VAR` paragraphs
 #'   below a table) are kept for row binding and the validation report but are
 #'   NEVER emitted into the ARS Footnote display section -- rendered footnotes
 #'   then contain only true footnotes. Set `TRUE` to append them to the
 #'   footnotes (debug escape hatch).
+#' @param heading_patterns Optional character vector of PCRE patterns tried
+#'   BEFORE the built-in TLF heading grammars, for sponsor shells whose
+#'   headings the built-ins do not recognise. Each pattern must use named
+#'   capture groups: `(?<number>...)` (required -- the dotted TLF number),
+#'   `(?<type>...)` (optional, matching Table/Figure/Listing; defaults to
+#'   Table), and `(?<title>...)` (optional inline title; the title tail is
+#'   then decomposed into title/population/source datasets the same way
+#'   built-in headings are). Custom patterns are accepted as-is -- the
+#'   built-in prose/TOC rejection rules are not applied to them. Not needed
+#'   for the built-in formats -- a bare `"Table 14.1.1"`, a colon inline
+#'   title `"Table 14.1.1: Title"`, and one-line headings that carry the
+#'   title, a dash-separated population, an inline annotation, and a
+#'   programming-datasets suffix together.
+#'   Example: `"^(?i)Output\\s+(?<number>\\d+(?:\\.\\d+)*)\\s*:\\s*(?<title>.*)$"`.
 #' @param validate       If `TRUE` (default), cross-reference annotations
 #'   against the ADaM spec and write a validation report.
 #' @param report_path    Path for the validation report `.xlsx`. Defaults to
@@ -134,9 +155,11 @@ spec_to_ars <- function(shell_path,
                         api_key      = NULL,
                         provider     = NULL,
                         supplement   = NULL,
+                        use_llm      = FALSE,
                         spec_column_aliases = NULL,
                         extract_with_llm = TRUE,
                         ship_annotations = FALSE,
+                        heading_patterns = NULL,
                         validate     = TRUE,
                         report_path  = file.path(tempdir(), "spec_validation_report.xlsx"),
                         code_dir     = NULL,
@@ -156,13 +179,20 @@ spec_to_ars <- function(shell_path,
     ))
   }
 
-  ## --- Mode resolution: supplement > live LLM > deterministic ---------------
-  ## All tiers are optional except the deterministic regex baseline -- a
-  ## missing key or missing supplement must NEVER stop the run.
+  ## --- Mode resolution: supplement > opt-in LLM > deterministic ------------
+  ## Regex is the always-on baseline and the DEFAULT: the LLM is opt-in via
+  ## `use_llm = TRUE`. With `use_llm = FALSE` (default) the run is deterministic
+  ## and makes no live LLM call even when an API key is configured -- the
+  ## package never asks for a key nor raises a key-related error/warning. A
+  ## supplement takes precedence over both (it also makes no live LLM calls).
   supp <- NULL
   if (!is.null(supplement)) {
     supp <- read_supplement(supplement)
     extraction_mode <- "supplement"
+  } else if (!isTRUE(use_llm)) {
+    extraction_mode <- "deterministic"
+    provider <- NULL
+    api_key  <- NULL
   } else {
     active <- get_active_llm()
     if (is.null(provider)) {
@@ -191,20 +221,18 @@ spec_to_ars <- function(shell_path,
   ## recorded and lands on the "Diagnostics" sheet of the validation report.
   diag_reset()
 
+  ## Deterministic and supplement are FIRST-CLASS modes, not degraded
+  ## fallbacks: with no key the pipeline is meant to run on regex (optionally
+  ## Copilot-supplemented), so it must never ask for a key nor raise a
+  ## key-related error/warning. The mode is recorded as a neutral INFO note
+  ## (provenance for the Diagnostics sheet), never a WARN or blocker.
   if (identical(extraction_mode, "deterministic")) {
-    cli::cli_alert_warning(paste(
-      "No LLM API key and no supplement -- running in deterministic mode",
-      "(regex + keyword heuristics). Accuracy is reduced for variant shell",
-      "layouts, grouping detection, Total columns, and analysis typing."))
-    cli::cli_alert_info(paste(
-      "TIP: no API key? {.code ars_copilot_instructions()} writes a file you",
-      "can upload to Copilot/ChatGPT together with your shell and spec; pass",
-      "the reply back via {.code spec_to_ars(supplement = ...)}."))
-    .diag_gap(
-      stage = "setup", severity = "WARN", input = INPUT_LLM,
-      problem = "Run executed in deterministic mode (no LLM API key, no supplement).",
-      why = "Variant annotation layouts, multi-level groupings, Total columns, and analysis-type classification rely on keyword heuristics in this mode.",
-      fix = "Set an API key (set_anthropic_key() / set_llm_key()) for full accuracy, or use the supplement workflow: ars_copilot_instructions().")
+    if (verbose) cli::cli_alert_info(
+      "Running in deterministic mode (regex extraction, keyword heuristics; no LLM).")
+    diag_add(
+      stage = "setup", severity = "INFO",
+      problem = "Run executed in deterministic mode (regex extraction, no LLM).",
+      action = "Deterministic and supplement are fully supported modes -- no API key is required.")
   } else if (identical(extraction_mode, "supplement") && verbose) {
     cli::cli_alert_info("Using supplement {.path {basename(supplement)}} -- no live LLM calls will be made.")
   }
@@ -216,9 +244,28 @@ spec_to_ars <- function(shell_path,
   spec <- parse_adam_spec(adam_spec_path, column_aliases = spec_column_aliases)
 
   if (verbose) cli::cli_alert_info("Parsing annotated shell {.path {basename(shell_path)}}...")
-  sections <- parse_shell_docx(shell_path, spec_lookup = spec$lookup)
+  sections <- parse_shell_docx(shell_path, spec_lookup = spec$lookup,
+                               heading_patterns = heading_patterns)
   if (length(sections) == 0) {
-    cli::cli_abort("No TLF sections found in {.path {shell_path}}.")
+    ## The parser has already said WHY each heading-shaped line was
+    ## rejected; repeat those reasons in the abort so they survive into
+    ## non-interactive logs, and point at the escape hatch.
+    near_misses <- attr(sections, "near_misses") %||% list()
+    miss_bullets <- vapply(near_misses, function(nm) {
+      gsub("}", "}}",
+           gsub("{", "{{",
+                sprintf("%s -- %s", dQuote(nm$text, q = FALSE), nm$reason),
+                fixed = TRUE),
+           fixed = TRUE)
+    }, character(1))
+    if (length(miss_bullets) > 0) {
+      names(miss_bullets) <- rep("x", length(miss_bullets))
+    }
+    cli::cli_abort(c(
+      "No TLF sections found in {.path {shell_path}}.",
+      miss_bullets,
+      "i" = "If one of these IS a real heading, pass a custom {.arg heading_patterns} pattern (see {.code ?spec_to_ars})."
+    ))
   }
 
   ## --- Annotation gap-filling on top of the deterministic pass --------------

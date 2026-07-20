@@ -137,7 +137,18 @@ INPUT_SUPPLEMENT <- "Copilot supplement (.json)"
 .read_docx <- function(path, arg = "docx_path", doc = INPUT_SHELL) {
   .require_file(path, arg, doc)
   tryCatch(
-    officer::read_docx(path),
+    withCallingHandlers(
+      officer::read_docx(path),
+      warning = function(w) {
+        ## xml2 warns "Undefined namespace prefix" while officer reads a
+        ## docProps/core.xml written by some e-signature tools (DocuSign).
+        ## Cosmetic -- the body parse is unaffected -- so muffle just this
+        ## one; every other warning still surfaces.
+        if (grepl("namespace prefix", conditionMessage(w), fixed = TRUE)) {
+          invokeRestart("muffleWarning")
+        }
+      }
+    ),
     error = function(e) {
       msg <- conditionMessage(e)
       cli::cli_abort(c(
