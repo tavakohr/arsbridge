@@ -451,13 +451,16 @@
 #'   token heuristic and its blocklist.
 #' @param heading_patterns Optional character vector of PCRE patterns tried
 #'   BEFORE the built-in heading grammars (see `.match_tlf_heading()`).
+#' @param progress If `TRUE`, show a cli progress bar while walking the body
+#'   (the slow step for a large shell). Default `FALSE`; `spec_to_ars()`
+#'   turns it on together with `verbose`.
 #'
 #' @return List of TLF section objects (see top of file for full schema).
 #'
 #' @keywords internal
 #' @noRd
 parse_shell_docx <- function(docx_path, spec_lookup = NULL,
-                             heading_patterns = NULL) {
+                             heading_patterns = NULL, progress = FALSE) {
   .validate_heading_patterns(heading_patterns)
   doc      <- .read_docx(docx_path)
   root_xml <- doc$doc_obj$get()
@@ -559,7 +562,17 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
     )
   }
 
+  ## Walking the body is the slow part of a large shell -- every table cell
+  ## is read run-by-run. Show a determinate bar over the body elements so a
+  ## long parse looks alive rather than hung. Off by default; spec_to_ars()
+  ## turns it on with `verbose`.
+  show_progress <- isTRUE(progress) && length(children) > 0L
+  if (show_progress) {
+    cli::cli_progress_bar("Reading shell layout", total = length(children))
+  }
+
   for (child in children) {
+    if (show_progress) cli::cli_progress_update()
     tag <- .local_name(child)
 
     ## Skip the cover/TOC table entirely.
@@ -676,6 +689,7 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
       state <- "IN_BODY"
     }
   }
+  if (show_progress) cli::cli_progress_done()
 
   if (!is.null(current)) {
     sections[[length(sections) + 1]] <- .finalize_section(current, spec_lookup)
