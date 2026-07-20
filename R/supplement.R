@@ -136,7 +136,9 @@ ars_copilot_instructions <- function(dir = ".",
 ## ---------------------------------------------------------------------------
 
 #' Strip a markdown code fence (```json ... ```) if the assistant included
-#' one, and normalise the "smart" quotes chat UIs substitute into JSON.
+#' one, normalise the "smart" quotes chat UIs substitute into JSON, and repair
+#' the one malformation assistants keep producing: a where-clause value quoted
+#' with DOUBLE quotes.
 #' @noRd
 .clean_supplement_text <- function(txt) {
   txt <- paste(txt, collapse = "\n")
@@ -145,6 +147,19 @@ ars_copilot_instructions <- function(dir = ".",
   ## The pattern is written with \u escapes so the source stays ASCII-portable
   ## (R CMD check: "Portable packages must use only ASCII characters").
   txt <- gsub("[\u201c\u201d]", "\"", txt)
+
+  ## Repair the single most common assistant mistake: a comparison value quoted
+  ## with DOUBLE quotes inside a where-clause, e.g. MHSCAT="UNDERLYING
+  ## CONDITIONS", whose inner quote closes the JSON string early ("invalid char
+  ## in json text"). In VALID JSON a '"' is never preceded by '=' (keys follow
+  ## '{' / ',' / ':' , values follow ':'), so `=" ... "` can only be a value
+  ## comparison -- rewrite its double quotes to the single quotes the format
+  ## wants. Escaped, already-valid quotes (=\"...\") start with a backslash,
+  ## not a quote, so they never match and are left untouched. The instruction
+  ## file still asks the assistant to use single quotes; this is the safety net
+  ## for when it does not.
+  txt <- gsub("=\\s*\"([^\"]*)\"", "='\\1'", txt, perl = TRUE)
+
   ## Keep only the fenced block when present (the contract asks for exactly
   ## one); otherwise use the whole text.
   m <- regmatches(txt, regexec("```(?:json)?\\s*(\\{[\\s\\S]*\\})\\s*```",

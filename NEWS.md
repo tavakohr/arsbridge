@@ -1,5 +1,14 @@
 # arsbridge (development version)
 
+* **A supplement with double-quoted where-clause values now loads instead of
+  aborting.** The most common Copilot mistake -- a comparison value quoted with
+  double quotes (`MHSCAT="UNDERLYING CONDITIONS"`), which breaks the JSON --
+  is now auto-repaired to single quotes before parsing. In valid JSON a `"` is
+  never preceded by `=`, so `="..."` can only be a value comparison, making the
+  rewrite safe; escaped, already-valid quotes are left untouched. The
+  instruction file still asks for single quotes, and `read_supplement()`'s error
+  still names the fix for any malformation the repair cannot cover.
+
 * **The validation report now carries a `Legend` sheet.** `spec_validation_report.xlsx`
   gains a final worksheet that names each status/severity, its meaning, and the
   exact fill hex it is tinted with (PASS `E2EFDA`, WARN `FFF2CC`, FAIL `FCE4D6`,

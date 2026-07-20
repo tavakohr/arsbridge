@@ -73,17 +73,44 @@ test_that("read_supplement aborts on malformed JSON, bad version, missing tlfs",
   expect_error(read_supplement(no_tlfs), "tlfs")
 })
 
-test_that("a double-quoted value breaks JSON and the error names the single-quote fix", {
+test_that("a double-quoted where value is auto-repaired to single quotes", {
   ## The classic Copilot mistake: a where-value quoted with double quotes,
-  ## which closes the JSON string early ("invalid char in json text").
+  ## which would close the JSON string early. arsbridge repairs `="..."` to
+  ## `='...'` before parsing, so the file loads instead of aborting.
   dq <- tempfile(fileext = ".json")
   writeLines(
     paste0('{"supplement_version":1,"tlfs":{"14.1.1":{"bindings":',
            '[{"label":"Underlying","variable":"ADMH.MHTERM",',
-           '"where":"MHSCAT="UNDERLYING CONDITIONS""}]}}}'),
+           '"where":"MHTERM not null and MHSCAT="UNDERLYING CONDITIONS""}]}}}'),
     dq)
-  expect_error(read_supplement(dq), "not valid JSON")
-  expect_error(read_supplement(dq), "single quote")
+  supp <- read_supplement(dq)
+  w <- supp$tlfs[["14.1.1"]]$bindings[[1]]$where
+  expect_match(w, "MHSCAT='UNDERLYING CONDITIONS'")
+  expect_false(grepl('"', w, fixed = TRUE))
+})
+
+test_that(".clean_supplement_text repairs double-quoted values but leaves valid JSON alone", {
+  ## Multiple double-quoted comparisons in one compound clause.
+  repaired <- arsbridge:::.clean_supplement_text(
+    '{"where":"A="X" and B="Y""}')
+  expect_false(grepl('="', repaired, fixed = TRUE))
+  expect_match(repaired, "A='X'")
+  expect_match(repaired, "B='Y'")
+
+  ## An already-correct single-quoted value is untouched.
+  ok <- '{"population":"ADSL.SAFFL=\'Y\'"}'
+  expect_identical(arsbridge:::.clean_supplement_text(ok), ok)
+
+  ## An escaped (already-valid) double-quoted value is left as-is.
+  esc <- '{"note":"say =\\"hi\\""}'
+  expect_identical(arsbridge:::.clean_supplement_text(esc), esc)
+})
+
+test_that("genuinely malformed JSON still aborts with the single-quote hint", {
+  bad <- tempfile(fileext = ".json")
+  writeLines("{ not json,, }", bad)
+  expect_error(read_supplement(bad), "not valid JSON")
+  expect_error(read_supplement(bad), "single quote")
 })
 
 ## --- ars_validate_supplement ----------------------------------------------
