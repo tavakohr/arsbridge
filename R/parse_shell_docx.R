@@ -73,6 +73,20 @@
 ## "cohort"/"group" there would misfile a second title line like "by Dose
 ## Cohort" as the population.
 .HEADING_POP_HINT_RE <- "(?i)\\bcohorts?\\b|\\bgroups?\\b|\\bparticipants\\b"
+
+## The single, canonical description of the heading form arsbridge detects
+## most reliably. Surfaced by the no-heading and no-title diagnostics and
+## documented verbatim in ?spec_to_ars, so the message a user sees when a
+## title cannot be found matches the guidance they are pointed to. Two
+## strings: a one-line recommendation for `action` fields, and a short
+## bulletable form for cli messages.
+.RECOMMENDED_HEADING_HINT <- paste(
+  "Give each output its own heading paragraph that begins with Table,",
+  "Figure, or Listing followed by its number and a title, e.g.",
+  "'Table 14.1.1: Summary of Demographics'. Keep it an ordinary paragraph",
+  "-- not inside a text box, shape, or table cell -- so arsbridge can find it."
+)
+
 ## Accepts "Source:", "Sources:", "Data Source:", "Source datasets:", and
 ## "=" in place of ":".
 .SOURCE_LINE_RE <- "^\\s*(?:Data\\s+)?Sources?(?:\\s+datasets?)?\\s*[:=]\\s*(.+?)\\.?\\s*$"
@@ -725,7 +739,8 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
     cli::cli_warn(c(
       "No TLF sections found in {.path {docx_path}}.",
       "i" = "Expected paragraphs matching {.val Table X.X.X}, {.val Figure X.X.X}, or {.val Listing X.X.X} (a title, dash-separated population, and annotation may follow on the same line).",
-      cli_bullets
+      cli_bullets,
+      "i" = .RECOMMENDED_HEADING_HINT
     ))
     diag_add(
       stage = "parse_shell", severity = "FAIL", input = INPUT_SHELL,
@@ -749,6 +764,20 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
   for (sec in sections) {
     n_rows  <- length(sec$stub_rows)
     n_annot <- sum(vapply(sec$stub_rows, function(r) isTRUE(r$has_annot), logical(1)))
+    ## A heading number was found but no title text -- the section will be
+    ## labelled only by its number downstream. Say how to make the title
+    ## identifiable (same guidance as the no-heading error and ?spec_to_ars).
+    if (!nzchar(trimws(sec$title %||% ""))) {
+      diag_add(
+        stage = "parse_shell", severity = "WARN", input = INPUT_SHELL,
+        problem = sprintf(
+          "TLF %s: heading number found but no title text was identified",
+          sec$tlf_number),
+        tlf_number = sec$tlf_number,
+        location = sec$tlf_number,
+        action = .RECOMMENDED_HEADING_HINT
+      )
+    }
     if (n_rows > 0 && n_annot == 0) {
       diag_add(
         stage = "parse_shell", severity = "WARN", input = INPUT_SHELL,

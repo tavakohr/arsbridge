@@ -28,7 +28,19 @@
 
 * When no TLF sections are found, the warning and the `spec_to_ars()` abort
   now list the heading-shaped lines that were seen and rejected, with the
-  reason for each, and point at `heading_patterns`.
+  reason for each, and repeat a one-line recommendation for how to write an
+  identifiable heading before pointing at `heading_patterns`.
+
+* New WARN when a heading's number is found but **no title text** is
+  identified (e.g. a bare `Table 14.1.1` with the title stranded in a text
+  box): the section is kept but flagged with the same how-to-write-an-
+  identifiable-heading guidance, so a missing title is surfaced rather than
+  shipped silently.
+
+* Documented the recommended heading convention in one place --
+  `?spec_to_ars` gains a "Writing identifiable TLF headings" section, and the
+  README gains a "TLF heading format" section -- so the guidance the error
+  and warning messages give matches the docs.
 
 * The cosmetic "Undefined namespace prefix" warning that `officer` emits while
   reading `docProps/core.xml` in some e-signed (DocuSign) shells is now

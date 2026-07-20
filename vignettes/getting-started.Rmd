@@ -60,13 +60,25 @@ arsbridge::check_anthropic_key()   # confirm the key loaded
 > up a workflow where a chat assistant (Copilot/ChatGPT) produces a supplement
 > file `spec_to_ars()` consumes. See `vignette("no-api-access")`.
 
-The deterministic reader recognises several TLF heading styles out of the box:
-a bare `Table 14.1.1`, a colon inline title (`Table 14.1.1: Title`), and a
-one-line heading that carries the title, a dash-separated population, an inline
-annotation, and a `[PROGRAMMING DATASETS USED: ...]` suffix together. If a
-sponsor's headings follow a different convention, pass a custom PCRE pattern
-via `spec_to_ars(heading_patterns = ...)` (named `number`/`type`/`title`
-groups; see `?spec_to_ars`).
+### Writing headings arsbridge can find
+
+arsbridge splits the shell into outputs by finding TLF heading paragraphs, so
+give each output its own **ordinary paragraph** that begins with `Table`,
+`Figure`, or `Listing` and its number. The recommended, most portable form is
+an explicit colon title — `Table 14.1.1: Descriptive Title` — with the
+population on the next line. Several styles are read out of the box: a bare
+`Table 14.1.1`, the colon title, and a one-line heading that also carries a
+dash-separated population, an inline annotation, and a
+`[PROGRAMMING DATASETS USED: ...]` suffix.
+
+Keep the heading a normal paragraph: a title stranded in a **text box, shape,
+table cell, or field/content control** is not read, and neither is prose that
+only mentions a number (`Table 14.1.1 shows ...`) or a bare section number
+(`14.1 Demographic and Baseline Tables`). When arsbridge finds no heading — or
+a number but no title — it says so and repeats this guidance. For a sponsor
+template with a genuinely different convention, pass a custom PCRE pattern via
+`spec_to_ars(heading_patterns = ...)` (named `number`/`type`/`title` groups;
+see `?spec_to_ars`) instead of reformatting the shell.
 
 ---
 
