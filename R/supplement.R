@@ -174,7 +174,8 @@ read_supplement <- function(path) {
       cli::cli_abort(c(
         "Supplement file is not valid JSON: {.path {path}}",
         "x" = "{err_msg}",
-        "i" = "Ask the assistant to re-emit ONE fenced strict-JSON block (double quotes, no trailing commas, no comments)."
+        "i" = "Most often a value contains a double quote, which breaks the string -- use single quotes inside values, e.g. {.code \"where\": \"MHSCAT='UNDERLYING CONDITIONS'\"} (not {.code =\"UNDERLYING CONDITIONS\"}).",
+        "i" = "Ask the assistant to re-emit ONE fenced strict-JSON block (single quotes inside values, no trailing commas, no comments)."
       ))
     }
   )

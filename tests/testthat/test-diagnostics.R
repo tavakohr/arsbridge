@@ -130,7 +130,7 @@ test_that("write_validation_report adds Diagnostics sheet when records exist", {
   write_validation_report(validation, path, diagnostics = diagnostics)
   expect_true(file.exists(path))
   wb <- openxlsx2::wb_load(path)
-  expect_setequal(wb$get_sheet_names(), c("Validation", "Diagnostics"))
+  expect_setequal(wb$get_sheet_names(), c("Validation", "Diagnostics", "Legend"))
 
   ## Round-trip the Diagnostics sheet content.
   diag_back <- openxlsx2::wb_to_df(wb, sheet = "Diagnostics")
@@ -148,7 +148,27 @@ test_that("write_validation_report omits Diagnostics sheet when empty", {
   path <- tempfile(fileext = ".xlsx")
   write_validation_report(validation, path, diagnostics = diag_records()[0, ])
   wb <- openxlsx2::wb_load(path)
-  expect_equal(unname(wb$get_sheet_names()), "Validation")
+  expect_equal(unname(wb$get_sheet_names()), c("Validation", "Legend"))
+})
+
+test_that("write_validation_report always carries a Legend sheet keyed to the palette", {
+  skip_if_not_installed("openxlsx2")
+  validation <- data.frame(
+    tlf_number = "T-1", status = "PASS", message = "ok",
+    stringsAsFactors = FALSE
+  )
+  path <- tempfile(fileext = ".xlsx")
+  write_validation_report(validation, path)
+  wb  <- openxlsx2::wb_load(path)
+  expect_true("Legend" %in% wb$get_sheet_names())
+
+  leg <- openxlsx2::wb_to_df(wb, sheet = "Legend")
+  expect_true(all(c("PASS", "WARN", "FAIL", "INFO") %in% leg$Status))
+  ## Every documented hex is the one the tinting actually uses.
+  for (s in c("PASS", "WARN", "FAIL", "INFO")) {
+    hex <- leg[["Fill (hex)"]][which(leg$Status == s)]
+    expect_equal(hex, unname(.REPORT_STATUS_FILL[[s]]))
+  }
 })
 
 test_that("shell parser records section-quality diagnostics", {

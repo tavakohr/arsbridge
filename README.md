@@ -221,6 +221,20 @@ ADaM spec and stamps each one **PASS**, **WARN**, or **FAIL**. This is
 your opportunity to catch typos and missing ADaM variables before any
 analysis code runs.
 
+Each row is tinted by its status, and the workbook’s **Legend** sheet
+spells this out. The colors (and their exact fill hex codes) are:
+
+| Status | Fill | Hex | Meaning |
+|---|---|---|---|
+| **PASS** | green | `E2EFDA` | Annotation matched a dataset + variable in the ADaM spec. No action needed. |
+| **WARN** | amber | `FFF2CC` | Needs review (e.g. an uncertain mapping). The ARS JSON is still generated. |
+| **FAIL** | red | `FCE4D6` | Could not be validated (invalid dataset/variable, or a blocking gap). Fix before use. |
+| **INFO** | blue | `DDEBF7` | Informational note (mainly the Diagnostics sheet). Not a validation failure. |
+
+WARN and FAIL are review signals, not automatic blockers — the JSON is
+written even when they are present, so a qualified programmer can triage
+them. A cell with no tint simply carries no status.
+
 ``` r
 # Counts by status
 table(res$validation$status)
