@@ -82,12 +82,12 @@
 </tr></thead>
 <tbody>
 <tr>
-<td><strong>Dual-pass shell reading</strong></td>
-<td>A regex detector handles known annotation conventions; an LLM handles everything else. You get more extracted rows with fewer assumptions.</td>
+<td><strong>Three ways to read the shell</strong></td>
+<td>A deterministic regex baseline always runs; you choose how the gaps it cannot resolve get filled — <strong>regex only</strong> (no key), a <strong>Copilot supplement</strong> (no API call), or a <strong>live LLM</strong> (opt-in with a key). Same spec-gated output from all three.</td>
 </tr>
 <tr>
 <td><strong>Spec-gated validation</strong></td>
-<td>Every variable the LLM proposes is checked against your ADaM spec. A variable missing from the spec is rejected and logged, never silently invented.</td>
+<td>Every variable proposed — by the regex, a supplement, or the LLM — is checked against your ADaM spec. A variable missing from the spec is rejected and logged, never silently invented.</td>
 </tr>
 <tr>
 <td><strong>CDISC ARS JSON output</strong></td>
@@ -119,11 +119,15 @@
     ADAM(["ADaM Datasets\n(.xpt or .csv)"])
 
     subgraph STEP1 ["Step 1 · Read the shell"]
-        R["Regex pass\n(colour · bold · brackets · plain-text)"]
-        L["LLM pass\n(any layout, any convention)"]
+        R["Regex baseline\n(colour · bold · brackets · plain-text)\nALWAYS runs"]
+        F{"Row the regex\ncould not resolve?"}
+        C["Copilot supplement\n(no API call)"]
+        L["Live LLM\n(use_llm = TRUE)"]
         G{"Spec gate\nDATASET.VARIABLE\nexists in spec?"}
-        R --&gt; G
-        L --&gt; G
+        R --&gt; F
+        F --&gt;|"regex only"| G
+        F --&gt;|"regex + Copilot"| C --&gt; G
+        F --&gt;|"LLM API"| L --&gt; G
     end
 
     subgraph STEP2 ["Step 2 · Validate"]
@@ -401,89 +405,42 @@
 <h2 id="how-arsbridge-reads-the-shell">How arsbridge reads the shell<a class="anchor" aria-label="anchor" href="#how-arsbridge-reads-the-shell"></a>
 </h2>
 <p>Every clinical study annotates its TLF shells differently. The ADaM variable for a row might appear as a red-coloured run, a bold fragment, a bracketed condition like <code>[ADAE.AEDECOD WHERE AEREL='RELATED']</code>, plain text after the label, or a layout that no regex was ever written for. A single detection strategy cannot cover all of these reliably.</p>
-<p>arsbridge reads each shell <strong>twice and takes the union.</strong></p>
-<pre><code>           annotated shell (.docx)
-                    |
-      +-------------+-------------+
-      |                           |
-      v                           v
-1. REGEX PASS               2. LLM PASS
-   parse_shell_docx()          extract_shell_llm()
-   four-layer detector          re-reads raw cell text,
-   - colour                     separates display label
-   - bold/italic/underline      from variable reference
-   - plain-text DATASET.VAR     in any layout
-   - bracket [DATASET.VAR]
-      |                           |
-      +-------------+-------------+
-                    |
-                    v
-          3. HARD SPEC GATE
-     every DATASET.VARIABLE must
-     exist in the ADaM spec, or it is
-     rejected and logged as a blocker
-                    |
-                    v
-       validated annotations -&gt; ARS JSON</code></pre>
-<p><strong>Pass 1: deterministic regex</strong> (<code>parse_shell_docx()</code>) walks the document OOXML and runs a four-layer detector on every stub cell and listing header. It handles known conventions with no API call. This pass always runs, even with no API key. It reads TLF headings in several styles: a bare <code>Table 14.1.1</code>, a colon inline title <code>Table 14.1.1: Title</code>, and a one-line heading that carries the title, a dash-separated population, an inline annotation, and a <code>[PROGRAMMING DATASETS USED: ...]</code> suffix together. Annotation values in single quotes, double quotes, or unquoted numerics (<code>ADSL.COHORTN=1</code>) are all detected. For a sponsor style the built-ins miss, pass <code>spec_to_ars(heading_patterns = ...)</code>.</p>
-<p><strong>Pass 2: LLM as primary reader</strong> (<code>extract_shell_llm()</code>) re-reads the raw text of each cell and separates the human display label from the machine variable reference, in whatever layout the shell uses. This is where the “any convention” power comes from: the LLM generalises to formats the regex was never designed for. It returns structured output via an <code>ellmer</code> type, never free text to parse.</p>
-<p><strong>Pass 3: spec gate</strong> checks every proposed <code>DATASET.VARIABLE</code> against your ADaM spec. A proposal not in the spec is dropped, not shipped, and recorded as a blocking finding that names the row and the rejected token. The spec is the ground-truth oracle.</p>
-<table class="table">
-<colgroup>
-<col width="18%">
-<col width="31%">
-<col width="31%">
-<col width="18%">
-</colgroup>
-<thead><tr>
-<th>Situation</th>
-<th align="center">Regex</th>
-<th align="center">LLM</th>
-<th>Result</th>
-</tr></thead>
-<tbody>
-<tr>
-<td>Known annotation convention</td>
-<td align="center">✓</td>
-<td align="center">silent</td>
-<td>Regex result kept</td>
-</tr>
-<tr>
-<td>Known convention, same read</td>
-<td align="center">✓</td>
-<td align="center">✓ same</td>
-<td>Confirmed</td>
-</tr>
-<tr>
-<td>Known convention, different reads</td>
-<td align="center">✓</td>
-<td align="center">✓ different</td>
-<td>
-<strong>LLM wins</strong> + <code>WARN</code>
-</td>
-</tr>
-<tr>
-<td>Variant layout regex cannot parse</td>
-<td align="center">✗</td>
-<td align="center">✓</td>
-<td><strong>LLM adds the row</strong></td>
-</tr>
-<tr>
-<td>LLM proposes a variable not in spec</td>
-<td align="center">✗</td>
-<td align="center">rejected</td>
-<td>Dropped + <strong>blocker logged</strong>
-</td>
-</tr>
-<tr>
-<td>Row has no variable</td>
-<td align="center">✗</td>
-<td align="center">silent</td>
-<td>Empty</td>
-</tr>
-</tbody>
-</table>
-<p>See <code><a href="articles/reading-engine.html">vignette("reading-engine")</a></code> for the complete parsing detail.</p>
+<p>Two things are the same no matter how you run arsbridge:</p>
+<ul>
+<li>
+<strong>A deterministic regex baseline</strong> (<code>parse_shell_docx()</code>) always runs — a four-layer detector over every stub cell and listing header (colour <code>#C00000</code> runs, bold/italic/underline, plain-text <code>DATASET.VARIABLE</code>, bracketed <code>[DATASET.VAR WHERE ...]</code>), plus flexible TLF-heading recognition (a bare <code>Table 14.1.1</code>, a colon title <code>Table 14.1.1: Title</code>, and one-line headings that also carry the population, an inline annotation, and a <code>[PROGRAMMING DATASETS USED: ...]</code> suffix; values single-, double-, or unquoted-numeric). No API call, no key. A sponsor style the built-ins miss is handled by <code>spec_to_ars(heading_patterns = ...)</code>.</li>
+<li>
+<strong>A hard spec gate.</strong> Every <code>DATASET.VARIABLE</code> — whoever proposed it — must exist in your ADaM spec, or it is dropped, never shipped, and logged as a named blocker. The spec is the ground-truth oracle.</li>
+</ul>
+<p>What differs is <strong>how the rows the regex could not resolve get filled</strong> — and that is the three approaches:</p>
+<pre><code>                 annotated shell (.docx)
+                          |
+              regex baseline  (always runs)
+                          |
+                 row still unresolved?
+                          |
+     +--------------------+--------------------+
+     |                    |                    |
+  regex only        regex + Copilot         LLM API
+  (default)          (supplement)         (use_llm = TRUE)
+  leave the gap      a chat assistant       the LLM re-reads
+                     fills gaps by hand      the cell + enriches
+     |                    |                    |
+     +--------------------+--------------------+
+                          |
+                    HARD SPEC GATE
+              (the variable must be in the spec)
+                          |
+                  validated -&gt; ARS JSON</code></pre>
+<ol style="list-style-type: decimal">
+<li>
+<strong>Regex only (deterministic)</strong> — the default; no key. Unresolved rows stay empty. Standard shells still produce valid ARS / ARD / output; variant layouts, groupings, Total columns, and analysis typing degrade, and one <code>WARN</code> records the mode.</li>
+<li>
+<strong>Regex + Copilot (supplement)</strong> — <code>spec_to_ars(supplement = "supplement.json")</code>. A chat assistant (Copilot/ChatGPT) reads the shell + spec by hand and returns a JSON supplement; its label-keyed bindings fill <strong>only</strong> rows the regex left blank — your authored shell annotations always win a disagreement — and it confirms the table set by title. No API call.</li>
+<li>
+<strong>LLM API (live)</strong> — opt in with <code>use_llm = TRUE</code> and a key. <code>extract_shell_llm()</code> re-reads each cell and separates the display label from the variable reference in any layout, and the LLM enriches each TLF (analysis type, method, groupings), generalising to formats no regex was written for.</li>
+</ol>
+<p>All three feed the same spec gate and emit the same ARS JSON shape; <code>_meta.extraction_mode</code> records which one ran. The next section shows how to run each; <code><a href="articles/reading-engine.html">vignette("reading-engine")</a></code> has the full parsing detail.</p>
 <hr>
 </div>
 <div class="section level2">
@@ -505,24 +462,26 @@
 </tr></thead>
 <tbody>
 <tr>
-<td><strong>Deterministic</strong></td>
+<td>
+<strong>Regex</strong> (deterministic)</td>
 <td>shell + spec</td>
 <td><code>spec_to_ars(shell, spec)</code></td>
 <td>Regex + heuristics. Standard shells still produce valid ARS/ARD/output; variant layouts, groupings, Total columns, and analysis typing degrade (one <code>WARN</code> records the mode).</td>
 </tr>
 <tr>
-<td><strong>Supplement</strong></td>
+<td>
+<strong>Regex + Copilot</strong> (supplement)</td>
 <td>+ a file from a chat assistant</td>
 <td><code>spec_to_ars(shell, spec, supplement = "supplement.json")</code></td>
 <td>Near-LLM. No API call — you use Copilot/ChatGPT by hand.</td>
 </tr>
 <tr>
-<td><strong>LLM</strong></td>
+<td><strong>LLM API</strong></td>
 <td>+ an API key</td>
 <td>
-<code><a href="reference/set_anthropic_key.html">set_anthropic_key()</a></code> then <code>spec_to_ars(shell, spec)</code>
+<code><a href="reference/set_anthropic_key.html">set_anthropic_key()</a></code> then <code>spec_to_ars(shell, spec, use_llm = TRUE)</code>
 </td>
-<td>Full.</td>
+<td>Full. The LLM is opt-in: a key alone does <strong>not</strong> trigger it — you must pass <code>use_llm = TRUE</code>.</td>
 </tr>
 </tbody>
 </table>
