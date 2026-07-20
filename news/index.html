@@ -40,8 +40,20 @@
     </div>
 
     <div class="section level2">
+<h2 class="pkg-version" data-toc-text="development version" id="arsbridge-development-version">arsbridge (development version)<a class="anchor" aria-label="anchor" href="#arsbridge-development-version"></a></h2>
+<ul><li><p><strong>One-line TLF headings are now read deterministically.</strong> The shell parser previously recognised an inline title only after a literal colon (<code>Table 14.1.1: Title</code>). It now also reads a colon-less one-line heading that packs the number, title, a dash-separated population, an inline annotation, and a <code>[PROGRAMMING DATASETS USED: ...]</code> suffix into a single paragraph – e.g. <code>Table 14.1.1 Summary of Disposition - Screened Subjects ADSL.SCRNFL='Y' [PROGRAMMING DATASETS USED: ADSL]</code>. The title, population, population annotation, and source datasets are split out of that line. Recognition stays conservative: ordinary prose that mentions a table number (<code>Table 14.1.1 shows the summary</code>), cross-references (<code>See Table 14.1.1 ...</code>), table-of-contents entries, and bare section numbers (<code>14.1 Demographic and Baseline Tables</code>) are still not headings.</p></li>
+<li><p>Annotation values written with straight or smart <strong>double quotes</strong> (<code>ADSL.SCRNFL="Y"</code>) and <strong>unquoted numeric equality</strong> (<code>ADSL.COHORTN=1</code>, common in column headers) are now detected. Captured values are canonicalized to single quotes so the emitted ARS JSON stays uniform regardless of the shell’s quote style. Text is Unicode-normalized before matching (non-breaking spaces, zero-width characters, and smart quotes), while en/em dashes are preserved as meaningful title separators.</p></li>
+<li><p>New <code>spec_to_ars(heading_patterns = ...)</code> escape hatch: a character vector of PCRE patterns (with named <code>number</code>/<code>type</code>/<code>title</code> groups) tried before the built-in grammars, for sponsor shells whose headings the built-ins do not recognise – no package edit required.</p></li>
+<li><p>When no TLF sections are found, the warning and the <code><a href="../reference/spec_to_ars.html">spec_to_ars()</a></code> abort now list the heading-shaped lines that were seen and rejected, with the reason for each, and repeat a one-line recommendation for how to write an identifiable heading before pointing at <code>heading_patterns</code>.</p></li>
+<li><p>New WARN when a heading’s number is found but <strong>no title text</strong> is identified (e.g. a bare <code>Table 14.1.1</code> with the title stranded in a text box): the section is kept but flagged with the same how-to-write-an- identifiable-heading guidance, so a missing title is surfaced rather than shipped silently.</p></li>
+<li><p>Documented the recommended heading convention in one place – <code><a href="../reference/spec_to_ars.html">?spec_to_ars</a></code> gains a “Writing identifiable TLF headings” section, and the README gains a “TLF heading format” section – so the guidance the error and warning messages give matches the docs.</p></li>
+<li><p>The cosmetic “Undefined namespace prefix” warning that <code>officer</code> emits while reading <code>docProps/core.xml</code> in some e-signed (DocuSign) shells is now muffled; every other warning still surfaces.</p></li>
+</ul></div>
+    <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.1.0" id="arsbridge-010">arsbridge 0.1.0<a class="anchor" aria-label="anchor" href="#arsbridge-010"></a></h2>
-<ul><li>
+<ul><li><p><strong>The LLM tier is now opt-in.</strong> <code><a href="../reference/spec_to_ars.html">spec_to_ars()</a></code> gains <code>use_llm</code> (default <code>FALSE</code>): by default the pipeline runs regex-only (deterministic) and makes NO live LLM call, <em>even when an API key is configured</em>. Pass <code>use_llm = TRUE</code> to use the LLM for extraction and enrichment when a key is available. This makes regex the first-class default and the LLM an explicit choice – ideal for CI, automation, and regex baselines. (A <code>supplement</code> still takes precedence; it also makes no live LLM calls.) <strong>Breaking:</strong> callers that relied on a configured key auto-selecting the LLM must now pass <code>use_llm = TRUE</code>.</p></li>
+<li><p>Deterministic (regex) and supplement (Copilot) runs are fully silent about API keys: <code><a href="../reference/spec_to_ars.html">spec_to_ars()</a></code> never asks for a key nor raises a key-related error or warning in those modes. The old “running in deterministic mode” WARN is now a neutral INFO provenance note, and the “no API key?” console nudge is gone. Genuine, table-specific findings (e.g. a capability blocker for an inferential table) are unaffected and still surface in every mode.</p></li>
+<li>
 <p>Three-tier reading engine; the LLM API key is now optional (<code>R/spec_to_ars.R</code>, <code>R/supplement.R</code>). <code><a href="../reference/spec_to_ars.html">spec_to_ars()</a></code> no longer aborts without a key: it resolves a mode from what you have —</p>
 <ul><li>
 <strong>deterministic</strong> (shell + spec only): regex + keyword heuristics, one <code>WARN</code> recording the reduced accuracy;</li>
@@ -93,7 +105,8 @@
 <li><p>Multi-provider LLM enrichment (Anthropic, OpenAI, Gemini) with a keyword-heuristic fallback so the pipeline runs without an API key.</p></li>
 <li><p><code><a href="../reference/ars_diagnostics.html">ars_diagnostics()</a></code> / <code><a href="../reference/ars_blockers.html">ars_blockers()</a></code>: plain-English diagnostics that point the user at the input document to fix.</p></li>
 </ul></div>
-  </main></div>
+  </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
+    </nav></aside></div>
 
 
     <footer><div class="pkgdown-footer-left">

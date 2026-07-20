@@ -19,9 +19,11 @@ spec_to_ars(
   api_key = NULL,
   provider = NULL,
   supplement = NULL,
+  use_llm = FALSE,
   spec_column_aliases = NULL,
   extract_with_llm = TRUE,
   ship_annotations = FALSE,
+  heading_patterns = NULL,
   validate = TRUE,
   report_path = file.path(tempdir(), "spec_validation_report.xlsx"),
   code_dir = NULL,
@@ -96,11 +98,21 @@ spec_to_ars(
   gate. Pre-flight a file with
   [`ars_validate_supplement()`](https://tavakohr.github.io/arsbridge/reference/ars_validate_supplement.md).
 
-  The three tiers are all optional except the deterministic baseline:
-  with neither a supplement nor an API key the pipeline still runs
-  end-to-end on regex + keyword heuristics (reduced accuracy for variant
-  layouts, groupings, and analysis typing; one WARN finding records the
-  mode).
+  Regex is the always-on baseline and the default; the LLM is opt-in
+  (see `use_llm`). Deterministic and supplement are first-class modes –
+  the function never asks for a key nor raises a key-related error or
+  warning in them; the mode that ran is recorded as a neutral INFO note
+  and in `extraction_mode` / `_meta.extraction_mode`.
+
+- use_llm:
+
+  Opt in to the live LLM tier. Default `FALSE` – the pipeline runs
+  regex-only (deterministic) and makes NO live LLM call, *even when an
+  API key is configured*. Set `TRUE` to use the LLM for annotation
+  extraction and semantic enrichment when a key is available; with
+  `TRUE` but no key, the run still degrades silently to deterministic
+  (never an error). Ignored when `supplement` is given (that path makes
+  no live LLM calls either).
 
 - spec_column_aliases:
 
@@ -115,9 +127,10 @@ spec_to_ars(
   as the primary annotation reader, separating display label from
   variable reference in variant layouts. Every proposed
   `DATASET.VARIABLE` is gated against the ADaM spec – out-of-spec
-  proposals are rejected and logged as blockers, never shipped. With no
-  API key the pass degrades to the deterministic regex result and emits
-  one warning. Set `FALSE` to use deterministic parsing only.
+  proposals are rejected and logged as blockers, never shipped. This is
+  a sub-control of the `llm` tier: it only has any effect when
+  `use_llm = TRUE`. Set `FALSE` to keep the LLM enrichment pass but skip
+  the LLM extraction pass.
 
 - ship_annotations:
 
@@ -127,6 +140,23 @@ spec_to_ars(
   emitted into the ARS Footnote display section – rendered footnotes
   then contain only true footnotes. Set `TRUE` to append them to the
   footnotes (debug escape hatch).
+
+- heading_patterns:
+
+  Optional character vector of PCRE patterns tried BEFORE the built-in
+  TLF heading grammars, for sponsor shells whose headings the built-ins
+  do not recognise. Each pattern must use named capture groups:
+  `(?<number>...)` (required – the dotted TLF number), `(?<type>...)`
+  (optional, matching Table/Figure/Listing; defaults to Table), and
+  `(?<title>...)` (optional inline title; the title tail is then
+  decomposed into title/population/source datasets the same way built-in
+  headings are). Custom patterns are accepted as-is – the built-in
+  prose/TOC rejection rules are not applied to them. Not needed for the
+  built-in formats – a bare `"Table 14.1.1"`, a colon inline title
+  `"Table 14.1.1: Title"`, and one-line headings that carry the title, a
+  dash-separated population, an inline annotation, and a
+  programming-datasets suffix together. Example:
+  `"^(?i)Output\\s+(?<number>\\d+(?:\\.\\d+)*)\\s*:\\s*(?<title>.*)$"`.
 
 - validate:
 
@@ -213,6 +243,38 @@ Invisibly returns a named list:
   `location`, `problem`, `action`). Also written to the "Diagnostics"
   sheet of the validation report and retrievable via
   [`ars_diagnostics()`](https://tavakohr.github.io/arsbridge/reference/ars_diagnostics.md).
+
+## Writing identifiable TLF headings
+
+arsbridge splits the shell into outputs by finding TLF heading
+paragraphs. For a heading to be recognised reliably, write it as **its
+own ordinary paragraph** (not inside a text box, shape, table cell, or
+field code) that **begins with `Table`, `Figure`, or `Listing` followed
+by the output number**. A title should follow the number. All of these
+are read:
+
+    Table 14.1.1
+    Table 14.1.1: Summary of Demographics
+    Table 14.1.1 Summary of Demographics
+    Table 14.1.1 Summary of Demographics - Safety Population ADSL.SAFFL='Y'
+    Table 14.1.1 Demographics - Screened Subjects ADSL.SCRNFL='Y' [PROGRAMMING DATASETS USED: ADSL]
+
+The population, an inline annotation, and a
+`[PROGRAMMING DATASETS USED: ...]` suffix may all ride on the same line;
+annotation values may use single quotes, double quotes, or an unquoted
+number (`ADSL.COHORTN=1`). The **recommended** form for a clean,
+portable shell is the explicit colon title –
+`Table 14.1.1: Descriptive Title` – with the population on the next
+line.
+
+These are deliberately **not** treated as headings, to avoid false
+splits: prose that mentions a number (`Table 14.1.1 shows ...`),
+cross-references (`See Table 14.1.1 ...`), table-of-contents lines, and
+bare section numbers with no designator
+(`14.1 Demographic and Baseline Tables`). When the parser finds no
+heading, or finds a number but no title, it says so and repeats this
+guidance. For a sponsor template whose headings genuinely differ, pass
+`heading_patterns` rather than reformatting the shell.
 
 ## Human review
 

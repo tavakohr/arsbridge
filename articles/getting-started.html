@@ -93,23 +93,52 @@ traces back to a real annotation grounded in the spec.</p>
 </h2>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Install from GitHub</span></span>
-<span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">install_github</span><span class="op">(</span><span class="st">"tavakohr/arsbridge"</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># One-time API key setup (interactive prompt; hides input when {askpass} is installed)</span></span>
+<span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">install_github</span><span class="op">(</span><span class="st">"tavakohr/arsbridge"</span><span class="op">)</span></span></code></pre></div>
+<p><code>arsbridge</code> runs <strong>regex-first</strong>: by default
+it needs no API key at all. The LLM is <strong>opt-in</strong> — pass
+<code>use_llm = TRUE</code> to have Claude help with annotation
+extraction and light per-TLF enrichment (analysis type, method name, row
+role). Even then, all variable names come from the shell annotations,
+never from the LLM.</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Only if you want the LLM tier: one-time key setup (hides input with {askpass})</span></span>
 <span><span class="fu">arsbridge</span><span class="fu">::</span><span class="fu"><a href="../reference/set_anthropic_key.html">set_anthropic_key</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="fu">arsbridge</span><span class="fu">::</span><span class="fu"><a href="../reference/check_anthropic_key.html">check_anthropic_key</a></span><span class="op">(</span><span class="op">)</span>   <span class="co"># confirm the key loaded</span></span></code></pre></div>
-<p><code>arsbridge</code> calls Claude once per TLF section for light
-semantic enrichment: analysis type, method name, and row role. All
-variable names come from the shell annotations, never from the LLM.</p>
+<span><span class="fu">arsbridge</span><span class="fu">::</span><span class="fu"><a href="../reference/check_anthropic_key.html">check_anthropic_key</a></span><span class="op">(</span><span class="op">)</span>   <span class="co"># confirm the key loaded</span></span>
+<span><span class="co"># ...then call spec_to_ars(..., use_llm = TRUE)</span></span></code></pre></div>
 <blockquote>
-<p><strong>No API key, or it’s blocked?</strong> You can still run at
-near-LLM accuracy with no API call. Start with
-<code><a href="../reference/ars_copilot_instructions.html">ars_copilot_instructions()</a></code>, which sets up a workflow where
-a chat assistant (Copilot/ChatGPT) produces a supplement file
+<p><strong>No API key, or it’s blocked?</strong> The default run already
+works with no key. For near-LLM accuracy without an API call,
+<code><a href="../reference/ars_copilot_instructions.html">ars_copilot_instructions()</a></code> sets up a workflow where a chat
+assistant (Copilot/ChatGPT) produces a supplement file
 <code><a href="../reference/spec_to_ars.html">spec_to_ars()</a></code> consumes. See
 <code><a href="../articles/no-api-access.html">vignette("no-api-access")</a></code>.</p>
 </blockquote>
+<div class="section level3">
+<h3 id="writing-headings-arsbridge-can-find">Writing headings arsbridge can find<a class="anchor" aria-label="anchor" href="#writing-headings-arsbridge-can-find"></a>
+</h3>
+<p>arsbridge splits the shell into outputs by finding TLF heading
+paragraphs, so give each output its own <strong>ordinary
+paragraph</strong> that begins with <code>Table</code>,
+<code>Figure</code>, or <code>Listing</code> and its number. The
+recommended, most portable form is an explicit colon title —
+<code>Table 14.1.1: Descriptive Title</code> — with the population on
+the next line. Several styles are read out of the box: a bare
+<code>Table 14.1.1</code>, the colon title, and a one-line heading that
+also carries a dash-separated population, an inline annotation, and a
+<code>[PROGRAMMING DATASETS USED: ...]</code> suffix.</p>
+<p>Keep the heading a normal paragraph: a title stranded in a
+<strong>text box, shape, table cell, or field/content control</strong>
+is not read, and neither is prose that only mentions a number
+(<code>Table 14.1.1 shows ...</code>) or a bare section number
+(<code>14.1 Demographic and Baseline Tables</code>). When arsbridge
+finds no heading — or a number but no title — it says so and repeats
+this guidance. For a sponsor template with a genuinely different
+convention, pass a custom PCRE pattern via
+<code>spec_to_ars(heading_patterns = ...)</code> (named
+<code>number</code>/<code>type</code>/<code>title</code> groups; see
+<code><a href="../reference/spec_to_ars.html">?spec_to_ars</a></code>) instead of reformatting the shell.</p>
 <hr>
+</div>
 </div>
 <div class="section level2">
 <h2 id="the-fastest-path-spec_to_ars_example">The fastest path: <code>spec_to_ars_example()</code><a class="anchor" aria-label="anchor" href="#the-fastest-path-spec_to_ars_example"></a>
@@ -117,15 +146,23 @@ a chat assistant (Copilot/ChatGPT) produces a supplement file
 <p>The package ships with a small bundled training example so you can
 run the entire pipeline before you own a study. This is the best way to
 get a feel for the output and the validation report.</p>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/tavakohr/arsbridge" class="external-link">arsbridge</a></span><span class="op">)</span></span>
 <span></span>
+<span><span class="co"># Default: regex-only, no API key needed, runs in seconds.</span></span>
 <span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/spec_to_ars_example.html">spec_to_ars_example</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Or, with a key configured, opt in to the LLM tier:</span></span>
+<span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/spec_to_ars_example.html">spec_to_ars_example</a></span><span class="op">(</span>use_llm <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span></span>
 <span><span class="co"># ARS JSON and validation report land in tempdir(); paths are in res.</span></span>
 <span><span class="va">res</span><span class="op">$</span><span class="va">n_tlfs</span>        <span class="co"># 40 TLF shells</span></span>
 <span><span class="va">res</span><span class="op">$</span><span class="va">n_analyses</span>    <span class="co"># ~226 analyses</span></span>
-<span><span class="va">res</span><span class="op">$</span><span class="va">n_warnings</span>    <span class="co"># ~29 warnings to review</span></span></code></pre></div>
-<p>Takes about six minutes (40 LLM calls, one per TLF section).</p>
+<span><span class="va">res</span><span class="op">$</span><span class="va">n_warnings</span>    <span class="co"># ~29 warnings to review</span></span>
+<span><span class="va">res</span><span class="op">$</span><span class="va">extraction_mode</span>   <span class="co"># "deterministic" by default, "llm" with use_llm = TRUE</span></span></code></pre></div>
+<p>The default deterministic run is fast and offline. With
+<code>use_llm = TRUE</code> it makes about 40 LLM calls (one per TLF
+section) and takes a few minutes.</p>
 <hr>
 </div>
 <div class="section level2">
@@ -134,7 +171,7 @@ get a feel for the output and the validation report.</p>
 <p>Once <code><a href="../reference/spec_to_ars_example.html">spec_to_ars_example()</a></code> finishes, you have a
 structured <code>reporting_event</code> object and a row-level
 validation report.</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Top-level shape of the ARS ReportingEvent</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/str.html" class="external-link">str</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">reporting_event</span>, max.level <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
 <span></span>
@@ -181,7 +218,7 @@ validation report.</p>
 returns a tidy ARD in <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> format.
 <code><a href="../reference/ars_render_tlf.html">ars_render_tlf()</a></code> then formats any output from that ARD into
 a publication-ready GT table, with no manual formatting step.</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Unzip the bundled simulated ADaM data</span></span>
 <span><span class="va">adam_dir</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"ADaM"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/unzip.html" class="external-link">unzip</a></span><span class="op">(</span><span class="fu"><a href="../reference/arsbridge_example.html">arsbridge_example</a></span><span class="op">(</span><span class="st">"ADaM.zip"</span><span class="op">)</span>, exdir <span class="op">=</span> <span class="va">adam_dir</span><span class="op">)</span></span>
@@ -207,7 +244,7 @@ proportions to percentages; lays continuous summaries out as
 rows; and carries ARS footnotes through as GT source notes.</p>
 <p>To inspect or customise the underlying <a href="https://GSK-Biostatistics.github.io/tfrmt/" class="external-link">tfrmt</a> spec
 before printing:</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># One output: get the tfrmt spec</span></span>
 <span><span class="va">spec</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/ars_to_tfrmt.html">ars_to_tfrmt</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">ars_path</span>, <span class="va">ard</span>, <span class="st">"T_14_1_1"</span><span class="op">)</span></span>
 <span></span>
@@ -224,7 +261,7 @@ before printing:</p>
 <div class="section level2">
 <h2 id="using-your-own-study-files">Using your own study files<a class="anchor" aria-label="anchor" href="#using-your-own-study-files"></a>
 </h2>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/spec_to_ars.html">spec_to_ars</a></span><span class="op">(</span></span>
 <span>  shell_path     <span class="op">=</span> <span class="st">"inputs/annotated_shell.docx"</span>,</span>
 <span>  adam_spec_path <span class="op">=</span> <span class="st">"inputs/adam_spec.xlsx"</span>,        <span class="co"># or define.xml</span></span>
@@ -243,7 +280,7 @@ valid input: TLF annotations reference ADaM variables.</p>
 <div class="section level2">
 <h2 id="the-bundled-example-file-by-file">The bundled example, file by file<a class="anchor" aria-label="anchor" href="#the-bundled-example-file-by-file"></a>
 </h2>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/arsbridge_example.html">arsbridge_example</a></span><span class="op">(</span><span class="op">)</span>                              <span class="co"># list all bundle contents</span></span>
 <span><span class="fu"><a href="../reference/arsbridge_example.html">arsbridge_example</a></span><span class="op">(</span><span class="st">"annotated_shell.docx"</span><span class="op">)</span>        <span class="co"># absolute path to a file</span></span>
 <span><span class="fu"><a href="../reference/arsbridge_example.html">arsbridge_example</a></span><span class="op">(</span><span class="st">"adam_spec.xlsx"</span><span class="op">)</span></span>
@@ -348,7 +385,7 @@ for each: the ARD carries a <code>manual_pending</code> stub row with
 <code>stat = NA</code>, tied to the same output, analysis, and method as
 a real result.</p>
 <p>List what is outstanding:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ard</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/ars_to_ard.html">ars_to_ard</a></span><span class="op">(</span><span class="va">ars_path</span>, <span class="st">"inputs/ADaM"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/ars_manual_worklist.html">ars_manual_worklist</a></span><span class="op">(</span><span class="va">ard</span><span class="op">)</span>   <span class="co"># one row per reserved cell</span></span></code></pre></div>
 <p>When rendered, computed cells appear with their values and each
@@ -356,7 +393,7 @@ reserved cell shows a loud <code>[‡ manual]</code> marker keyed to a
 footnote. No blank cells, no <code>NA</code>, no misleading zeros.</p>
 <p>To fill a reserved cell, compute it with a validated analysis script,
 then write the result back into the ARD row:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">i</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/which.html" class="external-link">which</a></span><span class="op">(</span><span class="va">ard</span><span class="op">$</span><span class="va">result_status</span> <span class="op">==</span> <span class="st">"manual_pending"</span><span class="op">)</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span></span>
 <span><span class="va">ard</span><span class="op">$</span><span class="va">stat</span><span class="op">[[</span><span class="va">i</span><span class="op">]</span><span class="op">]</span>         <span class="op">&lt;-</span> <span class="fl">0.012</span></span>
 <span><span class="va">ard</span><span class="op">$</span><span class="va">result_status</span><span class="op">[</span><span class="va">i</span><span class="op">]</span>  <span class="op">&lt;-</span> <span class="st">"manual_filled"</span></span>
@@ -365,7 +402,7 @@ then write the result back into the ARD row:</p>
 <p><code>derivation_ref</code> is the audit trail: not “someone typed
 0.012” but “value from <code>cmh_t1421.R</code>.” Before rendering,
 arsbridge checks every manual fill:</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/ars_validate_manual_fills.html">ars_validate_manual_fills</a></span><span class="op">(</span><span class="va">ard</span><span class="op">)</span>   <span class="co"># zero rows = every fill is traceable</span></span></code></pre></div>
 <p><code><a href="../reference/ars_render_all.html">ars_render_all()</a></code> runs this automatically and blocks any
 untraceable value before it reaches the final document. The design and
