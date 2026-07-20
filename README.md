@@ -26,8 +26,8 @@ No manual transcription. No orphan numbers. Every value auditable back to its so
 
 | Capability | What it means for you |
 |---|---|
-| **Dual-pass shell reading** | A regex detector handles known annotation conventions; an LLM handles everything else. You get more extracted rows with fewer assumptions. |
-| **Spec-gated validation** | Every variable the LLM proposes is checked against your ADaM spec. A variable missing from the spec is rejected and logged, never silently invented. |
+| **Three ways to read the shell** | A deterministic regex baseline always runs; you choose how the gaps it cannot resolve get filled — **regex only** (no key), a **Copilot supplement** (no API call), or a **live LLM** (opt-in with a key). Same spec-gated output from all three. |
+| **Spec-gated validation** | Every variable proposed — by the regex, a supplement, or the LLM — is checked against your ADaM spec. A variable missing from the spec is rejected and logged, never silently invented. |
 | **CDISC ARS JSON output** | The extraction result is a structured, versioned file you can diff, review, and feed to downstream tools like `{siera}`. |
 | **Native ARD execution** | Run ARS JSON directly against `.xpt` or `.csv` datasets using `{cards}`, with no dataset-loading boilerplate. |
 | **Publication-ready tables** | `ars_render_tlf()` builds a formatted GT table: treatment columns detected, percentages rescaled, row groups labelled, ARS footnotes carried through. |
@@ -44,11 +44,15 @@ flowchart TD
     ADAM(["ADaM Datasets\n(.xpt or .csv)"])
 
     subgraph STEP1 ["Step 1 · Read the shell"]
-        R["Regex pass\n(colour · bold · brackets · plain-text)"]
-        L["LLM pass\n(any layout, any convention)"]
+        R["Regex baseline\n(colour · bold · brackets · plain-text)\nALWAYS runs"]
+        F{"Row the regex\ncould not resolve?"}
+        C["Copilot supplement\n(no API call)"]
+        L["Live LLM\n(use_llm = TRUE)"]
         G{"Spec gate\nDATASET.VARIABLE\nexists in spec?"}
-        R --> G
-        L --> G
+        R --> F
+        F -->|"regex only"| G
+        F -->|"regex + Copilot"| C --> G
+        F -->|"LLM API"| L --> G
     end
 
     subgraph STEP2 ["Step 2 · Validate"]
@@ -349,68 +353,64 @@ a bracketed condition like `[ADAE.AEDECOD WHERE AEREL='RELATED']`, plain
 text after the label, or a layout that no regex was ever written for. A
 single detection strategy cannot cover all of these reliably.
 
-arsbridge reads each shell **twice and takes the union.**
+Two things are the same no matter how you run arsbridge:
+
+- **A deterministic regex baseline** (`parse_shell_docx()`) always runs — a
+  four-layer detector over every stub cell and listing header (colour
+  `#C00000` runs, bold/italic/underline, plain-text `DATASET.VARIABLE`,
+  bracketed `[DATASET.VAR WHERE ...]`), plus flexible TLF-heading recognition
+  (a bare `Table 14.1.1`, a colon title `Table 14.1.1: Title`, and one-line
+  headings that also carry the population, an inline annotation, and a
+  `[PROGRAMMING DATASETS USED: ...]` suffix; values single-, double-, or
+  unquoted-numeric). No API call, no key. A sponsor style the built-ins miss
+  is handled by `spec_to_ars(heading_patterns = ...)`.
+- **A hard spec gate.** Every `DATASET.VARIABLE` — whoever proposed it — must
+  exist in your ADaM spec, or it is dropped, never shipped, and logged as a
+  named blocker. The spec is the ground-truth oracle.
+
+What differs is **how the rows the regex could not resolve get filled** — and
+that is the three approaches:
 
 ```
-           annotated shell (.docx)
-                    |
-      +-------------+-------------+
-      |                           |
-      v                           v
-1. REGEX PASS               2. LLM PASS
-   parse_shell_docx()          extract_shell_llm()
-   four-layer detector          re-reads raw cell text,
-   - colour                     separates display label
-   - bold/italic/underline      from variable reference
-   - plain-text DATASET.VAR     in any layout
-   - bracket [DATASET.VAR]
-      |                           |
-      +-------------+-------------+
-                    |
-                    v
-          3. HARD SPEC GATE
-     every DATASET.VARIABLE must
-     exist in the ADaM spec, or it is
-     rejected and logged as a blocker
-                    |
-                    v
-       validated annotations -> ARS JSON
+                 annotated shell (.docx)
+                          |
+              regex baseline  (always runs)
+                          |
+                 row still unresolved?
+                          |
+     +--------------------+--------------------+
+     |                    |                    |
+  regex only        regex + Copilot         LLM API
+  (default)          (supplement)         (use_llm = TRUE)
+  leave the gap      a chat assistant       the LLM re-reads
+                     fills gaps by hand      the cell + enriches
+     |                    |                    |
+     +--------------------+--------------------+
+                          |
+                    HARD SPEC GATE
+              (the variable must be in the spec)
+                          |
+                  validated -> ARS JSON
 ```
 
-**Pass 1: deterministic regex** (`parse_shell_docx()`) walks the
-document OOXML and runs a four-layer detector on every stub cell and
-listing header. It handles known conventions with no API call. This pass
-always runs, even with no API key. It reads TLF headings in several
-styles: a bare `Table 14.1.1`, a colon inline title
-`Table 14.1.1: Title`, and a one-line heading that carries the title, a
-dash-separated population, an inline annotation, and a
-`[PROGRAMMING DATASETS USED: ...]` suffix together. Annotation values in
-single quotes, double quotes, or unquoted numerics (`ADSL.COHORTN=1`) are
-all detected. For a sponsor style the built-ins miss, pass
-`spec_to_ars(heading_patterns = ...)`.
+1. **Regex only (deterministic)** — the default; no key. Unresolved rows stay
+   empty. Standard shells still produce valid ARS / ARD / output; variant
+   layouts, groupings, Total columns, and analysis typing degrade, and one
+   `WARN` records the mode.
+2. **Regex + Copilot (supplement)** — `spec_to_ars(supplement = "supplement.json")`.
+   A chat assistant (Copilot/ChatGPT) reads the shell + spec by hand and
+   returns a JSON supplement; its label-keyed bindings fill **only** rows the
+   regex left blank — your authored shell annotations always win a
+   disagreement — and it confirms the table set by title. No API call.
+3. **LLM API (live)** — opt in with `use_llm = TRUE` and a key.
+   `extract_shell_llm()` re-reads each cell and separates the display label
+   from the variable reference in any layout, and the LLM enriches each TLF
+   (analysis type, method, groupings), generalising to formats no regex was
+   written for.
 
-**Pass 2: LLM as primary reader** (`extract_shell_llm()`) re-reads the
-raw text of each cell and separates the human display label from the
-machine variable reference, in whatever layout the shell uses. This is
-where the "any convention" power comes from: the LLM generalises to
-formats the regex was never designed for. It returns structured output
-via an `ellmer` type, never free text to parse.
-
-**Pass 3: spec gate** checks every proposed `DATASET.VARIABLE` against
-your ADaM spec. A proposal not in the spec is dropped, not shipped, and
-recorded as a blocking finding that names the row and the rejected token.
-The spec is the ground-truth oracle.
-
-| Situation | Regex | LLM | Result |
-|---|:---:|:---:|---|
-| Known annotation convention | ✓ | silent | Regex result kept |
-| Known convention, same read | ✓ | ✓ same | Confirmed |
-| Known convention, different reads | ✓ | ✓ different | **LLM wins** + `WARN` |
-| Variant layout regex cannot parse | ✗ | ✓ | **LLM adds the row** |
-| LLM proposes a variable not in spec | ✗ | rejected | Dropped + **blocker logged** |
-| Row has no variable | ✗ | silent | Empty |
-
-See `vignette("reading-engine")` for the complete parsing detail.
+All three feed the same spec gate and emit the same ARS JSON shape;
+`_meta.extraction_mode` records which one ran. The next section shows how to
+run each; `vignette("reading-engine")` has the full parsing detail.
 
 ------------------------------------------------------------------------
 
@@ -421,9 +421,9 @@ key or missing supplement never stops the run; it degrades and says so.
 
 | Tier | You supply | How to run | Accuracy |
 |---|---|---|---|
-| **Deterministic** | shell + spec | `spec_to_ars(shell, spec)` | Regex + heuristics. Standard shells still produce valid ARS/ARD/output; variant layouts, groupings, Total columns, and analysis typing degrade (one `WARN` records the mode). |
-| **Supplement** | + a file from a chat assistant | `spec_to_ars(shell, spec, supplement = "supplement.json")` | Near-LLM. No API call — you use Copilot/ChatGPT by hand. |
-| **LLM** | + an API key | `set_anthropic_key()` then `spec_to_ars(shell, spec)` | Full. |
+| **Regex** (deterministic) | shell + spec | `spec_to_ars(shell, spec)` | Regex + heuristics. Standard shells still produce valid ARS/ARD/output; variant layouts, groupings, Total columns, and analysis typing degrade (one `WARN` records the mode). |
+| **Regex + Copilot** (supplement) | + a file from a chat assistant | `spec_to_ars(shell, spec, supplement = "supplement.json")` | Near-LLM. No API call — you use Copilot/ChatGPT by hand. |
+| **LLM API** | + an API key | `set_anthropic_key()` then `spec_to_ars(shell, spec, use_llm = TRUE)` | Full. The LLM is opt-in: a key alone does **not** trigger it — you must pass `use_llm = TRUE`. |
 
 **Supplement workflow** (for environments where the LLM API is blocked but a
 chat assistant is allowed):
