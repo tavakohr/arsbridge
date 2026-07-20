@@ -273,7 +273,8 @@ spec_to_ars <- function(shell_path,
 
   if (verbose) cli::cli_alert_info("Parsing annotated shell {.path {basename(shell_path)}}...")
   sections <- parse_shell_docx(shell_path, spec_lookup = spec$lookup,
-                               heading_patterns = heading_patterns)
+                               heading_patterns = heading_patterns,
+                               progress = verbose)
   if (length(sections) == 0) {
     ## The parser has already said WHY each heading-shaped line was
     ## rejected; repeat those reasons in the abort so they survive into
