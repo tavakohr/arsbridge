@@ -99,11 +99,23 @@ it safe to trust a draft it produced:
   row, the shell’s annotation stands and any disagreement is logged as a
   `WARN` for you to review — the assistant can never silently rewrite an
   authored annotation.
+
 - **The spec is the gate.** Every `DATASET.VARIABLE` the supplement
   proposes is checked against your ADaM spec. One that is not in the
   spec is dropped and logged as a blocking `FAIL`, exactly as a live
   LLM’s proposal would be. The assistant cannot invent a variable into
   your output.
+
+- **It confirms the table set.** The assistant reads the whole shell
+  independently and lists every output with its `title`, so
+  [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
+  can compare that inventory against what it parsed. A supplement entry
+  with no matching table, a table the supplement never mentions, or a
+  title that disagrees between the two is logged as a `WARN` — this is
+  the one tier that can catch a table arsbridge parsed differently or
+  missed, because the live LLM only ever sees sections the parser
+  already found. If the shell heading carried no title but the
+  supplement has one, the parsed section adopts it.
 
 Statistic sub-rows (`Mean (SD)`, `Median`, `Q1, Q3`, `Min, Max`) are
 never bound from the supplement: they belong to the analysis row above

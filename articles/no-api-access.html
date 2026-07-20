@@ -184,18 +184,26 @@ ADSL.WEIGHTBL is not in the ADaM spec”</em>.</p>
 <p>The supplement is an <strong>assistant, not an override</strong>. Two
 guarantees make it safe to trust a draft it produced:</p>
 <ul>
-<li>
-<strong>The regex wins.</strong> A supplement binding lands only on
-a row the deterministic pass left unannotated. If the shell already
+<li><p><strong>The regex wins.</strong> A supplement binding lands only
+on a row the deterministic pass left unannotated. If the shell already
 annotated a row, the shell’s annotation stands and any disagreement is
 logged as a <code>WARN</code> for you to review — the assistant can
-never silently rewrite an authored annotation.</li>
-<li>
-<strong>The spec is the gate.</strong> Every
+never silently rewrite an authored annotation.</p></li>
+<li><p><strong>The spec is the gate.</strong> Every
 <code>DATASET.VARIABLE</code> the supplement proposes is checked against
 your ADaM spec. One that is not in the spec is dropped and logged as a
 blocking <code>FAIL</code>, exactly as a live LLM’s proposal would be.
-The assistant cannot invent a variable into your output.</li>
+The assistant cannot invent a variable into your output.</p></li>
+<li><p><strong>It confirms the table set.</strong> The assistant reads
+the whole shell independently and lists every output with its
+<code>title</code>, so <code><a href="../reference/spec_to_ars.html">spec_to_ars()</a></code> can compare that
+inventory against what it parsed. A supplement entry with no matching
+table, a table the supplement never mentions, or a title that disagrees
+between the two is logged as a <code>WARN</code> — this is the one tier
+that can catch a table arsbridge parsed differently or missed, because
+the live LLM only ever sees sections the parser already found. If the
+shell heading carried no title but the supplement has one, the parsed
+section adopts it.</p></li>
 </ul>
 <p>Statistic sub-rows (<code>Mean (SD)</code>, <code>Median</code>,
 <code>Q1, Q3</code>, <code>Min, Max</code>) are never bound from the
