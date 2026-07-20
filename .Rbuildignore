@@ -14,6 +14,7 @@
 ^REVIEW_.*\.md$
 ^REEVALUATION_.*\.md$
 ^evaluation$
+^RWE_error$
 ^codecov\.yml$
 ^probe_.*\.R$
 ^tmp_.*$

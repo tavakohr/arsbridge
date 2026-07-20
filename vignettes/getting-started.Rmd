@@ -40,20 +40,45 @@ For the full reading-engine detail, see `vignette("reading-engine")`.
 ```{r}
 # Install from GitHub
 devtools::install_github("tavakohr/arsbridge")
-
-# One-time API key setup (interactive prompt; hides input when {askpass} is installed)
-arsbridge::set_anthropic_key()
-arsbridge::check_anthropic_key()   # confirm the key loaded
 ```
 
-`arsbridge` calls Claude once per TLF section for light semantic enrichment:
-analysis type, method name, and row role. All variable names come from the
-shell annotations, never from the LLM.
+`arsbridge` runs **regex-first**: by default it needs no API key at all. The
+LLM is **opt-in** — pass `use_llm = TRUE` to have Claude help with annotation
+extraction and light per-TLF enrichment (analysis type, method name, row
+role). Even then, all variable names come from the shell annotations, never
+from the LLM.
 
-> **No API key, or it's blocked?** You can still run at near-LLM accuracy with
-> no API call. Start with `ars_copilot_instructions()`, which sets up a
-> workflow where a chat assistant (Copilot/ChatGPT) produces a supplement file
-> `spec_to_ars()` consumes. See `vignette("no-api-access")`.
+```{r}
+# Only if you want the LLM tier: one-time key setup (hides input with {askpass})
+arsbridge::set_anthropic_key()
+arsbridge::check_anthropic_key()   # confirm the key loaded
+# ...then call spec_to_ars(..., use_llm = TRUE)
+```
+
+> **No API key, or it's blocked?** The default run already works with no key.
+> For near-LLM accuracy without an API call, `ars_copilot_instructions()` sets
+> up a workflow where a chat assistant (Copilot/ChatGPT) produces a supplement
+> file `spec_to_ars()` consumes. See `vignette("no-api-access")`.
+
+### Writing headings arsbridge can find
+
+arsbridge splits the shell into outputs by finding TLF heading paragraphs, so
+give each output its own **ordinary paragraph** that begins with `Table`,
+`Figure`, or `Listing` and its number. The recommended, most portable form is
+an explicit colon title — `Table 14.1.1: Descriptive Title` — with the
+population on the next line. Several styles are read out of the box: a bare
+`Table 14.1.1`, the colon title, and a one-line heading that also carries a
+dash-separated population, an inline annotation, and a
+`[PROGRAMMING DATASETS USED: ...]` suffix.
+
+Keep the heading a normal paragraph: a title stranded in a **text box, shape,
+table cell, or field/content control** is not read, and neither is prose that
+only mentions a number (`Table 14.1.1 shows ...`) or a bare section number
+(`14.1 Demographic and Baseline Tables`). When arsbridge finds no heading — or
+a number but no title — it says so and repeats this guidance. For a sponsor
+template with a genuinely different convention, pass a custom PCRE pattern via
+`spec_to_ars(heading_patterns = ...)` (named `number`/`type`/`title` groups;
+see `?spec_to_ars`) instead of reformatting the shell.
 
 ---
 
@@ -66,14 +91,21 @@ for the output and the validation report.
 ```{r}
 library(arsbridge)
 
+# Default: regex-only, no API key needed, runs in seconds.
 res <- spec_to_ars_example()
+
+# Or, with a key configured, opt in to the LLM tier:
+res <- spec_to_ars_example(use_llm = TRUE)
+
 # ARS JSON and validation report land in tempdir(); paths are in res.
 res$n_tlfs        # 40 TLF shells
 res$n_analyses    # ~226 analyses
 res$n_warnings    # ~29 warnings to review
+res$extraction_mode   # "deterministic" by default, "llm" with use_llm = TRUE
 ```
 
-Takes about six minutes (40 LLM calls, one per TLF section).
+The default deterministic run is fast and offline. With `use_llm = TRUE` it
+makes about 40 LLM calls (one per TLF section) and takes a few minutes.
 
 ---
 

@@ -130,7 +130,13 @@ repaint_red <- function(docx_path) {
   ## like "... (ADSL.SAFFL='Y')" -- a black "trailing" run for whatever
   ## comes after the match (the closing paren here), so that text is kept
   ## instead of silently swallowed into the red run.
-  ADAM_RE <- paste0("\\bAD[A-Z]{1,6}\\.[A-Z][A-Z0-9]{0,7}(?:\\s*=\\s*'[^']*')?")
+  ## Value forms: single-quoted, straight double-quoted, smart double-quoted
+  ## (repaint runs on raw OOXML, BEFORE the parser's quote normalization),
+  ## or unquoted numeric.
+  ADAM_RE <- paste0(
+    "\\bAD[A-Z]{1,6}\\.[A-Z][A-Z0-9]{0,7}",
+    "(?:\\s*=\\s*(?:'[^']*'|\"[^\"]*\"|“[^“”]*”|[-+]?\\d+(?:\\.\\d+)?))?"
+  )
 
   paras <- xml2::xml_find_all(d, ".//*[local-name()='p']")
   for (p in paras) {
@@ -681,3 +687,196 @@ print(doc_dc_comment, target = out_dc_comment)
 inject_raw_table(out_dc_comment, datacell_comment_table_xml, "%%TABLE%%")
 add_comment_to_docx(out_dc_comment, "1", "Use ADSL.WEIGHT for this row.")
 cat("Wrote:", out_dc_comment, "\n")
+
+## ---------------------------------------------------------------------------
+## RWE-style fixtures -- one-line headings that carry the number, title,
+## dash-separated population, inline annotation (smart double quotes), and a
+## "[PROGRAMMING DATASETS USED: ...]" suffix all in ONE paragraph, the way
+## some sponsor RWE shells are authored. Also: a numbered section heading
+## ("14.1 ...") that must NOT start a section, an e-signature banner line,
+## unquoted-numeric column annotations, a tracked-change deletion that must
+## not leak into cell text, and a docProps/core.xml whose namespace officer
+## warns about (the warning arsbridge now muffles).
+## ---------------------------------------------------------------------------
+
+## Spec fixture for the RWE shells (kept separate from adam_spec_minimal so
+## existing tests keep their exact variable universe).
+rwe_vars <- data.frame(
+  Dataset   = rep("ADSL", 7),
+  Variable  = c("USUBJID", "AGE", "AGEGR1N", "SEX", "SCRNFL", "COMPLFL",
+                "COHORTN"),
+  Label     = c("Unique Subject Identifier", "Age", "Age Group 1 (N)",
+                "Sex", "Screened Population Flag", "Completer Population Flag",
+                "Cohort (N)"),
+  Type      = c("Char", "Num", "Num", "Char", "Char", "Char", "Num"),
+  Origin    = c("Assigned", "CRF", "Derived", "CRF", "Derived", "Derived",
+                "Assigned"),
+  Codelist  = c("", "", "", "SEX", "NY", "NY", ""),
+  Length    = c("40", "8", "8", "1", "1", "1", "8"),
+  Mandatory = rep("Req", 7),
+  stringsAsFactors = FALSE
+)
+wb_rwe <- openxlsx2::wb_workbook() |>
+  openxlsx2::wb_add_worksheet("Variables") |>
+  openxlsx2::wb_add_data(sheet = "Variables", x = rwe_vars)
+openxlsx2::wb_save(wb_rwe,
+                   file = file.path(here, "adam_spec_rwe.xlsx"),
+                   overwrite = TRUE)
+cat("Wrote:", file.path(here, "adam_spec_rwe.xlsx"), "\n")
+
+## The two one-line headings, written with a real en dash and real smart
+## double quotes -- exactly as Word autocorrect stores them.
+rwe_heading_1 <- paste0(
+  "Table 14.1.1 Summary of Subject Status and Subject Disposition ",
+  "– Screened Subjects ADSL.SCRNFL=“Y” ",
+  "[PROGRAMMING DATASETS USED: ADSL]"
+)
+rwe_heading_2 <- paste0(
+  "Table 14.1.3 Demographics – Completed Population ",
+  "ADSL.COMPLFL = “Y”"
+)
+
+doc_rwe <- read_docx() |>
+  body_add_par("Docusign Envelope ID: 00000000-DEMO-FIXTURE-0000") |>
+  body_add_par("14.1 Demographic and Baseline Tables", style = "heading 1") |>
+  body_add_par(rwe_heading_1) |>
+  body_add_table(
+    value = data.frame(
+      ` `        = c("Subjects screened, n  ADSL.SCRNFL=“Y”",
+                     "Age at enrollment (years)  ADSL.AGE",
+                     "  n",
+                     "  Mean (SD)",
+                     "Age group at enrollment, n (%)  ADSL.AGEGR1N",
+                     "  <65",
+                     "  >=65 TRACKDEL"),
+      `Cohort 1 (N=XX) ADSL.COHORTN=1` = rep("", 7),
+      `Cohort 2 (N=XX) ADSL.COHORTN=2` = rep("", 7),
+      check.names = FALSE,
+      stringsAsFactors = FALSE
+    ),
+    style = "table_template"
+  ) |>
+  body_add_par(rwe_heading_2) |>
+  body_add_table(
+    value = data.frame(
+      ` `     = c("Sex, n (%)  ADSL.SEX", "  Male", "  Female"),
+      `Cohort 1 (N=XX)` = rep("", 3),
+      `Cohort 2 (N=XX)` = rep("", 3),
+      check.names = FALSE,
+      stringsAsFactors = FALSE
+    ),
+    style = "table_template"
+  ) |>
+  body_add_par("Source: ADSL")
+out_rwe <- file.path(here, "annotated_shell_rwe_style.docx")
+print(doc_rwe, target = out_rwe)
+
+#' Wrap the marker text in a `<w:del>` tracked-change deletion so the parser
+#' can prove deleted text never leaks into cell text.
+#' @noRd
+inject_del_run <- function(docx_path, marker) {
+  td <- tempfile()
+  dir.create(td)
+  utils::unzip(docx_path, exdir = td)
+  doc_xml_path <- file.path(td, "word", "document.xml")
+  d <- xml2::read_xml(doc_xml_path)
+
+  t_nodes <- xml2::xml_find_all(d, ".//*[local-name()='t']")
+  for (t in t_nodes) {
+    full <- xml2::xml_text(t)
+    if (!grepl(marker, full, fixed = TRUE)) next
+    kept <- sub(paste0("\\s*", marker), "", full)
+    xml2::xml_text(t) <- kept
+    xml2::xml_set_attr(t, "xml:space", "preserve")
+    r <- xml2::xml_parent(t)
+    del_run <- xml2::read_xml(sprintf(
+      '<w:del xmlns:w="%s" w:id="901" w:author="reviewer"><w:r><w:t>%s</w:t></w:r></w:del>',
+      .W_NS_URL, marker
+    ))
+    xml2::xml_add_sibling(r, del_run, .where = "after")
+    break
+  }
+
+  xml2::write_xml(d, doc_xml_path)
+  rezip_docx(td, docx_path)
+}
+
+#' Rewrite docProps/core.xml with an off-standard default namespace, the way
+#' some e-signature tools do. officer's core-properties reader then hits an
+#' "Undefined namespace prefix" XPath warning -- which arsbridge muffles.
+#' @noRd
+break_core_props <- function(docx_path) {
+  td <- tempfile()
+  dir.create(td)
+  utils::unzip(docx_path, exdir = td)
+  writeLines(
+    c('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+      '<coreProperties xmlns="urn:example:esign-demo"><title/></coreProperties>'),
+    file.path(td, "docProps", "core.xml")
+  )
+  rezip_docx(td, docx_path)
+}
+
+inject_del_run(out_rwe, "TRACKDEL")
+repaint_red(out_rwe)
+break_core_props(out_rwe)
+cat("Wrote:", out_rwe, "\n")
+
+## Near-miss fixture: heading-shaped lines that must all be rejected, so
+## parse_shell_docx() returns zero sections and explains each rejection.
+doc_near_miss <- read_docx() |>
+  body_add_par("14.1 Demographic and Baseline Tables", style = "heading 1") |>
+  body_add_par("Table 14.1.1 shows the demographic summary") |>
+  body_add_table(
+    value = data.frame(
+      Characteristic = c("Age (years)", "  n"),
+      `Treatment A` = rep("", 2),
+      check.names = FALSE,
+      stringsAsFactors = FALSE
+    ),
+    style = "table_template"
+  ) |>
+  body_add_par("Source: ADSL")
+out_near_miss <- file.path(here, "annotated_shell_near_miss.docx")
+print(doc_near_miss, target = out_near_miss)
+cat("Wrote:", out_near_miss, "\n")
+
+## Custom-grammar fixture for the heading_patterns escape hatch: a sponsor
+## that headlines outputs as "Output N.N.N: Title".
+doc_custom <- read_docx() |>
+  body_add_par("Output 14.1.1: Summary of Demographics", style = "heading 2") |>
+  body_add_par("Safety Population (ADSL.SAFFL='Y')") |>
+  body_add_table(
+    value = data.frame(
+      Characteristic = c("Age (years)  ADSL.AGE", "  n", "  Mean (SD)"),
+      `Treatment A` = rep("", 3),
+      `Placebo`     = rep("", 3),
+      check.names = FALSE,
+      stringsAsFactors = FALSE
+    ),
+    style = "table_template"
+  ) |>
+  body_add_par("Source: ADSL")
+out_custom <- file.path(here, "annotated_shell_custom_heading.docx")
+print(doc_custom, target = out_custom)
+cat("Wrote:", out_custom, "\n")
+
+## A heading whose number is found but that has NO title text and no page
+## header to recover one from: the table follows the heading directly. Drives
+## the "heading number found but no title" WARN.
+doc_no_title <- read_docx() |>
+  body_add_par("Table 14.9.1", style = "heading 2") |>
+  body_add_table(
+    value = data.frame(
+      Characteristic = c("Age (years)  ADSL.AGE", "  n", "  Mean (SD)"),
+      `Treatment A` = rep("", 3),
+      `Placebo`     = rep("", 3),
+      check.names = FALSE,
+      stringsAsFactors = FALSE
+    ),
+    style = "table_template"
+  ) |>
+  body_add_par("Source: ADSL")
+out_no_title <- file.path(here, "annotated_shell_no_title.docx")
+print(doc_no_title, target = out_no_title)
+cat("Wrote:", out_no_title, "\n")

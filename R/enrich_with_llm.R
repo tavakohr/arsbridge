@@ -242,6 +242,10 @@ enrich_with_llm <- function(section,
     tlf_number            = section$tlf_number,
     tlf_type              = section$tlf_type,
     title                 = section$title,
+    ## The undecomposed heading line, when the shell carried title /
+    ## population / annotation on one line -- extra context for the model
+    ## in case the deterministic split got a boundary wrong.
+    raw_heading           = section$raw_heading %||% "",
     population            = section$population_text,
     population_annotation = section$population_annot,
     col_headers           = section$col_headers,

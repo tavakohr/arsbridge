@@ -191,7 +191,9 @@ extract_shell_llm <- function(section, spec_lookup = NULL,
     }
 
     ## Build the annotation string (variable + optional where-clause).
-    where <- trimws(p$where_clause %||% "")
+    ## Canonicalize quotes so an LLM-proposed where-clause with double
+    ## quotes ("Y") lands in the same single-quote form the parser emits.
+    where <- .canon_annotation(trimws(p$where_clause %||% ""))
     annotation <- if (nzchar(where)) paste0(ref, " WHERE ", where) else ref
 
     ## Bare re-read of a variable another row already carries with high

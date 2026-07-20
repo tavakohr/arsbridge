@@ -60,8 +60,10 @@ each TLF report:
 4. **Row filters.** When a row represents one value of a variable (e.g. row
    `Completed` for `ADSL.EOSSTT`), put the condition in `where`, e.g.
    `"where": "EOSSTT='COMPLETED'"`. Use single quotes around values.
-5. **Key each TLF by its number** exactly as in the shell heading
-   (e.g. `"14.1.1"` for "Table 14.1.1: ...").
+5. **Key each TLF by its number** exactly as in the shell heading,
+   whatever the heading style: `"14.1.1"` for "Table 14.1.1: Title", and
+   also `"14.1.1"` for a one-line heading like "Table 14.1.1 Title -
+   Screened Subjects ADSL.SCRNFL='Y' [PROGRAMMING DATASETS USED: ADSL]".
 6. Every field except `bindings` is optional — omit what you cannot
    determine rather than guessing.
 
