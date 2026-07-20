@@ -264,9 +264,9 @@ ars_validate_supplement <- function(path, adam_spec_path = NULL) {
     invisible(NULL)
   }
 
-  known_fields <- c("bindings", "columns", "population", "analysis_type",
-                    "ars_method_name", "by_variables", "include_total",
-                    "is_supported", "unsupported_reason")
+  known_fields <- c("title", "bindings", "columns", "population",
+                    "analysis_type", "ars_method_name", "by_variables",
+                    "include_total", "is_supported", "unsupported_reason")
 
   if (!is.null(supp)) {
     for (tlf in names(supp$tlfs)) {
@@ -279,6 +279,10 @@ ars_validate_supplement <- function(path, adam_spec_path = NULL) {
       if (length(extra) > 0) {
         note("INFO", tlf, "fields", sprintf(
           "unknown field(s) ignored: %s", paste(extra, collapse = ", ")))
+      }
+      if (!nzchar(trimws(as.character(entry$title %||% "")))) {
+        note("INFO", tlf, "title",
+             "add a 'title' (the shell heading text) so arsbridge can confirm it parsed this same table")
       }
       for (i in seq_along(entry$bindings %||% list())) {
         b <- entry$bindings[[i]]
@@ -376,6 +380,77 @@ ars_validate_supplement <- function(path, adam_spec_path = NULL) {
   keys[!vapply(keys, function(k) .norm_tlf_key(k) %in% ids, logical(1))]
 }
 
+#' TRUE when a parsed title and a supplement title agree, tolerantly. The
+#' parser may keep more of the heading than the assistant (or vice versa) --
+#' e.g. the parser drops the population, the assistant drops a subtitle -- so
+#' equal-after-normalisation OR one containing the other counts as agreement.
+#' A short title needs exact normalised equality (containment on 1-2 words is
+#' meaningless).
+#' @noRd
+.titles_agree <- function(parsed, supplied) {
+  a <- .norm_label(parsed)
+  b <- .norm_label(supplied)
+  if (!nzchar(a) || !nzchar(b)) return(TRUE)     # nothing to disagree about
+  if (identical(a, b)) return(TRUE)
+  if (min(nchar(a), nchar(b)) < 6L) return(FALSE)
+  grepl(a, b, fixed = TRUE) || grepl(b, a, fixed = TRUE)
+}
+
+#' Cross-check the supplement's table inventory against the parsed sections.
+#'
+#' The supplement tier is the only one whose author (a chat assistant) read
+#' the whole shell independently, so it is where "is arsbridge using the
+#' right set of tables?" can actually be checked. Returns a list of findings
+#' `list(severity, tlf_number, problem, action)` -- all non-blocking -- for:
+#'   1. a supplement TLF that matches no parsed section (extra / mis-numbered);
+#'   2. a parsed section that the supplement never mentions (a table the
+#'      supplement author saw but arsbridge may have parsed differently, or
+#'      one the author omitted);
+#'   3. a matched pair whose titles disagree (possible wrong table).
+#' @noRd
+.supplement_crosscheck <- function(supp, sections) {
+  findings <- list()
+  add <- function(sev, tlf, problem, action) {
+    findings[[length(findings) + 1L]] <<-
+      list(severity = sev, tlf_number = tlf, problem = problem, action = action)
+  }
+
+  section_ids <- vapply(sections, function(s) s$tlf_number %||% "", character(1))
+
+  ## 1. supplement entries with no matching parsed table.
+  for (key in .supplement_unmatched_tlfs(supp, section_ids)) {
+    add("WARN", key,
+        sprintf("Supplement entry '%s' matches no TLF parsed from the shell", key),
+        "Entry ignored -- key each TLF by the number in its shell heading (e.g. '14.1.1')")
+  }
+
+  ## 2 + 3. parsed tables missing from the supplement, and title mismatches.
+  supp_keys_norm <- vapply(names(supp$tlfs %||% list()), .norm_tlf_key, character(1))
+  for (sec in sections) {
+    in_supp <- .norm_tlf_key(sec$tlf_number) %in% supp_keys_norm
+    if (!in_supp) {
+      add("WARN", sec$tlf_number,
+          sprintf("TLF %s (%s) was parsed from the shell but the supplement has no entry for it",
+                  sec$tlf_number,
+                  if (nzchar(trimws(sec$title %||% ""))) sec$title else "no title"),
+          "Confirm the supplement covers every table -- a missing entry means no supplement help for this one")
+      next
+    }
+    supp_tlf   <- .match_supplement_tlf(supp, sec$tlf_number)
+    supp_title <- trimws(as.character(supp_tlf$title %||% ""))
+    parsed_title <- trimws(sec$title %||% "")
+    if (nzchar(supp_title) && nzchar(parsed_title) &&
+        !.titles_agree(parsed_title, supp_title)) {
+      add("WARN", sec$tlf_number,
+          sprintf("TLF %s: shell parsed the title as '%s' but the supplement says '%s'",
+                  sec$tlf_number, parsed_title, supp_title),
+          "Verify arsbridge is using the right table -- the heading and the supplement disagree on the title")
+    }
+  }
+
+  findings
+}
+
 #' Apply one TLF's supplement bindings to a parsed section.
 #'
 #' Fill-gaps-only policy (decided with the package owner): a supplement
@@ -392,6 +467,20 @@ ars_validate_supplement <- function(path, adam_spec_path = NULL) {
   if (is.null(supp_tlf)) return(sec)
   spec_keys <- toupper(names(spec_lookup %||% list()))
   gate_ok <- function(ref) length(spec_keys) == 0 || ref %in% spec_keys
+
+  ## Fill an empty parsed title from the supplement (the assistant read the
+  ## heading directly). Only when the shell gave us nothing -- a parsed title
+  ## always wins, and a disagreement is surfaced by .supplement_crosscheck().
+  supp_title <- trimws(as.character(supp_tlf$title %||% ""))
+  if (nzchar(supp_title) && !nzchar(trimws(sec$title %||% ""))) {
+    sec$title <- supp_title
+    diag_add(
+      stage = "supplement", severity = "INFO", input = INPUT_SUPPLEMENT,
+      problem = sprintf("TLF %s: title sourced from the supplement", sec$tlf_number),
+      tlf_number = sec$tlf_number, location = supp_title,
+      action = "Shell heading had no title; verify the supplement title against the shell"
+    )
+  }
 
   labels_norm <- vapply(sec$stub_rows %||% list(),
                         function(r) .norm_label(r$label), character(1))

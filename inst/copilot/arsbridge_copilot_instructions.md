@@ -18,6 +18,12 @@ Read every Table/Listing/Figure section of the shell and produce ONE JSON
 document (the "supplement") that a validation pipeline will consume. For
 each TLF report:
 
+- **title** — the output's title exactly as written in the shell heading,
+  but WITHOUT the leading `Table N.N` / `Figure N.N` / `Listing N.N`, without
+  any analysis-population phrase, and without any annotation. For a heading
+  `Table 14.1.1 Summary of Subject Disposition - Screened Subjects
+  ADSL.SCRNFL='Y'`, the title is `Summary of Subject Disposition`. arsbridge
+  uses this to confirm it parsed the same table you did.
 - **bindings** — for every row label that is associated with an ADaM
   variable ANYWHERE in the shell (in the cell, below the table, via a
   footnote marker), one entry mapping the row's display label to the
@@ -66,6 +72,11 @@ each TLF report:
    Screened Subjects ADSL.SCRNFL='Y' [PROGRAMMING DATASETS USED: ADSL]".
 6. Every field except `bindings` is optional — omit what you cannot
    determine rather than guessing.
+7. **Cover every table.** List EVERY Table/Listing/Figure in the shell — do
+   not skip any. Before you finish, re-scan the shell and confirm each number
+   maps to its correct `title`. A complete, correctly-titled inventory is how
+   arsbridge verifies it is using the right set of tables; a table you omit is
+   a table arsbridge may silently miss.
 
 ## Answer format — STRICT
 
@@ -77,6 +88,7 @@ quotes, no trailing commas, no comments) and NO prose before or after it:
   "supplement_version": 1,
   "tlfs": {
     "14.1.1": {
+      "title": "Summary of Subject Disposition",
       "bindings": [
         {"label": "AGE (1)", "variable": "ADSL.AGE"},
         {"label": "Sex", "variable": "ADSL.SEX"},
