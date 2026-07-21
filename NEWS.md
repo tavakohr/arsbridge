@@ -1,5 +1,22 @@
 # arsbridge (development version)
 
+* **Supplement format version 2: a `column_groups` field.** In the no-API
+  supplement workflow, a table whose result columns are values of one variable
+  (cohort columns keyed on `ADSL.COHORTN`) could not be expressed when the shell
+  header cells carried no machine-readable `DATASET.VAR=value` filter -- the
+  format had nowhere to hold the per-column conditions, so the grouping shipped
+  with an empty `groups[]`. Each TLF entry may now carry an ordered
+  `column_groups` array of `{label, where}` objects; `where` is a full
+  condition (`ADSL.COHORTN=1`, `is.na(ADSL.COHORTN)`) using the same grammar as
+  an annotated header. `spec_to_ars(supplement = ...)` feeds these into the
+  existing group builder, so each becomes one display column (including a
+  missing/Unknown bucket) with a WhereClause in the ARS JSON. The shell's own
+  header-annotation path still wins when it captured the columns itself; every
+  `where` passes the ADaM-spec gate; `ars_validate_supplement()` checks the new
+  field. The instruction file `ars_copilot_instructions()` writes is updated to
+  version 2 and now tells the assistant to put column conditions here, never to
+  fold them into `bindings`. Existing version-1 supplements must be regenerated.
+
 * **Column-header annotations now parse the `is.na()` / `missing()` call
   forms** that annotated shells actually use for a missing/Unknown group --
   R's `is.na(ADSL.COHORTN)` and SAS's `missing(COHORTN)`, plus the negations

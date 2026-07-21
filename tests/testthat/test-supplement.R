@@ -30,7 +30,7 @@
 }
 
 .supp_minimal <- function(tlfs) {
-  list(supplement_version = 1L, tlfs = tlfs)
+  list(supplement_version = 2L, tlfs = tlfs)
 }
 
 no_llm_keys <- function(code) {
@@ -47,7 +47,7 @@ test_that("read_supplement accepts plain, fenced, and smart-quoted JSON", {
   supp <- .supp_minimal(list(`14.1.1` = list(
     bindings = list(list(label = "Age (years)", variable = "ADSL.AGE")))))
   path <- .write_supp(supp)
-  expect_equal(read_supplement(path)$supplement_version, 1L)
+  expect_equal(read_supplement(path)$supplement_version, 2L)
 
   fenced <- tempfile(fileext = ".json")
   writeLines(c("Here is the supplement:", "```json",
@@ -57,7 +57,7 @@ test_that("read_supplement accepts plain, fenced, and smart-quoted JSON", {
 
   smart <- tempfile(fileext = ".json")
   writeLines(gsub('"', "“", readLines(path)), smart)  ## all quotes smart
-  expect_equal(read_supplement(smart)$supplement_version, 1L)
+  expect_equal(read_supplement(smart)$supplement_version, 2L)
 })
 
 test_that("read_supplement aborts on malformed JSON, bad version, missing tlfs", {
@@ -69,7 +69,7 @@ test_that("read_supplement aborts on malformed JSON, bad version, missing tlfs",
                                 tlfs = list(`14.1.1` = list())))
   expect_error(read_supplement(wrong_ver), "version mismatch")
 
-  no_tlfs <- .write_supp(list(supplement_version = 1L))
+  no_tlfs <- .write_supp(list(supplement_version = 2L))
   expect_error(read_supplement(no_tlfs), "tlfs")
 })
 
@@ -79,7 +79,7 @@ test_that("a double-quoted where value is auto-repaired to single quotes", {
   ## `='...'` before parsing, so the file loads instead of aborting.
   dq <- tempfile(fileext = ".json")
   writeLines(
-    paste0('{"supplement_version":1,"tlfs":{"14.1.1":{"bindings":',
+    paste0('{"supplement_version":2,"tlfs":{"14.1.1":{"bindings":',
            '[{"label":"Underlying","variable":"ADMH.MHTERM",',
            '"where":"MHTERM not null and MHSCAT="UNDERLYING CONDITIONS""}]}}}'),
     dq)
@@ -147,6 +147,34 @@ test_that("validator applies the spec gate when a spec path is given", {
                     grepl("not in the ADaM spec", out$problem)))
 })
 
+test_that("validator accepts column_groups and flags a single-entry axis", {
+  ok <- .write_supp(.supp_minimal(list(`14.1.2` = list(
+    title = "Key Protocol Deviations",
+    bindings = list(list(label = "Category", variable = "ADDV.DVCAT")),
+    columns = "ADSL.COHORTN",
+    column_groups = list(
+      list(label = "Cohort A", where = "ADSL.COHORTN=1"),
+      list(label = "Unknown Cohort", where = "is.na(ADSL.COHORTN)"))))))
+  out <- suppressMessages(ars_validate_supplement(ok))
+  expect_false(any(out$where == "column_groups" & out$severity == "FAIL"))
+
+  ## A single column group is not a grouping axis -> WARN.
+  lone <- .write_supp(.supp_minimal(list(`14.1.2` = list(
+    columns = "ADSL.COHORTN",
+    column_groups = list(list(label = "Only", where = "ADSL.COHORTN=1"))))))
+  out <- suppressMessages(ars_validate_supplement(lone))
+  expect_true(any(out$severity == "WARN" & out$where == "column_groups"))
+
+  ## A group with no where is a FAIL.
+  nowhere <- .write_supp(.supp_minimal(list(`14.1.2` = list(
+    columns = "ADSL.COHORTN",
+    column_groups = list(
+      list(label = "A", where = "ADSL.COHORTN=1"),
+      list(label = "B"))))))
+  out <- suppressMessages(ars_validate_supplement(nowhere))
+  expect_true(any(out$severity == "FAIL" & grepl("column_groups", out$where)))
+})
+
 ## --- .apply_supplement_bindings --------------------------------------------
 
 test_that("supplement fills only unannotated rows; regex wins conflicts", {
@@ -205,6 +233,71 @@ test_that("columns and population apply only when the shell left them empty", {
     sec, list(columns = "ADSL.SEX", population = "ADSL.AGE='X'"), .supp_spec)
   expect_equal(out$column_annotation, "ADSL.TRT01A")
   expect_equal(out$population_annot, "ADSL.SAFFL='Y'")
+})
+
+## --- supplement column_groups ----------------------------------------------
+
+.cg_supp_spec <- c(.supp_spec, list(ADSL.COHORTN = list(), ADDV.DVCAT = list()))
+
+test_that("supplement column_groups build the per-column axis when the shell has none", {
+  diag_reset()
+  sec <- .mk_supp_section()
+  sec$by_variable <- "COHORTN"; sec$by_variable_dataset <- "ADSL"
+  supp_tlf <- list(
+    columns = "ADSL.COHORTN",
+    column_groups = list(
+      list(label = "Cohort A",   where = "ADSL.COHORTN=1"),
+      list(label = "Cohort B", where = "ADSL.COHORTN=2"),
+      list(label = "Unknown Cohort",    where = "is.na(ADSL.COHORTN)")))
+  out <- .apply_supplement_bindings(sec, supp_tlf, .cg_supp_spec)
+
+  cg <- out$column_groups
+  expect_equal(cg$variable, "COHORTN")
+  expect_equal(cg$dataset, "ADSL")
+  expect_equal(vapply(cg$groups, `[[`, character(1), "label"),
+               c("Cohort A", "Cohort B", "Unknown Cohort"))
+  expect_equal(out$column_annotation, "ADSL.COHORTN")
+
+  ## Downstream: the existing builder emits three groups[], the Unknown one
+  ## carrying the empty-value EQ that is.na() parses to.
+  gf <- .build_grouping(out)
+  expect_length(gf$groups, 3)
+  expect_equal(unlist(gf$groups[[1]]$condition$condition$value), "1")
+  expect_equal(gf$groups[[1]]$condition$condition$comparator, "EQ")
+  expect_length(gf$groups[[3]]$condition$condition$value, 0)
+
+  recs <- diag_records()
+  expect_true(any(recs$severity == "INFO" &
+                    grepl("column-group condition", recs$problem)))
+})
+
+test_that("shell-derived column groups are not overwritten by the supplement", {
+  sec <- .mk_supp_section()
+  sec$column_groups <- list(
+    variable = "COHORTN", dataset = "ADSL",
+    groups = list(list(label = "Shell A", annotation = "ADSL.COHORTN=1",
+                       order = 1L)))
+  supp_tlf <- list(columns = "ADSL.COHORTN", column_groups = list(
+    list(label = "Supp A", where = "ADSL.COHORTN=1"),
+    list(label = "Supp B", where = "ADSL.COHORTN=2")))
+  out <- .apply_supplement_bindings(sec, supp_tlf, .cg_supp_spec)
+  expect_length(out$column_groups$groups, 1)
+  expect_equal(out$column_groups$groups[[1]]$label, "Shell A")
+})
+
+test_that("an out-of-spec column-group where is dropped with a FAIL; valid ones stay", {
+  diag_reset()
+  sec <- .mk_supp_section()
+  sec$by_variable <- "COHORTN"
+  supp_tlf <- list(columns = "ADSL.COHORTN", column_groups = list(
+    list(label = "Cohort A",   where = "ADSL.COHORTN=1"),
+    list(label = "Cohort B", where = "ADSL.COHORTN=2"),
+    list(label = "Bad",              where = "ADSL.FAKEVAR=9")))
+  out <- .apply_supplement_bindings(sec, supp_tlf, .cg_supp_spec)
+
+  expect_length(out$column_groups$groups, 2)   ## bad dropped, two valid kept
+  recs <- diag_records()
+  expect_true(any(recs$severity == "FAIL" & grepl("ADSL.FAKEVAR", recs$problem)))
 })
 
 ## --- enrichment passthrough -------------------------------------------------
@@ -374,6 +467,42 @@ test_that("spec_to_ars(supplement=) binds gaps and records the mode", {
   expect_true(any(recs$stage == "supplement" & grepl("applied", recs$problem)))
   ## No 'deterministic mode' setup WARN in supplement mode.
   expect_false(any(recs$stage == "setup"))
+})
+
+test_that("spec_to_ars emits populated groups[] from supplement column_groups", {
+  ## End-to-end: a supplement column_groups on a value-conditioned axis (SEX,
+  ## which the shell does not carry as a machine-readable header filter) must
+  ## reach the ARS JSON as a grouping factor with per-column groups[].
+  supp_path <- .write_supp(.supp_minimal(list(
+    `14.1.1` = list(
+      bindings = list(list(label = "Age (years)", variable = "ADSL.AGE")),
+      columns = "ADSL.SEX",
+      column_groups = list(
+        list(label = "Male",   where = "ADSL.SEX='M'"),
+        list(label = "Female", where = "ADSL.SEX='F'")),
+      analysis_type = "CONTINUOUS",
+      by_variables = list("SEX")
+    ))))
+  out_json <- tempfile(fileext = ".json")
+  suppressMessages(no_llm_keys(spec_to_ars(
+    shell_path     = test_path("fixtures/annotated_shell_2tlf_minimal.docx"),
+    adam_spec_path = test_path("fixtures/adam_spec_minimal.xlsx"),
+    supplement     = supp_path,
+    output_path    = out_json,
+    report_path    = tempfile(fileext = ".xlsx"),
+    verbose        = FALSE
+  )))
+
+  ars <- jsonlite::fromJSON(out_json, simplifyVector = FALSE)
+  sex_gf <- Filter(function(g)
+    identical(toupper(g$groupingVariable %||% ""), "SEX"),
+    ars$analysisGroupings)
+  expect_length(sex_gf, 1)
+  groups <- sex_gf[[1]]$groups
+  expect_length(groups, 2)
+  expect_setequal(vapply(groups, function(g) g$label, character(1)),
+                  c("Male", "Female"))
+  expect_equal(groups[[1]]$condition$condition$variable, "SEX")
 })
 
 ## --- title: known field, fill, and the table-set cross-check ---------------
