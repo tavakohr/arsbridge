@@ -20,7 +20,7 @@
 ##     dropped and logged as blockers, never shipped;
 ##   * versioned format (supplement_version) so old files fail loudly.
 
-.SUPPLEMENT_VERSION <- 1L
+.SUPPLEMENT_VERSION <- 2L
 
 ## Filename of the static instruction document (in inst/copilot/ and as the
 ## default name ars_copilot_instructions() writes).
@@ -280,9 +280,10 @@ ars_validate_supplement <- function(path, adam_spec_path = NULL) {
     invisible(NULL)
   }
 
-  known_fields <- c("title", "bindings", "columns", "population",
-                    "analysis_type", "ars_method_name", "by_variables",
-                    "include_total", "is_supported", "unsupported_reason")
+  known_fields <- c("title", "bindings", "columns", "column_groups",
+                    "population", "analysis_type", "ars_method_name",
+                    "by_variables", "include_total", "is_supported",
+                    "unsupported_reason")
 
   if (!is.null(supp)) {
     for (tlf in names(supp$tlfs)) {
@@ -310,6 +311,36 @@ ars_validate_supplement <- function(path, adam_spec_path = NULL) {
         check_var(b$variable, tlf, where)
       }
       if (!is.null(entry$columns))    check_var(entry$columns, tlf, "columns")
+      cg <- entry$column_groups %||% list()
+      if (length(cg) == 1) {
+        note("WARN", tlf, "column_groups",
+             "a column axis needs 2+ groups; a single entry is not a grouping -- use 'columns' alone or add the other columns")
+      }
+      axis_var <- toupper(trimws(as.character(entry$columns %||% "")))
+      for (i in seq_along(cg)) {
+        g <- cg[[i]]
+        where <- sprintf("column_groups[%d]", i)
+        if (!is.list(g) || !nzchar(trimws(as.character(g$label %||% "")))) {
+          note("FAIL", tlf, where, "regenerate: each column group needs a non-empty 'label' (the column header text)")
+          next
+        }
+        w <- trimws(as.character(g$where %||% ""))
+        if (!nzchar(w)) {
+          note("FAIL", tlf, where, "regenerate: each column group needs a 'where' condition (e.g. \"ADSL.COHORTN=1\" or \"is.na(ADSL.COHORTN)\")")
+          next
+        }
+        refs <- extract_annotation_vars(w)
+        if (length(refs) == 0) {
+          note("FAIL", tlf, where, sprintf(
+            "regenerate: 'where' has no DATASET.VARIABLE reference: '%s'", w))
+        } else {
+          for (r in refs) check_var(r, tlf, where)
+          if (nzchar(axis_var) && !axis_var %in% toupper(refs)) {
+            note("INFO", tlf, where, sprintf(
+              "'where' does not reference the column axis %s -- confirm this column belongs to that axis", axis_var))
+          }
+        }
+      }
       if (!is.null(entry$population)) {
         pop_refs <- extract_annotation_vars(as.character(entry$population))
         if (length(pop_refs) == 0) {
@@ -580,6 +611,49 @@ ars_validate_supplement <- function(path, adam_spec_path = NULL) {
         problem = sprintf("Supplement column variable %s is not in the ADaM spec; rejected.", cols),
         fix = "Fix the supplement's 'columns' field or add the variable to the spec.",
         tlf_number = sec$tlf_number)
+    }
+  }
+  ## Per-column group conditions: only when the deterministic shell pass
+  ## (.resolve_table_column_groups, run in .finalize_section BEFORE this)
+  ## found none -- shell/regex wins, matching the fill-gaps policy above.
+  ## Each entry's `where` is a full annotation the shell header path would
+  ## have produced, so it flows through the same .build_group_levels() ->
+  ## groups[] builder with no translation.
+  cg <- supp_tlf$column_groups %||% list()
+  if (length(cg) >= 2 && is.null(sec$column_groups) && nzchar(cols)) {
+    var  <- sub("^.*\\.", "", cols)
+    ds   <- sub("\\..*$", "", cols)
+    groups <- list(); n_dropped <- 0L
+    for (g in cg) {
+      label <- trimws(as.character(g$label %||% ""))
+      where <- trimws(as.character(g$where %||% ""))
+      if (!nzchar(label) || !nzchar(where)) next
+      refs <- toupper(extract_annotation_vars(where))
+      if (length(refs) == 0 || !all(vapply(refs, gate_ok, logical(1)))) {
+        n_dropped <- n_dropped + 1L
+        .diag_gap(
+          stage = "supplement", severity = "FAIL", input = INPUT_SUPPLEMENT,
+          problem = sprintf("Supplement column group '%s' condition '%s' has no in-spec DATASET.VARIABLE; rejected.",
+                            label, where),
+          why = "A column condition referencing a variable absent from the ADaM spec is treated as a hallucination, never shipped.",
+          fix = sprintf("Fix this column group's 'where' in the supplement, or add the variable to the ADaM spec."),
+          tlf_number = sec$tlf_number, location = label)
+        next
+      }
+      groups[[length(groups) + 1L]] <- list(
+        label = label, annotation = where, order = length(groups) + 1L)
+    }
+    if (length(groups) >= 2) {
+      sec$column_groups <- list(variable = var, dataset = ds, groups = groups)
+      if (is.null(sec$column_annotation)) sec$column_annotation <- cols
+      diag_add(
+        stage = "supplement", severity = "INFO", input = INPUT_SUPPLEMENT,
+        problem = sprintf("%d column-group condition(s) sourced from the supplement for %s%s",
+                          length(groups), cols,
+                          if (n_dropped > 0) sprintf(" (%d rejected by the spec gate)", n_dropped) else ""),
+        tlf_number = sec$tlf_number,
+        action = "Each becomes one display column; verify the labels and conditions in the ARS JSON"
+      )
     }
   }
   pop <- trimws(as.character(supp_tlf$population %||% ""))

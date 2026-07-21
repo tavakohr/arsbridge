@@ -1,4 +1,4 @@
-# arsbridge supplement request (format version 1)
+# arsbridge supplement request (format version 2)
 
 You are an expert CDISC clinical statistical programmer. Together with this
 instruction file you have been given TWO files from a clinical study:
@@ -33,10 +33,20 @@ each TLF report:
 - **columns** — the variable whose values form the table's result columns
   (usually the treatment variable, e.g. `ADSL.TRT01A`), when identifiable
   from the column headers or a `Treatment columns -> ...` line. Keep this a
-  SINGLE `DATASET.VARIABLE`: when the shell's header cells each carry their
-  own filter (`Cohort A ... ADSL.COHORTN=1`, `Unknown ... ADSL.COHORTN is
-  missing`), arsbridge reads those per-column conditions deterministically
-  from the shell itself — no supplement field is needed for them.
+  SINGLE `DATASET.VARIABLE`.
+- **column_groups** — the per-column conditions, when the result columns are
+  values of the `columns` variable but the shell's header cells do NOT already
+  carry a machine-readable `DATASET.VAR=value` filter you can see in the cell.
+  Give an ordered array (left-to-right = display order), one entry per column,
+  each `{"label": <header text>, "where": <full condition>}`. Write `where` as
+  a COMPLETE condition using the full `DATASET.VARIABLE`, exactly the grammar
+  arsbridge reads from an annotated header — e.g. `ADSL.COHORTN=1`,
+  `ADSL.COHORTN=2`, and the missing/Unknown bucket as `is.na(ADSL.COHORTN)`.
+  Enumerate EVERY such column, including the missing bucket. OMIT this field
+  when: the shell's header cells already carry the filters (arsbridge reads
+  those itself), or the table has a single non-grouped column, or the columns
+  are a treatment variable arsbridge groups by value automatically. Do NOT
+  also add a `Total` column here — use `include_total`.
 - **population** — the analysis-population condition when annotated
   (e.g. `ADSL.SAFFL='Y'`).
 - **analysis_type** — one of `CONTINUOUS` (mean/SD/median summaries),
@@ -70,6 +80,12 @@ each TLF report:
 4. **Row filters.** When a row represents one value of a variable (e.g. row
    `Completed` for `ADSL.EOSSTT`), put the condition in `where`, e.g.
    `"where": "EOSSTT='COMPLETED'"`.
+   - **Column conditions go in `column_groups`, never in `bindings`.** A
+     `bindings` entry is a STUB ROW (a row label down the left of the table).
+     A condition that defines a result COLUMN (e.g. a cohort at the top of the
+     table) belongs in `column_groups`. Do not create a binding whose label is
+     a column header like `(N=XX)` to smuggle a column condition in — it will
+     not match any row and is dropped.
 5. **Single quotes inside values — NEVER double quotes.** A double quote `"`
    is reserved for JSON structure. Every literal value INSIDE any string (a
    `where` condition, a `population`, a `title`) MUST use a single quote `'`.
@@ -113,7 +129,7 @@ no trailing commas, no comments):
 
 ```json
 {
-  "supplement_version": 1,
+  "supplement_version": 2,
   "tlfs": {
     "14.1.1": {
       "title": "Summary of Subject Disposition",
@@ -130,12 +146,31 @@ no trailing commas, no comments):
       "include_total": true,
       "is_supported": true,
       "unsupported_reason": ""
+    },
+    "14.1.2": {
+      "title": "Key Protocol Deviations",
+      "bindings": [
+        {"label": "Protocol Deviation Category", "variable": "ADDV.DVCAT"}
+      ],
+      "columns": "ADSL.COHORTN",
+      "column_groups": [
+        {"label": "Cohort A", "where": "ADSL.COHORTN=1"},
+        {"label": "Cohort B", "where": "ADSL.COHORTN=2"},
+        {"label": "Unknown Cohort", "where": "is.na(ADSL.COHORTN)"}
+      ],
+      "population": "ADSL.ELIGFL='Y'",
+      "analysis_type": "CATEGORICAL",
+      "ars_method_name": "Count and Percentage",
+      "by_variables": ["COHORTN"],
+      "include_total": true,
+      "is_supported": true,
+      "unsupported_reason": ""
     }
   }
 }
 ```
 
-The `"supplement_version": 1` field is required — echo it exactly. If you
+The `"supplement_version": 2` field is required — echo it exactly. If you
 cannot process a TLF at all, omit it from `tlfs` rather than emitting an
 empty or invented entry.
 
