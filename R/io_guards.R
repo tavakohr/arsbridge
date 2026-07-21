@@ -68,7 +68,7 @@ INPUT_SUPPLEMENT <- "Copilot supplement (.json)"
       is.na(dir) || !nzchar(dir)) {
     cli::cli_abort(c(
       "x" = "No {doc} folder was supplied ({.arg {arg}} is empty or missing).",
-      "i" = "To fix: pass the folder that holds your {doc} files (.xpt or .csv)."
+      "i" = "To fix: pass the folder that holds your {doc} files (.xpt, .sas7bdat, or .csv)."
     ))
   }
   if (!dir.exists(dir)) {
@@ -101,16 +101,20 @@ INPUT_SUPPLEMENT <- "Copilot supplement (.json)"
   )
 }
 
-#' Read one ADaM dataset (.xpt or .csv) by full path. SOFT: a single bad
-#' dataset should not stop the whole run, so this records a FAIL diagnostic
-#' and returns NULL; callers already skip analyses whose data is NULL.
+#' Read one ADaM dataset (.xpt, .sas7bdat, or .csv) by full path. SOFT: a
+#' single bad dataset should not stop the whole run, so this records a FAIL
+#' diagnostic and returns NULL; callers already skip analyses whose data is
+#' NULL.
 #' @noRd
 .read_dataset <- function(path, ds_name) {
   is_xpt <- grepl("\\.xpt$", path, ignore.case = TRUE)
+  is_sas <- grepl("\\.sas7bdat$", path, ignore.case = TRUE)
   ds_up  <- toupper(ds_name)
   doc    <- paste0(INPUT_DATA, " ", ds_up)
   reader <- if (is_xpt) {
     function(p) haven::read_xpt(p)
+  } else if (is_sas) {
+    function(p) haven::read_sas(p)
   } else {
     function(p) utils::read.csv(p, stringsAsFactors = FALSE, check.names = FALSE)
   }
@@ -124,7 +128,8 @@ INPUT_SUPPLEMENT <- "Copilot supplement (.json)"
         why = "Every analysis that reads this dataset will be skipped.",
         fix = sprintf("Re-export %s as a valid %s and place it in the ADaM folder.",
                       basename(path),
-                      if (is_xpt) "SAS transport file (XPT v5 or v8)" else "CSV"),
+                      if (is_xpt) "SAS transport file (XPT v5 or v8)"
+                      else if (is_sas) "SAS data set (.sas7bdat)" else "CSV"),
         location = path
       )
       NULL

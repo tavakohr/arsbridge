@@ -1,5 +1,13 @@
 # arsbridge (development version)
 
+* **Native SAS `.sas7bdat` ADaM cuts are now read everywhere.** The per-TLF
+  standalone `{cards}` scripts emitted by `write_tlf_code()`, the execution
+  engine (`ars_to_ard()`), and the listing/figure renderers previously loaded
+  only `.xpt` and `.csv`; they now also match and read `.sas7bdat` via
+  `haven::read_sas()`. Loaders remain case-insensitive on the dataset name, and
+  when several formats of the same dataset are present the native SAS formats
+  (`.xpt`, then `.sas7bdat`) are preferred over `.csv`.
+
 * **Rewritten Copilot instruction file (extraction guidance version 3).** The
   file `ars_copilot_instructions()` writes is substantially expanded to make a
   chat assistant classify each annotation before emitting JSON: a mandatory

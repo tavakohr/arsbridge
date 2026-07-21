@@ -86,6 +86,30 @@ test_that(".read_dataset returns NULL and records a FAIL on an unreadable file",
   expect_true(any(diag_records()$severity == "FAIL"))
 })
 
+test_that(".read_dataset and .listing_load read a .sas7bdat cut", {
+  skip_if_not_installed("haven")
+  td <- withr::local_tempdir()
+  df <- data.frame(USUBJID = c("01", "02"), AGE = c(40, 50),
+                   stringsAsFactors = FALSE)
+  ## write_sas() only builds the fixture; deprecated in haven 2.5.2, so silence
+  ## it and skip if a future haven drops it -- read_sas is the path under test.
+  built <- tryCatch({
+    suppressWarnings(haven::write_sas(df, file.path(td, "adsl.sas7bdat")))
+    TRUE
+  }, error = function(e) FALSE)
+  skip_if_not(built, "haven::write_sas() unavailable to build the sas7bdat fixture")
+
+  ## The engine's SOFT reader reads it by full path.
+  eng <- .read_dataset(file.path(td, "adsl.sas7bdat"), "ADSL")
+  expect_s3_class(eng, "data.frame")
+  expect_equal(nrow(eng), 2)
+
+  ## The renderer loader finds it case-insensitively by dataset name.
+  lst <- arsbridge:::.listing_load(td, "ADSL")
+  expect_s3_class(lst, "data.frame")
+  expect_true(all(c("USUBJID", "AGE") %in% names(lst)))
+})
+
 test_that(".read_docx aborts on a file that is not a real .docx", {
   bad <- tempfile(fileext = ".docx")
   writeLines("not a docx", bad)
