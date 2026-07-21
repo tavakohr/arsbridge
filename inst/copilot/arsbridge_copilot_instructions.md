@@ -90,8 +90,22 @@ each TLF report:
 
 ## Answer format — STRICT
 
-Reply with EXACTLY ONE fenced code block containing strict JSON (double
-quotes, no trailing commas, no comments) and NO prose before or after it:
+**Preferred — deliver a downloadable file.** If you can create files (a
+code-interpreter / "Analyst" / Python tool), WRITE the JSON to a file named
+`supplement.json` and offer it as a **download link**, not just on-screen text.
+Write it programmatically with a real JSON serializer (e.g. Python
+`json.dump(obj, f, ensure_ascii=True)`) — never hand-type the JSON into the
+file. Serializing it guarantees correct quoting and escaping and removes the
+copy-paste errors (smart quotes, stray double quotes, truncation) that a
+pasted chat block introduces. The user saves the file and passes it straight
+to `spec_to_ars(supplement = "supplement.json")`.
+
+**Fallback — only if you cannot create files:** reply with EXACTLY ONE fenced
+code block containing strict JSON and NO prose before or after it; the user
+saves it as `supplement.json` themselves.
+
+Either way the content is the same strict JSON (double quotes for structure,
+no trailing commas, no comments):
 
 ```json
 {
@@ -123,14 +137,17 @@ empty or invented entry.
 
 ## Before you send — check the JSON parses
 
-Re-read your reply as strict JSON before sending it:
+Whether you deliver a file or a fenced block, verify the JSON is strict first:
 
-- It is exactly ONE fenced ```` ```json ```` block, no prose around it.
 - Every `"` is a JSON delimiter. NO value contains a raw double quote — every
   literal value (`where`, `population`, `title`) uses single quotes `'`.
 - No trailing commas, no comments, no `...` placeholders, no line breaks
   inside a string value.
 - Every key is unique within its object.
+- If you wrote a file, it is named `supplement.json` and offered as a download
+  (not only shown on screen). If you emitted a fenced block, it is exactly ONE
+  ```` ```json ```` block with no prose around it.
 
-If any check fails, fix it and re-emit the whole block. A single stray double
-quote makes the entire file unreadable ("invalid char in json text").
+If any check fails, fix it and re-send. A single stray double quote makes the
+whole file unreadable ("invalid char in json text") — writing the file with a
+real serializer is the surest way to avoid it.
