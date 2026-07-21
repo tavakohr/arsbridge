@@ -1,5 +1,16 @@
 # arsbridge (development version)
 
+* **Column-header annotations now parse the `is.na()` / `missing()` call
+  forms** that annotated shells actually use for a missing/Unknown group --
+  R's `is.na(ADSL.COHORTN)` and SAS's `missing(COHORTN)`, plus the negations
+  `!is.na(...)` / `not missing(...)`. Previously only the prose
+  `DATASET.VAR is missing` form was recognized, so a call-form Unknown-cohort
+  header silently failed to parse and its column vanished from the axis. A
+  companion coverage check now WARNs when a header names the column-axis
+  variable but its annotation does not parse into a condition, reporting how
+  many columns were captured versus expected -- so a narrowed axis is
+  surfaced rather than shipped quietly.
+
 * **Annotation-defined column axis: per-column filters in table header
   cells.** When two or more column headers carry a filter on the same
   variable -- `Cohort A (N=XX) ADSL.COHORTN=1`, `Cohort B (N=XX)

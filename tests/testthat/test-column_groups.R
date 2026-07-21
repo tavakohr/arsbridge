@@ -108,6 +108,28 @@ test_that("annotated header cells become ordered column-group definitions", {
   expect_true(any(secs[[1]]$col_headers == "Cohort A (N=XX)"))
 })
 
+test_that("an axis header that fails to parse is reported, not silently dropped", {
+  diag_reset()
+  ## Two parseable COHORTN headers set the axis; a third names COHORTN but
+  ## uses an unsupported operator, so it drops out of the groups.
+  sec <- list(
+    tlf_number = "T-14-9-9", tlf_type = "TABLE", title = "Guardrail",
+    .pending_column_annotations = list(
+      labels = c("Cohort A (N=XX)", "Cohort B (N=XX)", "Odd (N=XX)"),
+      annotations = c("ADSL.COHORTN=1", "ADSL.COHORTN=2",
+                      "ADSL.COHORTN ~= 3")))
+  out <- .resolve_table_column_groups(sec)
+
+  ## The two good columns survive.
+  expect_length(out$column_groups$groups, 2)
+  ## The dropped column is surfaced with both counts.
+  d <- ars_diagnostics()
+  hit <- grepl("did not parse into a condition", d$problem)
+  expect_true(any(hit))
+  expect_true(any(grepl("1 of 3 ADSL.COHORTN column headers", d$problem[hit],
+                        fixed = TRUE)))
+})
+
 ## --- ARS JSON groups[] ------------------------------------------------------
 
 test_that("column groups emit per-level groups[] with conditions", {
