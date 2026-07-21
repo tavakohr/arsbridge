@@ -32,7 +32,11 @@ each TLF report:
   `{"label": "AGE (1)", "variable": "ADSL.AGE"}`.
 - **columns** — the variable whose values form the table's result columns
   (usually the treatment variable, e.g. `ADSL.TRT01A`), when identifiable
-  from the column headers or a `Treatment columns -> ...` line.
+  from the column headers or a `Treatment columns -> ...` line. Keep this a
+  SINGLE `DATASET.VARIABLE`: when the shell's header cells each carry their
+  own filter (`Cohort A ... ADSL.COHORTN=1`, `Unknown ... ADSL.COHORTN is
+  missing`), arsbridge reads those per-column conditions deterministically
+  from the shell itself — no supplement field is needed for them.
 - **population** — the analysis-population condition when annotated
   (e.g. `ADSL.SAFFL='Y'`).
 - **analysis_type** — one of `CONTINUOUS` (mean/SD/median summaries),

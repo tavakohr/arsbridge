@@ -218,7 +218,10 @@ enrich_with_llm <- function(section,
   }
 
   section$groupings     <- groupings
-  section$include_total <- isTRUE(as.logical(parsed$include_total %||% FALSE))
+  ## A "Total (N=XX) ..." column header spotted by the parser is as good as
+  ## an LLM/supplement include_total answer.
+  section$include_total <- isTRUE(as.logical(parsed$include_total %||% FALSE)) ||
+    isTRUE(section$include_total_hint)
   ## Back-compat single-grouping fields = outermost grouping.
   first <- if (length(groupings) > 0) groupings[[1]] else NULL
   section$by_variable         <- first$variable %||% ""

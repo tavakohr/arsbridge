@@ -32,6 +32,12 @@ make_grouping_id <- function(by_variable) {
   paste0("GF_", .slug(by_variable))
 }
 
+#' Per-level Group ID inside a GroupingFactor (condition-defined columns)
+#' @noRd
+make_group_id <- function(variable, label) {
+  paste0("GRP_", .slug(variable), "_", .slug(label))
+}
+
 #' AnalysisMethod ID from method name
 #' @noRd
 make_method_id <- function(method_name) {

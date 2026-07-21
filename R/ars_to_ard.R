@@ -253,6 +253,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
   # Lookup maps built once from the spec and shared with resolve_analysis().
   analysis_to_output <- .build_analysis_to_output(spec)
   grouping_map       <- .build_grouping_map(spec)
+  grouping_groups    <- .build_grouping_groups_map(spec)
 
   # Helper functions to clean and evaluate filters
   clean_var_name <- function(var_name, df_names) {
@@ -424,7 +425,8 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
   n_selected    <- 0L   # how many analyses passed the user's id selection
   ard_list <- list()
   for (ana in spec[["analyses"]]) {
-    res <- resolve_analysis(ana, spec, subject_key, grouping_map, analysis_to_output)
+    res <- resolve_analysis(ana, spec, subject_key, grouping_map,
+                            analysis_to_output, grouping_groups)
     analysis_id <- res$analysis_id
     if (is.null(analysis_id)) {
       .diag_gap(
@@ -540,6 +542,65 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     }
     grouping_vars <- grouping_vars[grouping_vars %in% names(df_filtered)]
     by_arg <- if (length(grouping_vars) > 0) grouping_vars else NULL
+
+    ## Annotation-defined column groups: the shell's header cells carried one
+    ## condition per column ("Cohort A ... ADSL.COHORTN=1", "... is missing").
+    ## Keep only definitions whose variable survived into by_arg and whose
+    ## conditions are ADSL-resolvable (the derived factor must exist in both
+    ## the analysis frame and the ADSL denominator frame, or cards cannot
+    ## join them). The emitted code derives the same factor via case_when
+    ## (.group_mutate_expr); the legacy path derives it here so the
+    ## engine-equivalence guarantee holds.
+    group_defs <- list()
+    for (raw_var in names(res$group_defs %||% list())) {
+      clean <- unname(clean_var_name(raw_var, names(df_filtered)))
+      defs  <- res$group_defs[[raw_var]]
+      if (!clean %in% (by_arg %||% character())) next
+      adsl_only <- all(vapply(defs, function(d) {
+        refs <- .where_datasets(d$condition)
+        length(refs) == 0 || all(toupper(refs) == "ADSL")
+      }, logical(1)))
+      if (!adsl_only) next
+      group_defs[[clean]] <- defs
+    }
+    res$group_defs <- group_defs
+
+    for (grp_var in names(group_defs)) {
+      defs <- group_defs[[grp_var]]
+      ## Rows no condition claims fall out of the group columns (they become
+      ## a factor NA, which cards drops from the grouped pass) -- say how
+      ## many, once per analysis, so a shrinking column set is never silent.
+      matched <- Reduce(`|`, lapply(defs, function(d) {
+        eval_where_clause(df_filtered, d$condition)
+      }))
+      n_unmatched <- sum(!matched)
+      if (n_unmatched > 0) {
+        diag_add(
+          stage = "execute_ard", severity = "WARN", input = INPUT_DATA,
+          problem = sprintf(
+            "%d row(s) in %s match no column-group condition for %s",
+            n_unmatched, analysis_ds, grp_var),
+          location = analysis_id,
+          action = "Excluded from the group columns; still counted in the Total column when the shell has one"
+        )
+      }
+      if (legacy) {
+        derive_group_factor <- function(df) {
+          labels <- vapply(defs, function(d) d$label, character(1))
+          lbl <- rep(NA_character_, nrow(df))
+          for (d in defs) {
+            hit <- eval_where_clause(df, d$condition)
+            lbl[is.na(lbl) & hit] <- d$label
+          }
+          df[[grp_var]] <- factor(lbl, levels = labels)
+          df
+        }
+        df_filtered <- derive_group_factor(df_filtered)
+        if (grp_var %in% names(df_population)) {
+          df_population <- derive_group_factor(df_population)
+        }
+      }
+    }
 
     ## Resolve the stratification operand (CMH etc.) against the data, like the
     ## grouping vars. An absent or unknown strata means the method cannot

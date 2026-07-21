@@ -880,3 +880,31 @@ doc_no_title <- read_docx() |>
 out_no_title <- file.path(here, "annotated_shell_no_title.docx")
 print(doc_no_title, target = out_no_title)
 cat("Wrote:", out_no_title, "\n")
+
+## Column-group fixture: every column header carries its own filter
+## annotation, including a merged "Unknown" bucket for missing values --
+## the annotation-defined column axis. The Total header filters a different
+## variable and must be excluded from the groups (it drives include_total).
+doc_colgrp <- read_docx() |>
+  body_add_par("Table 14.2.1 Demographics by Cohort – Screened Subjects ADSL.SCRNFL='Y'") |>
+  body_add_table(
+    value = data.frame(
+      ` ` = c("Age (years)  ADSL.AGE",
+              "  n",
+              "  Mean (SD)",
+              "Sex, n (%)  ADSL.SEX",
+              "  Male",
+              "  Female"),
+      `Cohort A (N=XX) ADSL.COHORTN=1`       = rep("", 6),
+      `Cohort B (N=XX) ADSL.COHORTN=2`       = rep("", 6),
+      `Unknown Cohort (N=XX) ADSL.COHORTN is missing` = rep("", 6),
+      `Total (N=XX) All Patients where ADSL.SCRNFL='Y'` = rep("", 6),
+      check.names = FALSE,
+      stringsAsFactors = FALSE
+    ),
+    style = "table_template"
+  ) |>
+  body_add_par("Source: ADSL")
+out_colgrp <- file.path(here, "annotated_shell_column_groups.docx")
+print(doc_colgrp, target = out_colgrp)
+cat("Wrote:", out_colgrp, "\n")

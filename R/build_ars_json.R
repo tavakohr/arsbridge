@@ -816,7 +816,8 @@ build_ars_json <- function(sections,
   }
   out <- lapply(groupings, function(g) {
     if (!nzchar(g$variable %||% "")) return(NULL)
-    .build_grouping_one(g$variable, g$dataset %||% "ADSL")
+    .build_grouping_one(g$variable, g$dataset %||% "ADSL",
+                        column_groups = sec$column_groups)
   })
   Filter(Negate(is.null), out)
 }
@@ -827,10 +828,11 @@ build_ars_json <- function(sections,
 .build_grouping <- function(sec) {
   by_var <- sec$by_variable %||% ""
   if (!nzchar(by_var)) return(NULL)
-  .build_grouping_one(by_var, sec$by_variable_dataset %||% "ADSL")
+  .build_grouping_one(by_var, sec$by_variable_dataset %||% "ADSL",
+                      column_groups = sec$column_groups)
 }
 
-.build_grouping_one <- function(variable, dataset) {
+.build_grouping_one <- function(variable, dataset, column_groups = NULL) {
   list(
     id               = make_grouping_id(variable),
     name             = variable,
@@ -841,10 +843,50 @@ build_ars_json <- function(sections,
     groupingDataset  = dataset,
     groupingVariable = variable,
     dataDriven       = FALSE,
-    ## siera iterates JSON_AnalysisGroupings$groups[[e]]; emit empty array
-    ## so the iteration succeeds when no per-level groups are specified.
-    groups           = list()
+    ## Per-level groups when the shell's column headers defined them (each
+    ## header condition = one display column); otherwise the empty array
+    ## siera expects (it iterates JSON_AnalysisGroupings$groups[[e]]).
+    groups           = .build_group_levels(variable, column_groups)
   )
+}
+
+#' Per-level Group objects for a grouping factor, from the parser's
+#' `sec$column_groups`. Empty list when the section has none or they belong
+#' to a different variable. Each level's `condition` is the ARS WhereClause
+#' `parse_where_clause()` returns, so the executor and the code emitter
+#' consume it after the jsonlite round-trip with no translation.
+#' @noRd
+.build_group_levels <- function(variable, column_groups) {
+  if (is.null(column_groups) || length(column_groups$groups %||% list()) == 0) {
+    return(list())
+  }
+  bare_var <- toupper(sub("^.*\\.", "", variable))
+  if (!identical(toupper(column_groups$variable %||% ""), bare_var)) {
+    return(list())
+  }
+
+  out <- list()
+  for (def in column_groups$groups) {
+    condition <- parse_where_clause(def$annotation %||% "")
+    if (is.null(condition)) {
+      diag_add(
+        stage = "build_ars", severity = "WARN",
+        problem = sprintf(
+          "Column group '%s' has no parseable condition (%s); level dropped",
+          def$label %||% "", def$annotation %||% ""),
+        action = "That header column will be data-driven instead of condition-defined"
+      )
+      next
+    }
+    out[[length(out) + 1L]] <- list(
+      id        = make_group_id(bare_var, def$label %||% ""),
+      name      = def$label %||% "",
+      label     = def$label %||% "",
+      order     = def$order %||% (length(out) + 1L),
+      condition = condition
+    )
+  }
+  out
 }
 
 .build_method <- function(sec) {
