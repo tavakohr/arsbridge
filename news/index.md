@@ -2,6 +2,25 @@
 
 ## arsbridge (development version)
 
+- **Annotation-defined column axis: per-column filters in table header
+  cells.** When two or more column headers carry a filter on the same
+  variable – `Cohort A (N=XX) ADSL.COHORTN=1`,
+  `Cohort B (N=XX) ADSL.COHORTN=2`,
+  `Unknown Cohort (N=XX) ADSL.COHORTN is missing` – each condition now
+  becomes one display column, in shell order. This makes a
+  merged/derived column (an “Unknown” bucket collecting missing values)
+  expressible purely by annotation, with no ADaM change: the engine
+  derives the grouping in memory from the conditions, identically in the
+  executed ARD and the emitted
+  [cards](https://github.com/insightsengineering/cards) scripts (a
+  `case_when` factor built from the same where-clause predicates). The
+  conditions are carried in the ARS JSON as per-level `groups[]` entries
+  with WhereClauses. Rows matching no column are excluded from the group
+  columns and counted in a WARN; a `Total (N=XX) ...` header is
+  recognized as the overall column and switches `includeTotal` on. The
+  annotation grammar also gains the positive `DATASET.VAR is missing` /
+  `is null` form and parenthesized `IN ('a','b')` value lists.
+
 - **The Copilot instruction file now asks for a downloadable
   `supplement.json` file** (written programmatically with a real JSON
   serializer) rather than an on-screen block, with the fenced block kept

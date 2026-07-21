@@ -637,8 +637,16 @@ Table 14.1.1 Demographics - Screened Subjects ADSL.SCRNFL='Y' [PROGRAMMING DATAS
 <code>Subject ID</code> / <code>USUBJID</code>
 </td>
 </tr>
+<tr>
+<td>Column group (one filter per column header)</td>
+<td>
+<code>Label (N=XX) DATASET.VAR=value</code>, <code>... IN ('a','b')</code>, or <code>... is missing</code>
+</td>
+<td><code>Unknown Cohort (N=XX) ADSL.COHORTN is missing</code></td>
+</tr>
 </tbody>
 </table>
+<p><strong>Column-group headers</strong> define the whole column axis by annotation: when two or more header cells filter the <em>same</em> variable, each condition becomes one display column — so a merged column like an “Unknown” bucket (<code>ADSL.COHORTN is missing</code>) works with <strong>no ADaM change</strong>. Rows matching no column are excluded from the group columns (with a <code>WARN</code>), and a <code>Total (N=XX) ...</code> header is recognized as the overall column, not a group.</p>
 <p>The regex pass handles colour, bold/italic/underline, bracket, and plain-text patterns. The LLM pass handles everything else, including mixed or non-standard layouts.</p>
 <hr>
 </div>
