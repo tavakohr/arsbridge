@@ -15,7 +15,7 @@ ars_render_listing(
 \arguments{
 \item{ars_path}{Path to the CDISC ARS JSON.}
 
-\item{adam_dir}{Directory containing the ADaM datasets (.xpt/.csv).}
+\item{adam_dir}{Directory containing the ADaM datasets (.xpt/.sas7bdat/.csv).}
 
 \item{output_id}{Listing output id or name (case-insensitive).}
 

@@ -6,14 +6,17 @@
 ## label), and this renderer assembles those columns -- merging across datasets
 ## by subject -- directly from the ADaM data.
 
-## Minimal ADaM loader (xpt/csv), case-insensitive on dataset name.
+## Minimal ADaM loader (xpt/sas7bdat/csv), case-insensitive on dataset name.
+## Native SAS formats are preferred over .csv when both are present.
 .listing_load <- function(adam_dir, name) {
   if (is.null(name) || !nzchar(name)) return(NULL)
   files <- list.files(adam_dir, full.names = TRUE)
   base  <- tolower(basename(files))
   xpt <- files[base == tolower(paste0(name, ".xpt"))]
+  sas <- files[base == tolower(paste0(name, ".sas7bdat"))]
   csv <- files[base == tolower(paste0(name, ".csv"))]
   if (length(xpt)) return(as.data.frame(haven::read_xpt(xpt[1])))
+  if (length(sas)) return(as.data.frame(haven::read_sas(sas[1])))
   if (length(csv)) return(utils::read.csv(csv[1], stringsAsFactors = FALSE, check.names = FALSE))
   NULL
 }
@@ -49,7 +52,7 @@
 #' subject, applies the listing's population filter, and returns a `gt_tbl`.
 #'
 #' @param ars_path Path to the CDISC ARS JSON.
-#' @param adam_dir Directory containing the ADaM datasets (.xpt/.csv).
+#' @param adam_dir Directory containing the ADaM datasets (.xpt/.sas7bdat/.csv).
 #' @param output_id Listing output id or name (case-insensitive).
 #' @param subject_key Subject identifier for cross-dataset merges. Default
 #'   `"USUBJID"`.

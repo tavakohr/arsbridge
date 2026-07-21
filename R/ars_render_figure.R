@@ -22,7 +22,7 @@
 #'   errors with guidance.
 #'
 #' @param ars_path Path to the CDISC ARS JSON.
-#' @param adam_dir Directory of ADaM datasets (.xpt/.csv).
+#' @param adam_dir Directory of ADaM datasets (.xpt/.sas7bdat/.csv).
 #' @param output_id Figure output id or name.
 #' @param type Figure type; `"auto"` infers from the title.
 #' @param dataset ADaM dataset to plot. Default `NULL`: resolved from the

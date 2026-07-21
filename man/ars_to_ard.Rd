@@ -16,7 +16,7 @@ ars_to_ard(
 \arguments{
 \item{ars_path}{Path to the CDISC ARS JSON file.}
 
-\item{adam_dir}{Directory containing the ADaM datasets (.csv or .xpt).}
+\item{adam_dir}{Directory containing the ADaM datasets (.csv, .xpt, or .sas7bdat).}
 
 \item{output_ids}{Optional character vector of Output IDs to run only analyses
 referenced by those outputs. Matching is case-insensitive and checks both
@@ -51,7 +51,7 @@ traceability.
 \description{
 Reads a CDISC ARS JSON specification and executes the analyses defined within
 it directly using the \code{{cards}} package, dynamically loading the ADaM datasets
-(.csv or .xpt) and combining individual ARD tables into a single tidy ARD object.
+(.csv, .xpt, or .sas7bdat) and combining individual ARD tables into a single tidy ARD object.
 }
 \examples{
 \dontrun{
