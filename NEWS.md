@@ -1,5 +1,11 @@
 # arsbridge (development version)
 
+* **The Copilot instruction file now asks for a downloadable `supplement.json`
+  file** (written programmatically with a real JSON serializer) rather than an
+  on-screen block, with the fenced block kept as a fallback. Delivering a
+  serialized file avoids the copy-paste smart-quote / stray-double-quote /
+  truncation errors that a pasted chat block introduces.
+
 * **A supplement with double-quoted where-clause values now loads instead of
   aborting.** The most common Copilot mistake -- a comparison value quoted with
   double quotes (`MHSCAT="UNDERLYING CONDITIONS"`), which breaks the JSON --
