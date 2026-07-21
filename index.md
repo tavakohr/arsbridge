@@ -563,6 +563,15 @@ most common conventions:
 | Population flag (column header) | `[FLAG == "Y"]` | `[SAFFL == "Y"]` |
 | Colour-marked variable | Red `#C00000` run | `ADSL.AGE` in red text |
 | Listing column header | Label on line 1, variable on line 2 | `Subject ID` / `USUBJID` |
+| Column group (one filter per column header) | `Label (N=XX) DATASET.VAR=value`, `... IN ('a','b')`, or `... is missing` | `Unknown Cohort (N=XX) ADSL.COHORTN is missing` |
+
+**Column-group headers** define the whole column axis by annotation:
+when two or more header cells filter the *same* variable, each condition
+becomes one display column — so a merged column like an “Unknown” bucket
+(`ADSL.COHORTN is missing`) works with **no ADaM change**. Rows matching
+no column are excluded from the group columns (with a `WARN`), and a
+`Total (N=XX) ...` header is recognized as the overall column, not a
+group.
 
 The regex pass handles colour, bold/italic/underline, bracket, and
 plain-text patterns. The LLM pass handles everything else, including
