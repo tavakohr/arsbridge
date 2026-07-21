@@ -2,6 +2,40 @@
 
 ## arsbridge (development version)
 
+- **Supplement format version 2: a `column_groups` field.** In the
+  no-API supplement workflow, a table whose result columns are values of
+  one variable (cohort columns keyed on `ADSL.COHORTN`) could not be
+  expressed when the shell header cells carried no machine-readable
+  `DATASET.VAR=value` filter – the format had nowhere to hold the
+  per-column conditions, so the grouping shipped with an empty
+  `groups[]`. Each TLF entry may now carry an ordered `column_groups`
+  array of `{label, where}` objects; `where` is a full condition
+  (`ADSL.COHORTN=1`, `is.na(ADSL.COHORTN)`) using the same grammar as an
+  annotated header. `spec_to_ars(supplement = ...)` feeds these into the
+  existing group builder, so each becomes one display column (including
+  a missing/Unknown bucket) with a WhereClause in the ARS JSON. The
+  shell’s own header-annotation path still wins when it captured the
+  columns itself; every `where` passes the ADaM-spec gate;
+  [`ars_validate_supplement()`](https://tavakohr.github.io/arsbridge/reference/ars_validate_supplement.md)
+  checks the new field. The instruction file
+  [`ars_copilot_instructions()`](https://tavakohr.github.io/arsbridge/reference/ars_copilot_instructions.md)
+  writes is updated to version 2 and now tells the assistant to put
+  column conditions here, never to fold them into `bindings`. Existing
+  version-1 supplements must be regenerated.
+
+- **Column-header annotations now parse the
+  [`is.na()`](https://rdrr.io/r/base/NA.html) /
+  [`missing()`](https://rdrr.io/r/base/missing.html) call forms** that
+  annotated shells actually use for a missing/Unknown group – R’s
+  `is.na(ADSL.COHORTN)` and SAS’s `missing(COHORTN)`, plus the negations
+  `!is.na(...)` / `not missing(...)`. Previously only the prose
+  `DATASET.VAR is missing` form was recognized, so a call-form
+  Unknown-cohort header silently failed to parse and its column vanished
+  from the axis. A companion coverage check now WARNs when a header
+  names the column-axis variable but its annotation does not parse into
+  a condition, reporting how many columns were captured versus expected
+  – so a narrowed axis is surfaced rather than shipped quietly.
+
 - **Annotation-defined column axis: per-column filters in table header
   cells.** When two or more column headers carry a filter on the same
   variable – `Cohort A (N=XX) ADSL.COHORTN=1`,
