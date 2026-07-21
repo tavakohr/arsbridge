@@ -2,8 +2,8 @@
 
 Reads a CDISC ARS JSON specification and executes the analyses defined
 within it directly using the `{cards}` package, dynamically loading the
-ADaM datasets (.csv or .xpt) and combining individual ARD tables into a
-single tidy ARD object.
+ADaM datasets (.csv, .xpt, or .sas7bdat) and combining individual ARD
+tables into a single tidy ARD object.
 
 ## Usage
 
@@ -26,7 +26,7 @@ ars_to_ard(
 
 - adam_dir:
 
-  Directory containing the ADaM datasets (.csv or .xpt).
+  Directory containing the ADaM datasets (.csv, .xpt, or .sas7bdat).
 
 - output_ids:
 

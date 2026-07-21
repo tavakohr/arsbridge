@@ -31,7 +31,7 @@ ars_render_figure(
 
 - adam_dir:
 
-  Directory of ADaM datasets (.xpt/.csv).
+  Directory of ADaM datasets (.xpt/.sas7bdat/.csv).
 
 - output_id:
 
