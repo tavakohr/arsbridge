@@ -56,6 +56,18 @@
   "(", .ADAM_DS, ")\\.(", .ADAM_VAR, ")",
   "\\s+(?:is\\s+)?(?:null|missing)\\b"
 )
+## Call-form missing checks as annotated shells actually write them:
+## R's "is.na(ADSL.COHORTN)" and SAS's "missing(COHORTN)", plus the negations
+## "!is.na(...)" / "not missing(...)". The negated form embeds the positive
+## one, so .one_condition() must test .RE_ISNA_NEG first.
+.RE_ISNA_NEG <- paste0(
+  "(?:!|\\bnot\\b)\\s*(?:is\\.na|missing)\\s*\\(\\s*",
+  "(", .ADAM_DS, ")\\.(", .ADAM_VAR, ")\\s*\\)"
+)
+.RE_ISNA_POS <- paste0(
+  "(?:is\\.na|missing)\\s*\\(\\s*",
+  "(", .ADAM_DS, ")\\.(", .ADAM_VAR, ")\\s*\\)"
+)
 
 #' Build an ARS WhereClause object from an annotation expression.
 #'
@@ -75,6 +87,8 @@
 #'   "ADSL.AGE between 18 and 65"            (-> GE/LE compound)
 #'   "ADAE.AETERM contains 'rash'"           (CONTAINS extension)
 #'   "ADSL.DCSREAS not missing" / "ADSL.DTHDT is null"
+#'   "is.na(ADSL.COHORTN)" / "missing(ADSL.COHORTN)"  (call-form missing)
+#'   "!is.na(ADSL.COHORTN)" / "not missing(ADSL.COHORTN)"  (call-form present)
 #'
 #' @noRd
 parse_where_clause <- function(expr) {
@@ -130,7 +144,7 @@ parse_where_clause <- function(expr) {
         stage = "where_clause", severity = "WARN",
         problem = "Condition could not be parsed into an ARS WhereClause",
         location = u,
-        action = "Condition dropped -- filtering will be weaker than the annotation intends (supported: =, EQ/NE/IN/NOTIN/GT/GE/LT/LE incl. unquoted numerics, IN ('a','b') lists, BETWEEN x AND y, CONTAINS 'text', is/not null/missing)"
+        action = "Condition dropped -- filtering will be weaker than the annotation intends (supported: =, EQ/NE/IN/NOTIN/GT/GE/LT/LE incl. unquoted numerics, IN ('a','b') lists, BETWEEN x AND y, CONTAINS 'text', is/not null/missing, is.na()/missing() incl. negation)"
       )
     }
   }
@@ -205,6 +219,16 @@ parse_where_clause <- function(expr) {
       action = "ars_to_ard() executes it as a case-insensitive substring match; external ARS consumers may reject it"
     )
     return(.cond(m[2], m[3], "CONTAINS", m[4]))
+  }
+  ## Call-form missing checks: "!is.na(...)" / "not missing(...)" BEFORE the
+  ## positive "is.na(...)" / "missing(...)" (the negated form embeds it).
+  m <- regmatches(part, regexec(.RE_ISNA_NEG, part, ignore.case = TRUE, perl = TRUE))[[1]]
+  if (length(m) == 3) {
+    return(.cond(m[2], m[3], "NE", NA_character_))
+  }
+  m <- regmatches(part, regexec(.RE_ISNA_POS, part, ignore.case = TRUE, perl = TRUE))[[1]]
+  if (length(m) == 3) {
+    return(.cond(m[2], m[3], "EQ", NA_character_))
   }
   ## Null checks: "not null/missing" BEFORE the positive form.
   m <- regmatches(part, regexec(.RE_NULL_CHECK, part, ignore.case = TRUE, perl = TRUE))[[1]]

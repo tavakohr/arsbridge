@@ -32,6 +32,40 @@ test_that("not null produces NE with empty value", {
   expect_length(wc$condition$value, 0)
 })
 
+test_that("is.na() call form parses to EQ with empty value (numeric missing)", {
+  wc <- parse_where_clause("is.na(ADSL.COHORTN)")
+  expect_equal(wc$condition$dataset, "ADSL")
+  expect_equal(wc$condition$variable, "COHORTN")
+  expect_equal(wc$condition$comparator, "EQ")
+  expect_length(wc$condition$value, 0)
+})
+
+test_that("SAS missing() call form parses to EQ with empty value", {
+  wc <- parse_where_clause("missing(ADSL.COHORTN)")
+  expect_equal(wc$condition$variable, "COHORTN")
+  expect_equal(wc$condition$comparator, "EQ")
+  expect_length(wc$condition$value, 0)
+})
+
+test_that("!is.na() and 'not missing()' call forms parse to NE (present)", {
+  wc1 <- parse_where_clause("!is.na(ADSL.COHORTN)")
+  expect_equal(wc1$condition$comparator, "NE")
+  expect_length(wc1$condition$value, 0)
+
+  wc2 <- parse_where_clause("not missing(ADSL.COHORTN)")
+  expect_equal(wc2$condition$comparator, "NE")
+  expect_length(wc2$condition$value, 0)
+})
+
+test_that("is.na() combines with another condition into a compound", {
+  wc <- parse_where_clause("ADSL.SCRNFL='Y' and is.na(ADSL.COHORTN)")
+  expect_equal(wc$compoundExpression$logicalOperator, "AND")
+  expect_length(wc$compoundExpression$whereClauses, 2)
+  comps <- vapply(wc$compoundExpression$whereClauses,
+                  function(c) c$condition$comparator, character(1))
+  expect_setequal(comps, c("EQ", "EQ"))
+})
+
 test_that("empty / NULL input returns NULL", {
   expect_null(parse_where_clause(""))
   expect_null(parse_where_clause(NULL))
