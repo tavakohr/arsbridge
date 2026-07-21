@@ -122,6 +122,11 @@
   ## DATASET.VAR WHERE OTHERVAR='val'  (longest -- match first)
   paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR,
          "\\s+(?i:where)\\s+", .ADAM_VAR, "\\s*=\\s*", .QUOTED_VALUE),
+  ## DATASET.VAR IN ('a','b') / NOT IN ("a","b")  (parenthesized value list;
+  ## either quote style -- .canon_annotation rewrites double to single quotes)
+  paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR,
+         "\\s+(?i:NOT\\s*IN|NOTIN|IN)\\s*\\(\\s*", .QUOTED_VALUE,
+         "(?:\\s*,\\s*", .QUOTED_VALUE, ")*\\s*\\)"),
   ## DATASET.VAR EQ 'val' / NE 'val' / ... (ARS comparator form)
   paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR,
          "\\s+(?:EQ|NE|IN|NOTIN|GT|GE|LT|LE)\\s+", .QUOTED_VALUE),
@@ -134,6 +139,11 @@
   ## DATASET.VAR not null / not missing
   paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR,
          "\\s+(?i:not\\s+(?:null|missing))"),
+  ## DATASET.VAR is null / is missing (positive form -- listed AFTER the
+  ## "not null / not missing" branch; before the bare DS.VAR branch so the
+  ## " is missing" tail is captured instead of truncated)
+  paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR,
+         "\\s+(?i:(?:is\\s+)?(?:null|missing))\\b"),
   ## unique USUBJID in DATASET (count expression)
   paste0("(?i)unique\\s+USUBJID\\s+in\\s+", .ADAM_DS),
   ## Bare DATASET.VARIABLE  (least specific -- match last)
@@ -868,10 +878,24 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
   }
   header_rows <- rows[seq_len(n_header_rows)]
 
-  headers <- .combine_header_rows(header_rows)
-  headers <- headers[nzchar(headers)]
-  current$col_headers <- headers
-  current$n_data_cols <- max(0L, length(headers) - 1L)
+  if (identical(current$tlf_type %||% "TABLE", "TABLE")) {
+    ## For tables, run the annotation detector on each header cell so a
+    ## per-column filter ("Cohort 1 (N=XX) ADSL.COHORTN=1") separates into
+    ## a clean display label and a condition. The conditions are resolved
+    ## into column groups later, in .finalize_section().
+    combined <- .combine_header_rows_detected(header_rows)
+    keep     <- nzchar(combined$labels)
+    current$col_headers <- combined$labels[keep]
+    current$.pending_column_annotations <- list(
+      labels      = combined$labels[keep],
+      annotations = combined$annotations[keep]
+    )
+  } else {
+    headers <- .combine_header_rows(header_rows)
+    headers <- headers[nzchar(headers)]
+    current$col_headers <- headers
+  }
+  current$n_data_cols <- max(0L, length(current$col_headers) - 1L)
 
   ## For LISTING outputs, each column header carries the annotation rather
   ## than the stub column. We capture the raw cell content here but DEFER
@@ -1066,6 +1090,64 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
     parts <- unique(parts[nzchar(parts)])
     trimws(paste(parts, collapse = " "))
   }, character(1))
+}
+
+#' Expand one header row like `.expand_header_row()`, but run the 4-layer
+#' annotation detector on each cell so the display label and any in-cell
+#' annotation ("Cohort 1 (N=XX) ADSL.COHORTN=1") come back separated.
+#' Returns list(labels, annotations), one element per physical grid column
+#' (a spanned cell repeats over every column it covers).
+#' @noRd
+.expand_header_row_detected <- function(row_node) {
+  cells       <- xml2::xml_find_all(row_node, "./*[local-name()='tc']")
+  labels      <- character(0)
+  annotations <- character(0)
+  for (cell in cells) {
+    raw  <- .cell_text(cell)
+    det  <- .detect_annotation(raw, .runs_metadata(cell))
+    span <- .grid_span(cell)
+    labels      <- c(labels, rep(trimws(det$label %||% raw), span))
+    annotations <- c(annotations, rep(det$annotation %||% "", span))
+  }
+  list(labels = labels, annotations = annotations)
+}
+
+#' Combine one or more header rows like `.combine_header_rows()`, but keep
+#' the per-grid-column annotation alongside the annotation-stripped label.
+#' The label combines down the rows with the same unique/paste logic; the
+#' annotation is the FIRST non-empty one seen down a grid column (covers a
+#' split header where row 1 holds "Cohort A" and row 2 holds
+#' "(N=XX) ADSL.COHORTN=1").
+#' @noRd
+.combine_header_rows_detected <- function(header_rows) {
+  expanded <- lapply(header_rows, .expand_header_row_detected)
+  width    <- max(vapply(expanded, function(e) length(e$labels), integer(1)), 0L)
+  if (width == 0L) {
+    return(list(labels = character(0), annotations = character(0)))
+  }
+
+  pad <- function(x, fill) {
+    length(x) <- width
+    x[is.na(x)] <- fill
+    x
+  }
+  expanded <- lapply(expanded, function(e) {
+    list(labels = pad(e$labels, ""), annotations = pad(e$annotations, ""))
+  })
+
+  labels <- vapply(seq_len(width), function(col) {
+    parts <- vapply(expanded, function(e) e$labels[[col]], character(1))
+    parts <- unique(parts[nzchar(parts)])
+    trimws(paste(parts, collapse = " "))
+  }, character(1))
+
+  annotations <- vapply(seq_len(width), function(col) {
+    down <- vapply(expanded, function(e) e$annotations[[col]], character(1))
+    down <- down[nzchar(down)]
+    if (length(down) > 0) down[[1]] else ""
+  }, character(1))
+
+  list(labels = labels, annotations = annotations)
 }
 
 #' TRUE when a cell is a `vMerge` continuation of the cell above it, not a
@@ -1467,8 +1549,170 @@ bind_annotations <- function(sec) {
 #' on the saved header cells, attach `header_rows`, and append annotated
 #' headers to `stub_rows` for uniform downstream processing.
 #'
+#' Resolve per-column header annotations into column-group definitions.
+#'
+#' A sponsor can define the column axis of a summary table entirely in the
+#' header cells: "Cohort A (N=XX) ADSL.COHORTN=1", "Cohort B (N=XX)
+#' ADSL.COHORTN=2", "Unknown Cohort (N=XX) ADSL.COHORTN is missing". When at
+#' least two headers carry a parseable condition on the SAME variable, that
+#' variable becomes the column axis and each condition becomes one display
+#' column -- letting a merged/derived column (an "Unknown" bucket for missing
+#' values) exist without any ADaM change. A header conditioned on a different
+#' variable (a Total column's population flag) is left out of the groups; a
+#' Total-labelled one instead flags `include_total_hint`.
+#' @noRd
+.resolve_table_column_groups <- function(sec, spec_lookup = NULL) {
+  pending <- sec$.pending_column_annotations
+  sec$.pending_column_annotations <- NULL
+  if (is.null(pending) || !identical(sec$tlf_type, "TABLE")) return(sec)
+
+  labels      <- pending$labels
+  annotations <- pending$annotations
+  has_annot   <- nzchar(annotations)
+  if (!any(has_annot)) return(sec)
+
+  ## One candidate per annotated grid column: which variable it references
+  ## and whether its annotation parses into a real condition. Consecutive
+  ## duplicates are one spanned cell repeated over its subcolumns.
+  candidates <- list()
+  for (i in which(has_annot)) {
+    prev <- if (length(candidates) > 0) candidates[[length(candidates)]] else NULL
+    if (!is.null(prev) && identical(prev$annotation, annotations[[i]]) &&
+        identical(prev$label, labels[[i]])) {
+      next
+    }
+    refs <- extract_annotation_vars(annotations[[i]])
+    candidates[[length(candidates) + 1L]] <- list(
+      label      = labels[[i]],
+      annotation = annotations[[i]],
+      variable   = if (length(refs) > 0) toupper(refs[[1]]) else "",
+      condition  = parse_where_clause(annotations[[i]])
+    )
+  }
+  if (length(candidates) == 0) return(sec)
+
+  ## The axis variable is the DATASET.VARIABLE claimed by >= 2 headers whose
+  ## annotations parsed into real conditions. Bare references (no operator)
+  ## do not count as conditions -- a repeated bare DS.VAR keeps today's
+  ## single column_annotation semantics below.
+  conditioned <- Filter(function(cand) {
+    nzchar(cand$variable) && !is.null(cand$condition)
+  }, candidates)
+  var_counts <- table(vapply(conditioned, function(cand) cand$variable,
+                             character(1)))
+  qualifying <- names(var_counts)[var_counts >= 2L]
+
+  if (length(qualifying) == 0) {
+    ## No per-level groups. A variable referenced bare by 2+ headers still
+    ## names the column axis (existing convention for treatment headers).
+    bare_vars <- vapply(candidates, function(cand) cand$variable, character(1))
+    bare_tab  <- table(bare_vars[nzchar(bare_vars)])
+    if (length(bare_tab) > 0 && max(bare_tab) >= 2L &&
+        is.null(sec$column_annotation)) {
+      sec$column_annotation <- names(bare_tab)[which.max(bare_tab)]
+    }
+    return(sec)
+  }
+
+  if (length(qualifying) > 1) {
+    ## Most headers wins; first in document order breaks a tie.
+    ordered <- names(sort(var_counts[qualifying], decreasing = TRUE))
+    axis_var <- ordered[[1]]
+    .diag_gap(
+      stage = "parse_shell", severity = "WARN", input = INPUT_SHELL,
+      problem = sprintf(
+        "Column headers condition on several variables (%s); %s (most columns) was taken as the column axis.",
+        paste(qualifying, collapse = ", "), axis_var),
+      why = "A table has one column axis; the other conditioned headers cannot also define columns.",
+      fix = "Annotate every group column with the same variable, or move the odd one out.",
+      tlf_number = sec$tlf_number, location = sec$title %||% ""
+    )
+  } else {
+    axis_var <- qualifying[[1]]
+  }
+
+  groups <- list()
+  for (cand in conditioned) {
+    if (!identical(cand$variable, axis_var)) next
+    ## Display level label: the header text without its (N=XX) placeholder.
+    level_label <- sub("\\s*\\(\\s*[Nn]\\s*=\\s*[^)]*\\)\\s*$", "", cand$label)
+    level_label <- trimws(gsub("\\s+", " ", level_label))
+    groups[[length(groups) + 1L]] <- list(
+      label      = level_label,
+      annotation = cand$annotation,
+      order      = length(groups) + 1L
+    )
+  }
+  if (length(groups) < 2) return(sec)
+
+  ## Duplicate labels across different conditions would collide as factor
+  ## levels downstream -- disambiguate and say so.
+  group_labels <- vapply(groups, function(g) g$label, character(1))
+  if (anyDuplicated(group_labels)) {
+    fixed <- make.unique(group_labels, sep = " ")
+    for (i in seq_along(groups)) groups[[i]]$label <- fixed[[i]]
+    diag_add(
+      stage = "parse_shell", severity = "WARN", input = INPUT_SHELL,
+      problem = "Two column-group headers share the same display label; suffixes were added to keep them distinct",
+      tlf_number = sec$tlf_number, location = sec$title %||% "",
+      action = "Give each group column a distinct header label"
+    )
+  }
+
+  dataset  <- sub("\\..*$", "", axis_var)
+  variable <- sub("^.*\\.", "", axis_var)
+
+  ## Hard spec gate is advisory here (the axis still parses without a spec):
+  ## an out-of-spec axis variable is surfaced, not dropped.
+  if (!is.null(spec_lookup) && length(spec_lookup) > 0 &&
+      !axis_var %in% toupper(names(spec_lookup))) {
+    diag_add(
+      stage = "parse_shell", severity = "WARN", input = INPUT_SHELL,
+      problem = sprintf("Column-axis variable %s is not in the ADaM spec", axis_var),
+      tlf_number = sec$tlf_number, location = sec$title %||% "",
+      action = "Verify the header annotations name a real spec variable"
+    )
+  }
+
+  sec$column_groups <- list(
+    variable = variable,
+    dataset  = dataset,
+    groups   = groups
+  )
+  ## In-cell header annotations claim the column axis; the arrow-line and
+  ## supplement fallbacks both defer to an existing value.
+  sec$column_annotation <- axis_var
+
+  ## A leftover "Total (N=XX) ..." header (excluded from the groups because
+  ## it filters a different variable, or none) marks the overall column.
+  non_axis <- Filter(function(cand) !identical(cand$variable, axis_var),
+                     candidates)
+  total_labels <- c(
+    vapply(non_axis, function(cand) cand$label, character(1)),
+    labels[!has_annot]
+  )
+  if (any(grepl("(?i)^total\\b", total_labels, perl = TRUE))) {
+    sec$include_total_hint <- TRUE
+  }
+
+  diag_add(
+    stage = "parse_shell", severity = "INFO", input = INPUT_SHELL,
+    problem = sprintf(
+      "%d column-group definitions captured from header annotations for %s",
+      length(groups), axis_var),
+    tlf_number = sec$tlf_number, location = sec$title %||% "",
+    action = "Each annotated header becomes one display column; verify labels and conditions in the ARS JSON"
+  )
+
+  sec
+}
+
 #' @noRd
 .finalize_section <- function(sec, spec_lookup = NULL) {
+  ## Resolve per-column header filters into column groups BEFORE
+  ## bind_annotations, so an in-cell header annotation claims the column
+  ## axis first and the arrow-line fallback's is.null() guard defers to it.
+  sec <- .resolve_table_column_groups(sec, spec_lookup)
   ## Bind below-table / arrow-form annotations to their rows first, so the
   ## per-section "no annotations detected" diagnostic and everything
   ## downstream see the bound rows (ADR 0003 Layer A).
@@ -1842,7 +2086,16 @@ split_label_annotation <- function(cell_text) {
   label <- trimws(sub("\\s*[\\[\\(]?\\s*$", "", before, perl = TRUE))
 
   annotation <- substr(cell_text, start, nchar(cell_text))
-  annotation <- sub("\\s*[\\]\\)]\\s*$", "", annotation, perl = TRUE)
+  ## Strip the closing half of a bracket-enclosed annotation ("[ADSL.AGE]",
+  ## "(ADSL.SAFFL='Y')") -- but a trailing ")" that closes a parenthesis
+  ## OPENED INSIDE the annotation (an IN list: "ADSL.RACE IN ('A','B')")
+  ## belongs to the annotation and must stay.
+  annotation <- sub("\\s*\\]\\s*$", "", annotation, perl = TRUE)
+  n_open  <- lengths(regmatches(annotation, gregexpr("(", annotation, fixed = TRUE)))
+  n_close <- lengths(regmatches(annotation, gregexpr(")", annotation, fixed = TRUE)))
+  if (n_close > n_open) {
+    annotation <- sub("\\s*\\)\\s*$", "", annotation, perl = TRUE)
+  }
   annotation <- .canon_annotation(trimws(annotation))
 
   list(label = label, annotation = annotation)

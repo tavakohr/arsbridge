@@ -37,6 +37,44 @@
   grouping_map
 }
 
+## groupingId -> per-level group definitions, for grouping factors that carry
+## condition-defined groups[] (an annotation-defined column axis). Entries
+## exist ONLY for factors with at least one usable {label, condition} level,
+## so an empty map means "raw data-driven levels" exactly as before.
+#' @noRd
+.build_grouping_groups_map <- function(spec) {
+  out <- list()
+  for (gf in spec[["analysisGroupings"]]) {
+    gf_id <- .as_scalar_char(gf[["id"]])
+    if (is.null(gf_id)) next
+    gf_var <- if (is.list(gf[["groupingVariable"]])) {
+      .as_scalar_char(gf[["groupingVariable"]][["variable"]])
+    } else {
+      .as_scalar_char(gf[["groupingVariable"]])
+    }
+    if (is.null(gf_var)) next
+
+    defs <- list()
+    for (grp in gf[["groups"]] %||% list()) {
+      label <- .as_scalar_char(grp[["label"]]) %||% .as_scalar_char(grp[["name"]])
+      condition <- grp[["condition"]]
+      if (is.null(label) || !nzchar(label) || is.null(condition)) next
+      order_val <- suppressWarnings(as.integer(.as_scalar_char(grp[["order"]]) %||% NA))
+      if (is.na(order_val)) order_val <- length(defs) + 1L
+      defs[[length(defs) + 1L]] <- list(
+        label     = label,
+        order     = order_val,
+        condition = condition
+      )
+    }
+    if (length(defs) > 0) {
+      defs <- defs[order(vapply(defs, function(d) d$order, integer(1)))]
+      out[[gf_id]] <- list(variable = gf_var, groups = defs)
+    }
+  }
+  out
+}
+
 ## analysisId -> outputId, built once from the ARS outputs' referencedAnalysisIds.
 #' @noRd
 .build_analysis_to_output <- function(spec) {
@@ -71,21 +109,26 @@
 #' @param ana One analysis object from `spec$analyses`.
 #' @param spec The full ARS spec (parsed with `simplifyVector = FALSE`).
 #' @param subject_key Subject-level identifier (default `"USUBJID"`).
-#' @param grouping_map,analysis_to_output Optional pre-built lookup maps (see
-#'   `.build_grouping_map` / `.build_analysis_to_output`); rebuilt from `spec`
-#'   when `NULL`. Pass them in when resolving many analyses to avoid rework.
+#' @param grouping_map,analysis_to_output,grouping_groups Optional pre-built
+#'   lookup maps (see `.build_grouping_map` / `.build_analysis_to_output` /
+#'   `.build_grouping_groups_map`); rebuilt from `spec` when `NULL`. Pass
+#'   them in when resolving many analyses to avoid rework.
 #'
 #' @return A list with `analysis_id`, `output_id`, `method_id`, `dataset`,
 #'   `variable` (raw, uncleaned), `by` (character vector of grouping vars),
 #'   `pop_where`, `subset_where` (WhereClause objects or `NULL`),
 #'   `include_total` (logical), `strata` (stratification variable for methods
-#'   like CMH, or `NULL`), `subject_key`, `label`, `annotation`,
-#'   `description`, and `sap_description`.
+#'   like CMH, or `NULL`), `group_defs` (named by grouping variable: ordered
+#'   per-level `{label, order, condition}` definitions for annotation-defined
+#'   column axes; empty list otherwise), `subject_key`, `label`,
+#'   `annotation`, `description`, and `sap_description`.
 #' @noRd
 resolve_analysis <- function(ana, spec, subject_key = "USUBJID",
-                             grouping_map = NULL, analysis_to_output = NULL) {
+                             grouping_map = NULL, analysis_to_output = NULL,
+                             grouping_groups = NULL) {
   if (is.null(grouping_map))       grouping_map       <- .build_grouping_map(spec)
   if (is.null(analysis_to_output)) analysis_to_output <- .build_analysis_to_output(spec)
+  if (is.null(grouping_groups))    grouping_groups    <- .build_grouping_groups_map(spec)
 
   analysis_id <- .as_scalar_char(ana[["id"]])
   output_id   <- if (!is.null(analysis_id)) analysis_to_output[[analysis_id]] else NULL
@@ -103,11 +146,18 @@ resolve_analysis <- function(ana, spec, subject_key = "USUBJID",
   ## clean them against the actual dataset columns (a `.`-qualified name like
   ## ADSL.TRT01A only resolves once the data frame is known).
   by <- character(0)
+  group_defs <- list()
   for (grp in ana[["orderedGroupings"]] %||% list()) {
     gf_id <- .as_scalar_char(grp[["groupingId"]])
     if (is.null(gf_id)) next
     gf_var <- grouping_map[[gf_id]]
     if (!is.null(gf_var) && nzchar(gf_var)) by <- c(by, gf_var)
+    ## Condition-defined levels ride along keyed by the variable name, so
+    ## the executor/emitter can derive the display grouping in-memory.
+    entry <- grouping_groups[[gf_id]]
+    if (!is.null(entry) && !is.null(gf_var) && nzchar(gf_var)) {
+      group_defs[[gf_var]] <- entry$groups
+    }
   }
 
   include_total <- isTRUE(as.logical(unlist(ana[["includeTotal"]])[1] %||% FALSE))
@@ -132,6 +182,7 @@ resolve_analysis <- function(ana, spec, subject_key = "USUBJID",
     subset_where    = subset_where,
     include_total   = include_total,
     strata          = strata,
+    group_defs      = group_defs,
     subject_key     = subject_key,
     label           = .as_scalar_char(ana[["label"]]),
     annotation      = .as_scalar_char(ana[["annotation"]]),

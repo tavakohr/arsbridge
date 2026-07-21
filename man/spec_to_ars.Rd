@@ -201,6 +201,23 @@ and repeats this guidance. For a sponsor template whose headings genuinely
 differ, pass \code{heading_patterns} rather than reformatting the shell.
 }
 
+\section{Column-group headers (annotation-defined column axis)}{
+
+A table's column axis can be defined entirely in its header cells: when
+two or more headers carry a filter on the SAME variable -- e.g.
+\verb{Cohort A (N=XX) ADSL.COHORTN=1}, \verb{Cohort B (N=XX) ADSL.COHORTN=2},
+\verb{Unknown Cohort (N=XX) ADSL.COHORTN is missing} -- each condition becomes
+one display column, in shell order. This is how a merged or derived
+column (an "Unknown" bucket collecting missing values) is produced
+without changing the ADaM data: the engine derives the grouping in
+memory from the annotated conditions, identically in the executed ARD
+and the emitted \code{{cards}} scripts. Supported condition forms include
+\verb{=value} (quoted or numeric), \code{IN ('a','b')}, and \verb{is missing} /
+\verb{not missing}. Rows matching no column are excluded from the group
+columns and counted (WARN); a \verb{Total (N=XX) ...} header is read as the
+overall column, not a group.
+}
+
 \section{Human review}{
 
 The generated ARS JSON is a draft. A qualified clinical programmer MUST

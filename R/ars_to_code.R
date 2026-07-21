@@ -83,20 +83,92 @@
   )
 }
 
-## The analysis data frame expression: dataset, pop filter, subset filter.
+## TRUE when every per-level condition references only ADSL (or nothing).
+## The derived column factor must exist identically in the analysis frame
+## AND the ADSL denominator frame (cards joins them by shared columns), so
+## the feature only engages for ADSL-resolvable conditions.
+#' @noRd
+.group_defs_adsl_only <- function(defs) {
+  all(vapply(defs, function(d) {
+    refs <- .where_datasets(d$condition)
+    length(refs) == 0 || all(toupper(refs) == "ADSL")
+  }, logical(1)))
+}
+
+## The usable per-level group definitions for this analysis, keyed by the
+## CLEANED grouping variable name: only variables actually in `res$by`, and
+## only ADSL-resolvable definition sets.
+#' @noRd
+.group_defs_for <- function(res) {
+  defs_all <- res$group_defs %||% list()
+  if (length(defs_all) == 0) return(list())
+  by_clean <- .clean_emit_name(res$by)
+  out <- list()
+  for (raw_var in names(defs_all)) {
+    clean <- .clean_emit_name(raw_var)
+    defs  <- defs_all[[raw_var]]
+    if (!clean %in% by_clean) next
+    if (!.group_defs_adsl_only(defs)) next
+    out[[clean]] <- defs
+  }
+  out
+}
+
+## Emitted derivation of an annotation-defined column grouping: the variable
+## is overwritten with its display labels as an ordered factor, one
+## case_when branch per header condition. Every predicate comes from
+## where_to_filter_expr(), so the emitted code computes exactly what the
+## executor's eval_where_clause() computes -- equivalence by construction.
+## Rows matching no condition become NA and drop out of the grouped pass
+## (cards omits NA by-levels); the executor logs how many.
+#' @noRd
+.group_mutate_expr <- function(res) {
+  defs_by_var <- .group_defs_for(res)
+  if (length(defs_by_var) == 0) return("")
+
+  out <- ""
+  for (var in names(defs_by_var)) {
+    defs <- defs_by_var[[var]]
+    branches <- vapply(defs, function(d) {
+      sprintf("      %s ~ %s",
+              where_to_filter_expr(d$condition),
+              encodeString(d$label, quote = "\""))
+    }, character(1))
+    level_labels <- vapply(defs, function(d) d$label, character(1))
+    out <- paste0(
+      out,
+      " |>\n    dplyr::mutate(", .bt(var), " = factor(\n",
+      "      dplyr::case_when(\n",
+      paste(branches, collapse = ",\n"), ",\n",
+      "      TRUE ~ NA_character_\n",
+      "      ),\n",
+      "      levels = ", .r_chr_vec(level_labels), "\n",
+      "    ))"
+    )
+  }
+  out
+}
+
+## The analysis data frame expression: dataset, pop filter, subset filter,
+## then any annotation-defined column grouping (filters must see the raw
+## values, so the derivation comes last).
 #' @noRd
 .data_expr <- function(res) {
   e <- res$dataset
   e <- .apply_where_expr(e, res$dataset, res$pop_where, res$subject_key)
   e <- .apply_where_expr(e, res$dataset, res$subset_where, res$subject_key)
-  e
+  paste0(e, .group_mutate_expr(res))
 }
 
 ## The denominator (population) frame expression -- always ADSL-based, mirroring
-## df_population = apply_where_clause("ADSL", pop_where) in ars_to_ard.R.
+## df_population = apply_where_clause("ADSL", pop_where) in ars_to_ard.R. Gets
+## the same column-grouping derivation as the data frame: cards joins the two
+## by shared columns and errors if one side holds the factor and the other the
+## raw values.
 #' @noRd
 .denom_expr <- function(res) {
-  .apply_where_expr("ADSL", "ADSL", res$pop_where, res$subject_key)
+  e <- .apply_where_expr("ADSL", "ADSL", res$pop_where, res$subject_key)
+  paste0(e, .group_mutate_expr(res))
 }
 
 ## ---- per-method block emission --------------------------------------------
@@ -276,20 +348,23 @@
 #' @param subject_key Subject identifier (default `"USUBJID"`).
 #' @param adam_dir Default ADaM directory baked into the script header (the
 #'   reader can edit it; the engine overrides it when sourcing).
-#' @param grouping_map,analysis_to_output Optional pre-built lookup maps.
+#' @param grouping_map,analysis_to_output,grouping_groups Optional pre-built
+#'   lookup maps.
 #' @return A single character string: the full script for this TLF.
 #' @noRd
 .emit_tlf_script <- function(output_id, spec, subject_key = "USUBJID",
                              adam_dir = ".", grouping_map = NULL,
-                             analysis_to_output = NULL) {
+                             analysis_to_output = NULL,
+                             grouping_groups = NULL) {
   if (is.null(grouping_map))       grouping_map       <- .build_grouping_map(spec)
   if (is.null(analysis_to_output)) analysis_to_output <- .build_analysis_to_output(spec)
+  if (is.null(grouping_groups))    grouping_groups    <- .build_grouping_groups_map(spec)
 
   ## Resolve the analyses referenced by this output, in spec (display) order.
   reslist <- list()
   for (ana in spec[["analyses"]]) {
     res <- resolve_analysis(ana, spec, subject_key, grouping_map,
-                            analysis_to_output)
+                            analysis_to_output, grouping_groups)
     if (identical(res$output_id, output_id) &&
         !identical(res$method_id, "MTH_LISTING")) {
       reslist[[length(reslist) + 1L]] <- res
@@ -418,6 +493,7 @@ write_tlf_code <- function(spec_or_path, code_dir, output_ids = NULL,
 
   grouping_map       <- .build_grouping_map(spec)
   analysis_to_output <- .build_analysis_to_output(spec)
+  grouping_groups    <- .build_grouping_groups_map(spec)
 
   ## All output ids, optionally filtered (by id or name, case-insensitive).
   all_outputs <- spec[["outputs"]] %||% list()
@@ -435,7 +511,8 @@ write_tlf_code <- function(spec_or_path, code_dir, output_ids = NULL,
   for (o in outs) {
     oid <- .as_scalar_char(o[["id"]])
     script <- .emit_tlf_script(oid, spec, subject_key, adam_dir,
-                               grouping_map, analysis_to_output)
+                               grouping_map, analysis_to_output,
+                               grouping_groups)
     fp <- file.path(code_dir, paste0(make.names(oid), ".R"))
     writeLines(script, fp)
     paths[[oid]] <- fp
