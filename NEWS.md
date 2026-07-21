@@ -1,5 +1,19 @@
 # arsbridge (development version)
 
+* **Rewritten Copilot instruction file (extraction guidance version 3).** The
+  file `ars_copilot_instructions()` writes is substantially expanded to make a
+  chat assistant classify each annotation before emitting JSON: a mandatory
+  role taxonomy (population / result-column / displayed-row / listing-column /
+  supporting-filter / programming-note), Word label reconstruction rules,
+  footnote-mapping resolution, data-type-aware literal quoting, TLF inventory
+  reconciliation against the Table of Contents, and per-TLF and final
+  validation checklists. The `column_groups` fallback (format version 2) is
+  folded into the new column-structure guidance: the assistant supplies
+  per-column conditions there only when the shell headers carry no
+  machine-readable `DATASET.VARIABLE=value` filter, each `where` written with
+  the full dataset prefix. All examples use generic ADaM datasets/variables and
+  generic TLF labels.
+
 * **Supplement format version 2: a `column_groups` field.** In the no-API
   supplement workflow, a table whose result columns are values of one variable
   (cohort columns keyed on `ADSL.COHORTN`) could not be expressed when the shell
