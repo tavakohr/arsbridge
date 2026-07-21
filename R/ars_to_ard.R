@@ -169,10 +169,10 @@
 #'
 #' Reads a CDISC ARS JSON specification and executes the analyses defined within
 #' it directly using the `{cards}` package, dynamically loading the ADaM datasets
-#' (.csv or .xpt) and combining individual ARD tables into a single tidy ARD object.
+#' (.csv, .xpt, or .sas7bdat) and combining individual ARD tables into a single tidy ARD object.
 #'
 #' @param ars_path   Path to the CDISC ARS JSON file.
-#' @param adam_dir   Directory containing the ADaM datasets (.csv or .xpt).
+#' @param adam_dir   Directory containing the ADaM datasets (.csv, .xpt, or .sas7bdat).
 #' @param output_ids Optional character vector of Output IDs to run only analyses
 #'   referenced by those outputs. Matching is case-insensitive and checks both
 #'   Output ID and Output Name (e.g. "T-14-1-1" or "T_14_1_1").
@@ -225,12 +225,16 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       basenames <- tolower(basename(files))
       csv_file <- files[basenames == tolower(paste0(name_upper, ".csv"))]
       xpt_file <- files[basenames == tolower(paste0(name_upper, ".xpt"))]
+      sas_file <- files[basenames == tolower(paste0(name_upper, ".sas7bdat"))]
 
       if (length(xpt_file) > 0) {
-        ## .read_dataset reads .xpt/.csv and, on a read failure, records a FAIL
-        ## diagnostic naming the dataset and returns NULL (this analysis is then
-        ## skipped) rather than throwing a cryptic base-R error.
+        ## .read_dataset reads .xpt/.sas7bdat/.csv and, on a read failure, records
+        ## a FAIL diagnostic naming the dataset and returns NULL (this analysis is
+        ## then skipped) rather than throwing a cryptic base-R error. Native SAS
+        ## formats are preferred over .csv when both are present.
         dfs[[name_upper]] <<- .read_dataset(xpt_file[1], name_upper)
+      } else if (length(sas_file) > 0) {
+        dfs[[name_upper]] <<- .read_dataset(sas_file[1], name_upper)
       } else if (length(csv_file) > 0) {
         dfs[[name_upper]] <<- .read_dataset(csv_file[1], name_upper)
       } else {

@@ -37,17 +37,20 @@
 .blk_name <- function(analysis_id) paste0("blk_", make.names(analysis_id))
 
 ## Robust inline loader: case-insensitive filename match (ADaM cuts ship as
-## ADSL.xpt / adsl.csv / etc., and Linux file systems are case-sensitive), with
-## an .xpt-or-.csv reader. Pure base/haven, self-contained per dataset.
+## ADSL.xpt / adsl.sas7bdat / adsl.csv / etc., and Linux file systems are
+## case-sensitive), with an .xpt / .sas7bdat / .csv reader. Pure base/haven,
+## self-contained per dataset.
 #' @noRd
 .loader_line <- function(ds) {
   sprintf(paste0(
     "%s <- local({\n",
-    "  f <- list.files(adam_dir, pattern = \"(?i)^%s\\\\.(xpt|csv)$\",\n",
+    "  f <- list.files(adam_dir, pattern = \"(?i)^%s\\\\.(xpt|sas7bdat|csv)$\",\n",
     "                  full.names = TRUE)[1]\n",
     "  if (is.na(f)) stop(\"%s not found in \", adam_dir)\n",
     "  if (grepl(\"(?i)\\\\.xpt$\", f)) {\n",
     "    haven::read_xpt(f)\n",
+    "  } else if (grepl(\"(?i)\\\\.sas7bdat$\", f)) {\n",
+    "    haven::read_sas(f)\n",
     "  } else {\n",
     "    utils::read.csv(f, stringsAsFactors = FALSE, check.names = FALSE)\n",
     "  }\n",

@@ -22,7 +22,7 @@ ars_render_figure(
 \arguments{
 \item{ars_path}{Path to the CDISC ARS JSON.}
 
-\item{adam_dir}{Directory of ADaM datasets (.xpt/.csv).}
+\item{adam_dir}{Directory of ADaM datasets (.xpt/.sas7bdat/.csv).}
 
 \item{output_id}{Figure output id or name.}
 

@@ -142,3 +142,30 @@ test_that("disposition bare-flag renders as a labelled subject count, not Y", {
   ns <- ard[ard$stat_name == "n", ]
   expect_true(all(unlist(ns$stat) == 3))
 })
+
+test_that("emitted loader finds and reads .sas7bdat (alongside .xpt / .csv)", {
+  code <- arsbridge:::.loader_line("ADSL")
+  ## The filename pattern and a dedicated reader branch cover sas7bdat.
+  expect_match(code, "(xpt|sas7bdat|csv)", fixed = TRUE)
+  expect_match(code, "haven::read_sas(f)", fixed = TRUE)
+
+  ## Functional: a sas7bdat cut is located case-insensitively and read.
+  skip_if_not_installed("haven")
+  td <- withr::local_tempdir()
+  ## write_sas() only builds the fixture; it is deprecated (haven 2.5.2), so
+  ## silence its warning and skip if a future haven drops it -- the reader
+  ## branch (read_sas) is the behaviour under test.
+  built <- tryCatch({
+    suppressWarnings(haven::write_sas(
+      data.frame(USUBJID = c("01", "02"), AGE = c(40, 50),
+                 stringsAsFactors = FALSE),
+      file.path(td, "adsl.sas7bdat")))
+    TRUE
+  }, error = function(e) FALSE)
+  skip_if_not(built, "haven::write_sas() unavailable to build the sas7bdat fixture")
+  adam_dir <- td
+  ADSL <- eval(parse(text = code))
+  expect_s3_class(ADSL, "data.frame")
+  expect_equal(nrow(ADSL), 2)
+  expect_true(all(c("USUBJID", "AGE") %in% names(ADSL)))
+})
