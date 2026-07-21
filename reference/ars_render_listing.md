@@ -25,7 +25,7 @@ ars_render_listing(
 
 - adam_dir:
 
-  Directory containing the ADaM datasets (.xpt/.csv).
+  Directory containing the ADaM datasets (.xpt/.sas7bdat/.csv).
 
 - output_id:
 
