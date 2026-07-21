@@ -1643,6 +1643,24 @@ bind_annotations <- function(sec) {
       order      = length(groups) + 1L
     )
   }
+  ## Coverage check: a header that NAMES the axis variable but whose annotation
+  ## did not parse into a condition is a display column silently lost from the
+  ## column axis. Surface the shortfall so a shell whose (e.g.) missing-value
+  ## header uses an unsupported form is caught rather than quietly narrowed.
+  axis_headers <- Filter(function(cand) identical(cand$variable, axis_var),
+                         candidates)
+  dropped <- length(axis_headers) - length(groups)
+  if (dropped > 0) {
+    diag_add(
+      stage = "parse_shell", severity = "WARN", input = INPUT_SHELL,
+      problem = sprintf(
+        "%d of %d %s column headers did not parse into a condition; %d column group(s) captured",
+        dropped, length(axis_headers), axis_var, length(groups)),
+      tlf_number = sec$tlf_number, location = sec$title %||% "",
+      action = "Check those headers' annotations -- the dropped columns will be missing from the ARS grouping"
+    )
+  }
+
   if (length(groups) < 2) return(sec)
 
   ## Duplicate labels across different conditions would collide as factor
