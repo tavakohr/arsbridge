@@ -486,6 +486,81 @@ build_ars_json <- function(sections,
     ## Last categorical analysis emitted -- candidate parent for authored
     ## level rows that follow it (option A of the level-row model).
     cat_parent <- NULL
+
+    ## Build a free-standing analysis for an annotation the ROW loop did not
+    ## itself produce -- used for the two "nothing the supplement added is
+    ## dropped" cases: a supplement proposal that conflicts with the shell's own
+    ## annotation (built alongside it), and a supplement binding whose label
+    ## matched no stub row (built as a labelled analysis on the output). Mirrors
+    ## the primary row path's method precedence and dedup, updates the section
+    ## accumulators in place, and never touches `cat_parent` (a free-standing
+    ## analysis is never a level of the block above it). Returns invisibly.
+    emit_extra_analysis <- function(label, annotation, indent = 0L) {
+      annotation <- trimws(as.character(annotation %||% ""))
+      refs <- if (nzchar(annotation)) extract_annotation_vars(annotation) else character()
+      if (length(refs) == 0) return(invisible(NULL))
+      pieces <- strsplit(refs[1], ".", fixed = TRUE)[[1]]
+      er2 <- list(
+        label            = label %||% "",
+        primary_dataset  = pieces[1],
+        primary_variable = if (length(pieces) >= 2) pieces[2] else "",
+        variable_role    = "ANALYSIS",
+        data_subset      = .subset_from_annotation(annotation)
+      )
+      if (!nzchar(er2$primary_variable %||% "")) return(invisible(NULL))
+      idx2    <- length(analysis_ids) + 1L
+      ds_obj2 <- .build_data_subset(er2, sec$tlf_number, idx2)
+      if (!is.null(ds_obj2) && !ds_obj2$id %in% seen_ds) {
+        ds_obj2$order <- length(data_subsets) + 1L
+        ds_obj2$level <- 1L
+        data_subsets[[length(data_subsets) + 1L]] <<- ds_obj2
+        seen_ds <<- c(seen_ds, ds_obj2$id)
+      }
+      ## Method: annotation-inferred form, else the spec's categorical verdict,
+      ## else the section method -- the same precedence the primary row uses.
+      row2         <- list(label = label %||% "", annotation = annotation,
+                           has_annot = TRUE)
+      cat_verdict2 <- .var_is_categorical(er2$primary_dataset, er2$primary_variable)
+      inferred2    <- .infer_row_method(row2, cat_verdict2)
+      method2_id   <- mth_obj$id
+      cand2        <- if (!is.null(inferred2)) .STANDARD_METHODS[[inferred2$method]] else NULL
+      if (!is.null(cand2)) {
+        method2_id <- cand2$id
+        if (!cand2$id %in% seen_mth) {
+          methods[[length(methods) + 1L]] <<- .with_op_self_rels(cand2)
+          seen_mth <<- c(seen_mth, cand2$id)
+        }
+      } else if (identical(mth_obj$id, "MTH_SUMMARY_STATISTICS_CONTINUOUS") &&
+                 isTRUE(cat_verdict2)) {
+        method2_id <- count_method_id
+        if (!count_method_id %in% seen_mth) {
+          methods[[length(methods) + 1L]] <<-
+            .with_op_self_rels(.STANDARD_METHODS[["Count and Percentage"]])
+          seen_mth <<- c(seen_mth, count_method_id)
+        }
+      }
+      row_sig2 <- paste(method2_id,
+                        toupper(er2$primary_dataset  %||% ""),
+                        toupper(er2$primary_variable %||% ""),
+                        if (!is.null(ds_obj2)) ds_obj2$id else "",
+                        if (identical(method2_id, count_method_id)) ""
+                        else trimws(label %||% ""),
+                        sep = "|")
+      if (row_sig2 %in% seen_row_sig) return(invisible(NULL))
+      seen_row_sig <<- c(seen_row_sig, row_sig2)
+      an2 <- .build_analysis(
+        section = sec, row = row2, enrichment = er2, index = idx2,
+        as_id = as_obj$id, gf_ids = gf_ids, method_id = method2_id,
+        ds_id = if (!is.null(ds_obj2)) ds_obj2$id else NULL)
+      analyses[[length(analyses) + 1L]]         <<- an2
+      analysis_ids                              <<- c(analysis_ids, an2$id)
+      shell_layout[[length(shell_layout) + 1L]] <<- list(
+        order = length(shell_layout) + 1L,
+        label = label %||% "", indent = indent,
+        analysis_id = an2$id, kind = "supplement_added")
+      invisible(an2$id)
+    }
+
     for (ridx in seq_along(rows_iter)) {
       row <- rows_iter[[ridx]]
       raw <- as.character(row$raw_text %||% "")
@@ -633,13 +708,23 @@ build_ars_json <- function(sections,
 
       ## Duplicate-template dedup (nested AE shells author example blocks:
       ## "<Preferred Term>" placeholder rows plus repeated "Preferred Term"
-      ## mock rows all annotated AEDECOD). Two rows resolving to the same
-      ## method + variable + subset would expand the SAME distribution twice
-      ## and collide in the renderer -- keep the first, collapse the rest.
+      ## mock rows all annotated AEDECOD). A Count-and-Percentage row expands
+      ## the FULL categorical distribution of its variable, so two such rows on
+      ## the same variable + subset would draw the same distribution twice and
+      ## collide in the renderer -- those collapse on method + variable + subset
+      ## regardless of their (placeholder) labels.
+      ##
+      ## Every OTHER row (a continuous summary, a subject count, ...) is one
+      ## authored line, so two of them that happen to share a variable are still
+      ## distinct analyses -- their LABEL joins the signature so a genuinely
+      ## distinct row (e.g. "Age (years)" and "Age (years) - total") is never
+      ## silently dropped from the ARD.
+      is_cat_distribution <- identical(row_method_id, count_method_id)
       row_sig <- paste(row_method_id,
                        toupper(er$primary_dataset  %||% ""),
                        toupper(er$primary_variable %||% ""),
                        if (!is.null(ds_obj)) ds_obj$id else "",
+                       if (is_cat_distribution) "" else trimws(row$label %||% ""),
                        sep = "|")
       if (build_layout && row_sig %in% seen_row_sig) {
         diag_add(
@@ -679,6 +764,47 @@ build_ars_json <- function(sections,
         list(var = toupper(er$primary_variable), aid = an_obj$id)
       } else {
         NULL
+      }
+
+      ## Supplement contributed an ADDITIONAL analysis for this row that the
+      ## regex did not produce (a differing variable the fill-gaps policy would
+      ## otherwise keep only as provenance). The shell's own analysis above
+      ## stands (regex wins the row); this builds the supplement's proposal as
+      ## its own analysis alongside it so nothing the supplement added is lost.
+      extra_ann <- trimws(as.character(row$supplement_proposed_annotation %||% ""))
+      if (build_layout && nzchar(extra_ann)) {
+        extra_id <- emit_extra_analysis(row$label %||% "", extra_ann, indent)
+        if (!is.null(extra_id)) {
+          diag_add(
+            stage = "build_ars", severity = "INFO",
+            problem = sprintf(
+              "Row '%s': supplement's differing proposal (%s) added as an additional analysis; the shell's own annotation was kept too",
+              row$label %||% "?", extra_ann),
+            tlf_number = sec$tlf_number,
+            action = "Both the shell annotation and the supplement proposal are computed -- nothing the supplement contributed is dropped"
+          )
+        }
+      }
+    }
+
+    ## Supplement bindings whose label matched no stub row: the shell never
+    ## authored a place for them, but they passed the ADaM-spec gate, so build
+    ## each as a free-standing, labelled analysis on this output rather than
+    ## dropping it. Only for plain tables -- listings/figures/gated sections do
+    ## not summarise per-row analyses.
+    if (build_layout) {
+      for (extra in sec$supplement_extra_rows %||% list()) {
+        extra_id <- emit_extra_analysis(extra$label %||% "", extra$annotation %||% "")
+        if (!is.null(extra_id)) {
+          diag_add(
+            stage = "build_ars", severity = "INFO",
+            problem = sprintf(
+              "Supplement binding '%s' (%s) matched no stub row; added as a free-standing analysis on TLF %s",
+              extra$label %||% "?", extra$annotation %||% "", sec$tlf_number),
+            tlf_number = sec$tlf_number,
+            action = "The supplement named an analysis the shell has no row for -- verify its label against the shell"
+          )
+        }
       }
     }
     if (!build_layout) shell_layout <- list()
@@ -790,7 +916,7 @@ build_ars_json <- function(sections,
 
 .build_analysis_set <- function(sec) {
   pop_text  <- sec$population_text %||% "All Subjects"
-  pop_annot <- sec$population_annot %||% ""
+  pop_annot <- trimws(sec$population_annot %||% "")
   cond      <- parse_where_clause(pop_annot)
   obj <- list(
     id    = make_analysis_set_id(pop_text),
@@ -799,6 +925,20 @@ build_ars_json <- function(sections,
   )
   if (!is.null(cond)) {
     obj <- modifyList(obj, cond)
+  } else if (nzchar(pop_annot)) {
+    ## The shell/supplement carried a population filter but it did not parse
+    ## into an ARS WhereClause. Keep the raw text on the set (never silently
+    ## drop it): the renderer can still show the intended filter and QA can
+    ## see it, instead of the analyses defaulting to the full population.
+    obj$annotationText <- pop_annot
+    diag_add(
+      stage = "build_ars", severity = "WARN", tlf_number = sec$tlf_number,
+      location = sec$title %||% "",
+      problem = sprintf(
+        "Population filter '%s' did not parse into an ARS WhereClause; carried as annotationText",
+        pop_annot),
+      action = "Analyses will run on the full population until this filter is expressible -- review the population annotation"
+    )
   }
   ## level + order are stamped by build_ars_json() at the dedup append site.
   obj
