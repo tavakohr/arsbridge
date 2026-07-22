@@ -236,3 +236,54 @@ test_that("ars_render_tlf writes docx and rtf files via flextable", {
   expect_true(file.exists(rtf))
   expect_gt(file.info(rtf)$size, 0)
 })
+
+test_that("render falls back to default column order when the fixed order names a missing column", {
+  skip_if_not_installed("tfrmt")
+  skip_if_not_installed("gt")
+  skip_if_not_installed("cards")
+
+  ## Data-driven COHORTN grouping (groups: []) + display columns that imply a
+  ## level with no rows: the fixed col_plan then names a column absent from the
+  ## widened data. The render must NOT abort -- it drops the fixed order, warns,
+  ## and still produces a table.
+  td <- withr::local_tempdir()
+  utils::write.csv(data.frame(
+    USUBJID = sprintf("S%02d", 1:6),
+    COHORTN = c(1, 1, 2, 2, 1, 2), SCRNFL = rep("Y", 6),
+    SEX = c("M", "F", "M", "F", "M", "F"), stringsAsFactors = FALSE),
+    file.path(td, "adsl.csv"), row.names = FALSE)
+  spec <- list(id = "S", name = "s", version = "1",
+    analysisSets = list(list(id = "AS", name = "Scr", label = "Scr",
+      condition = list(dataset = "ADSL", variable = "SCRNFL",
+                       comparator = "EQ", value = list("Y")))),
+    dataSubsets = list(arsbridge:::.default_data_subset()),
+    analysisGroupings = list(list(id = "GF", name = "COHORTN", label = "g",
+      groupingDataset = "ADSL", groupingVariable = "COHORTN",
+      dataDriven = TRUE, groups = list())),
+    methods = list(arsbridge:::.with_op_self_rels(
+      arsbridge:::.STANDARD_METHODS[["Count and Percentage"]])),
+    outputs = list(list(id = "T1", name = "T1", label = "Disp", version = "1",
+      outputType = "TABLE",
+      displays = list(list(order = 1L, displayTitle = "Disp",
+        columns = list(list(label = "Cohort 1"), list(label = "Cohort 2"),
+                       list(label = "Cohort 99 (N=0)")),
+        displaySections = list(list(sectionType = "Footnote", subSections = list())))),
+      fileSpecifications = list(list(name = "T1.rtf", fileType = "rtf")),
+      referencedAnalysisIds = list("AN1"),
+      `_meta` = list(source_datasets = list("ADSL")))),
+    analyses = list(list(id = "AN1", name = "A1", label = "Sex, n (%)",
+      version = "1", analysisSetId = "AS", dataset = "ADSL", variable = "SEX",
+      analysisVariable = list(dataset = "ADSL", variable = "SEX"),
+      dataSubsetId = "",
+      orderedGroupings = list(list(order = 1, groupingId = "GF",
+                                   resultsByGroup = TRUE)),
+      methodId = "MTH_COUNT_AND_PERCENTAGE", annotation = "ADSL.SEX",
+      includeTotal = TRUE)),
+    `_meta` = list(unsupported_outputs = list()))
+  j <- file.path(td, "s.json")
+  writeLines(jsonlite::toJSON(spec, auto_unbox = TRUE, null = "null"), j)
+  ard <- suppressMessages(ars_to_ard(j, adam_dir = td))
+
+  gt_tbl <- suppressWarnings(ars_render_tlf(j, ard, "T1", format = "gt"))
+  expect_s3_class(gt_tbl, "gt_tbl")
+})
