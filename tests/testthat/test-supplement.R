@@ -528,6 +528,19 @@ test_that("all copilot resources ship with the package", {
   expect_true(nzchar(s) && file.exists(s))
 })
 
+test_that("every instruction file carries a 'How to run this' block with a fenced prompt", {
+  for (f in c("arsbridge_copilot_instructions.md",
+              "arsbridge_phase1_blueprint_instructions.md",
+              "arsbridge_phase2_build_instructions.md")) {
+    p <- system.file("copilot", f, package = "arsbridge")
+    skip_if_not(nzchar(p) && file.exists(p))
+    txt <- paste(readLines(p, warn = FALSE), collapse = "\n")
+    expect_match(txt, "## How to run this", fixed = TRUE)
+    expect_match(txt, "```text", fixed = TRUE)
+    expect_match(txt, "Prompt to paste:", fixed = TRUE)
+  }
+})
+
 test_that("ars_copilot_instructions writes the single-file set (instructions + schema)", {
   dir <- withr::local_tempdir()
   paths <- suppressMessages(ars_copilot_instructions(dir, open = FALSE))

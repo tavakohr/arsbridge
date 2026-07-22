@@ -1,4 +1,4 @@
-# arsbridge supplement request (format version 3, extraction guidance version 4)
+# arsbridge supplement request (format version 3, extraction guidance version 4.1)
 
 You are an expert CDISC clinical statistical programmer. You have been given
 these files from a clinical study:
@@ -13,6 +13,29 @@ these files from a clinical study:
 3. This instruction file.
 4. The **JSON Schema** `arsbridge_supplement_v3.schema.json`. Your reply MUST
    validate against it. Check it yourself before you answer.
+
+## How to run this
+
+Attach four files to your chat assistant: **this file**,
+`arsbridge_supplement_v3.schema.json`, your annotated TLF shell (`.docx`), and
+your ADaM specification (`.xlsx`). Select the highest reasoning mode. Paste the
+prompt below. Save the reply as `supplement.json`, then run
+`spec_to_ars(supplement = "supplement.json")` (optionally pre-flight with
+`ars_validate_supplement("supplement.json", "<adam_spec>.xlsx")`).
+
+Prompt to paste:
+
+```text
+Read all attached files completely: this instruction file, the JSON Schema,
+the annotated TLF shell, and the ADaM specification.
+
+Produce the supplement in ONE pass, following this instruction file exactly.
+Process every Table, Listing, and Figure. Every condition must be a typed
+WhereClause object (never a string). Validate against the attached JSON Schema
+before answering.
+
+Return exactly one strict-JSON file: supplement.json (supplement_version 3).
+```
 
 ## Objective
 

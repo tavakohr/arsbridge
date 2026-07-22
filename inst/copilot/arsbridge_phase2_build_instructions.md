@@ -1,8 +1,33 @@
 # arsbridge Phase 2: Semantic Construction, Repair, and Readiness
 
+## How to run this
+
+Start a NEW chat session and attach four files: **this file**,
+`arsbridge_supplement_v3.schema.json`, your annotated TLF shell (`.docx`), and
+the `tlf_extraction_blueprints.json` from Phase 1. Select the highest reasoning
+mode. Paste the prompt below. Save the two replies as `supplement.json` and
+`extraction_validation_report.json`, then run
+`spec_to_ars(supplement = "supplement.json")` (optionally pre-flight with
+`ars_validate_supplement("supplement.json", "<adam_spec>.xlsx")`).
+
+Prompt to paste:
+
+```text
+Read all four attached files completely: this Phase 2 instruction file, the
+JSON Schema, the annotated TLF shell, and tlf_extraction_blueprints.json.
+
+Perform Phase 2 ONLY, following this instruction file exactly. Do not repeat
+Phase 1. Run both internal cycles (2A construct, 2B repair) and all mandatory
+reviews. Every condition must be a typed WhereClause object (never a string).
+Validate the result against the attached JSON Schema before answering.
+
+Return exactly two strict-JSON files: supplement.json (supplement_version 3)
+and extraction_validation_report.json.
+```
+
 ## Document control
 
-- Instruction version: 8.0 (packaged with arsbridge)
+- Instruction version: 8.1 (packaged with arsbridge)
 - Phase: 2 only
 - Input: `tlf_extraction_blueprints.json` (blueprint version 2) + the annotated shell + this file + `arsbridge_supplement_v3.schema.json`
 - Outputs: `supplement.json` (format version 3) and `extraction_validation_report.json`

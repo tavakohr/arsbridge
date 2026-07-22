@@ -1,8 +1,30 @@
 # arsbridge Phase 1: Evidence Discovery and TLF Blueprint
 
+## How to run this
+
+In your chat assistant (Copilot / ChatGPT / enterprise portal), start a NEW
+session and attach three files: **this file**, your annotated TLF shell
+(`.docx`), and your ADaM specification (`.xlsx`). Select the highest reasoning
+mode. Paste the prompt below. Save the reply as
+`tlf_extraction_blueprints.json` and carry it into the Phase 2 session.
+
+Prompt to paste:
+
+```text
+Read all three attached files completely: this Phase 1 instruction file, the
+annotated TLF shell, and the ADaM specification.
+
+Perform Phase 1 ONLY, following this instruction file exactly. Process every
+Table, Listing, and Figure. Discover, classify, and validate all evidence and
+build one table-specific blueprint per output. Do NOT produce supplement.json.
+
+Return exactly one strict-JSON file: tlf_extraction_blueprints.json
+(blueprint version 2) -- every TLF once, no duplicate keys.
+```
+
 ## Document control
 
-- Instruction version: 8.0 (packaged with arsbridge)
+- Instruction version: 8.1 (packaged with arsbridge)
 - Phase: 1 only
 - Primary output: `tlf_extraction_blueprints.json` (blueprint version 2)
 - Inputs: complete annotated TLF shell (`.docx`) + complete ADaM specification (`.xlsx`) + this file
