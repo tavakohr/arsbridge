@@ -990,7 +990,28 @@ ars_render_tlf <- function(ars_path, ard, output_id,
   }
   stopifnot(label_var %in% names(data_prepped))
 
-  gt_tbl <- tfrmt::print_to_gt(tf, .data = data_prepped)
+  gt_tbl <- tryCatch(
+    tfrmt::print_to_gt(tf, .data = data_prepped),
+    error = function(e) {
+      ## A fixed column order (col_plan) that names a column absent from the
+      ## prepared data -- e.g. a column-axis grouping that shipped raw
+      ## data-driven levels, so no display-labelled columns exist -- makes
+      ## tfrmt's create_col_order abort ("Unable to create dataset subset
+      ## vars"). Failing here stops the whole pipeline before any RTF/Word file
+      ## is written. Instead drop the fixed order and retry: the table still
+      ## renders, just in tfrmt's default column order.
+      if (is.null(tf[["col_plan"]])) stop(e)
+      diag_add(
+        stage = "render", severity = "WARN", input = INPUT_ARS,
+        problem = sprintf(
+          "Output %s: could not apply the shell's fixed column order (%s); rendered in default column order.",
+          out_id, conditionMessage(e)),
+        location = out_id,
+        action = "Usually the column-axis grouping shipped raw data-driven levels -- define its column groups (annotate the shell header conditions, or use the supplement's column_groups) so the display columns are named."
+      )
+      tf[["col_plan"]] <- NULL
+      tfrmt::print_to_gt(tf, .data = data_prepped)
+    })
   ## Blank the synthetic row-label column header.
   if (label_var %in% c(.ARS_ROW_LABEL, .ARS_SHELL_LBL) &&
       label_var %in% names(gt_tbl[["_data"]])) {

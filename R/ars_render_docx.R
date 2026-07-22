@@ -15,6 +15,47 @@
   if (nzchar(num)) paste(word, num) else word
 }
 
+## Classify one output as "table", "listing", or "figure" from its outputType
+## (falling back to the id prefix T/L/F). Shared by every batch renderer so
+## they agree on how each output is dispatched.
+.classify_output <- function(o) {
+  ot <- toupper(.sc(o[["outputType"]]) %||% "")
+  id <- .sc(o[["id"]]) %||% ""
+  if (ot == "TABLE"   || grepl("^T", id)) return("table")
+  if (ot == "LISTING" || grepl("^L", id)) return("listing")
+  if (ot == "FIGURE"  || grepl("^F", id)) return("figure")
+  "table"
+}
+
+## Render one table/listing output to a regulatory flextable, reusing the same
+## GT -> flextable path as ars_render_all(). Aborts (caller catches) for figures
+## -- they are images, not table cells -- and when a listing lacks adam_dir.
+.output_to_flextable <- function(ars_path, spec, ard, o, adam_dir, max_rows) {
+  oid  <- .sc(o[["id"]])
+  kind <- .classify_output(o)
+  if (kind == "figure") {
+    stop("figures are not part of a table RTF; render them with ars_render_figure()")
+  }
+  gt_tbl <- if (kind == "listing") {
+    if (is.null(adam_dir))
+      stop("adam_dir is required to render listing ", oid)
+    ars_render_listing(ars_path, adam_dir, oid, max_rows = max_rows)
+  } else {
+    ars_render_tlf(ars_path, ard, oid)
+  }
+  .gt_to_flextable(gt_tbl, .sc(o[["name"]]) %||% oid,
+                   extract_title(o), extract_footnotes(o))
+}
+
+## The subset of a big ARD belonging to one output id (keeps every column and
+## the cards list-columns intact). Empty frame when the output has no rows.
+.ard_for_output <- function(ard, oid) {
+  if (is.null(ard) || !"output_id" %in% names(ard)) return(ard)
+  keep <- .flat_chr(ard[["output_id"]]) == oid
+  keep[is.na(keep)] <- FALSE
+  ard[keep, , drop = FALSE]
+}
+
 ## Add a numbered placeholder page for an output arsbridge did not render.
 ## Keeps the final document complete and the table numbering aligned to the
 ## shell. `gate = TRUE` (the default) is the deliberate capability gate -- the
@@ -257,13 +298,7 @@ ars_render_all <- function(ars_path, ard, adam_dir = NULL, file = NULL,
   doc  <- officer::read_docx()
   doc  <- officer::body_set_default_section(doc, sect)
 
-  classify <- function(o) {
-    ot <- toupper(.sc(o[["outputType"]]) %||% "")
-    if (ot == "TABLE"   || grepl("^T", .sc(o[["id"]]))) return("table")
-    if (ot == "LISTING" || grepl("^L", .sc(o[["id"]]))) return("listing")
-    if (ot == "FIGURE"  || grepl("^F", .sc(o[["id"]]))) return("figure")
-    "table"
-  }
+  classify <- .classify_output
 
   ## Outputs arsbridge cannot generate (from build-time capability gate) ->
   ## rendered as numbered placeholders instead of being skipped/coerced.
@@ -359,4 +394,191 @@ ars_render_all <- function(ars_path, ard, adam_dir = NULL, file = NULL,
   }
   attr(manifest, "file") <- file
   manifest
+}
+
+
+#' Render each output to its own ARD and table file
+#'
+#' The "one file per program" companion to [ars_render_all()]: instead of a
+#' single combined document, this writes a separate table file (and, by
+#' default, a separate ARD `.rds`) for every output in the reporting event --
+#' the layout most clinical repositories expect, one deliverable per TLF
+#' program.
+#'
+#' Tables and listings are written with the same regulatory flextable styling
+#' as [ars_render_all()]; figures are written as `.png`. Each output's ARD
+#' slice (its rows of the big ARD, cards list-columns intact) is saved as
+#' `<dir>/<output_id>.rds` unless `write_ard = FALSE`.
+#'
+#' @param ars_path Path to the ARS reporting-event JSON.
+#' @param dir Output directory. Created (recursively) if it does not exist.
+#' @param adam_dir Directory of ADaM datasets. Required to compute the ARD when
+#'   `ard` is `NULL`, and to render listings/figures.
+#' @param ard Optional precomputed ARD (from [ars_to_ard()]). When `NULL` it is
+#'   computed from `ars_path` + `adam_dir`.
+#' @param output_ids Optional character vector restricting which outputs to
+#'   render (matched against output id or name, case-insensitively).
+#' @param format Table file format: `"rtf"` (default) or `"docx"`.
+#' @param write_ard Also write each output's ARD slice as
+#'   `<dir>/<output_id>.rds`. Default `TRUE`.
+#' @param max_rows Row cap for listings. Default 500.
+#'
+#' @return Invisibly, a manifest data frame: `output_id`, `type`, `status`
+#'   (`"rendered"`/`"error"`/`"skipped"`), `ard_file`, `doc_file`, `reason`.
+#'   `attr(., "dir")` is the output directory.
+#'
+#' @seealso [ars_render_combined()] for one big ARD + one combined RTF,
+#'   [ars_render_all()] for a single combined Word document.
+#' @export
+ars_render_split <- function(ars_path, dir, adam_dir = NULL, ard = NULL,
+                             output_ids = NULL, format = c("rtf", "docx"),
+                             write_ard = TRUE, max_rows = 500) {
+  format <- match.arg(format)
+  spec   <- .read_json(ars_path)
+  if (is.null(ard)) {
+    if (is.null(adam_dir)) {
+      cli::cli_abort(c(
+        "x" = "No {.arg ard} supplied and no {.arg adam_dir} to compute one.",
+        "i" = "Pass {.arg adam_dir} (the ADaM folder) or a precomputed {.arg ard} from {.fn ars_to_ard}."))
+    }
+    ard <- ars_to_ard(ars_path, adam_dir = adam_dir)
+  }
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+
+  want <- if (!is.null(output_ids)) tolower(trimws(output_ids)) else NULL
+  rows <- list()
+  for (o in spec[["outputs"]]) {
+    oid  <- .sc(o[["id"]])
+    kind <- .classify_output(o)
+    if (!is.null(want) &&
+        !any(tolower(c(oid, .sc(o[["name"]]))) %in% want)) next
+
+    ard_file <- NA_character_
+    if (isTRUE(write_ard)) {
+      ard_file <- file.path(dir, paste0(oid, ".rds"))
+      saveRDS(.ard_for_output(ard, oid), ard_file)
+    }
+
+    doc_file <- NA_character_; status <- "error"; reason <- ""
+    res <- tryCatch({
+      if (kind == "figure") {
+        if (is.null(adam_dir)) stop("adam_dir is required to render figures")
+        p <- ars_render_figure(ars_path, adam_dir, oid)
+        doc_file <- file.path(dir, paste0(oid, ".png"))
+        ggplot2::ggsave(doc_file, plot = p, width = 9, height = 5.5, dpi = 300)
+      } else {
+        ft <- .output_to_flextable(ars_path, spec, ard, o, adam_dir, max_rows)
+        doc_file <- file.path(dir, paste0(oid, ".", format))
+        .write_flextable(ft, doc_file, format)
+      }
+      "ok"
+    }, error = function(e) conditionMessage(e))
+
+    if (identical(res, "ok")) {
+      status <- "rendered"
+    } else {
+      doc_file <- NA_character_; reason <- res
+    }
+    rows[[length(rows) + 1L]] <- data.frame(
+      output_id = oid %||% NA_character_, type = kind, status = status,
+      ard_file = ard_file, doc_file = doc_file, reason = reason,
+      stringsAsFactors = FALSE)
+  }
+
+  manifest <- if (length(rows)) do.call(rbind, rows) else data.frame(
+    output_id = character(), type = character(), status = character(),
+    ard_file = character(), doc_file = character(), reason = character(),
+    stringsAsFactors = FALSE)
+  attr(manifest, "dir") <- dir
+  n_ok <- sum(manifest$status == "rendered")
+  cli::cli_alert_success(
+    "Wrote {n_ok} of {nrow(manifest)} output{?s} to {.path {dir}} (one file per program).")
+  invisible(manifest)
+}
+
+#' Render every output into one combined ARD and one combined RTF
+#'
+#' The "run all" companion to [ars_render_split()]: computes (or accepts) the
+#' single big ARD covering every analysis, optionally saves it, and writes all
+#' tables and listings into ONE combined RTF file (each table carries its own
+#' id + title header). Figures are not included in an RTF and are reported as
+#' skipped -- use [ars_render_split()] or [ars_render_all()] for those.
+#'
+#' @param ars_path Path to the ARS reporting-event JSON.
+#' @param file Path of the combined `.rtf` to write.
+#' @param adam_dir Directory of ADaM datasets. Required to compute the ARD when
+#'   `ard` is `NULL`, and to render listings.
+#' @param ard Optional precomputed ARD (from [ars_to_ard()]). When `NULL` it is
+#'   computed from `ars_path` + `adam_dir`.
+#' @param ard_file Optional path to also save the big ARD as an `.rds`.
+#' @param output_ids Optional character vector restricting which outputs to
+#'   include (matched against output id or name, case-insensitively).
+#' @param max_rows Row cap for listings. Default 500.
+#'
+#' @return Invisibly, a manifest data frame: `output_id`, `type`, `status`
+#'   (`"rendered"`/`"error"`/`"skipped"`), `reason`. `attr(., "file")` is the
+#'   RTF path and `attr(., "ard_file")` the saved ARD path (or `NA`).
+#'
+#' @seealso [ars_render_split()] for one file per program,
+#'   [ars_render_all()] for a single combined Word document.
+#' @export
+ars_render_combined <- function(ars_path, file, adam_dir = NULL, ard = NULL,
+                                ard_file = NULL, output_ids = NULL,
+                                max_rows = 500) {
+  spec <- .read_json(ars_path)
+  if (is.null(ard)) {
+    if (is.null(adam_dir)) {
+      cli::cli_abort(c(
+        "x" = "No {.arg ard} supplied and no {.arg adam_dir} to compute one.",
+        "i" = "Pass {.arg adam_dir} (the ADaM folder) or a precomputed {.arg ard} from {.fn ars_to_ard}."))
+    }
+    ard <- ars_to_ard(ars_path, adam_dir = adam_dir)
+  }
+  saved_ard <- NA_character_
+  if (!is.null(ard_file)) {
+    dir.create(dirname(ard_file), recursive = TRUE, showWarnings = FALSE)
+    saveRDS(ard, ard_file); saved_ard <- ard_file
+  }
+  dir.create(dirname(file), recursive = TRUE, showWarnings = FALSE)
+
+  want <- if (!is.null(output_ids)) tolower(trimws(output_ids)) else NULL
+  fts <- list(); rows <- list()
+  for (o in spec[["outputs"]]) {
+    oid  <- .sc(o[["id"]])
+    kind <- .classify_output(o)
+    if (!is.null(want) &&
+        !any(tolower(c(oid, .sc(o[["name"]]))) %in% want)) next
+
+    if (kind == "figure") {
+      rows[[length(rows) + 1L]] <- data.frame(
+        output_id = oid, type = kind, status = "skipped",
+        reason = "figures are not included in a combined RTF -- use ars_render_split()",
+        stringsAsFactors = FALSE)
+      next
+    }
+    res <- tryCatch({
+      fts[[oid]] <- .output_to_flextable(ars_path, spec, ard, o, adam_dir, max_rows)
+      "ok"
+    }, error = function(e) conditionMessage(e))
+    rows[[length(rows) + 1L]] <- data.frame(
+      output_id = oid, type = kind,
+      status = if (identical(res, "ok")) "rendered" else "error",
+      reason = if (identical(res, "ok")) "" else res,
+      stringsAsFactors = FALSE)
+  }
+
+  if (length(fts) == 0) {
+    cli::cli_abort(c(
+      "x" = "No table or listing output could be rendered into {.path {file}}.",
+      "i" = "Inspect {.fn ars_diagnostics} and the manifest for per-output reasons."))
+  }
+  do.call(flextable::save_as_rtf, c(fts, list(path = file)))
+
+  manifest <- do.call(rbind, rows)
+  attr(manifest, "file")     <- file
+  attr(manifest, "ard_file") <- saved_ard
+  n_ok <- sum(manifest$status == "rendered")
+  cli::cli_alert_success(
+    "Wrote {n_ok} table/listing output{?s} into {.path {file}}{if (!is.na(saved_ard)) paste0(' (ARD: ', saved_ard, ')') else ''}.")
+  invisible(manifest)
 }
