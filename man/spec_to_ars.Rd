@@ -15,6 +15,7 @@ spec_to_ars(
   api_key = NULL,
   provider = NULL,
   supplement = NULL,
+  supplement_trust = c("fill_gaps", "prefer_supplement"),
   use_llm = FALSE,
   spec_column_aliases = NULL,
   extract_with_llm = TRUE,
