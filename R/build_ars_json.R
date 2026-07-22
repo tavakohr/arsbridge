@@ -594,7 +594,19 @@ build_ars_json <- function(sections,
         }
       }
       if (is.null(er$data_subset) || length(er$data_subset) == 0) {
-        er$data_subset <- .subset_from_annotation(row$annotation)
+        ## A typed supplement row filter (v3) is authoritative and never
+        ## re-parsed from a string: a single condition flattens to the subset
+        ## shape, a compound expression is carried as-is for .build_data_subset.
+        if (!is.null(row$supplement_where)) {
+          flat <- .where_flat(row$supplement_where)
+          if (is.null(flat)) {
+            er$data_subset_compound <- row$supplement_where
+          } else {
+            er$data_subset <- flat
+          }
+        } else {
+          er$data_subset <- .subset_from_annotation(row$annotation)
+        }
       }
 
       ## Authored LEVEL row of the categorical block above it: the row's
@@ -917,7 +929,9 @@ build_ars_json <- function(sections,
 .build_analysis_set <- function(sec) {
   pop_text  <- sec$population_text %||% "All Subjects"
   pop_annot <- trimws(sec$population_annot %||% "")
-  cond      <- parse_where_clause(pop_annot)
+  ## A typed supplement population (v3) is already an ARS WhereClause, so it is
+  ## used directly; otherwise parse the shell/supplement annotation string.
+  cond      <- sec$population_where %||% parse_where_clause(pop_annot)
   obj <- list(
     id    = make_analysis_set_id(pop_text),
     name  = pop_text,
@@ -1007,7 +1021,9 @@ build_ars_json <- function(sections,
 
   out <- list()
   for (def in column_groups$groups) {
-    condition <- parse_where_clause(def$annotation %||% "")
+    ## A typed supplement group (v3) carries the ARS WhereClause directly;
+    ## a shell-derived group carries only the annotation string to parse.
+    condition <- def$condition %||% parse_where_clause(def$annotation %||% "")
     if (is.null(condition)) {
       diag_add(
         stage = "build_ars", severity = "WARN",
@@ -1133,6 +1149,20 @@ build_ars_json <- function(sections,
 }
 
 .build_data_subset <- function(enrichment, tlf_number, index) {
+  ## A compound supplement filter (v3) that could not flatten to a single
+  ## condition is emitted as a compoundExpression DataSubset. eval_where_clause()
+  ## and where_to_filter_expr() both consume this shape, so the engine and the
+  ## code emitter execute it with no extra translation.
+  comp <- enrichment$data_subset_compound
+  if (!is.null(comp) && !is.null(comp$compoundExpression)) {
+    tag <- paste0(tlf_number, "_", index, "_cmp")
+    return(list(
+      id    = make_data_subset_id(tag),
+      name  = tag,
+      label = tag,
+      compoundExpression = comp$compoundExpression
+    ))
+  }
   ds <- enrichment$data_subset
   if (is.null(ds) || length(ds) == 0) return(NULL)
   tag <- if (!is.null(ds$variable)) {

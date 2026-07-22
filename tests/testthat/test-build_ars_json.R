@@ -418,3 +418,36 @@ test_that("a supplement binding matching no stub row is built as a free-standing
   free_id <- re$analyses[[which(labels == "Time to discontinuation")]]$id
   expect_true(free_id %in% ref_ids)
 })
+
+## --- supplement v3 typed conditions ----------------------------------------
+
+test_that(".build_group_levels prefers a typed condition over the annotation string", {
+  ## A v3 supplement group carries the typed condition directly; when both a
+  ## typed condition and a (bogus) annotation are present, the typed one wins.
+  cg <- list(variable = "SEX", dataset = "ADSL", groups = list(
+    list(label = "Male", order = 1L, annotation = "ADSL.SEX='WRONG'",
+         condition = list(condition = list(dataset = "ADSL", variable = "SEX",
+                                           comparator = "EQ", value = list("M")))),
+    list(label = "Female", order = 2L,
+         condition = list(condition = list(dataset = "ADSL", variable = "SEX",
+                                           comparator = "EQ", value = list("F"))))))
+  gl <- .build_group_levels("SEX", cg)
+  expect_length(gl, 2)
+  expect_equal(gl[[1]]$condition$condition$value, list("M"))   ## typed, not "WRONG"
+  expect_equal(gl[[2]]$condition$condition$value, list("F"))
+})
+
+test_that(".build_data_subset emits a compoundExpression from a compound row filter", {
+  er <- list(data_subset_compound = list(compoundExpression = list(
+    logicalOperator = "OR",
+    whereClauses = list(
+      list(condition = list(dataset = "ADAE", variable = "AEDECOD",
+                            comparator = "EQ", value = list("HEADACHE"))),
+      list(condition = list(dataset = "ADAE", variable = "AEDECOD",
+                            comparator = "EQ", value = list("NAUSEA")))))))
+  ds <- .build_data_subset(er, "T-14-3-1", 1L)
+  expect_false(is.null(ds$compoundExpression))
+  expect_null(ds$condition)
+  expect_equal(ds$compoundExpression$logicalOperator, "OR")
+  expect_length(ds$compoundExpression$whereClauses, 2)
+})
