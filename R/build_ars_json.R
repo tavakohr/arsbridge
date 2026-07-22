@@ -719,6 +719,26 @@ build_ars_json <- function(sections,
         )
       }
 
+      ## Supplement-specified per-row method (MIXED_SUMMARY, per-row methodId):
+      ## honoured for a supplement-bound row, or for any row under
+      ## prefer_supplement. It never overrides a shell-annotated row's inferred
+      ## method in fill_gaps mode (such a row's detection_method is not
+      ## "supplement"), keeping deterministic ground truth highest there.
+      supp_mid <- row$supplement_method_id
+      if (!is.null(supp_mid) && nzchar(supp_mid %||% "") &&
+          (identical(row$detection_method, "supplement") ||
+           identical(supplement_trust, "prefer_supplement"))) {
+        supp_nm   <- .method_name_from_id(supp_mid)
+        supp_cand <- if (!is.null(supp_nm)) .STANDARD_METHODS[[supp_nm]] else NULL
+        if (!is.null(supp_cand)) {
+          row_method_id <- supp_cand$id
+          if (!supp_cand$id %in% seen_mth) {
+            methods[[length(methods) + 1L]] <- .with_op_self_rels(supp_cand)
+            seen_mth <- c(seen_mth, supp_cand$id)
+          }
+        }
+      }
+
       ## Duplicate-template dedup (nested AE shells author example blocks:
       ## "<Preferred Term>" placeholder rows plus repeated "Preferred Term"
       ## mock rows all annotated AEDECOD). A Count-and-Percentage row expands
@@ -1270,6 +1290,12 @@ build_ars_json <- function(sections,
   )
   if (length(shell_layout %||% list()) > 0) {
     out_meta$shell_layout <- shell_layout
+  }
+  ## Supplement channels arsbridge records but does not yet compute
+  ## (record filters, sorting, denominators, provenance). They travel in the
+  ## output _meta so a reviewer -- and a future engine -- can see them.
+  if (length(section$supplement_extras %||% list()) > 0) {
+    out_meta$supplement <- section$supplement_extras
   }
   list(
     id                    = make_output_id(section$tlf_number),

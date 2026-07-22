@@ -301,6 +301,51 @@ test_that("analysisSet population and groupings apply only when the shell is emp
   expect_equal(out$population_annot, "ADSL.SAFFL='Y'")
 })
 
+test_that("a per-row methodId is stored (catalogue only) and consumed for the row", {
+  supp_tlf <- list(analyses = list(
+    list(rowLabel = "Age (years)", variable = .av("ADSL", "AGE"),
+         methodId = "MTH_COUNT_AND_PERCENTAGE"),
+    list(rowLabel = "Sex", variable = .av("ADSL", "SEX"),
+         methodId = "MTH_NONSENSE")))            ## shell row -> conflict path
+  sec <- .apply_supplement_bindings(.mk_supp_section(), supp_tlf, .supp_spec)
+  expect_equal(sec$stub_rows[[1]]$supplement_method_id, "MTH_COUNT_AND_PERCENTAGE")
+})
+
+test_that("listingColumns bind like analyses through the same channel", {
+  sec <- .mk_supp_section()
+  supp_tlf <- list(listingColumns = list(
+    list(label = "Age (years)", variable = .av("ADSL", "AGE"))))
+  out <- .apply_supplement_bindings(sec, supp_tlf, .supp_spec)
+  expect_true(out$stub_rows[[1]]$has_annot)
+  expect_equal(out$stub_rows[[1]]$annotation, "ADSL.AGE")
+  expect_equal(out$stub_rows[[1]]$detection_method, "supplement")
+})
+
+test_that("record filter, sorting and provenance are recorded (not computed) with an INFO", {
+  diag_reset()
+  sec <- .mk_supp_section()
+  supp_tlf <- list(
+    recordFilter = .wc("ADSL", "SAFFL", "EQ", "Y"),
+    sorting = list(list(dataset = "ADSL", variable = "AGE", direction = "ASC", order = 1L)),
+    provenance = list(blueprintStatus = "READY_FOR_PHASE_2"))
+  out <- .apply_supplement_bindings(sec, supp_tlf, .supp_spec)
+  expect_false(is.null(out$supplement_extras$recordFilter))
+  expect_equal(out$supplement_extras$recordFilter$condition$variable, "SAFFL")
+  expect_false(is.null(out$supplement_extras$sorting))
+  expect_false(is.null(out$supplement_extras$provenance))
+  recs <- diag_records()
+  expect_true(any(recs$severity == "INFO" & grepl("Recorded but not yet computed", recs$problem)))
+})
+
+test_that("an anchor mismatch raises a WARN", {
+  diag_reset()
+  sec <- .mk_supp_section()   ## first stub label is "Age (years)", 3 rows
+  supp_tlf <- list(anchors = list(firstRowLabel = "Something Else", rowCount = 99L))
+  .apply_supplement_bindings(sec, supp_tlf, .supp_spec)
+  recs <- diag_records()
+  expect_true(any(recs$severity == "WARN" & grepl("Anchor mismatch", recs$problem)))
+})
+
 ## --- supplement typed groupings -> column groups ---------------------------
 
 .cg_supp_spec <- c(.supp_spec, list(ADSL.COHORTN = list(), ADDV.DVCAT = list()))

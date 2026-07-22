@@ -437,6 +437,23 @@ test_that(".build_group_levels prefers a typed condition over the annotation str
   expect_equal(gl[[2]]$condition$condition$value, list("F"))
 })
 
+test_that("a supplement per-row methodId overrides the section method for that row", {
+  ## MIXED_SUMMARY section (continuous default) with a supplement-bound row
+  ## carrying an explicit count method -- the row's method must be that id.
+  sec <- .demo_section()
+  sec$stub_rows <- list(
+    list(label = "Age (years)", annotation = "ADSL.AGE", has_annot = TRUE,
+         detection_method = "supplement", detection_confidence = "medium",
+         supplement_method_id = "MTH_COUNT_AND_PERCENTAGE")
+  )
+  sec$enriched_rows <- list(list(label = "Age (years)", primary_dataset = "ADSL",
+                                 primary_variable = "AGE", variable_role = "ANALYSIS"))
+  re <- build_ars_json(list(sec), spec_lookup = list(ADSL.AGE = list(type = "num")),
+                       extraction_mode = "supplement", supplement_trust = "fill_gaps")
+  age_an <- Filter(function(a) identical(a$variable, "AGE"), re$analyses)[[1]]
+  expect_equal(age_an$methodId, "MTH_COUNT_AND_PERCENTAGE")
+})
+
 test_that(".build_data_subset emits a compoundExpression from a compound row filter", {
   er <- list(data_subset_compound = list(compoundExpression = list(
     logicalOperator = "OR",

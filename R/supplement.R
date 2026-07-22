@@ -332,6 +332,13 @@ read_supplement <- function(path) {
   if (identical(toupper(.as_scalar_char(x) %||% ""), "HIGH")) "medium" else "low"
 }
 
+#' A supplement v3 methodId -> the id when it is a catalogue id, else NULL.
+#' @noRd
+.supp_method_id <- function(x) {
+  id <- toupper(trimws(.as_scalar_char(x) %||% ""))
+  if (nzchar(id) && id %in% .SUPP_METHOD_IDS) id else NULL
+}
+
 #' Apply one TLF's supplement (format v3) to a parsed section.
 #'
 #' Fill-gaps-only policy (decided with the package owner): a supplement
@@ -382,7 +389,16 @@ read_supplement <- function(path) {
                         function(r) .norm_label(r$label), character(1))
   n_applied <- 0L; n_conflict <- 0L; n_unmatched <- 0L; n_rejected <- 0L
 
-  for (b in supp_tlf$analyses %||% list()) {
+  ## Listing columns bind exactly like analyses (label -> variable), so fold
+  ## them into the same loop; their `order`/`format` are display hints the
+  ## renderer takes from the shell, not consumed here.
+  bind_items <- supp_tlf$analyses %||% list()
+  for (lc in supp_tlf$listingColumns %||% list()) {
+    bind_items[[length(bind_items) + 1L]] <- list(
+      rowLabel = lc$label, variable = lc$variable)
+  }
+
+  for (b in bind_items) {
     label <- trimws(as.character(b$rowLabel %||% ""))
     ref   <- .supp_var_ref(b$variable)
     if (!nzchar(label) || !nzchar(ref)) next
@@ -487,6 +503,7 @@ read_supplement <- function(path) {
           sec$stub_rows[[idx]]$detection_method          <- "supplement"
           sec$stub_rows[[idx]]$detection_confidence      <- .supp_confidence(b$confidence)
           sec$stub_rows[[idx]]$supplement_where          <- parsed_where
+          sec$stub_rows[[idx]]$supplement_method_id      <- .supp_method_id(b$methodId)
           sec$stub_rows[[idx]]$secondary_annotation      <- shell_orig
           sec$stub_rows[[idx]]$shell_overridden_annotation <- shell_orig
           sec$stub_rows[[idx]]$supplement_conflict       <- TRUE
@@ -523,6 +540,14 @@ read_supplement <- function(path) {
     sec$stub_rows[[idx]]$detection_method     <- "supplement"
     sec$stub_rows[[idx]]$detection_confidence <- .supp_confidence(b$confidence)
     sec$stub_rows[[idx]]$supplement_where     <- parsed_where
+    sec$stub_rows[[idx]]$supplement_method_id <- .supp_method_id(b$methodId)
+    ## parentRowLabel / denominator are recorded but not yet computed.
+    if (nzchar(trimws(as.character(b$parentRowLabel %||% "")))) {
+      sec$stub_rows[[idx]]$supplement_parent_label <- trimws(as.character(b$parentRowLabel))
+    }
+    if (!is.null(b$denominator)) {
+      sec$stub_rows[[idx]]$supplement_denominator <- b$denominator
+    }
     n_applied <- n_applied + 1L
   }
 
@@ -591,6 +616,16 @@ read_supplement <- function(path) {
     sec <- .apply_supplement_groups(sec, groupings, gate_ok)
   }
 
+  ## Channels arsbridge records but does not yet compute: kept on the section
+  ## (and later copied to the output _meta) so a reviewer -- and a future
+  ## engine -- can see them, with one INFO naming what was recorded.
+  sec <- .record_supplement_extras(sec, supp_tlf)
+
+  ## Anchor crosscheck: a cheap guard that the assistant read the SAME table
+  ## arsbridge parsed. A wrong-table read that a title comparison misses often
+  ## shows up as a first-row-label or row-count mismatch.
+  .supplement_anchor_check(sec, supp_tlf$anchors)
+
   if (n_applied + n_conflict + n_unmatched + n_rejected > 0) {
     diag_add(
       stage = "supplement", severity = "INFO", input = INPUT_SUPPLEMENT,
@@ -603,6 +638,85 @@ read_supplement <- function(path) {
     )
   }
   sec
+}
+
+#' Record the supplement channels arsbridge does not yet compute onto the
+#' section (`sec$supplement_extras`) and emit one INFO naming them. Consuming
+#' these means new engine/renderer behaviour, out of scope for now; keeping
+#' them visible means a reviewer never loses what the supplement supplied.
+#' @noRd
+.record_supplement_extras <- function(sec, supp_tlf) {
+  extras <- sec$supplement_extras %||% list()
+  recorded <- character(0)
+
+  if (!is.null(supp_tlf$recordFilter)) {
+    wr <- .supp_where(supp_tlf$recordFilter,
+                      sprintf("tlfs/%s/recordFilter", sec$tlf_number %||% "?"))
+    if (!is.null(wr$where)) {
+      extras$recordFilter <- wr$where
+      recorded <- c(recorded, "recordFilter")
+    }
+  }
+  if (length(supp_tlf$sorting %||% list()) > 0) {
+    extras$sorting <- supp_tlf$sorting
+    recorded <- c(recorded, "sorting")
+  }
+  if (!is.null(supp_tlf$provenance)) {
+    extras$provenance <- supp_tlf$provenance
+    recorded <- c(recorded, "provenance")
+  }
+
+  ## Per-row parent/denominator hints stored while binding also count as
+  ## recorded-but-not-computed context.
+  has_parent <- any(vapply(sec$stub_rows %||% list(),
+                           function(r) !is.null(r$supplement_parent_label), logical(1)))
+  has_denom  <- any(vapply(sec$stub_rows %||% list(),
+                           function(r) !is.null(r$supplement_denominator), logical(1)))
+  if (has_parent) recorded <- c(recorded, "parentRowLabel")
+  if (has_denom)  recorded <- c(recorded, "denominator")
+
+  if (length(extras) > 0) sec$supplement_extras <- extras
+  if (length(recorded) > 0) {
+    diag_add(
+      stage = "supplement", severity = "INFO", input = INPUT_SUPPLEMENT,
+      problem = sprintf("Recorded but not yet computed: %s",
+                        paste(unique(recorded), collapse = ", ")),
+      tlf_number = sec$tlf_number,
+      action = "Carried into the output's _meta.supplement for review; not used in computation yet"
+    )
+  }
+  sec
+}
+
+#' Warn when the supplement's row anchors disagree with the parsed stub rows --
+#' a cheap "did the assistant read the same table?" guard.
+#' @noRd
+.supplement_anchor_check <- function(sec, anchors) {
+  if (is.null(anchors)) return(invisible(NULL))
+  labels <- vapply(sec$stub_rows %||% list(),
+                   function(r) trimws(as.character(r$label %||% "")), character(1))
+  first <- trimws(as.character(anchors$firstRowLabel %||% ""))
+  if (nzchar(first) && length(labels) > 0 &&
+      !identical(.norm_label(first), .norm_label(labels[1]))) {
+    diag_add(
+      stage = "supplement", severity = "WARN", input = INPUT_SUPPLEMENT,
+      problem = sprintf("Anchor mismatch: supplement's first row is '%s' but the shell's first stub is '%s'",
+                        first, labels[1]),
+      tlf_number = sec$tlf_number,
+      action = "Confirm the supplement describes the same table arsbridge parsed"
+    )
+  }
+  rc <- suppressWarnings(as.integer(anchors$rowCount %||% NA))
+  if (!is.na(rc) && length(labels) > 0 && rc != length(labels)) {
+    diag_add(
+      stage = "supplement", severity = "WARN", input = INPUT_SUPPLEMENT,
+      problem = sprintf("Anchor mismatch: supplement says %d rows but the shell parsed %d stub rows",
+                        rc, length(labels)),
+      tlf_number = sec$tlf_number,
+      action = "Confirm the supplement describes the same table arsbridge parsed"
+    )
+  }
+  invisible(NULL)
 }
 
 #' One grouping factor's `{groupingDataset, groupingVariable}` -> "DS.VAR", "".
