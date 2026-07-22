@@ -78,6 +78,15 @@ function never asks for a key nor raises a key-related error or warning in
 them; the mode that ran is recorded as a neutral INFO note and in
 \code{extraction_mode} / \verb{_meta.extraction_mode}.}
 
+\item{supplement_trust}{How a supplement value resolves against the regex on
+a conflict. \code{"fill_gaps"} (default): a supplement value lands only where
+the regex left a gap; the shell annotation wins a disagreement.
+\code{"prefer_supplement"}: a validated, spec-gated supplement value overrides
+the shell on a conflict, with a WARN recording both and the shell's
+original kept as a secondary analysis. The hard ADaM-spec gate is never
+bypassed in either mode. Ignored (with a warning) without \code{supplement};
+recorded at \verb{_meta.supplement_trust}.}
+
 \item{use_llm}{Opt in to the live LLM tier. Default \code{FALSE} -- the pipeline
 runs regex-only (deterministic) and makes NO live LLM call, \emph{even when an
 API key is configured}. Set \code{TRUE} to use the LLM for annotation
