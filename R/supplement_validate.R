@@ -304,10 +304,18 @@ ars_validate_supplement <- function(path, adam_spec_path = NULL) {
       note("WARN", tlf, where, sprintf(
         "methodId '%s' is not a catalogue id -- a placeholder method will be used", mid))
     }
+    ## parentRowLabel may point to a displayed stub row that is not itself a
+    ## supplement analysis (a category header like "Sex, n (%)"), which the
+    ## validator cannot see -- so a non-matching parent is only advisory. A
+    ## self-reference, though, is always an error.
     par <- trimws(as.character(a$parentRowLabel %||% ""))
-    if (nzchar(par) && !par %in% labels) {
+    self <- trimws(as.character(a$rowLabel %||% ""))
+    if (nzchar(par) && identical(par, self)) {
       note("FAIL", tlf, where, sprintf(
-        "regenerate: parentRowLabel '%s' names no other analysis rowLabel in this TLF", par))
+        "regenerate: parentRowLabel '%s' points at its own row", par))
+    } else if (nzchar(par) && !par %in% labels) {
+      note("INFO", tlf, where, sprintf(
+        "parentRowLabel '%s' is not another analysis in this TLF; confirm it matches a displayed stub row", par))
     }
     conf <- toupper(trimws(as.character(a$confidence %||% "")))
     if (nzchar(conf) && !conf %in% c("HIGH", "MEDIUM", "LOW")) {

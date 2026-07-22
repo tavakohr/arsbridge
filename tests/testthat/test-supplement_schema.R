@@ -18,6 +18,13 @@ test_that("the golden v3 example fixture is valid JSON with two TLFs", {
   expect_setequal(names(fx$tlfs), c("14.1.1", "14.3.1"))
 })
 
+test_that("the golden fixture passes ars_validate_supplement with no FAIL", {
+  out <- suppressMessages(ars_validate_supplement(
+    test_path("fixtures/supplement_v3_example.json"),
+    adam_spec_path = test_path("fixtures/adam_spec_minimal.xlsx")))
+  expect_equal(sum(out$severity == "FAIL"), 0)
+})
+
 test_that("the golden fixture validates against the shipped schema (jsonvalidate)", {
   skip_if_not_installed("jsonvalidate")
   schema_path <- system.file("schema", "arsbridge_supplement_v3.schema.json",

@@ -164,14 +164,25 @@ test_that("validator checks typed groupings and flags a single-group axis", {
   expect_true(any(out$severity == "WARN" & grepl("groupings", out$where)))
 })
 
-test_that("validator flags an unresolvable parentRowLabel", {
-  supp <- .write_supp(.supp_minimal(list(`14.1.1` = list(
+test_that("a self-referential parentRowLabel FAILs; a stub-row parent is only advisory", {
+  ## Points at its own row -> FAIL.
+  bad <- .write_supp(.supp_minimal(list(`14.1.1` = list(
     title = "x", analysis_type = "CATEGORICAL", is_supported = TRUE,
     analyses = list(
       list(rowLabel = "Headache", variable = .av("ADAE", "AEDECOD"),
-           parentRowLabel = "No Such Parent"))))))
-  out <- suppressMessages(ars_validate_supplement(supp))
+           parentRowLabel = "Headache"))))))
+  out <- suppressMessages(ars_validate_supplement(bad))
   expect_true(any(out$severity == "FAIL" & grepl("parentRowLabel", out$problem)))
+
+  ## Points at a shell stub the validator cannot see -> INFO, never FAIL.
+  ok <- .write_supp(.supp_minimal(list(`14.1.1` = list(
+    title = "x", analysis_type = "CATEGORICAL_HIERARCHICAL", is_supported = TRUE,
+    analyses = list(
+      list(rowLabel = "Headache", variable = .av("ADAE", "AEDECOD"),
+           parentRowLabel = "Nervous system disorders"))))))
+  out <- suppressMessages(ars_validate_supplement(ok))
+  expect_false(any(out$severity == "FAIL" & grepl("parentRowLabel", out$problem)))
+  expect_true(any(out$severity == "INFO" & grepl("parentRowLabel", out$problem)))
 })
 
 ## --- .apply_supplement_bindings --------------------------------------------
