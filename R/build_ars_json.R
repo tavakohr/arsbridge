@@ -330,7 +330,8 @@ build_ars_json <- function(sections,
                            study_name = NULL,
                            spec_lookup = NULL,
                            ship_annotations = FALSE,
-                           extraction_mode = "llm") {
+                           extraction_mode = "llm",
+                           supplement_trust = NULL) {
   if (length(sections) == 0) {
     cli::cli_abort("Cannot build ReportingEvent: no TLF sections provided.")
   }
@@ -778,22 +779,24 @@ build_ars_json <- function(sections,
         NULL
       }
 
-      ## Supplement contributed an ADDITIONAL analysis for this row that the
-      ## regex did not produce (a differing variable the fill-gaps policy would
-      ## otherwise keep only as provenance). The shell's own analysis above
-      ## stands (regex wins the row); this builds the supplement's proposal as
-      ## its own analysis alongside it so nothing the supplement added is lost.
-      extra_ann <- trimws(as.character(row$supplement_proposed_annotation %||% ""))
+      ## The losing side of a row conflict is built as its OWN analysis
+      ## alongside the winner, so nothing either side contributed is dropped.
+      ## Symmetric across trust modes: in fill_gaps the supplement's differing
+      ## proposal is the secondary; in prefer_supplement the shell's overridden
+      ## original is. Both arrive on the row as `secondary_annotation` (the
+      ## older `supplement_proposed_annotation` name is still honoured).
+      extra_ann <- trimws(as.character(
+        row$secondary_annotation %||% row$supplement_proposed_annotation %||% ""))
       if (build_layout && nzchar(extra_ann)) {
         extra_id <- emit_extra_analysis(row$label %||% "", extra_ann, indent)
         if (!is.null(extra_id)) {
           diag_add(
             stage = "build_ars", severity = "INFO",
             problem = sprintf(
-              "Row '%s': supplement's differing proposal (%s) added as an additional analysis; the shell's own annotation was kept too",
+              "Row '%s': the conflicting proposal (%s) was added as an additional analysis; the winning annotation was kept too",
               row$label %||% "?", extra_ann),
             tlf_number = sec$tlf_number,
-            action = "Both the shell annotation and the supplement proposal are computed -- nothing the supplement contributed is dropped"
+            action = "Both sides of the conflict are computed -- nothing either side contributed is dropped"
           )
         }
       }
@@ -908,6 +911,9 @@ build_ars_json <- function(sections,
       ## "supplement" (chat-assistant supplement file), or "deterministic"
       ## (regex + keyword heuristics only, reduced accuracy).
       extraction_mode       = extraction_mode,
+      ## How supplement values resolved against the regex ("fill_gaps" or
+      ## "prefer_supplement"); NULL/absent when no supplement was used.
+      supplement_trust      = supplement_trust,
       requires_human_review = TRUE,
       ## TLFs where no grouping variable could be resolved (built
       ## ungrouped) -- start the human review here.

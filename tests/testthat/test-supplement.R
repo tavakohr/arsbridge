@@ -201,6 +201,35 @@ test_that("supplement fills only unannotated rows; regex wins conflicts", {
                     grepl("ADSL.SEX", recs$problem)))
 })
 
+test_that("prefer_supplement overrides a row conflict and keeps the shell as secondary", {
+  diag_reset()
+  supp_tlf <- list(analyses = list(
+    list(rowLabel = "Sex", variable = .av("ADSL", "EOSSTT"))   ## conflicts with shell ADSL.SEX
+  ))
+  sec <- .apply_supplement_bindings(.mk_supp_section(), supp_tlf, .supp_spec,
+                                    trust = "prefer_supplement")
+  ## Supplement value now wins the row; the shell's original is kept as secondary.
+  expect_equal(sec$stub_rows[[2]]$annotation, "ADSL.EOSSTT")
+  expect_equal(sec$stub_rows[[2]]$detection_method, "supplement")
+  expect_equal(sec$stub_rows[[2]]$secondary_annotation, "ADSL.SEX")
+  expect_equal(sec$stub_rows[[2]]$shell_overridden_annotation, "ADSL.SEX")
+  recs <- diag_records()
+  expect_true(any(recs$severity == "WARN" & grepl("overrides the shell", recs$problem)))
+})
+
+test_that("prefer_supplement never bypasses the spec gate", {
+  diag_reset()
+  supp_tlf <- list(analyses = list(
+    list(rowLabel = "Sex", variable = .av("ADSL", "FAKEVAR"))
+  ))
+  sec <- .apply_supplement_bindings(.mk_supp_section(), supp_tlf, .supp_spec,
+                                    trust = "prefer_supplement")
+  ## The hallucination is rejected in prefer mode too; the shell value stands.
+  expect_equal(sec$stub_rows[[2]]$annotation, "ADSL.SEX")
+  recs <- diag_records()
+  expect_true(any(recs$severity == "FAIL" & grepl("ADSL.FAKEVAR", recs$problem)))
+})
+
 test_that("HIGH confidence maps to medium, and a typed whereClause is stored", {
   diag_reset()
   supp_tlf <- list(analyses = list(
@@ -497,6 +526,44 @@ test_that("spec_to_ars(supplement=) binds gaps and records the mode", {
                     grepl("99.9.9", recs$problem, fixed = TRUE)))
   expect_true(any(recs$stage == "supplement" & grepl("applied", recs$problem)))
   expect_false(any(recs$stage == "setup"))
+})
+
+test_that("spec_to_ars records supplement_trust and keeps both sides of an override", {
+  ## prefer_supplement: the supplement overrides the shell's ADSL.AGE on the
+  ## Age row (ADSL.RACE is in-spec but differs), keeping the shell as secondary.
+  supp_path <- .write_supp(.supp_minimal(list(
+    `14.1.1` = list(
+      title = "Demographics", analysis_type = "CONTINUOUS", is_supported = TRUE,
+      analyses = list(list(rowLabel = "Age (years)", variable = .av("ADSL", "RACE")))
+    ))))
+  out_json <- tempfile(fileext = ".json")
+  res <- suppressMessages(no_llm_keys(spec_to_ars(
+    shell_path       = test_path("fixtures/annotated_shell_2tlf_minimal.docx"),
+    adam_spec_path   = test_path("fixtures/adam_spec_minimal.xlsx"),
+    supplement       = supp_path,
+    supplement_trust = "prefer_supplement",
+    output_path      = out_json,
+    report_path      = tempfile(fileext = ".xlsx"),
+    verbose          = FALSE
+  )))
+  expect_equal(res$reporting_event$`_meta`$supplement_trust, "prefer_supplement")
+  recs <- res$diagnostics
+  expect_true(any(recs$stage == "supplement" & recs$severity == "WARN" &
+                    grepl("overrides the shell", recs$problem)))
+})
+
+test_that("supplement_trust set without a supplement warns and is ignored", {
+  expect_warning(
+    suppressMessages(no_llm_keys(spec_to_ars(
+      shell_path       = test_path("fixtures/annotated_shell_2tlf_minimal.docx"),
+      adam_spec_path   = test_path("fixtures/adam_spec_minimal.xlsx"),
+      supplement_trust = "prefer_supplement",
+      output_path      = tempfile(fileext = ".json"),
+      report_path      = tempfile(fileext = ".xlsx"),
+      verbose          = FALSE
+    ))),
+    "has no effect without"
+  )
 })
 
 test_that("spec_to_ars emits populated groups[] from typed supplement groupings", {

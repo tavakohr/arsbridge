@@ -346,11 +346,21 @@ read_supplement <- function(path) {
 #' (`sec$population_where`, `row$supplement_where`, group `condition`), so the
 #' builders consume them without ever re-parsing a string.
 #'
+#' @param trust `"fill_gaps"` (default): a supplement value lands only where
+#'   the regex left a gap; a conflict keeps the shell value (regex wins).
+#'   `"prefer_supplement"`: a validated, spec-gated supplement value OVERRIDES
+#'   the shell value on a conflict, with a WARN recording both; the gate is
+#'   never bypassed, and the overridden shell value is kept as a secondary
+#'   analysis so nothing is dropped.
+#'
 #' @return The section, with bound rows carrying
 #'   `detection_method = "supplement"` and a `supplement_where` filter.
 #' @noRd
-.apply_supplement_bindings <- function(sec, supp_tlf, spec_lookup) {
+.apply_supplement_bindings <- function(sec, supp_tlf, spec_lookup,
+                                       trust = c("fill_gaps", "prefer_supplement")) {
   if (is.null(supp_tlf)) return(sec)
+  trust <- match.arg(trust)
+  prefer <- identical(trust, "prefer_supplement")
   spec_keys <- toupper(names(spec_lookup %||% list()))
   gate_ok <- function(ref) length(spec_keys) == 0 || ref %in% spec_keys
 
@@ -468,22 +478,44 @@ read_supplement <- function(path) {
       existing <- toupper(trimws(sec$stub_rows[[idx]]$annotation %||% ""))
       if (!startsWith(existing, ref)) {
         n_conflict <- n_conflict + 1L
-        ## Fill-gaps policy: the shell annotation stands (regex wins). But keep
-        ## the supplement's proposal on the row as provenance rather than
-        ## discarding it silently, so a later review step (or the validation
-        ## report) can surface the disagreement and the proposal is never lost.
-        sec$stub_rows[[idx]]$supplement_proposed_annotation <- annotation
-        sec$stub_rows[[idx]]$supplement_conflict            <- TRUE
-        sec$stub_rows[[idx]]$supplement_conflict_with       <- existing
-        diag_add(
-          stage = "supplement", severity = "WARN", input = INPUT_SUPPLEMENT,
-          problem = sprintf("Row '%s': supplement proposes %s but the shell annotation reads %s",
-                            sec$stub_rows[[idx]]$label %||% label, ref, existing),
-          tlf_number = sec$tlf_number,
-          action = "Shell annotation kept (regex wins); supplement proposal retained for provenance -- review this row if the shell is wrong"
-        )
+        shell_orig <- sec$stub_rows[[idx]]$annotation
+        if (prefer) {
+          ## prefer_supplement: the (validated, spec-gated) supplement value
+          ## overrides the shell's. The shell's original is kept as a secondary
+          ## analysis so nothing is dropped, and a WARN records both.
+          sec$stub_rows[[idx]]$annotation                <- annotation
+          sec$stub_rows[[idx]]$detection_method          <- "supplement"
+          sec$stub_rows[[idx]]$detection_confidence      <- .supp_confidence(b$confidence)
+          sec$stub_rows[[idx]]$supplement_where          <- parsed_where
+          sec$stub_rows[[idx]]$secondary_annotation      <- shell_orig
+          sec$stub_rows[[idx]]$shell_overridden_annotation <- shell_orig
+          sec$stub_rows[[idx]]$supplement_conflict       <- TRUE
+          diag_add(
+            stage = "supplement", severity = "WARN", input = INPUT_SUPPLEMENT,
+            problem = sprintf("Row '%s': supplement %s overrides the shell annotation %s (trust = prefer_supplement)",
+                              sec$stub_rows[[idx]]$label %||% label, ref, existing),
+            tlf_number = sec$tlf_number,
+            action = "Supplement value used; shell original kept as a secondary analysis -- review this row"
+          )
+        } else {
+          ## Fill-gaps policy: the shell annotation stands (regex wins). Keep
+          ## the supplement's proposal on the row as provenance rather than
+          ## discarding it silently, so a later review step (or the validation
+          ## report) can surface the disagreement and the proposal is never lost.
+          sec$stub_rows[[idx]]$supplement_proposed_annotation <- annotation
+          sec$stub_rows[[idx]]$secondary_annotation           <- annotation
+          sec$stub_rows[[idx]]$supplement_conflict            <- TRUE
+          sec$stub_rows[[idx]]$supplement_conflict_with       <- existing
+          diag_add(
+            stage = "supplement", severity = "WARN", input = INPUT_SUPPLEMENT,
+            problem = sprintf("Row '%s': supplement proposes %s but the shell annotation reads %s",
+                              sec$stub_rows[[idx]]$label %||% label, ref, existing),
+            tlf_number = sec$tlf_number,
+            action = "Shell annotation kept (regex wins); supplement proposal retained for provenance -- review this row if the shell is wrong"
+          )
+        }
       }
-      next   ## fill gaps only: annotated rows are never touched
+      next   ## the row is resolved either way; the gap-fill path is below
     }
 
     sec$stub_rows[[idx]]$annotation           <- annotation
@@ -494,17 +526,29 @@ read_supplement <- function(path) {
     n_applied <- n_applied + 1L
   }
 
-  ## Population: from the typed analysisSet, only when the shell found none.
-  if (!is.null(supp_tlf$analysisSet) && !nzchar(sec$population_annot %||% "")) {
+  ## Population: from the typed analysisSet, when the shell found none, or (in
+  ## prefer_supplement mode) overriding the shell's with a WARN.
+  had_pop <- nzchar(sec$population_annot %||% "")
+  if (!is.null(supp_tlf$analysisSet) && (!had_pop || prefer)) {
     as3 <- supp_tlf$analysisSet
     wr <- .supp_where(as3, sprintf("tlfs/%s/analysisSet", sec$tlf_number %||% "?"))
     bad_refs <- if (is.null(wr$where)) character(0)
                 else Filter(function(r) !gate_ok(r), .where_refs(wr$where))
     if (!is.null(wr$where) && length(bad_refs) == 0) {
+      new_pop <- .where_to_annotation(wr$where)
+      if (prefer && had_pop && !identical(sec$population_annot, new_pop)) {
+        diag_add(
+          stage = "supplement", severity = "WARN", input = INPUT_SUPPLEMENT,
+          problem = sprintf("Population overridden: shell '%s' -> supplement '%s' (trust = prefer_supplement)",
+                            sec$population_annot, new_pop),
+          tlf_number = sec$tlf_number,
+          action = "Supplement population used -- review this TLF"
+        )
+      }
       sec$population_where <- wr$where
-      sec$population_annot <- .where_to_annotation(wr$where)
+      sec$population_annot <- new_pop
       lab <- trimws(as.character(as3$label %||% ""))
-      if (nzchar(lab) && !nzchar(sec$population_text %||% "")) {
+      if (nzchar(lab) && (!nzchar(sec$population_text %||% "") || prefer)) {
         sec$population_text <- lab
       }
     } else {
@@ -525,12 +569,25 @@ read_supplement <- function(path) {
   ## variable; the first grouping carrying explicit condition groups (>= 2, all
   ## in-spec) becomes the column groups -- each group keeps its typed condition
   ## so .build_group_levels() consumes it with no translation.
+  ## In prefer_supplement mode the supplement axis/groups override the shell's.
   groupings <- supp_tlf$groupings %||% list()
-  if (length(groupings) > 0 && is.null(sec$column_annotation)) {
+  if (length(groupings) > 0 && (is.null(sec$column_annotation) || prefer)) {
     axis_ref <- .supp_grouping_ref(groupings[[1]])
-    if (nzchar(axis_ref) && gate_ok(axis_ref)) sec$column_annotation <- axis_ref
+    if (nzchar(axis_ref) && gate_ok(axis_ref)) {
+      if (prefer && !is.null(sec$column_annotation) &&
+          !identical(sec$column_annotation, axis_ref)) {
+        diag_add(
+          stage = "supplement", severity = "WARN", input = INPUT_SUPPLEMENT,
+          problem = sprintf("Column axis overridden: shell '%s' -> supplement '%s' (trust = prefer_supplement)",
+                            sec$column_annotation, axis_ref),
+          tlf_number = sec$tlf_number,
+          action = "Supplement column axis used -- review this TLF"
+        )
+      }
+      sec$column_annotation <- axis_ref
+    }
   }
-  if (length(groupings) > 0 && is.null(sec$column_groups)) {
+  if (length(groupings) > 0 && (is.null(sec$column_groups) || prefer)) {
     sec <- .apply_supplement_groups(sec, groupings, gate_ok)
   }
 
