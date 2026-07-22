@@ -22,9 +22,13 @@
 
 .SUPPLEMENT_VERSION <- 3L
 
-## Filename of the static instruction document (in inst/copilot/ and as the
-## default name ars_copilot_instructions() writes).
+## Filenames of the static instruction documents (in inst/copilot/) and the
+## shipped v3 JSON Schema (in inst/schema/). ars_copilot_instructions() copies
+## the set for the chosen workflow into the user's directory.
 .COPILOT_INSTRUCTIONS_FILE <- "arsbridge_copilot_instructions.md"
+.COPILOT_PHASE1_FILE       <- "arsbridge_phase1_blueprint_instructions.md"
+.COPILOT_PHASE2_FILE       <- "arsbridge_phase2_build_instructions.md"
+.SUPPLEMENT_SCHEMA_FILE    <- "arsbridge_supplement_v3.schema.json"
 
 ## Enum accepted for supplement analysis_type -- must stay in sync with
 ## .enrich_type() in enrich_with_llm.R.
@@ -35,34 +39,51 @@
 ## The static instruction file
 ## ---------------------------------------------------------------------------
 
-#' Write the Copilot instruction file for the supplement workflow
+## Resolve a shipped resource (installed package first, source tree fallback).
+#' @noRd
+.copilot_resolve <- function(subdir, file) {
+  src <- system.file(subdir, file, package = "arsbridge")
+  if (!nzchar(src)) {
+    dev <- file.path("inst", subdir, file)
+    if (file.exists(dev)) src <- dev
+  }
+  src
+}
+
+#' Write the Copilot instruction files for the supplement workflow
 #'
 #' Environments with no LLM API access can still boost `spec_to_ars()`
 #' accuracy with a chat assistant (GitHub Copilot, ChatGPT, an enterprise
-#' portal): upload the instruction file this function writes TOGETHER WITH
-#' your annotated shell `.docx` and ADaM spec `.xlsx`, and the assistant
-#' replies with one standard `supplement.json`. Pass that file to
-#' `spec_to_ars(supplement = "supplement.json")`.
+#' portal): upload the instruction file(s) this function writes TOGETHER WITH
+#' your annotated shell `.docx`, ADaM spec `.xlsx`, and the shipped JSON
+#' Schema, and the assistant replies with one strict `supplement.json`
+#' (format v3). Pass that file to `spec_to_ars(supplement = "supplement.json")`.
 #'
-#' The instruction file is static and versioned -- do not edit it; the
-#' format it requests is what `spec_to_ars()` knows how to validate.
+#' Two workflows are offered:
+#' * `"single"` (default): one instruction file. The assistant reads the shell
+#'   and spec and returns the supplement in one pass. Best for small/medium
+#'   shells.
+#' * `"two_phase"`: two instruction files. Phase 1 produces an evidence
+#'   blueprint (`tlf_extraction_blueprints.json`); Phase 2 turns that blueprint
+#'   into the supplement plus a validation report. Best for large or complex
+#'   shells where a single pass misses items -- the phases force explicit
+#'   evidence discovery then semantic construction with review cycles.
 #'
-#' @param dir       Directory to write the file into. Default: the current
+#' The files are static and versioned -- do not edit them; the format they
+#' request is what `spec_to_ars()` knows how to validate. The JSON Schema
+#' (`arsbridge_supplement_v3.schema.json`) is written alongside so the
+#' assistant can self-check its reply, and so can
+#' [ars_validate_supplement()] (when `jsonvalidate` is installed).
+#'
+#' @param dir       Directory to write the files into. Default: the current
 #'   working directory.
-#' @param open      Open the file for reading after writing it (so you can
-#'   see what the assistant will be told). Default: `TRUE` in interactive
-#'   sessions.
-#' @param overwrite Overwrite an existing copy. Default `FALSE` (the
-#'   existing copy is reported and kept).
+#' @param workflow  `"single"` (default) or `"two_phase"`. See Details.
+#' @param open      Open the first written file for reading. Default: `TRUE`
+#'   in interactive sessions.
+#' @param overwrite Overwrite existing copies. Default `FALSE` (existing
+#'   copies are reported and kept).
 #'
-#' @return Invisibly, the absolute path of the instruction file.
-#'
-#' @section Where the file comes from:
-#' The instruction file ships *inside* the installed package at
-#' `inst/copilot/arsbridge_copilot_instructions.md`. This function resolves it
-#' with `system.file("copilot", ...)` and copies it into `dir`, so you never
-#' need to know the internal package path. (Under `devtools::load_all()` it
-#' falls back to the source tree's `inst/copilot/`.)
+#' @return Invisibly, a character vector of the absolute paths written.
 #'
 #' @section Data note:
 #' Uploading the shell and spec to a chat assistant transmits their text
@@ -76,24 +97,29 @@
 #'
 #' @examples
 #' \dontrun{
-#' ars_copilot_instructions()   # writes ./arsbridge_copilot_instructions.md
+#' ars_copilot_instructions()                       # single-file workflow
+#' ars_copilot_instructions(workflow = "two_phase") # blueprint + build
 #' }
 #' @export
 ars_copilot_instructions <- function(dir = ".",
+                                     workflow = c("single", "two_phase"),
                                      open = interactive(),
                                      overwrite = FALSE) {
-  src <- system.file("copilot", .COPILOT_INSTRUCTIONS_FILE,
-                     package = "arsbridge")
-  if (!nzchar(src)) {
-    dev_path <- file.path("inst", "copilot", .COPILOT_INSTRUCTIONS_FILE)
-    if (file.exists(dev_path)) src <- dev_path
-  }
-  if (!nzchar(src) || !file.exists(src)) {
-    cli::cli_abort("Instruction file not found in the installed package: {.file {.COPILOT_INSTRUCTIONS_FILE}}")
+  workflow <- match.arg(workflow)
+
+  ## The set of (subdir, filename) resources for the chosen workflow. The JSON
+  ## Schema ships in every set so the assistant always has something to
+  ## self-validate against.
+  files <- if (identical(workflow, "single")) {
+    list(c("copilot", .COPILOT_INSTRUCTIONS_FILE),
+         c("schema",  .SUPPLEMENT_SCHEMA_FILE))
+  } else {
+    list(c("copilot", .COPILOT_PHASE1_FILE),
+         c("copilot", .COPILOT_PHASE2_FILE),
+         c("schema",  .SUPPLEMENT_SCHEMA_FILE))
   }
 
-  ## Create the target directory the user named rather than aborting -- they
-  ## explicitly asked us to write there.
+  ## Create the target directory the user named rather than aborting.
   if (!dir.exists(dir)) {
     ok <- dir.create(dir, recursive = TRUE, showWarnings = FALSE)
     if (!isTRUE(ok) && !dir.exists(dir)) {
@@ -104,31 +130,47 @@ ars_copilot_instructions <- function(dir = ".",
     }
     cli::cli_alert_info("Created {.path {dir}}.")
   }
-  dest <- file.path(dir, .COPILOT_INSTRUCTIONS_FILE)
 
-  if (file.exists(dest) && !isTRUE(overwrite)) {
-    cli::cli_alert_info("Using the existing copy at {.path {dest}} (pass {.code overwrite = TRUE} to refresh it).")
-  } else {
-    ok <- file.copy(src, dest, overwrite = TRUE)
-    if (!isTRUE(ok)) {
-      cli::cli_abort("Could not write {.path {dest}}.")
+  written <- character(0)
+  for (f in files) {
+    src <- .copilot_resolve(f[1], f[2])
+    if (!nzchar(src) || !file.exists(src)) {
+      cli::cli_abort("Shipped resource not found in the package: {.file {f[2]}}")
     }
-    cli::cli_alert_success("Wrote {.path {dest}}")
+    dest <- file.path(dir, f[2])
+    if (file.exists(dest) && !isTRUE(overwrite)) {
+      cli::cli_alert_info("Using the existing copy at {.path {dest}} (pass {.code overwrite = TRUE} to refresh it).")
+    } else {
+      ok <- file.copy(src, dest, overwrite = TRUE)
+      if (!isTRUE(ok)) cli::cli_abort("Could not write {.path {dest}}.")
+      cli::cli_alert_success("Wrote {.path {dest}}")
+    }
+    written <- c(written, normalizePath(dest))
   }
 
-  cli::cli_h2("Supplement workflow (no API key needed)")
-  cli::cli_ol(c(
-    "Upload to your chat assistant (Copilot/ChatGPT): this instruction file + your annotated shell {.file .docx} + your ADaM spec {.file .xlsx}.",
-    "Save the assistant's JSON reply as {.file supplement.json}.",
-    "Optional pre-flight: {.code ars_validate_supplement(\"supplement.json\", \"<adam_spec>.xlsx\")}.",
-    "Run {.code spec_to_ars(shell, spec, supplement = \"supplement.json\")}."
-  ))
+  if (identical(workflow, "single")) {
+    cli::cli_h2("Supplement workflow (no API key needed)")
+    cli::cli_ol(c(
+      "Upload to your chat assistant: the instruction file + the JSON Schema + your annotated shell {.file .docx} + your ADaM spec {.file .xlsx}.",
+      "Save the assistant's JSON reply as {.file supplement.json}.",
+      "Optional pre-flight: {.code ars_validate_supplement(\"supplement.json\", \"<adam_spec>.xlsx\")}.",
+      "Run {.code spec_to_ars(shell, spec, supplement = \"supplement.json\")}."
+    ))
+  } else {
+    cli::cli_h2("Two-phase supplement workflow (no API key needed)")
+    cli::cli_ol(c(
+      "Session 1 (Phase 1): upload the Phase-1 file + shell + spec. Save the reply as {.file tlf_extraction_blueprints.json}.",
+      "Session 2 (Phase 2): upload the Phase-2 file + the JSON Schema + shell + the blueprint. Save {.file supplement.json} and {.file extraction_validation_report.json}.",
+      "Optional pre-flight: {.code ars_validate_supplement(\"supplement.json\", \"<adam_spec>.xlsx\")}.",
+      "Run {.code spec_to_ars(shell, spec, supplement = \"supplement.json\")}."
+    ))
+  }
 
-  if (isTRUE(open)) {
-    tryCatch(file.show(dest, title = .COPILOT_INSTRUCTIONS_FILE),
+  if (isTRUE(open) && length(written) > 0) {
+    tryCatch(file.show(written[1], title = basename(written[1])),
              error = function(e) invisible(NULL))
   }
-  invisible(normalizePath(dest))
+  invisible(written)
 }
 
 ## ---------------------------------------------------------------------------

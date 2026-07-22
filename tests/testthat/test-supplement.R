@@ -505,10 +505,34 @@ test_that("ars_copilot_instructions creates a not-yet-existing dir", {
   expect_true(file.exists(path[[1]]))
 })
 
-test_that("the copilot instruction file ships with the package", {
-  p <- system.file("copilot", "arsbridge_copilot_instructions.md",
+test_that("all copilot resources ship with the package", {
+  for (f in c("arsbridge_copilot_instructions.md",
+              "arsbridge_phase1_blueprint_instructions.md",
+              "arsbridge_phase2_build_instructions.md")) {
+    p <- system.file("copilot", f, package = "arsbridge")
+    expect_true(nzchar(p) && file.exists(p))
+  }
+  s <- system.file("schema", "arsbridge_supplement_v3.schema.json",
                    package = "arsbridge")
-  expect_true(nzchar(p) && file.exists(p))
+  expect_true(nzchar(s) && file.exists(s))
+})
+
+test_that("ars_copilot_instructions writes the single-file set (instructions + schema)", {
+  dir <- withr::local_tempdir()
+  paths <- suppressMessages(ars_copilot_instructions(dir, open = FALSE))
+  expect_length(paths, 2)
+  expect_true(file.exists(file.path(dir, "arsbridge_copilot_instructions.md")))
+  expect_true(file.exists(file.path(dir, "arsbridge_supplement_v3.schema.json")))
+})
+
+test_that("ars_copilot_instructions(workflow = 'two_phase') writes both phases + schema", {
+  dir <- withr::local_tempdir()
+  paths <- suppressMessages(
+    ars_copilot_instructions(dir, workflow = "two_phase", open = FALSE))
+  expect_length(paths, 3)
+  expect_true(file.exists(file.path(dir, "arsbridge_phase1_blueprint_instructions.md")))
+  expect_true(file.exists(file.path(dir, "arsbridge_phase2_build_instructions.md")))
+  expect_true(file.exists(file.path(dir, "arsbridge_supplement_v3.schema.json")))
 })
 
 ## --- spec_to_ars 3-tier integration (fully offline) --------------------------
