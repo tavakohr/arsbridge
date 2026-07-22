@@ -30,7 +30,9 @@
   (evidence blueprint) and Phase-2 (semantic construction + repair) instruction
   set for large or complex shells, alongside the single-file workflow. Both
   emit supplement version 3 and are shipped in step with the reader, so the
-  instructions and the accepted format can no longer diverge.
+  instructions and the accepted format can no longer diverge. Each instruction
+  file opens with a **"How to run this"** block -- the operator steps (which
+  files to attach, what to save) plus a paste-ready prompt for the chat.
   `ars_copilot_instructions()` now returns the vector of paths it wrote.
 
 * **`ars_validate_supplement()` rewritten for v3** with typed-condition checks,
