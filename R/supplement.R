@@ -554,11 +554,20 @@ ars_validate_supplement <- function(path, adam_spec_path = NULL) {
     idx <- .match_stub_label(.norm_label(label), labels_norm)
     if (is.na(idx)) {
       n_unmatched <- n_unmatched + 1L
+      ## No stub row carries this label, but the variable already passed the
+      ## spec gate above -- so keep the binding as a free-standing analysis for
+      ## the builder rather than dropping it (the supplement named an analysis
+      ## the shell has no row for). build_ars_json() materialises these onto
+      ## the output; .build_analysis derives dataset/variable from the string.
+      where <- trimws(as.character(b$where %||% ""))
+      annotation <- if (nzchar(where)) paste0(ref, " WHERE ", where) else ref
+      sec$supplement_extra_rows[[length(sec$supplement_extra_rows) + 1L]] <-
+        list(label = label, annotation = annotation)
       diag_add(
         stage = "supplement", severity = "WARN", input = INPUT_SUPPLEMENT,
         problem = sprintf("Supplement binding label '%s' matched no stub row", label),
         tlf_number = sec$tlf_number,
-        action = "Binding skipped -- the label must be the stub text as it appears in the shell"
+        action = "Kept as a free-standing analysis on this TLF -- if it was meant for an existing row, match the label to the stub text as it appears in the shell"
       )
       next
     }
@@ -582,12 +591,19 @@ ars_validate_supplement <- function(path, adam_spec_path = NULL) {
       existing <- toupper(trimws(sec$stub_rows[[idx]]$annotation %||% ""))
       if (!startsWith(existing, ref)) {
         n_conflict <- n_conflict + 1L
+        ## Fill-gaps policy: the shell annotation stands (regex wins). But keep
+        ## the supplement's proposal on the row as provenance rather than
+        ## discarding it silently, so a later review step (or the validation
+        ## report) can surface the disagreement and the proposal is never lost.
+        sec$stub_rows[[idx]]$supplement_proposed_annotation <- annotation
+        sec$stub_rows[[idx]]$supplement_conflict            <- TRUE
+        sec$stub_rows[[idx]]$supplement_conflict_with       <- existing
         diag_add(
           stage = "supplement", severity = "WARN", input = INPUT_SUPPLEMENT,
           problem = sprintf("Row '%s': supplement proposes %s but the shell annotation reads %s",
                             sec$stub_rows[[idx]]$label %||% label, ref, existing),
           tlf_number = sec$tlf_number,
-          action = "Shell annotation kept (regex wins) -- review this row if the shell is wrong"
+          action = "Shell annotation kept (regex wins); supplement proposal retained for provenance -- review this row if the shell is wrong"
         )
       }
       next   ## fill gaps only: annotated rows are never touched

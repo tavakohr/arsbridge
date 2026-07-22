@@ -84,3 +84,35 @@ test_that("a quoted value still wins over the numeric-equality branch", {
   expect_equal(wc$condition$comparator, "EQ")
   expect_equal(unlist(wc$condition$value), "Y")
 })
+
+test_that("double-equals equality parses like single-equals (numeric)", {
+  wc <- parse_where_clause("ADSL.COHORTN==99")
+  expect_equal(wc$condition$dataset, "ADSL")
+  expect_equal(wc$condition$variable, "COHORTN")
+  expect_equal(wc$condition$comparator, "EQ")
+  expect_equal(unlist(wc$condition$value), "99")
+})
+
+test_that("double-equals equality parses like single-equals (quoted)", {
+  wc <- parse_where_clause("ADSL.SCRNFL=='Y'")
+  expect_equal(wc$condition$comparator, "EQ")
+  expect_equal(unlist(wc$condition$value), "Y")
+})
+
+test_that("is.na() OR double-equals is one compound, not just the is.na branch", {
+  ## The column-header form the user described: a cohort column defined by
+  ## "missing OR the numeric Unknown code". Both branches must survive.
+  wc <- parse_where_clause("is.na(ADSL.COHORTN) or ADSL.COHORTN==99")
+  expect_equal(wc$compoundExpression$logicalOperator, "OR")
+  expect_length(wc$compoundExpression$whereClauses, 2)
+  vals <- lapply(wc$compoundExpression$whereClauses,
+                 function(c) unlist(c$condition$value))
+  ## first branch is the missing check (empty value), second is EQ 99
+  expect_length(vals[[1]], 0)
+  expect_equal(vals[[2]], "99")
+})
+
+test_that("!= is not mangled by the ==-normalisation", {
+  wc <- parse_where_clause("ADSL.DCSREAS not missing")
+  expect_equal(wc$condition$comparator, "NE")
+})

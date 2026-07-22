@@ -319,3 +319,102 @@ test_that("Round-trip through siera::readARS produces non-empty ARD scripts", {
     expect_match(content, "df3_")   # confirms the method template expanded
   }
 })
+
+test_that("distinct authored rows with different labels are not collapsed", {
+  ## Two continuous summary rows on the same variable but distinct labels must
+  ## each produce their own analysis -- the widened dedup key keeps them apart.
+  sec <- .demo_section()
+  sec$stub_rows <- list(
+    list(label = "Age (years)", annotation = "ADSL.AGE", has_annot = TRUE,
+         detection_method = "pattern", detection_confidence = "high"),
+    list(label = "Age (years) - total", annotation = "ADSL.AGE", has_annot = TRUE,
+         detection_method = "pattern", detection_confidence = "high")
+  )
+  sec$enriched_rows <- list(
+    list(label = "Age (years)", primary_dataset = "ADSL",
+         primary_variable = "AGE", variable_role = "ANALYSIS"),
+    list(label = "Age (years) - total", primary_dataset = "ADSL",
+         primary_variable = "AGE", variable_role = "ANALYSIS")
+  )
+  re <- build_ars_json(list(sec))
+  expect_length(re$analyses, 2)
+  expect_setequal(vapply(re$analyses, function(a) a$label, character(1)),
+                  c("Age (years)", "Age (years) - total"))
+})
+
+test_that("repeated categorical count rows on one variable still collapse", {
+  ## AE-template case: placeholder + example rows all counting the same
+  ## variable draw the same distribution -- one analysis, despite the labels.
+  sec <- .demo_section(title = "AE by Preferred Term")
+  sec$analysis_type   <- "CATEGORICAL"
+  sec$ars_method_name <- "Count and Percentage"
+  sec$stub_rows <- list(
+    list(label = "<Preferred Term>", annotation = "ADAE.AEDECOD", has_annot = TRUE,
+         detection_method = "pattern", detection_confidence = "high"),
+    list(label = "Preferred Term", annotation = "ADAE.AEDECOD", has_annot = TRUE,
+         detection_method = "pattern", detection_confidence = "high")
+  )
+  sec$enriched_rows <- list(
+    list(label = "<Preferred Term>", primary_dataset = "ADAE",
+         primary_variable = "AEDECOD", variable_role = "ANALYSIS"),
+    list(label = "Preferred Term", primary_dataset = "ADAE",
+         primary_variable = "AEDECOD", variable_role = "ANALYSIS")
+  )
+  re <- build_ars_json(list(sec),
+                       spec_lookup = list(ADAE.AEDECOD = list(type = "char")))
+  expect_length(re$analyses, 1)
+})
+
+test_that("an unparseable population filter is carried as annotationText", {
+  sec <- .demo_section()
+  sec$population_text  <- "Cohort subset"
+  sec$population_annot <- "ADSL.COHORTN in the unknown set"  # not a real clause
+  re <- build_ars_json(list(sec))
+  as_obj <- re$analysisSets[[1]]
+  expect_null(as_obj$condition)
+  expect_equal(as_obj$annotationText, "ADSL.COHORTN in the unknown set")
+})
+
+test_that("a supplement's differing proposal becomes an ADDITIONAL analysis, not dropped", {
+  ## Row already annotated by the shell (regex wins) AND carrying a differing
+  ## supplement proposal: the shell analysis stands and the supplement's is
+  ## built alongside it -- nothing the supplement contributed is ignored.
+  sec <- .demo_section()
+  sec$stub_rows <- list(
+    list(label = "Disposition", annotation = "ADSL.EOSSTT", has_annot = TRUE,
+         detection_method = "pattern", detection_confidence = "high",
+         supplement_proposed_annotation = "ADSL.DCSREAS",
+         supplement_conflict = TRUE, supplement_conflict_with = "ADSL.EOSSTT")
+  )
+  sec$enriched_rows <- list(
+    list(label = "Disposition", primary_dataset = "ADSL",
+         primary_variable = "EOSSTT", variable_role = "ANALYSIS")
+  )
+  re <- build_ars_json(list(sec),
+                       spec_lookup = list(ADSL.EOSSTT = list(type = "char"),
+                                          ADSL.DCSREAS = list(type = "char")))
+  vars <- vapply(re$analyses, function(a) a$variable, character(1))
+  expect_true("EOSSTT"  %in% vars)   ## the shell's own analysis
+  expect_true("DCSREAS" %in% vars)   ## the supplement's additional analysis
+  expect_length(re$analyses, 2)
+})
+
+test_that("a supplement binding matching no stub row is built as a free-standing analysis", {
+  ## The shell authored no row for this binding, but it passed the spec gate,
+  ## so it must appear as its own analysis on the output rather than vanish.
+  sec <- .demo_section()
+  sec$supplement_extra_rows <- list(
+    list(label = "Time to discontinuation", annotation = "ADSL.EOSSTT")
+  )
+  re <- build_ars_json(list(sec),
+                       spec_lookup = list(ADSL.AGE = list(type = "num"),
+                                          ADSL.EOSSTT = list(type = "char")))
+  vars   <- vapply(re$analyses, function(a) a$variable, character(1))
+  labels <- vapply(re$analyses, function(a) a$label, character(1))
+  expect_true("EOSSTT" %in% vars)
+  expect_true("Time to discontinuation" %in% labels)
+  ## and the output references it
+  ref_ids <- unlist(re$outputs[[1]]$referencedAnalysisIds)
+  free_id <- re$analyses[[which(labels == "Time to discontinuation")]]$id
+  expect_true(free_id %in% ref_ids)
+})

@@ -130,12 +130,22 @@
   ## DATASET.VAR EQ 'val' / NE 'val' / ... (ARS comparator form)
   paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR,
          "\\s+(?:EQ|NE|IN|NOTIN|GT|GE|LT|LE)\\s+", .QUOTED_VALUE),
-  ## DATASET.VAR='val'  (most common shell-annotation form)
-  paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR, "\\s*=\\s*", .QUOTED_VALUE),
-  ## DATASET.VAR=1  (unquoted numeric equality -- the usual convention for
-  ## column-header annotations like "Cohort 1 (N=XX) ADSL.COHORTN=1")
+  ## DATASET.VAR='val' / =="val"  (most common shell-annotation form; the
+  ## double-equals R/Python operator is accepted too -- ==? matches one or two)
+  paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR, "\\s*==?\\s*", .QUOTED_VALUE),
+  ## DATASET.VAR=1 / ==99  (unquoted numeric equality -- the usual convention
+  ## for column-header annotations like "Cohort 1 (N=XX) ADSL.COHORTN=1" or
+  ## the double-equals form "ADSL.COHORTN==99")
   paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR,
-         "\\s*=\\s*[-+]?\\d+(?:\\.\\d+)?\\b"),
+         "\\s*==?\\s*[-+]?\\d+(?:\\.\\d+)?\\b"),
+  ## Call-form missing checks the way annotated shells write them -- R's
+  ## "is.na(ADSL.COHORTN)" and SAS's "missing(COHORTN)", plus the negations
+  ## "!is.na(...)" / "not missing(...)". Listed before the bare DS.VAR branch
+  ## so the whole call is captured, not just the inner reference.
+  paste0("(?i:(?:!|\\bnot\\b)\\s*(?:is\\.na|missing)\\s*\\(\\s*",
+         .ADAM_DS, "\\.", .ADAM_VAR, "\\s*\\))"),
+  paste0("(?i:(?:is\\.na|missing)\\s*\\(\\s*",
+         .ADAM_DS, "\\.", .ADAM_VAR, "\\s*\\))"),
   ## DATASET.VAR not null / not missing
   paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR,
          "\\s+(?i:not\\s+(?:null|missing))"),

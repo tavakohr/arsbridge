@@ -193,6 +193,11 @@ test_that("supplement fills only unannotated rows; regex wins conflicts", {
   ## Conflict: the shell's ADSL.SEX stands, a WARN names both variables.
   expect_equal(sec$stub_rows[[2]]$annotation, "ADSL.SEX")
   expect_equal(sec$stub_rows[[2]]$detection_method, "colour")
+  ## ...but the supplement proposal is retained on the row for provenance
+  ## rather than being silently discarded.
+  expect_true(isTRUE(sec$stub_rows[[2]]$supplement_conflict))
+  expect_equal(sec$stub_rows[[2]]$supplement_proposed_annotation, "ADSL.EOSSTT")
+  expect_equal(sec$stub_rows[[2]]$supplement_conflict_with, "ADSL.SEX")
   recs <- diag_records()
   expect_true(any(recs$stage == "supplement" & recs$severity == "WARN" &
                     grepl("ADSL.EOSSTT", recs$problem) &
@@ -213,6 +218,13 @@ test_that("where clauses, statline rows, unmatched labels, spec gate", {
   expect_equal(sec$stub_rows[[1]]$annotation,
                "ADSL.EOSSTT WHERE EOSSTT='COMPLETED'")
   expect_false(sec$stub_rows[[3]]$has_annot)   ## statline untouched
+
+  ## The unmatched (in-spec) binding is kept as a free-standing analysis, not
+  ## dropped; the out-of-spec one is rejected by the gate and never kept.
+  extra_vars <- vapply(sec$supplement_extra_rows %||% list(),
+                       function(e) e$annotation, character(1))
+  expect_true("ADSL.AGE" %in% extra_vars)          ## "No Such Row" binding kept
+  expect_false(any(grepl("FAKEVAR", extra_vars)))  ## hallucination not kept
 
   recs <- diag_records()
   expect_true(any(recs$severity == "INFO" & grepl("statistic sub-row", recs$problem)))

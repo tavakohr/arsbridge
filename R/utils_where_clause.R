@@ -95,6 +95,14 @@ parse_where_clause <- function(expr) {
   expr <- trimws(expr %||% "")
   if (!nzchar(expr)) return(NULL)
 
+  ## Normalise the R/Python double-equals equality operator to the single "="
+  ## the grammar below expects (shells and supplements write both
+  ## "ADSL.COHORTN=99" and "ADSL.COHORTN==99"). "!=", ">=" and "<=" never
+  ## contain the "==" substring, so they are left untouched. Comparison values
+  ## in clinical filters do not contain "==", so this is safe on the whole
+  ## expression.
+  expr <- gsub("==", "=", expr, fixed = TRUE)
+
   ## Strip leading/trailing "unique USUBJID in DATASET where" boilerplate so
   ## what remains is just the conditional payload.
   expr <- sub("^(?i)\\s*unique\\s+USUBJID\\s+in\\s+[A-Z0-9]+\\s+where\\s+",
