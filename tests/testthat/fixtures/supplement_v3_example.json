@@ -1,0 +1,165 @@
+{
+  "supplement_version": 3,
+  "validation_report": "extraction_validation_report.json",
+  "generator": {
+    "workflow": "two_phase",
+    "instruction_version": "8.0"
+  },
+  "tlfs": {
+    "14.1.1": {
+      "title": "Summary of Demographic and Baseline Characteristics",
+      "outputType": "TABLE",
+      "analysis_type": "MIXED_SUMMARY",
+      "is_supported": true,
+      "analysisSet": {
+        "label": "Safety Population",
+        "condition": {
+          "dataset": "ADSL",
+          "variable": "SAFFL",
+          "comparator": "EQ",
+          "value": ["Y"]
+        }
+      },
+      "groupings": [
+        {
+          "groupingDataset": "ADSL",
+          "groupingVariable": "TRT01A",
+          "dataDriven": true,
+          "label": "Treatment Group"
+        }
+      ],
+      "includeTotal": true,
+      "analyses": [
+        {
+          "rowLabel": "Age (years)",
+          "variable": {"dataset": "ADSL", "variable": "AGE"},
+          "methodId": "MTH_SUMMARY_STATISTICS_CONTINUOUS",
+          "confidence": "HIGH"
+        },
+        {
+          "rowLabel": "Male",
+          "variable": {"dataset": "ADSL", "variable": "SEX"},
+          "whereClause": {
+            "condition": {
+              "dataset": "ADSL", "variable": "SEX",
+              "comparator": "EQ", "value": ["M"]
+            }
+          },
+          "methodId": "MTH_COUNT_AND_PERCENTAGE",
+          "parentRowLabel": "Sex, n (%)"
+        },
+        {
+          "rowLabel": "Female",
+          "variable": {"dataset": "ADSL", "variable": "SEX"},
+          "whereClause": {
+            "condition": {
+              "dataset": "ADSL", "variable": "SEX",
+              "comparator": "EQ", "value": ["F"]
+            }
+          },
+          "methodId": "MTH_COUNT_AND_PERCENTAGE",
+          "parentRowLabel": "Sex, n (%)"
+        },
+        {
+          "rowLabel": "White",
+          "variable": {"dataset": "ADSL", "variable": "RACE"},
+          "whereClause": {
+            "condition": {
+              "dataset": "ADSL", "variable": "RACE",
+              "comparator": "EQ", "value": ["WHITE"]
+            }
+          },
+          "methodId": "MTH_COUNT_AND_PERCENTAGE",
+          "parentRowLabel": "Race, n (%)"
+        },
+        {
+          "rowLabel": "Black or African American",
+          "variable": {"dataset": "ADSL", "variable": "RACE"},
+          "whereClause": {
+            "condition": {
+              "dataset": "ADSL", "variable": "RACE",
+              "comparator": "EQ", "value": ["BLACK OR AFRICAN AMERICAN"]
+            }
+          },
+          "methodId": "MTH_COUNT_AND_PERCENTAGE",
+          "parentRowLabel": "Race, n (%)",
+          "confidence": "MEDIUM"
+        }
+      ],
+      "anchors": {
+        "firstRowLabel": "Age (years)",
+        "lastRowLabel": "Black or African American",
+        "rowCount": 10
+      }
+    },
+    "14.3.1": {
+      "title": "Summary of Treatment-Emergent Adverse Events",
+      "outputType": "TABLE",
+      "analysis_type": "AE_FREQUENCY",
+      "methodId": "MTH_AE_FREQUENCY_COUNT",
+      "is_supported": true,
+      "analysisSet": {
+        "label": "Safety Population",
+        "condition": {
+          "dataset": "ADSL",
+          "variable": "SAFFL",
+          "comparator": "EQ",
+          "value": ["Y"]
+        }
+      },
+      "groupings": [
+        {
+          "groupingDataset": "ADSL",
+          "groupingVariable": "TRT01A",
+          "dataDriven": true,
+          "label": "Treatment Group"
+        }
+      ],
+      "includeTotal": true,
+      "analyses": [
+        {
+          "rowLabel": "Any TEAE",
+          "variable": {"dataset": "ADAE", "variable": "TRTEMFL"},
+          "whereClause": {
+            "condition": {
+              "dataset": "ADAE", "variable": "TRTEMFL",
+              "comparator": "EQ", "value": ["Y"]
+            }
+          },
+          "confidence": "HIGH"
+        },
+        {
+          "rowLabel": "Headache",
+          "variable": {"dataset": "ADAE", "variable": "AEDECOD"},
+          "whereClause": {
+            "condition": {
+              "dataset": "ADAE", "variable": "AEDECOD",
+              "comparator": "EQ", "value": ["HEADACHE"]
+            }
+          },
+          "parentRowLabel": "Most Common TEAEs (>=5%)",
+          "evidenceIds": ["EV-14.3.1-07"]
+        },
+        {
+          "rowLabel": "Nausea",
+          "variable": {"dataset": "ADAE", "variable": "AEDECOD"},
+          "whereClause": {
+            "condition": {
+              "dataset": "ADAE", "variable": "AEDECOD",
+              "comparator": "EQ", "value": ["NAUSEA"]
+            }
+          },
+          "parentRowLabel": "Most Common TEAEs (>=5%)"
+        }
+      ],
+      "sorting": [
+        {"dataset": "ADAE", "variable": "AEDECOD", "direction": "ASC", "order": 1}
+      ],
+      "anchors": {
+        "firstRowLabel": "Any TEAE",
+        "lastRowLabel": "Nausea",
+        "rowCount": 5
+      }
+    }
+  }
+}
