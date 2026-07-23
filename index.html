@@ -24,7 +24,7 @@
 
     <a class="navbar-brand me-2" href="index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9004</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9005</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -96,6 +96,10 @@
 <tr>
 <td><strong>Native ARD execution</strong></td>
 <td>Run ARS JSON directly against <code>.xpt</code> or <code>.csv</code> datasets using <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a>, with no dataset-loading boilerplate.</td>
+</tr>
+<tr>
+<td><strong>Codelist-decoded categories</strong></td>
+<td>A coded categorical variable (e.g. a numeric <code>DCSREASN</code>) is decoded through the ADaM spec’s codelist: the ARD and rendered table show <code>DEATH</code>, not <code>1</code>, in codelist order, with unobserved terms reported as n = 0. Unannotated coded column axes get their column labels from the codelist too.</td>
 </tr>
 <tr>
 <td><strong>Publication-ready tables</strong></td>

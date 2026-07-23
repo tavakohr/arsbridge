@@ -26,6 +26,7 @@ to its source.
 | **Spec-gated validation** | Every variable proposed — by the regex, a supplement, or the LLM — is checked against your ADaM spec. A variable missing from the spec is rejected and logged, never silently invented. |
 | **CDISC ARS JSON output** | The extraction result is a structured, versioned file you can diff, review, and feed to downstream tools like [siera](https://clymbclinical.github.io/siera/). |
 | **Native ARD execution** | Run ARS JSON directly against `.xpt` or `.csv` datasets using [cards](https://github.com/insightsengineering/cards), with no dataset-loading boilerplate. |
+| **Codelist-decoded categories** | A coded categorical variable (e.g. a numeric `DCSREASN`) is decoded through the ADaM spec’s codelist: the ARD and rendered table show `DEATH`, not `1`, in codelist order, with unobserved terms reported as n = 0. Unannotated coded column axes get their column labels from the codelist too. |
 | **Publication-ready tables** | [`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md) builds a formatted GT table: treatment columns detected, percentages rescaled, row groups labelled, ARS footnotes carried through. |
 | **Partial tables, full traceability** | Statistics arsbridge cannot yet compute are reserved as keyed `manual_pending` rows. Each shows a `[‡ manual]` marker in the table until a programmer fills it with a validated script. Nothing is ever an orphan number. |
 

@@ -2,6 +2,33 @@
 
 ## arsbridge (development version)
 
+- **Spec codelists decode coded categorical variables end to end.**
+  `parse_adam_spec()` now reads the spec workbook’s Codelists sheet
+  (both the `"Codelist Name" / "Term (Code)" / "Decoded Value"` and the
+  `"ID" / "Term" / "Order" / "Decoded Value"` header conventions, with
+  merged-cell fill-down and a `Used By Variables` fallback link) and,
+  for define.xml input, the `CodeList` / `CodeListRef` nodes. The parsed
+  codelists ship in the ARS JSON as `_meta$value_decodes`, and both the
+  execution engine and the emitted {cards} deliverable derive the coded
+  analysis variable as a factor
+  (`factor(as.character(VAR), levels = codes, labels = decodes)`) before
+  [`cards::ard_categorical()`](https://rdrr.io/pkg/cards/man/deprecated.html).
+  The ARD therefore shows decoded labels (“DEATH”) instead of raw codes
+  (“1”), keeps codelist order, and reports EVERY codelist term –
+  unobserved categories appear with n = 0, matching disposition shells
+  that list all reasons. Authored level rows (`ADSL.DCSREASN=1` under
+  the parent) are stamped with the decoded label (raw code kept as
+  `level_code`) so renderer level matching is unaffected. Codelists
+  larger than 15 terms (e.g. COUNTRY) are skipped with a WARN so tables
+  never explode into hundreds of zero rows.
+
+- **Column groups fall back to the spec codelist.** When a grouping
+  variable’s column headers carry no condition annotations (the
+  `GF_<VAR>` `groups: []` case that rendered coded column labels), the
+  grouping factor’s per-level groups are now derived from the variable’s
+  codelist – decoded label, `EQ` term condition, codelist order – with a
+  WARN asking for review. Header-annotated groups always win.
+
 - **BREAKING: supplement format version 3 – typed CDISC ARS
   conditions.** The no-API supplement now carries every filter,
   population, and column condition as a typed ARS `WhereClause` object
