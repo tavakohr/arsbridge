@@ -606,6 +606,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       }
     }
 
+
     ## Resolve the stratification operand (CMH etc.) against the data, like the
     ## grouping vars. An absent or unknown strata means the method cannot
     ## execute, so .EXEC_DESCRIPTORS$available() returns FALSE and the cell is
@@ -689,6 +690,32 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
                         "dataset where ", analysis_var, " is populated to render this row.")
       )
       next
+    }
+
+    ## Codelist decode of the analysis variable (legacy path only -- the
+    ## default path sources the emitted block, which derives the same factor
+    ## via .decode_mutate_expr, so this keeps emitted == executed). Same
+    ## gates as the emitter: per-category methods only, never the subject
+    ## key, never a bare-flag count. Applied after the all-missing skip so
+    ## both paths judge that condition on the raw column.
+    if (legacy && !is_stub && !is.null(res$decode) && length(res$decode) > 0 &&
+        method_id %in% c("MTH_COUNT_AND_PERCENTAGE", "MTH_AE_FREQUENCY_COUNT",
+                         "MTH_SUBJECT_COUNT") &&
+        !identical(toupper(analysis_var), toupper(subject_key)) &&
+        !.is_bare_flag(res) &&
+        analysis_var %in% names(df_filtered)) {
+      dec_values <- vapply(res$decode, function(d) as.character(d$value %||% ""),
+                           character(1))
+      dec_labels <- vapply(res$decode, function(d) as.character(d$label %||% ""),
+                           character(1))
+      dec_keep <- nzchar(dec_values) & nzchar(dec_labels)
+      if (any(dec_keep)) {
+        df_filtered[[analysis_var]] <- factor(
+          as.character(df_filtered[[analysis_var]]),
+          levels = dec_values[dec_keep],
+          labels = dec_labels[dec_keep]
+        )
+      }
     }
 
     ard <- if (is_stub) {

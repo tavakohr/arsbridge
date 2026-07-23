@@ -16,6 +16,14 @@
 ## otherwise returns `a`. Mirrors rlang::`%||%` semantics without the dep.
 `%||%` <- function(a, b) if (is.null(a) || length(a) == 0) b else a
 
+## Largest codelist that expands into decoded factor levels / column groups.
+## A categorical analysis on a decoded variable shows EVERY codelist term
+## (unobserved ones as n = 0), which is right for a 9-term discontinuation
+## codelist but would explode a 195-term COUNTRY codelist into 195 rows.
+## Above this size the decode is skipped (observed raw values are shown) and
+## a diagnostic says so.
+.CODELIST_DECODE_MAX_TERMS <- 15L
+
 ## Variables that always live in ADSL regardless of the listing's primary
 ## source dataset. Used by parse_shell_docx() to resolve a bare variable
 ## name (e.g. "USUBJID", "ACTARMCD") in a listing column header to its

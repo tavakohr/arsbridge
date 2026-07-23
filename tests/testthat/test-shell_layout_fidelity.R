@@ -484,3 +484,62 @@ test_that("ars_render_figure resolves its default dataset from _meta.source_data
   p <- ars_render_figure(ars_path, adam_dir, "F_14_3_1")
   expect_s3_class(p, "ggplot")
 })
+
+test_that("decoded level slots fill from the decoded computed pool", {
+  ## Disposition pattern with a spec codelist: the parent expands decoded
+  ## labels ("DEATH"), and the authored "Death" level row's slot was stamped
+  ## with the decoded label at build time -- so slot and pool share one
+  ## vocabulary and the authored row fills instead of blanking.
+  sec <- list(
+    tlf_number = "T-2", tlf_type = "TABLE", title = "Disposition",
+    population_text = "All", population_annot = "",
+    footnotes = character(), source_datasets = "ADSL",
+    col_headers = c("", "Placebo"), n_data_cols = 1L,
+    ars_method_name = "Count and Percentage",
+    by_variable = "TRT01A", by_variable_dataset = "ADSL",
+    stub_rows = list(
+      list(label = "Primary reason for discontinuation",
+           annotation = "ADSL.DCSREASN", has_annot = TRUE),
+      list(label = "Death", annotation = "ADSL.DCSREASN=1",
+           has_annot = TRUE)),
+    enriched_rows = list(
+      list(label = "Primary reason for discontinuation",
+           primary_dataset = "ADSL", primary_variable = "DCSREASN",
+           data_subset = NULL, variable_role = "ANALYSIS")))
+  lookup <- list(`ADSL.DCSREASN` = list(dataset = "ADSL",
+                                        variable = "DCSREASN",
+                                        type = "integer",
+                                        codelist = "DCSREAS"))
+  codelists <- list(DCSREAS = list(
+    name = "DCSREAS",
+    terms = data.frame(term = c("1", "2"),
+                       decode = c("DEATH", "LOST TO FOLLOW-UP"),
+                       order = 1:2, stringsAsFactors = FALSE),
+    used_by = "ADSL.DCSREASN"))
+
+  re <- suppressMessages(suppressWarnings(
+    build_ars_json(list(sec), spec_lookup = lookup, codelists = codelists)))
+  o  <- re$outputs[[1]]
+  sl <- o$`_meta`$shell_layout
+  expect_identical(sl[[2]]$kind, "level")
+  expect_identical(sl[[2]]$level, "DEATH")
+
+  ## Renderer fill: the ARD pool carries decoded labels (factor levels).
+  parent_aid <- sl[[1]]$analysis_id
+  layout <- .shell_layout(o)
+  ard <- data.frame(
+    output_id = o$id, analysis_id = parent_aid,
+    method_id = "MTH_COUNT_AND_PERCENTAGE",
+    variable = "DCSREASN",
+    variable_level = c("DEATH", "LOST TO FOLLOW-UP"),
+    group1_level = "Placebo",
+    stat_name = "n", stat = c(4, 2), stringsAsFactors = FALSE)
+  prep <- .tfrmt_prep_ard_layout(
+    ard, o$id, layout, col_var = "group1_level", keep_params = "n",
+    col_levels = "Placebo", fixed_vars = "TRT01A",
+    params_map = list(MTH_COUNT_AND_PERCENTAGE = "n"))
+  death <- prep[prep[[.ARS_SHELL_LBL]] == "Death", ]
+  expect_equal(death$stat, 4)
+  ## The unmatched decoded level still expands under the parent header.
+  expect_true("LOST TO FOLLOW-UP" %in% prep[[.ARS_SHELL_LBL]])
+})
