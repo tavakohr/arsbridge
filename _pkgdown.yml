@@ -58,6 +58,8 @@ reference:
   - ars_to_tfrmt_list
   - ars_render_tlf
   - ars_render_all
+  - ars_render_combined
+  - ars_render_split
   - ars_render_listing
   - ars_render_figure
 

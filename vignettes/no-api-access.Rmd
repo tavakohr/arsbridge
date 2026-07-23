@@ -57,16 +57,47 @@ package consumes the assistant's reply as an auxiliary file.
 ars_copilot_instructions()
 ```
 
-This writes `arsbridge_copilot_instructions.md` into your working directory
-and prints the workflow. The file is static and versioned — it tells the
-assistant exactly what to read and, critically, the exact JSON shape to
-reply with, so the package can validate the answer.
+This writes two files into your working directory — the instruction file
+`arsbridge_copilot_instructions.md` and the JSON Schema
+`arsbridge_supplement_v3.schema.json` — and prints the workflow. The
+instruction file is static and versioned: it tells the assistant exactly what
+to read and the exact JSON shape (format version 3) to reply with, so the
+package can validate the answer. For a large or complex shell where a single
+pass misses items, use the two-session workflow instead:
+
+```{r}
+ars_copilot_instructions(workflow = "two_phase")
+```
+
+which writes a Phase-1 (evidence blueprint) and a Phase-2 (semantic
+construction + repair) instruction file. Phase 1 returns
+`tlf_extraction_blueprints.json`; you feed that back in session 2 to produce
+the supplement.
+
+### Typed conditions (format v3)
+
+The single most important thing to know about the format: **every filter,
+population, and column condition is a typed object, not a string.** A row that
+displays "Completed" is expressed as
+
+```json
+{"rowLabel": "Completed", "variable": {"dataset": "ADSL", "variable": "EOSSTT"},
+ "whereClause": {"condition": {"dataset": "ADSL", "variable": "EOSSTT",
+                               "comparator": "EQ", "value": ["COMPLETED"]}}}
+```
+
+not as `"where": "EOSSTT='COMPLETED'"`. This is what eliminates the old
+string-parsing failures (double `=`, smart quotes, `OR` splitting): the
+assistant hands the package a parsed tree, so there is nothing left to
+mis-parse. The instruction file and the shipped JSON Schema spell the shape out
+in full, with a worked example.
 
 ### Step 2 — upload to the assistant
 
-Upload **three files together** to your chat assistant:
+Upload **four files together** to your chat assistant:
 
 * `arsbridge_copilot_instructions.md` (from step 1),
+* `arsbridge_supplement_v3.schema.json` (so the assistant can self-check),
 * your annotated TLF shell `.docx`,
 * your ADaM specification `.xlsx`.
 
@@ -78,11 +109,13 @@ Save the assistant's reply — one JSON block — as `supplement.json`.
 ars_validate_supplement("supplement.json", "adam_spec.xlsx")
 ```
 
-This checks the format version, every binding's shape and variable syntax,
-the analysis-type enums, and — when you pass the spec — that every proposed
-variable actually exists in your ADaM spec. Any `FAIL` line is worded so you
-can paste it straight back to the assistant to regenerate the file, e.g.
-*"regenerate: ADSL.WEIGHTBL is not in the ADaM spec"*.
+This checks the format version, every typed condition, the analysis-type and
+method enums, and — when you pass the spec — that every referenced variable
+exists in your ADaM spec. Any `FAIL` line is worded so you can paste it back to
+the assistant, e.g. *"regenerate: ADSL.WEIGHTBL is not in the ADaM spec"*; when
+there are FAILs the result also carries a `repair_prompt` attribute bundling
+them into one paste-ready block. When `jsonvalidate` is installed, the file is
+additionally checked against the shipped JSON Schema.
 
 ### Step 4 — run
 
@@ -101,11 +134,17 @@ res$extraction_mode
 The supplement is an **assistant, not an override**. Two guarantees make it
 safe to trust a draft it produced:
 
-* **The regex wins.** A supplement binding lands only on a row the
+* **The regex wins (by default).** A supplement binding lands only on a row the
   deterministic pass left unannotated. If the shell already annotated a row,
   the shell's annotation stands and any disagreement is logged as a `WARN`
   for you to review — the assistant can never silently rewrite an authored
-  annotation.
+  annotation. When you *do* trust the assistant's reading more than the regex
+  (a shell the deterministic pass extracts poorly), pass
+  `spec_to_ars(supplement_trust = "prefer_supplement")`: a validated,
+  spec-gated supplement value then overrides the regex on a conflict, with a
+  `WARN` recording both and the shell's original kept as a secondary analysis.
+  The spec gate still applies, so a hallucinated variable is rejected in either
+  mode.
 * **The spec is the gate.** Every `DATASET.VARIABLE` the supplement proposes
   is checked against your ADaM spec. One that is not in the spec is dropped
   and logged as a blocking `FAIL`, exactly as a live LLM's proposal would be.
@@ -145,8 +184,10 @@ wording and a study's variable inventory can be sponsor-confidential —
 | Symptom | Cause | Fix |
 |---|---|---|
 | `Supplement file is not valid JSON` | assistant wrapped the reply in prose, or used smart quotes | the reader strips a ```` ```json ```` fence and smart double-quotes automatically; if it still fails, ask the assistant to "reply with only one fenced strict-JSON block" |
-| `Supplement version mismatch` | file made with a different package version | rerun `ars_copilot_instructions()` from the installed version and regenerate |
-| `binding label 'X' matched no stub row` (`WARN`) | the `label` is not the stub text verbatim | ensure `label` is copied exactly from the shell, footnote markers and all |
-| `is not in the ADaM spec` (`FAIL`) | assistant proposed a variable your spec does not have | fix the binding or add the variable to the spec |
+| `Supplement version mismatch` | a v2 file, or one made with a different package version | v3 conditions are typed objects, not strings — regenerate with `ars_copilot_instructions()` from the installed version |
+| `invalid whereClause` / `not a where-clause` (`FAIL`) | a condition was written as a string, or with a bad comparator | use the typed shape `{"condition": {"dataset", "variable", "comparator", "value": [...]}}`; paste the `repair_prompt` back to the assistant |
+| `analysis label 'X' matched no stub row` (`WARN`) | the `rowLabel` is not the stub text verbatim | copy `rowLabel` exactly from the shell, footnote markers and all |
+| `is not in the ADaM spec` (`FAIL`) | assistant proposed a variable your spec does not have | fix the analysis or add the variable to the spec |
+| `Anchor mismatch` (`WARN`) | the supplement's first row / row count disagrees with the parsed table | confirm the assistant described the same table arsbridge parsed |
 | `entry 'X' matches no TLF in the shell` (`WARN`) | TLF numbering typo in the reply | key each TLF by its shell heading number (e.g. `"14.1.1"`) |
 | a TLF ran on heuristics (`WARN`) | that TLF is missing from the supplement | add it to `tlfs` and rerun |
