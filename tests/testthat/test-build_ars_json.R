@@ -480,3 +480,138 @@ test_that(".build_data_subset tolerates a missing-value (empty array) filter", {
   expect_equal(ds$condition$variable, "DCSREAS")
   expect_length(ds$condition$value, 0)
 })
+
+## --- Codelist decodes (spec codelist -> ARS _meta$value_decodes) ------------
+
+## Disposition-style section: a coded categorical parent row with one
+## authored level row, grouped by a coded cohort variable.
+.cl_section <- function(column_groups = NULL) {
+  sec <- list(
+    tlf_number       = "T-14-1-1",
+    tlf_type         = "TABLE",
+    title            = "Subject Disposition",
+    population_text  = "Screened Subjects",
+    population_annot = "ADSL.SCRNFL='Y'",
+    source_datasets  = "ADSL",
+    col_headers      = c("", "Cohort A", "Cohort B", "Total"),
+    n_data_cols      = 3L,
+    stub_rows        = list(
+      list(label = "Primary reason for discontinuation",
+           annotation = "ADSL.DCSREASN", has_annot = TRUE,
+           raw_text = "Primary reason for discontinuation"),
+      list(label = "  Death", annotation = "ADSL.DCSREASN=1",
+           has_annot = TRUE, raw_text = "  Death")
+    ),
+    analysis_type    = "CATEGORICAL",
+    ars_method_name  = "Count and Percentage",
+    by_variable      = "COHORTN",
+    by_variable_dataset = "ADSL",
+    enriched_rows    = list()
+  )
+  if (!is.null(column_groups)) sec$column_groups <- column_groups
+  sec
+}
+
+.cl_codelists <- function() {
+  list(
+    DCSREAS = list(
+      name = "DCSREAS",
+      terms = data.frame(term = c("1", "2", "3"),
+                         decode = c("DEATH", "LOST TO FOLLOW-UP", "OTHER"),
+                         order = 1:3, stringsAsFactors = FALSE),
+      used_by = "ADSL.DCSREASN"),
+    COHORT = list(
+      name = "COHORT",
+      terms = data.frame(term = c("1", "2", "99"),
+                         decode = c("Cohort A", "Cohort B", "Missing"),
+                         order = 1:3, stringsAsFactors = FALSE),
+      used_by = "ADSL.COHORTN")
+  )
+}
+
+.cl_lookup <- function() {
+  list(
+    "ADSL.DCSREASN" = list(dataset = "ADSL", variable = "DCSREASN",
+                           type = "integer", codelist = "DCSREAS"),
+    "ADSL.COHORTN"  = list(dataset = "ADSL", variable = "COHORTN",
+                           type = "integer", codelist = "COHORT")
+  )
+}
+
+test_that("value_decodes ships the codelist for a coded categorical row", {
+  re <- build_ars_json(list(.cl_section()), spec_lookup = .cl_lookup(),
+                       codelists = .cl_codelists())
+  vd <- re$`_meta`$value_decodes
+  expect_true("ADSL.DCSREASN" %in% names(vd))
+  entry <- vd[["ADSL.DCSREASN"]]
+  expect_equal(vapply(entry, function(e) e$value, character(1)),
+               c("1", "2", "3"))
+  expect_equal(vapply(entry, function(e) e$label, character(1)),
+               c("DEATH", "LOST TO FOLLOW-UP", "OTHER"))
+})
+
+test_that("authored level slots are stamped with the decoded label", {
+  re  <- build_ars_json(list(.cl_section()), spec_lookup = .cl_lookup(),
+                        codelists = .cl_codelists())
+  lay <- re$outputs[[1]]$`_meta`$shell_layout
+  lvl <- Filter(function(e) identical(e$kind, "level"), lay)
+  expect_length(lvl, 1)
+  expect_equal(lvl[[1]]$level, "DEATH")
+  expect_equal(lvl[[1]]$level_code, "1")
+})
+
+test_that("grouping factor groups fall back to the codelist when headers have none", {
+  diag_reset()
+  re <- build_ars_json(list(.cl_section()), spec_lookup = .cl_lookup(),
+                       codelists = .cl_codelists())
+  gf <- re$analysisGroupings[[1]]
+  expect_equal(gf$id, "GF_COHORTN")
+  expect_length(gf$groups, 3)
+  expect_equal(vapply(gf$groups, function(g) g$label, character(1)),
+               c("Cohort A", "Cohort B", "Missing"))
+  cond1 <- gf$groups[[1]]$condition$condition
+  expect_equal(cond1$variable, "COHORTN")
+  expect_equal(cond1$comparator, "EQ")
+  expect_equal(unlist(cond1$value), "1")
+  ## The fallback announces itself for review.
+  d <- ars_diagnostics()
+  expect_true(any(grepl("derived from the spec codelist", d$problem)))
+})
+
+test_that("header-annotated column groups beat the codelist fallback", {
+  re <- build_ars_json(list(.cl_section(column_groups = list(
+    variable = "COHORTN", dataset = "ADSL",
+    groups = list(
+      list(label = "Cohort One", annotation = "ADSL.COHORTN=1", order = 1L),
+      list(label = "Cohort Two", annotation = "ADSL.COHORTN=2", order = 2L)
+    )))), spec_lookup = .cl_lookup(), codelists = .cl_codelists())
+  gf <- re$analysisGroupings[[1]]
+  expect_length(gf$groups, 2)
+  expect_equal(vapply(gf$groups, function(g) g$label, character(1)),
+               c("Cohort One", "Cohort Two"))
+})
+
+test_that("an oversized codelist is skipped with a diagnostic", {
+  diag_reset()
+  big <- .cl_codelists()
+  big$DCSREAS$terms <- data.frame(
+    term   = as.character(1:20),
+    decode = paste("Reason", 1:20),
+    order  = 1:20, stringsAsFactors = FALSE
+  )
+  re <- build_ars_json(list(.cl_section()), spec_lookup = .cl_lookup(),
+                       codelists = big)
+  expect_false("ADSL.DCSREASN" %in% names(re$`_meta`$value_decodes))
+  ## Authored level slot keeps its raw coded value -- nothing translated.
+  lay <- re$outputs[[1]]$`_meta`$shell_layout
+  lvl <- Filter(function(e) identical(e$kind, "level"), lay)
+  expect_equal(lvl[[1]]$level, "1")
+  d <- ars_diagnostics()
+  expect_true(any(grepl("decode skipped", d$problem)))
+})
+
+test_that("no codelists means no decodes and unchanged groupings", {
+  re <- build_ars_json(list(.cl_section()), spec_lookup = .cl_lookup())
+  expect_length(re$`_meta`$value_decodes, 0)
+  expect_length(re$analysisGroupings[[1]]$groups, 0)
+})

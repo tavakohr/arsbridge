@@ -120,8 +120,12 @@
 #'   `include_total` (logical), `strata` (stratification variable for methods
 #'   like CMH, or `NULL`), `group_defs` (named by grouping variable: ordered
 #'   per-level `{label, order, condition}` definitions for annotation-defined
-#'   column axes; empty list otherwise), `subject_key`, `label`,
-#'   `annotation`, `description`, and `sap_description`.
+#'   column axes; empty list otherwise), `decode` (ordered list of
+#'   `{value, label}` pairs from the spec codelist shipped in the
+#'   ReportingEvent's `_meta$value_decodes` for this analysis variable, or
+#'   `NULL` -- the executor/emitter derive a decoded factor from it),
+#'   `subject_key`, `label`, `annotation`, `description`, and
+#'   `sap_description`.
 #' @noRd
 resolve_analysis <- function(ana, spec, subject_key = "USUBJID",
                              grouping_map = NULL, analysis_to_output = NULL,
@@ -168,6 +172,26 @@ resolve_analysis <- function(ana, spec, subject_key = "USUBJID",
   strata <- .as_scalar_char(ana[["strata"]]) %||%
     .as_scalar_char(ana[["stratificationVariable"]])
 
+  ## Spec-codelist decode for the analysis variable, shipped by
+  ## build_ars_json() in _meta$value_decodes. Ordered {value, label} pairs;
+  ## kept in the shipped order (build_ars_json already ordered the terms).
+  decode <- NULL
+  if (!is.null(variable) && nzchar(variable %||% "")) {
+    bare_var <- toupper(sub("^.*\\.", "", variable))
+    ds       <- toupper(dataset %||% "")
+    entry <- spec[["_meta"]][["value_decodes"]][[paste0(ds, ".", bare_var)]]
+    if (!is.null(entry) && length(entry) > 0) {
+      decode <- lapply(entry, function(e) list(
+        value = .as_scalar_char(e[["value"]]) %||% "",
+        label = .as_scalar_char(e[["label"]]) %||% ""
+      ))
+      keep <- vapply(decode, function(d) nzchar(d$value) && nzchar(d$label),
+                     logical(1))
+      decode <- decode[keep]
+      if (length(decode) == 0) decode <- NULL
+    }
+  }
+
   description <- .as_scalar_char(ana[["description"]]) %||%
     .as_scalar_char(ana[["name"]]) %||% analysis_id
 
@@ -183,6 +207,7 @@ resolve_analysis <- function(ana, spec, subject_key = "USUBJID",
     include_total   = include_total,
     strata          = strata,
     group_defs      = group_defs,
+    decode          = decode,
     subject_key     = subject_key,
     label           = .as_scalar_char(ana[["label"]]),
     annotation      = .as_scalar_char(ana[["annotation"]]),

@@ -98,3 +98,59 @@ test_that("emitted-block engine equals the legacy executor path", {
   expect_false(is.null(ard_leg))
   expect_equal(.eq_norm(ard_new), .eq_norm(ard_leg))
 })
+
+test_that("decoded categorical analyses stay equivalent across engines", {
+  skip_if_not_installed("cards")
+  td <- withr::local_tempdir()
+  utils::write.csv(data.frame(
+    USUBJID  = sprintf("S%02d", 1:10),
+    TRT01A   = rep(c("Drug A", "Placebo"), each = 5),
+    SAFFL    = "Y",
+    DCSREASN = c(1, 1, 2, NA, NA, 3, 1, NA, NA, NA),
+    stringsAsFactors = FALSE
+  ), file.path(td, "adsl.csv"), row.names = FALSE)
+
+  spec <- list(
+    analysisSets = list(list(id = "AS_SAF", name = "Safety",
+      condition = list(dataset = "ADSL", variable = "SAFFL",
+                       comparator = "EQ", value = list("Y")))),
+    dataSubsets = list(),
+    analysisGroupings = list(list(id = "GF_TRT", name = "TRT01A",
+                                  groupingVariable = "TRT01A")),
+    methods = list(),
+    outputs = list(list(id = "OUT_DS", name = "T-DS",
+                        referencedAnalysisIds = list("AN_REAS"))),
+    analyses = list(list(
+      id = "AN_REAS", methodId = "MTH_COUNT_AND_PERCENTAGE",
+      label = "Discontinuation reason", dataset = "ADSL",
+      variable = "DCSREASN",
+      analysisVariable = list(dataset = "ADSL", variable = "DCSREASN"),
+      analysisSetId = "AS_SAF", dataSubsetId = "",
+      orderedGroupings = list(list(order = 1, groupingId = "GF_TRT",
+                                   resultsByGroup = TRUE)),
+      includeTotal = TRUE)),
+    `_meta` = list(value_decodes = list(
+      "ADSL.DCSREASN" = list(
+        list(value = "1", label = "DEATH",             order = 1),
+        list(value = "2", label = "LOST TO FOLLOW-UP", order = 2),
+        list(value = "3", label = "OTHER",             order = 3),
+        list(value = "4", label = "PREGNANCY",         order = 4)
+      )
+    ))
+  )
+  ars <- file.path(td, "ars.json")
+  writeLines(jsonlite::toJSON(spec, auto_unbox = TRUE, null = "null"), ars)
+
+  ard_new <- ars_to_ard(ars, td)
+  ard_leg <- ars_to_ard(ars, td, legacy = TRUE)
+
+  expect_false(is.null(ard_new))
+  expect_false(is.null(ard_leg))
+  expect_equal(.eq_norm(ard_new), .eq_norm(ard_leg))
+
+  ## Both engines decoded -- including the zero-count PREGNANCY level.
+  lv <- vapply(ard_new$variable_level, function(x)
+    if (length(x)) as.character(x[[1]]) else NA_character_, character(1))
+  expect_true(all(c("DEATH", "LOST TO FOLLOW-UP", "OTHER", "PREGNANCY") %in% lv))
+  expect_false(any(lv %in% c("1", "2", "3", "4"), na.rm = TRUE))
+})

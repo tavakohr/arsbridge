@@ -169,3 +169,92 @@ test_that("emitted loader finds and reads .sas7bdat (alongside .xpt / .csv)", {
   expect_equal(nrow(ADSL), 2)
   expect_true(all(c("USUBJID", "AGE") %in% names(ADSL)))
 })
+
+## --- Codelist decode emission ------------------------------------------------
+
+.ac_decode_meta <- function() {
+  list(value_decodes = list(
+    "ADSL.DCSREASN" = list(
+      list(value = "1", label = "DEATH",             order = 1),
+      list(value = "2", label = "LOST TO FOLLOW-UP", order = 2),
+      list(value = "3", label = "OTHER",             order = 3)
+    )
+  ))
+}
+
+test_that("a shipped decode emits a factor derivation and decodes the ARD", {
+  td <- withr::local_tempdir()
+  utils::write.csv(data.frame(
+    USUBJID  = sprintf("%02d", 1:8),
+    TRT01A   = rep(c("Drug A", "Placebo"), each = 4),
+    DCSREASN = c(1, 1, 2, NA, 1, NA, NA, NA),
+    stringsAsFactors = FALSE
+  ), file.path(td, "adsl.csv"), row.names = FALSE)
+
+  spec <- .ac_spec(list(list(
+    id = "AN_1", methodId = "MTH_COUNT_AND_PERCENTAGE",
+    label = "Discontinuation reason", dataset = "ADSL", variable = "DCSREASN",
+    analysisVariable = list(dataset = "ADSL", variable = "DCSREASN"),
+    analysisSetId = "", dataSubsetId = "",
+    orderedGroupings = list(list(order = 1, groupingId = "GF_TRT",
+                                 resultsByGroup = TRUE)),
+    includeTotal = FALSE)))
+  spec$`_meta` <- .ac_decode_meta()
+
+  paths <- write_tlf_code(.ac_write(spec, td), file.path(td, "code"),
+                          adam_dir = td)
+  txt <- paste(readLines(paths[[1]]), collapse = "\n")
+
+  ## The deliverable carries the decode as plain readable cards code.
+  expect_true(grepl("factor(", txt, fixed = TRUE))
+  expect_true(grepl('as.character(DCSREASN)', txt, fixed = TRUE))
+  expect_true(grepl('"DEATH"', txt, fixed = TRUE))
+
+  ## Sourcing it yields decoded levels, including the unobserved one (n = 0).
+  ard <- .ac_source(paths[[1]])
+  lv <- vapply(ard$variable_level, function(x)
+    if (length(x)) as.character(x[[1]]) else NA_character_, character(1))
+  expect_true(all(c("DEATH", "LOST TO FOLLOW-UP", "OTHER") %in% lv))
+  n_other <- unlist(ard$stat[lv == "OTHER" & ard$stat_name == "n"])
+  expect_true(all(n_other == 0))
+})
+
+test_that("the decode never touches continuous or bare-flag blocks", {
+  td <- withr::local_tempdir()
+  .ac_adsl(td)
+
+  ## Continuous method on a variable that (wrongly) carries a decode entry:
+  ## the emitted block must keep as.numeric, not factor.
+  spec <- .ac_spec(list(list(
+    id = "AN_AGE", methodId = "MTH_SUMMARY_STATISTICS_CONTINUOUS",
+    label = "Age group", dataset = "ADSL", variable = "AGEGR1",
+    analysisVariable = list(dataset = "ADSL", variable = "AGEGR1"),
+    analysisSetId = "", dataSubsetId = "",
+    orderedGroupings = list(), includeTotal = FALSE)))
+  spec$`_meta` <- list(value_decodes = list(
+    "ADSL.AGEGR1" = list(list(value = "<65", label = "Under 65", order = 1))
+  ))
+  paths <- write_tlf_code(.ac_write(spec, td), file.path(td, "code"),
+                          adam_dir = td)
+  txt <- paste(readLines(paths[[1]]), collapse = "\n")
+  expect_false(grepl('"Under 65"', txt, fixed = TRUE))
+
+  ## Bare-flag disposition count: the flag's own value never displays, so a
+  ## decode on it must not emit either.
+  spec2 <- .ac_spec(list(list(
+    id = "AN_RAND", methodId = "MTH_SUBJECT_COUNT",
+    label = "Randomized", dataset = "ADSL", variable = "RANDFL",
+    analysisVariable = list(dataset = "ADSL", variable = "RANDFL"),
+    analysisSetId = "", dataSubsetId = "DS_RAND",
+    orderedGroupings = list(), includeTotal = FALSE)),
+    subsets = list(list(id = "DS_RAND",
+      condition = list(dataset = "ADSL", variable = "RANDFL",
+                       comparator = "EQ", value = list("Y")))))
+  spec2$`_meta` <- list(value_decodes = list(
+    "ADSL.RANDFL" = list(list(value = "Y", label = "Yes", order = 1))
+  ))
+  paths2 <- write_tlf_code(.ac_write(spec2, td), file.path(td, "code2"),
+                           adam_dir = td)
+  txt2 <- paste(readLines(paths2[[1]]), collapse = "\n")
+  expect_false(grepl('"Yes"', txt2, fixed = TRUE))
+})
