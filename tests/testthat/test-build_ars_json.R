@@ -468,3 +468,15 @@ test_that(".build_data_subset emits a compoundExpression from a compound row fil
   expect_equal(ds$compoundExpression$logicalOperator, "OR")
   expect_length(ds$compoundExpression$whereClauses, 2)
 })
+
+test_that(".build_data_subset tolerates a missing-value (empty array) filter", {
+  ## v3 supplement encodes an "is missing" test as EQ/NE with value = [].
+  er <- list(data_subset = list(
+    dataset = "ADSL", variable = "DCSREAS",
+    comparator = "NE", value = list()))
+  ds <- .build_data_subset(er, "T-14-1-1", 1L)
+  expect_false(is.null(ds))
+  expect_equal(ds$condition$dataset, "ADSL")
+  expect_equal(ds$condition$variable, "DCSREAS")
+  expect_length(ds$condition$value, 0)
+})
