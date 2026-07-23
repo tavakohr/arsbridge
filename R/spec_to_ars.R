@@ -480,6 +480,7 @@ spec_to_ars <- function(shell_path,
   re <- build_ars_json(enriched, study_id = study_id,
                        study_name = study_name %||% study_id,
                        spec_lookup = spec$lookup,
+                       codelists = spec$codelists,
                        ship_annotations = ship_annotations,
                        extraction_mode = extraction_mode,
                        supplement_trust = if (identical(extraction_mode, "supplement"))

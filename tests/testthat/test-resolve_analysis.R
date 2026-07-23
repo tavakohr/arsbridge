@@ -87,3 +87,30 @@ test_that("resolve_analysis honours a custom subject_key", {
   res  <- resolve_analysis(spec$analyses[[1]], spec, subject_key = "SUBJID")
   expect_equal(res$subject_key, "SUBJID")
 })
+
+test_that("resolve_analysis reads the analysis variable's decode from _meta", {
+  spec <- .ra_spec()
+  spec$`_meta` <- list(value_decodes = list(
+    "ADSL.AGEGR1" = list(
+      list(value = "1", label = "<65",  order = 1),
+      list(value = "2", label = ">=65", order = 2)
+    )
+  ))
+  res <- resolve_analysis(spec$analyses[[1]], spec)
+  expect_length(res$decode, 2)
+  expect_equal(res$decode[[1]], list(value = "1", label = "<65"))
+  expect_equal(res$decode[[2]], list(value = "2", label = ">=65"))
+})
+
+test_that("decode is NULL without a matching _meta entry", {
+  spec <- .ra_spec()
+  res  <- resolve_analysis(spec$analyses[[1]], spec)
+  expect_null(res$decode)
+
+  ## Entry for a DIFFERENT variable must not leak onto this analysis.
+  spec$`_meta` <- list(value_decodes = list(
+    "ADSL.DCSREASN" = list(list(value = "1", label = "DEATH", order = 1))
+  ))
+  res2 <- resolve_analysis(spec$analyses[[1]], spec)
+  expect_null(res2$decode)
+})

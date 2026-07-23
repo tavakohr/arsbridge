@@ -315,6 +315,13 @@
 #'   `enrich_with_llm()` applied to each section).
 #' @param study_id   Study identifier.
 #' @param study_name Human-readable study name.
+#' @param codelists  Optional codelists from `parse_adam_spec()$codelists`.
+#'   When a categorical analysis variable resolves to one (via the spec's
+#'   Codelist column or a codelist's Used-By list), its value -> decoded-label
+#'   map ships in the ReportingEvent's `_meta$value_decodes`, so the engine
+#'   and the emitted cards code display decoded values ("DEATH") instead of
+#'   raw codes ("1"). Codelists above `.CODELIST_DECODE_MAX_TERMS` terms are
+#'   skipped with a diagnostic.
 #' @param ship_annotations When `TRUE`, programmer annotation lines captured
 #'   below the shell tables are appended to each output's Footnote display
 #'   section (debug escape hatch). Default `FALSE`: annotations are kept in
@@ -329,6 +336,7 @@ build_ars_json <- function(sections,
                            study_id   = "STUDY-001",
                            study_name = NULL,
                            spec_lookup = NULL,
+                           codelists = NULL,
                            ship_annotations = FALSE,
                            extraction_mode = "llm",
                            supplement_trust = NULL) {
@@ -355,6 +363,66 @@ build_ars_json <- function(sections,
     grepl("char|text|string|^c$", type) || (nzchar(cl) && !is.na(cl))
   }
   count_method_id <- .STANDARD_METHODS[["Count and Percentage"]]$id
+
+  ## --- Codelist decode support ---------------------------------------------
+  ## Ordered term -> decoded-label map for one DATASET.VARIABLE, or NULL when
+  ## no codelist resolves / the codelist is too large to expand. Memoised so
+  ## the size-guard diagnostic fires once per variable, not once per row.
+  decode_cache <- list()
+  .decode_terms_for <- function(dataset, variable) {
+    bare_var <- toupper(sub("^.*\\.", "", variable %||% ""))
+    ds       <- toupper(dataset %||% "")
+    if (!nzchar(bare_var) || length(codelists %||% list()) == 0) return(NULL)
+    key <- paste0(ds, ".", bare_var)
+    if (!is.null(decode_cache[[key]])) {
+      cached <- decode_cache[[key]]
+      return(if (identical(cached, "none")) NULL else cached)
+    }
+    cl <- .codelist_for(codelists, ds, bare_var, spec_lookup[[key]])
+    terms <- if (is.null(cl) || nrow(cl$terms) == 0) {
+      NULL
+    } else if (nrow(cl$terms) > .CODELIST_DECODE_MAX_TERMS) {
+      diag_add(
+        stage = "build_ars", severity = "WARN",
+        problem = sprintf(
+          "Codelist '%s' for %s has %d terms (limit %d) -- decode skipped",
+          cl$name %||% "?", key, nrow(cl$terms), .CODELIST_DECODE_MAX_TERMS),
+        action = "Observed raw values will be shown for this variable; raise the limit or trim the codelist if the decode is wanted"
+      )
+      NULL
+    } else {
+      cl$terms
+    }
+    decode_cache[[key]] <<- if (is.null(terms)) "none" else terms
+    terms
+  }
+
+  ## Analysis methods whose results are per-category and therefore display
+  ## the variable's values -- the ones a decode applies to.
+  .DECODE_METHOD_IDS <- c("MTH_COUNT_AND_PERCENTAGE",
+                          "MTH_AE_FREQUENCY_COUNT",
+                          "MTH_SUBJECT_COUNT")
+
+  ## `_meta$value_decodes` accumulator: one entry per DATASET.VARIABLE that
+  ## some categorical-family analysis displays, each an ordered list of
+  ## {value, label, order}. The subject key never gets a decode (its
+  ## "categories" are subjects).
+  value_decodes <- list()
+  note_value_decode <- function(dataset, variable, method_id) {
+    if (!(method_id %||% "") %in% .DECODE_METHOD_IDS) return(invisible(NULL))
+    bare_var <- toupper(sub("^.*\\.", "", variable %||% ""))
+    if (!nzchar(bare_var) || identical(bare_var, "USUBJID")) return(invisible(NULL))
+    key <- paste0(toupper(dataset %||% ""), ".", bare_var)
+    if (!is.null(value_decodes[[key]])) return(invisible(NULL))
+    terms <- .decode_terms_for(dataset, bare_var)
+    if (is.null(terms)) return(invisible(NULL))
+    value_decodes[[key]] <<- lapply(seq_len(nrow(terms)), function(i) list(
+      value = terms$term[i],
+      label = terms$decode[i],
+      order = terms$order[i]
+    ))
+    invisible(NULL)
+  }
 
   ## TRUE when a "DATASET.VARIABLE" annotation reference is resolvable against
   ## the ADaM spec (exact DATASET.VAR key, or VAR present in any dataset).
@@ -436,9 +504,20 @@ build_ars_json <- function(sections,
     }
 
     ## --- GroupingFactors from the (ordered) grouping list ---
-    gf_objs <- .build_groupings(sec)
+    gf_objs <- .build_groupings(sec, codelists = codelists,
+                                spec_lookup = spec_lookup)
     for (gf_obj in gf_objs) {
       if (!gf_obj$id %in% seen_gf) {
+        if (isTRUE(attr(gf_obj, "codelist_derived"))) {
+          diag_add(
+            stage = "build_ars", severity = "WARN",
+            problem = sprintf(
+              "Column groups for %s derived from the spec codelist (%d levels) -- no header conditions were annotated",
+              gf_obj$groupingVariable %||% "?", length(gf_obj$groups)),
+            tlf_number = sec$tlf_number,
+            action = "Verify the derived columns (labels, order, missing-value handling) against the shell headers"
+          )
+        }
         grouping_factors[[length(grouping_factors) + 1L]] <- gf_obj
         seen_gf <- c(seen_gf, gf_obj$id)
       }
@@ -555,6 +634,7 @@ build_ars_json <- function(sections,
         ds_id = if (!is.null(ds_obj2)) ds_obj2$id else NULL)
       analyses[[length(analyses) + 1L]]         <<- an2
       analysis_ids                              <<- c(analysis_ids, an2$id)
+      note_value_decode(er2$primary_dataset, er2$primary_variable, method2_id)
       shell_layout[[length(shell_layout) + 1L]] <<- list(
         order = length(shell_layout) + 1L,
         label = label %||% "", indent = indent,
@@ -622,10 +702,21 @@ build_ars_json <- function(sections,
           identical(toupper(fs_child$variable %||% ""), cat_parent$var)) {
         lv <- fs_child$value %||% list()
         lv <- if (length(lv) > 0) as.character(lv[[1]]) else ""
+        ## When the parent variable ships a codelist decode, its computed
+        ## levels are decoded labels -- translate the authored coded value so
+        ## the renderer's level matching sees the same vocabulary. The raw
+        ## code rides along as level_code for traceability.
+        lv_display <- lv
+        decode_terms <- .decode_terms_for(cat_parent$ds, cat_parent$var)
+        if (!is.null(decode_terms) && nzchar(lv)) {
+          hit <- match(lv, as.character(decode_terms$term))
+          if (!is.na(hit)) lv_display <- decode_terms$decode[hit]
+        }
         shell_layout[[length(shell_layout) + 1L]] <- list(
           order = length(shell_layout) + 1L,
           label = row$label %||% "", indent = indent,
-          analysis_id = cat_parent$aid, kind = "level", level = lv)
+          analysis_id = cat_parent$aid, kind = "level", level = lv_display,
+          level_code = lv)
         diag_add(
           stage = "build_ars", severity = "INFO",
           problem = sprintf("Row '%s' is a level of the categorical block above (%s='%s')",
@@ -780,6 +871,7 @@ build_ars_json <- function(sections,
       )
       analyses[[length(analyses) + 1L]] <- an_obj
       analysis_ids <- c(analysis_ids, an_obj$id)
+      note_value_decode(er$primary_dataset, er$primary_variable, row_method_id)
       layout_kind <- if (identical(row_method_id, "MTH_COUNT_AND_PERCENTAGE") &&
                            identical(row_kind, "row")) "categorical"
                      else if (identical(row_method_id, "MTH_SUMMARY_STATISTICS_CONTINUOUS") &&
@@ -794,7 +886,9 @@ build_ars_json <- function(sections,
       ## level rows that follow.
       cat_parent <- if (identical(layout_kind, "categorical") &&
                           nzchar(er$primary_variable %||% "")) {
-        list(var = toupper(er$primary_variable), aid = an_obj$id)
+        list(var = toupper(er$primary_variable),
+             ds  = toupper(er$primary_dataset %||% ""),
+             aid = an_obj$id)
       } else {
         NULL
       }
@@ -934,6 +1028,11 @@ build_ars_json <- function(sections,
       ## How supplement values resolved against the regex ("fill_gaps" or
       ## "prefer_supplement"); NULL/absent when no supplement was used.
       supplement_trust      = supplement_trust,
+      ## Spec-codelist decodes for categorical analysis variables, keyed
+      ## "DATASET.VARIABLE" -> ordered {value, label, order} lists. The
+      ## engine / emitted code derive a decoded factor from these so the ARD
+      ## shows "DEATH", not "1" (resolve_analysis() reads them back).
+      value_decodes         = value_decodes,
       requires_human_review = TRUE,
       ## TLFs where no grouping variable could be resolved (built
       ## ungrouped) -- start the human review here.
@@ -988,16 +1087,17 @@ build_ars_json <- function(sections,
 #' multi-level `sec$groupings` list (P8); falls back to the legacy single
 #' `by_variable` / `by_variable_dataset` pair.
 #' @noRd
-.build_groupings <- function(sec) {
+.build_groupings <- function(sec, codelists = NULL, spec_lookup = NULL) {
   groupings <- sec$groupings
   if (is.null(groupings) || length(groupings) == 0) {
-    single <- .build_grouping(sec)
+    single <- .build_grouping(sec, codelists, spec_lookup)
     return(if (is.null(single)) list() else list(single))
   }
   out <- lapply(groupings, function(g) {
     if (!nzchar(g$variable %||% "")) return(NULL)
     .build_grouping_one(g$variable, g$dataset %||% "ADSL",
-                        column_groups = sec$column_groups)
+                        column_groups = sec$column_groups,
+                        codelists = codelists, spec_lookup = spec_lookup)
   })
   Filter(Negate(is.null), out)
 }
@@ -1005,15 +1105,27 @@ build_ars_json <- function(sections,
 #' Legacy single-grouping builder (kept for sections enriched before the
 #' multi-level model and for direct unit tests).
 #' @noRd
-.build_grouping <- function(sec) {
+.build_grouping <- function(sec, codelists = NULL, spec_lookup = NULL) {
   by_var <- sec$by_variable %||% ""
   if (!nzchar(by_var)) return(NULL)
   .build_grouping_one(by_var, sec$by_variable_dataset %||% "ADSL",
-                      column_groups = sec$column_groups)
+                      column_groups = sec$column_groups,
+                      codelists = codelists, spec_lookup = spec_lookup)
 }
 
-.build_grouping_one <- function(variable, dataset, column_groups = NULL) {
-  list(
+.build_grouping_one <- function(variable, dataset, column_groups = NULL,
+                                codelists = NULL, spec_lookup = NULL) {
+  ## Header-annotated column groups always win; the spec codelist is the
+  ## fallback so an unannotated coded column axis (e.g. COHORTN) still gets
+  ## labelled, condition-defined columns instead of raw coded values.
+  groups <- .build_group_levels(variable, column_groups)
+  codelist_derived <- FALSE
+  if (length(groups) == 0) {
+    groups <- .build_group_levels_from_codelist(variable, dataset,
+                                                codelists, spec_lookup)
+    codelist_derived <- length(groups) > 0
+  }
+  gf <- list(
     id               = make_grouping_id(variable),
     name             = variable,
     label            = paste0("Grouping by ", variable),
@@ -1026,8 +1138,51 @@ build_ars_json <- function(sections,
     ## Per-level groups when the shell's column headers defined them (each
     ## header condition = one display column); otherwise the empty array
     ## siera expects (it iterates JSON_AnalysisGroupings$groups[[e]]).
-    groups           = .build_group_levels(variable, column_groups)
+    groups           = groups
   )
+  ## Marker for the caller's once-per-factor diagnostic; attributes on lists
+  ## are dropped by jsonlite::toJSON, so nothing leaks into the ARS file.
+  attr(gf, "codelist_derived") <- codelist_derived
+  gf
+}
+
+#' Per-level Group objects derived from the ADaM spec codelist of the
+#' grouping variable -- the fallback when the shell's column headers carried
+#' no parseable conditions. One EQ condition per codelist term, labelled by
+#' its decoded value, in codelist order. Empty list when no codelist
+#' resolves or the codelist is too large to expand into columns.
+#' @noRd
+.build_group_levels_from_codelist <- function(variable, dataset,
+                                              codelists, spec_lookup) {
+  if (is.null(codelists) || length(codelists) == 0) return(list())
+  bare_var <- toupper(sub("^.*\\.", "", variable %||% ""))
+  ds       <- toupper(dataset %||% "ADSL")
+  if (!nzchar(bare_var)) return(list())
+
+  rec <- if (!is.null(spec_lookup)) spec_lookup[[paste0(ds, ".", bare_var)]] else NULL
+  cl  <- .codelist_for(codelists, ds, bare_var, rec)
+  if (is.null(cl) || nrow(cl$terms) == 0) return(list())
+  if (nrow(cl$terms) > .CODELIST_DECODE_MAX_TERMS) return(list())
+
+  out <- list()
+  for (i in seq_len(nrow(cl$terms))) {
+    label <- cl$terms$decode[i]
+    out[[length(out) + 1L]] <- list(
+      id        = make_group_id(bare_var, label),
+      name      = label,
+      label     = label,
+      order     = length(out) + 1L,
+      ## Same wrapped WhereClause shape parse_where_clause() returns, so the
+      ## executor / emitter consume it with no translation.
+      condition = list(condition = list(
+        dataset    = ds,
+        variable   = bare_var,
+        comparator = "EQ",
+        value      = list(cl$terms$term[i])
+      ))
+    )
+  }
+  out
 }
 
 #' Per-level Group objects for a grouping factor, from the parser's

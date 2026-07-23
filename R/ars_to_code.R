@@ -152,15 +152,52 @@
   out
 }
 
+## Emitted decode of a coded categorical analysis variable: the spec
+## codelist (res$decode, from the ARS _meta$value_decodes) becomes a factor
+## whose levels are the coded terms and whose labels are the decoded values.
+## as.character() bridges numeric ADaM values ("1" vs 1) against the text
+## codelist terms. The factor keeps codelist order and makes cards report
+## EVERY term -- unobserved ones as n = 0 -- so the ARD shows "DEATH", not
+## "1", and zero-count categories still appear. Methods that do not display
+## the variable's values (continuous summaries, bare-flag counts, subject
+## counts on the subject key) are left untouched.
+#' @noRd
+.decode_mutate_expr <- function(res) {
+  decode <- res$decode
+  if (is.null(decode) || length(decode) == 0) return("")
+  method <- res$method_id %||% ""
+  if (!method %in% c("MTH_COUNT_AND_PERCENTAGE", "MTH_AE_FREQUENCY_COUNT",
+                     "MTH_SUBJECT_COUNT")) {
+    return("")
+  }
+  var <- .clean_emit_name(res$variable)
+  if (is.null(var) || !nzchar(var %||% "")) return("")
+  if (identical(toupper(var), toupper(res$subject_key %||% ""))) return("")
+  if (.is_bare_flag(res)) return("")
+
+  values <- vapply(decode, function(d) as.character(d$value %||% ""), character(1))
+  labels <- vapply(decode, function(d) as.character(d$label %||% ""), character(1))
+  keep   <- nzchar(values) & nzchar(labels)
+  if (!any(keep)) return("")
+
+  paste0(
+    " |>\n    dplyr::mutate(", .bt(var), " = factor(\n",
+    "      as.character(", .bt(var), "),\n",
+    "      levels = ", .r_chr_vec(values[keep]), ",\n",
+    "      labels = ", .r_chr_vec(labels[keep]), "\n",
+    "    ))"
+  )
+}
+
 ## The analysis data frame expression: dataset, pop filter, subset filter,
-## then any annotation-defined column grouping (filters must see the raw
-## values, so the derivation comes last).
+## then any annotation-defined column grouping and codelist decode (filters
+## must see the raw values, so the derivations come last).
 #' @noRd
 .data_expr <- function(res) {
   e <- res$dataset
   e <- .apply_where_expr(e, res$dataset, res$pop_where, res$subject_key)
   e <- .apply_where_expr(e, res$dataset, res$subset_where, res$subject_key)
-  paste0(e, .group_mutate_expr(res))
+  paste0(e, .group_mutate_expr(res), .decode_mutate_expr(res))
 }
 
 ## The denominator (population) frame expression -- always ADSL-based, mirroring
