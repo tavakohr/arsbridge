@@ -330,7 +330,8 @@ build_ars_json <- function(sections,
                            study_name = NULL,
                            spec_lookup = NULL,
                            ship_annotations = FALSE,
-                           extraction_mode = "llm") {
+                           extraction_mode = "llm",
+                           supplement_trust = NULL) {
   if (length(sections) == 0) {
     cli::cli_abort("Cannot build ReportingEvent: no TLF sections provided.")
   }
@@ -594,7 +595,19 @@ build_ars_json <- function(sections,
         }
       }
       if (is.null(er$data_subset) || length(er$data_subset) == 0) {
-        er$data_subset <- .subset_from_annotation(row$annotation)
+        ## A typed supplement row filter (v3) is authoritative and never
+        ## re-parsed from a string: a single condition flattens to the subset
+        ## shape, a compound expression is carried as-is for .build_data_subset.
+        if (!is.null(row$supplement_where)) {
+          flat <- .where_flat(row$supplement_where)
+          if (is.null(flat)) {
+            er$data_subset_compound <- row$supplement_where
+          } else {
+            er$data_subset <- flat
+          }
+        } else {
+          er$data_subset <- .subset_from_annotation(row$annotation)
+        }
       }
 
       ## Authored LEVEL row of the categorical block above it: the row's
@@ -706,6 +719,26 @@ build_ars_json <- function(sections,
         )
       }
 
+      ## Supplement-specified per-row method (MIXED_SUMMARY, per-row methodId):
+      ## honoured for a supplement-bound row, or for any row under
+      ## prefer_supplement. It never overrides a shell-annotated row's inferred
+      ## method in fill_gaps mode (such a row's detection_method is not
+      ## "supplement"), keeping deterministic ground truth highest there.
+      supp_mid <- row$supplement_method_id
+      if (!is.null(supp_mid) && nzchar(supp_mid %||% "") &&
+          (identical(row$detection_method, "supplement") ||
+           identical(supplement_trust, "prefer_supplement"))) {
+        supp_nm   <- .method_name_from_id(supp_mid)
+        supp_cand <- if (!is.null(supp_nm)) .STANDARD_METHODS[[supp_nm]] else NULL
+        if (!is.null(supp_cand)) {
+          row_method_id <- supp_cand$id
+          if (!supp_cand$id %in% seen_mth) {
+            methods[[length(methods) + 1L]] <- .with_op_self_rels(supp_cand)
+            seen_mth <- c(seen_mth, supp_cand$id)
+          }
+        }
+      }
+
       ## Duplicate-template dedup (nested AE shells author example blocks:
       ## "<Preferred Term>" placeholder rows plus repeated "Preferred Term"
       ## mock rows all annotated AEDECOD). A Count-and-Percentage row expands
@@ -766,22 +799,24 @@ build_ars_json <- function(sections,
         NULL
       }
 
-      ## Supplement contributed an ADDITIONAL analysis for this row that the
-      ## regex did not produce (a differing variable the fill-gaps policy would
-      ## otherwise keep only as provenance). The shell's own analysis above
-      ## stands (regex wins the row); this builds the supplement's proposal as
-      ## its own analysis alongside it so nothing the supplement added is lost.
-      extra_ann <- trimws(as.character(row$supplement_proposed_annotation %||% ""))
+      ## The losing side of a row conflict is built as its OWN analysis
+      ## alongside the winner, so nothing either side contributed is dropped.
+      ## Symmetric across trust modes: in fill_gaps the supplement's differing
+      ## proposal is the secondary; in prefer_supplement the shell's overridden
+      ## original is. Both arrive on the row as `secondary_annotation` (the
+      ## older `supplement_proposed_annotation` name is still honoured).
+      extra_ann <- trimws(as.character(
+        row$secondary_annotation %||% row$supplement_proposed_annotation %||% ""))
       if (build_layout && nzchar(extra_ann)) {
         extra_id <- emit_extra_analysis(row$label %||% "", extra_ann, indent)
         if (!is.null(extra_id)) {
           diag_add(
             stage = "build_ars", severity = "INFO",
             problem = sprintf(
-              "Row '%s': supplement's differing proposal (%s) added as an additional analysis; the shell's own annotation was kept too",
+              "Row '%s': the conflicting proposal (%s) was added as an additional analysis; the winning annotation was kept too",
               row$label %||% "?", extra_ann),
             tlf_number = sec$tlf_number,
-            action = "Both the shell annotation and the supplement proposal are computed -- nothing the supplement contributed is dropped"
+            action = "Both sides of the conflict are computed -- nothing either side contributed is dropped"
           )
         }
       }
@@ -896,6 +931,9 @@ build_ars_json <- function(sections,
       ## "supplement" (chat-assistant supplement file), or "deterministic"
       ## (regex + keyword heuristics only, reduced accuracy).
       extraction_mode       = extraction_mode,
+      ## How supplement values resolved against the regex ("fill_gaps" or
+      ## "prefer_supplement"); NULL/absent when no supplement was used.
+      supplement_trust      = supplement_trust,
       requires_human_review = TRUE,
       ## TLFs where no grouping variable could be resolved (built
       ## ungrouped) -- start the human review here.
@@ -917,7 +955,9 @@ build_ars_json <- function(sections,
 .build_analysis_set <- function(sec) {
   pop_text  <- sec$population_text %||% "All Subjects"
   pop_annot <- trimws(sec$population_annot %||% "")
-  cond      <- parse_where_clause(pop_annot)
+  ## A typed supplement population (v3) is already an ARS WhereClause, so it is
+  ## used directly; otherwise parse the shell/supplement annotation string.
+  cond      <- sec$population_where %||% parse_where_clause(pop_annot)
   obj <- list(
     id    = make_analysis_set_id(pop_text),
     name  = pop_text,
@@ -1007,7 +1047,9 @@ build_ars_json <- function(sections,
 
   out <- list()
   for (def in column_groups$groups) {
-    condition <- parse_where_clause(def$annotation %||% "")
+    ## A typed supplement group (v3) carries the ARS WhereClause directly;
+    ## a shell-derived group carries only the annotation string to parse.
+    condition <- def$condition %||% parse_where_clause(def$annotation %||% "")
     if (is.null(condition)) {
       diag_add(
         stage = "build_ars", severity = "WARN",
@@ -1133,6 +1175,20 @@ build_ars_json <- function(sections,
 }
 
 .build_data_subset <- function(enrichment, tlf_number, index) {
+  ## A compound supplement filter (v3) that could not flatten to a single
+  ## condition is emitted as a compoundExpression DataSubset. eval_where_clause()
+  ## and where_to_filter_expr() both consume this shape, so the engine and the
+  ## code emitter execute it with no extra translation.
+  comp <- enrichment$data_subset_compound
+  if (!is.null(comp) && !is.null(comp$compoundExpression)) {
+    tag <- paste0(tlf_number, "_", index, "_cmp")
+    return(list(
+      id    = make_data_subset_id(tag),
+      name  = tag,
+      label = tag,
+      compoundExpression = comp$compoundExpression
+    ))
+  }
   ds <- enrichment$data_subset
   if (is.null(ds) || length(ds) == 0) return(NULL)
   tag <- if (!is.null(ds$variable)) {
@@ -1234,6 +1290,12 @@ build_ars_json <- function(sections,
   )
   if (length(shell_layout %||% list()) > 0) {
     out_meta$shell_layout <- shell_layout
+  }
+  ## Supplement channels arsbridge records but does not yet compute
+  ## (record filters, sorting, denominators, provenance). They travel in the
+  ## output _meta so a reviewer -- and a future engine -- can see them.
+  if (length(section$supplement_extras %||% list()) > 0) {
+    out_meta$supplement <- section$supplement_extras
   }
   list(
     id                    = make_output_id(section$tlf_number),

@@ -1,5 +1,44 @@
 # arsbridge (development version)
 
+* **BREAKING: supplement format version 3 -- typed CDISC ARS conditions.**
+  The no-API supplement now carries every filter, population, and column
+  condition as a typed ARS `WhereClause` object
+  (`{condition: {dataset, variable, comparator, value}}` /
+  `{compoundExpression: {logicalOperator, whereClauses}}`) instead of a string.
+  This ends the string-parsing fragility (double `=`, smart quotes, `OR`,
+  `="..."` value repair) that caused real-world extraction failures. Per-TLF
+  entries gain typed `analysisSet`, `groupings` (with typed group conditions),
+  `analyses` (was `bindings`; `variable` is now a `{dataset, variable}` object
+  and the filter a typed `whereClause`), plus `listingColumns`, `recordFilter`,
+  `sorting`, per-row `methodId`/`parentRowLabel`/`denominator`, `anchors`, and
+  `provenance`. `read_supplement()` accepts only `supplement_version` 3 and
+  aborts loudly on a v2 file -- regenerate with `ars_copilot_instructions()`.
+  A JSON Schema (`inst/schema/arsbridge_supplement_v3.schema.json`) ships with
+  the package, is uploaded to the assistant for self-checking, and is used by
+  `ars_validate_supplement()` when `jsonvalidate` (new Suggests) is installed.
+
+* **`spec_to_ars(supplement_trust=)` -- configurable conflict resolution.**
+  `"fill_gaps"` (default, unchanged) lands a supplement value only where the
+  regex left a gap; `"prefer_supplement"` lets a validated, spec-gated
+  supplement value override the shell on a conflict, with a WARN recording both
+  and the shell original kept as a secondary analysis. The hard ADaM-spec gate
+  is never bypassed in either mode. The mode is recorded at
+  `_meta.supplement_trust`.
+
+* **Packaged two-phase Copilot workflow.**
+  `ars_copilot_instructions(workflow = "two_phase")` writes a Phase-1
+  (evidence blueprint) and Phase-2 (semantic construction + repair) instruction
+  set for large or complex shells, alongside the single-file workflow. Both
+  emit supplement version 3 and are shipped in step with the reader, so the
+  instructions and the accepted format can no longer diverge. Each instruction
+  file opens with a **"How to run this"** block -- the operator steps (which
+  files to attach, what to save) plus a paste-ready prompt for the chat.
+  `ars_copilot_instructions()` now returns the vector of paths it wrote.
+
+* **`ars_validate_supplement()` rewritten for v3** with typed-condition checks,
+  comparator/enum/arity validation, parent-row resolution, and a paste-ready
+  `repair_prompt` attribute that bundles every FAIL for the assistant.
+
 * **Native SAS `.sas7bdat` ADaM cuts are now read everywhere.** The per-TLF
   standalone `{cards}` scripts emitted by `write_tlf_code()`, the execution
   engine (`ars_to_ard()`), and the listing/figure renderers previously loaded

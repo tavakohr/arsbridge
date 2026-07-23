@@ -26,6 +26,9 @@ docs/
 # inputs/ is shared for user practice; only the extracted loose XPT
 # folder is ignored (ADaM.zip itself IS tracked).
 RWE_error/
+# suprev/ holds local Copilot working files (blueprints, instruction
+# drafts, conformance notes) tied to a specific study -- never committed.
+suprev/
 inputs/ADaM/
 outputs/
 .align_backup/

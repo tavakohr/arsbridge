@@ -1,0 +1,243 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/tavakohr/arsbridge/schema/arsbridge_supplement_v3.schema.json",
+  "title": "arsbridge supplement (format version 3)",
+  "description": "Per-TLF extraction help for arsbridge's supplement mode. Conditions are typed CDISC ARS WhereClause objects, not strings. camelCase fields are ARS-shaped; snake_case fields are arsbridge control fields.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["supplement_version", "tlfs"],
+  "properties": {
+    "supplement_version": {
+      "const": 3,
+      "description": "Format version. Must be 3 for this schema."
+    },
+    "validation_report": {
+      "type": "string",
+      "description": "Optional filename of the companion extraction_validation_report.json (two-phase workflow)."
+    },
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "workflow": {"type": "string"},
+        "instruction_version": {"type": "string"}
+      }
+    },
+    "tlfs": {
+      "type": "object",
+      "description": "Named map of TLF number (e.g. \"14.1.1\") to its entry.",
+      "minProperties": 1,
+      "additionalProperties": {"$ref": "#/definitions/tlfEntry"}
+    }
+  },
+  "definitions": {
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataset", "variable", "comparator"],
+      "properties": {
+        "dataset": {"type": "string"},
+        "variable": {"type": "string"},
+        "comparator": {
+          "enum": ["EQ", "NE", "GT", "GE", "LT", "LE", "IN", "NOTIN", "CONTAINS"]
+        },
+        "value": {
+          "type": "array",
+          "description": "Values as strings; an empty array means a missing-value test.",
+          "items": {"type": ["string", "number", "boolean"]}
+        }
+      }
+    },
+    "compoundExpression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["logicalOperator", "whereClauses"],
+      "properties": {
+        "logicalOperator": {"enum": ["AND", "OR", "NOT"]},
+        "whereClauses": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/definitions/whereClause"}
+        }
+      }
+    },
+    "whereClause": {
+      "type": "object",
+      "additionalProperties": false,
+      "oneOf": [
+        {"required": ["condition"]},
+        {"required": ["compoundExpression"]}
+      ],
+      "properties": {
+        "condition": {"$ref": "#/definitions/condition"},
+        "compoundExpression": {"$ref": "#/definitions/compoundExpression"}
+      }
+    },
+    "analysisSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "oneOf": [
+        {"required": ["condition"]},
+        {"required": ["compoundExpression"]}
+      ],
+      "properties": {
+        "label": {"type": "string"},
+        "condition": {"$ref": "#/definitions/condition"},
+        "compoundExpression": {"$ref": "#/definitions/compoundExpression"}
+      }
+    },
+    "analysisVariable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataset", "variable"],
+      "properties": {
+        "dataset": {"type": "string"},
+        "variable": {"type": "string"}
+      }
+    },
+    "methodId": {
+      "enum": [
+        "MTH_SUMMARY_STATISTICS_CONTINUOUS",
+        "MTH_COUNT_AND_PERCENTAGE",
+        "MTH_SUBJECT_COUNT",
+        "MTH_KAPLAN_MEIER_ESTIMATE",
+        "MTH_AE_FREQUENCY_COUNT",
+        "MTH_LISTING"
+      ]
+    },
+    "group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "order"],
+      "oneOf": [
+        {"required": ["condition"]},
+        {"required": ["compoundExpression"]}
+      ],
+      "properties": {
+        "label": {"type": "string"},
+        "order": {"type": "integer", "minimum": 1},
+        "condition": {"$ref": "#/definitions/condition"},
+        "compoundExpression": {"$ref": "#/definitions/compoundExpression"}
+      }
+    },
+    "groupingFactor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["groupingDataset", "groupingVariable", "dataDriven"],
+      "properties": {
+        "groupingDataset": {"type": "string"},
+        "groupingVariable": {"type": "string"},
+        "dataDriven": {"type": "boolean"},
+        "label": {"type": "string"},
+        "groups": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/group"}
+        }
+      }
+    },
+    "denominator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope"],
+      "properties": {
+        "scope": {"enum": ["analysisSet", "group", "whereClause"]},
+        "whereClause": {"$ref": "#/definitions/whereClause"}
+      }
+    },
+    "analysisEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rowLabel", "variable"],
+      "properties": {
+        "rowLabel": {"type": "string"},
+        "variable": {"$ref": "#/definitions/analysisVariable"},
+        "whereClause": {"$ref": "#/definitions/whereClause"},
+        "methodId": {"$ref": "#/definitions/methodId"},
+        "parentRowLabel": {"type": "string"},
+        "order": {"type": "integer", "minimum": 1},
+        "denominator": {"$ref": "#/definitions/denominator"},
+        "evidenceIds": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"enum": ["HIGH", "MEDIUM", "LOW"]}
+      }
+    },
+    "listingColumn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "variable"],
+      "properties": {
+        "label": {"type": "string"},
+        "variable": {"$ref": "#/definitions/analysisVariable"},
+        "order": {"type": "integer", "minimum": 1},
+        "format": {"type": "string"}
+      }
+    },
+    "sortKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataset", "variable"],
+      "properties": {
+        "dataset": {"type": "string"},
+        "variable": {"type": "string"},
+        "direction": {"enum": ["ASC", "DESC"]},
+        "order": {"type": "integer", "minimum": 1}
+      }
+    },
+    "anchors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "firstRowLabel": {"type": "string"},
+        "lastRowLabel": {"type": "string"},
+        "rowCount": {"type": "integer", "minimum": 0}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "blueprintStatus": {"type": "string"},
+        "reviewItems": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "tlfEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "analysis_type", "is_supported"],
+      "properties": {
+        "title": {"type": "string"},
+        "outputType": {"enum": ["TABLE", "LISTING", "FIGURE"]},
+        "analysis_type": {
+          "enum": [
+            "CONTINUOUS", "CATEGORICAL", "CATEGORICAL_HIERARCHICAL",
+            "MIXED_SUMMARY", "SUBJECT_COUNT", "SURVIVAL", "AE_FREQUENCY",
+            "SHIFT_TABLE", "LISTING", "FIGURE", "MODEL_BASED", "OTHER"
+          ]
+        },
+        "methodId": {"$ref": "#/definitions/methodId"},
+        "is_supported": {"type": "boolean"},
+        "unsupported_reason": {"type": "string"},
+        "analysisSet": {"$ref": "#/definitions/analysisSet"},
+        "recordFilter": {"$ref": "#/definitions/whereClause"},
+        "groupings": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/groupingFactor"}
+        },
+        "includeTotal": {"type": "boolean"},
+        "analyses": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/analysisEntry"}
+        },
+        "listingColumns": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/listingColumn"}
+        },
+        "sorting": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/sortKey"}
+        },
+        "anchors": {"$ref": "#/definitions/anchors"},
+        "provenance": {"$ref": "#/definitions/provenance"}
+      }
+    }
+  }
+}

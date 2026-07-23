@@ -48,6 +48,14 @@
 #'   function never asks for a key nor raises a key-related error or warning in
 #'   them; the mode that ran is recorded as a neutral INFO note and in
 #'   `extraction_mode` / `_meta.extraction_mode`.
+#' @param supplement_trust How a supplement value resolves against the regex on
+#'   a conflict. `"fill_gaps"` (default): a supplement value lands only where
+#'   the regex left a gap; the shell annotation wins a disagreement.
+#'   `"prefer_supplement"`: a validated, spec-gated supplement value overrides
+#'   the shell on a conflict, with a WARN recording both and the shell's
+#'   original kept as a secondary analysis. The hard ADaM-spec gate is never
+#'   bypassed in either mode. Ignored (with a warning) without `supplement`;
+#'   recorded at `_meta.supplement_trust`.
 #' @param use_llm Opt in to the live LLM tier. Default `FALSE` -- the pipeline
 #'   runs regex-only (deterministic) and makes NO live LLM call, *even when an
 #'   API key is configured*. Set `TRUE` to use the LLM for annotation
@@ -198,6 +206,7 @@ spec_to_ars <- function(shell_path,
                         api_key      = NULL,
                         provider     = NULL,
                         supplement   = NULL,
+                        supplement_trust = c("fill_gaps", "prefer_supplement"),
                         use_llm      = FALSE,
                         spec_column_aliases = NULL,
                         extract_with_llm = TRUE,
@@ -208,6 +217,14 @@ spec_to_ars <- function(shell_path,
                         code_dir     = NULL,
                         adam_dir     = ".",
                         verbose      = TRUE) {
+
+  supplement_trust <- match.arg(supplement_trust)
+  if (!identical(supplement_trust, "fill_gaps") && is.null(supplement)) {
+    cli::cli_warn(c(
+      "{.arg supplement_trust} = {.val {supplement_trust}} has no effect without a {.arg supplement}.",
+      "i" = "It is ignored; the run proceeds in the resolved extraction mode."
+    ))
+  }
 
   .require_file(shell_path, "shell_path", INPUT_SHELL)
   .require_file(adam_spec_path, "adam_spec_path", INPUT_SPEC)
@@ -326,10 +343,14 @@ spec_to_ars <- function(shell_path,
       extract_shell_llm(sec, spec_lookup = spec$lookup,
                         provider = provider, model = model, api_key = api_key))
   } else if (identical(extraction_mode, "supplement")) {
-    if (verbose) cli::cli_alert_info("Applying supplement bindings (spec-gated, shell annotations win)...")
+    if (verbose) {
+      win <- if (identical(supplement_trust, "prefer_supplement"))
+               "supplement values win conflicts" else "shell annotations win"
+      cli::cli_alert_info("Applying supplement (spec-gated, {win})...")
+    }
     sections <- lapply(sections, function(sec)
       .apply_supplement_bindings(sec, .match_supplement_tlf(supp, sec$tlf_number),
-                                 spec$lookup))
+                                 spec$lookup, trust = supplement_trust))
     ## Cross-check the supplement's table inventory against what was parsed:
     ## supplement entries with no matching table, tables the supplement never
     ## mentions, and title disagreements -- so the user can confirm arsbridge
@@ -460,7 +481,9 @@ spec_to_ars <- function(shell_path,
                        study_name = study_name %||% study_id,
                        spec_lookup = spec$lookup,
                        ship_annotations = ship_annotations,
-                       extraction_mode = extraction_mode)
+                       extraction_mode = extraction_mode,
+                       supplement_trust = if (identical(extraction_mode, "supplement"))
+                         supplement_trust else NULL)
 
   json_text <- jsonlite::toJSON(re, auto_unbox = TRUE, pretty = TRUE, null = "null")
   .write_text(json_text, output_path, "the ARS JSON", useBytes = TRUE)
