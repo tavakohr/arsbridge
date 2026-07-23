@@ -1192,7 +1192,8 @@ build_ars_json <- function(sections,
   ds <- enrichment$data_subset
   if (is.null(ds) || length(ds) == 0) return(NULL)
   tag <- if (!is.null(ds$variable)) {
-    paste0(ds$dataset, "_", ds$variable, "_", ds$value[[1]] %||% "")
+    first_val <- if (length(ds$value)) ds$value[[1]] else ""
+    paste0(ds$dataset, "_", ds$variable, "_", first_val)
   } else {
     paste0(tlf_number, "_", index)
   }
