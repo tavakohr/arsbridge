@@ -1,55 +1,73 @@
-# Write the Copilot instruction file for the supplement workflow
+# Write the Copilot instruction files for the supplement workflow
 
 Environments with no LLM API access can still boost
 [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
 accuracy with a chat assistant (GitHub Copilot, ChatGPT, an enterprise
-portal): upload the instruction file this function writes TOGETHER WITH
-your annotated shell `.docx` and ADaM spec `.xlsx`, and the assistant
-replies with one standard `supplement.json`. Pass that file to
+portal): upload the instruction file(s) this function writes TOGETHER
+WITH your annotated shell `.docx`, ADaM spec `.xlsx`, and the shipped
+JSON Schema, and the assistant replies with one strict `supplement.json`
+(format v3). Pass that file to
 `spec_to_ars(supplement = "supplement.json")`.
 
 ## Usage
 
 ``` r
-ars_copilot_instructions(dir = ".", open = interactive(), overwrite = FALSE)
+ars_copilot_instructions(
+  dir = ".",
+  workflow = c("single", "two_phase"),
+  open = interactive(),
+  overwrite = FALSE
+)
 ```
 
 ## Arguments
 
 - dir:
 
-  Directory to write the file into. Default: the current working
+  Directory to write the files into. Default: the current working
   directory.
+
+- workflow:
+
+  `"single"` (default) or `"two_phase"`. See Details.
 
 - open:
 
-  Open the file for reading after writing it (so you can see what the
-  assistant will be told). Default: `TRUE` in interactive sessions.
+  Open the first written file for reading. Default: `TRUE` in
+  interactive sessions.
 
 - overwrite:
 
-  Overwrite an existing copy. Default `FALSE` (the existing copy is
+  Overwrite existing copies. Default `FALSE` (existing copies are
   reported and kept).
 
 ## Value
 
-Invisibly, the absolute path of the instruction file.
+Invisibly, a character vector of the absolute paths written.
 
 ## Details
 
-The instruction file is static and versioned – do not edit it; the
-format it requests is what
+Two workflows are offered:
+
+- `"single"` (default): one instruction file. The assistant reads the
+  shell and spec and returns the supplement in one pass. Best for
+  small/medium shells.
+
+- `"two_phase"`: two instruction files. Phase 1 produces an evidence
+  blueprint (`tlf_extraction_blueprints.json`); Phase 2 turns that
+  blueprint into the supplement plus a validation report. Best for large
+  or complex shells where a single pass misses items – the phases force
+  explicit evidence discovery then semantic construction with review
+  cycles.
+
+The files are static and versioned – do not edit them; the format they
+request is what
 [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
-knows how to validate.
-
-## Where the file comes from
-
-The instruction file ships *inside* the installed package at
-`inst/copilot/arsbridge_copilot_instructions.md`. This function resolves
-it with `system.file("copilot", ...)` and copies it into `dir`, so you
-never need to know the internal package path. (Under
-`devtools::load_all()` it falls back to the source tree's
-`inst/copilot/`.)
+knows how to validate. The JSON Schema
+(`arsbridge_supplement_v3.schema.json`) is written alongside so the
+assistant can self-check its reply, and so can
+[`ars_validate_supplement()`](https://tavakohr.github.io/arsbridge/reference/ars_validate_supplement.md)
+(when `jsonvalidate` is installed).
 
 ## Data note
 
@@ -72,6 +90,7 @@ if an API key becomes available. Full walkthrough:
 
 ``` r
 if (FALSE) { # \dontrun{
-ars_copilot_instructions()   # writes ./arsbridge_copilot_instructions.md
+ars_copilot_instructions()                       # single-file workflow
+ars_copilot_instructions(workflow = "two_phase") # blueprint + build
 } # }
 ```

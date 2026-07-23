@@ -19,6 +19,10 @@ clinical table out.
   : Render an ARS output to a formatted clinical table
 - [`ars_render_all()`](https://tavakohr.github.io/arsbridge/reference/ars_render_all.md)
   : Render every output of a reporting event into one Word document
+- [`ars_render_combined()`](https://tavakohr.github.io/arsbridge/reference/ars_render_combined.md)
+  : Render every output into one combined ARD and one combined RTF
+- [`ars_render_split()`](https://tavakohr.github.io/arsbridge/reference/ars_render_split.md)
+  : Render each output to its own ARD and table file
 - [`ars_render_listing()`](https://tavakohr.github.io/arsbridge/reference/ars_render_listing.md)
   : Render an ARS listing output to a GT table
 - [`ars_render_figure()`](https://tavakohr.github.io/arsbridge/reference/ars_render_figure.md)
@@ -75,9 +79,10 @@ assistant (Copilot/ChatGPT). See the “Using arsbridge without API
 access” article.
 
 - [`ars_copilot_instructions()`](https://tavakohr.github.io/arsbridge/reference/ars_copilot_instructions.md)
-  : Write the Copilot instruction file for the supplement workflow
+  : Write the Copilot instruction files for the supplement workflow
 - [`ars_validate_supplement()`](https://tavakohr.github.io/arsbridge/reference/ars_validate_supplement.md)
-  : Validate a Copilot supplement file before running spec_to_ars()
+  : Validate a Copilot supplement file (format v3) before running
+  spec_to_ars()
 
 ## Examples
 
