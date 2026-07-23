@@ -19,6 +19,7 @@ spec_to_ars(
   api_key = NULL,
   provider = NULL,
   supplement = NULL,
+  supplement_trust = c("fill_gaps", "prefer_supplement"),
   use_llm = FALSE,
   spec_column_aliases = NULL,
   extract_with_llm = TRUE,
@@ -103,6 +104,17 @@ spec_to_ars(
   the function never asks for a key nor raises a key-related error or
   warning in them; the mode that ran is recorded as a neutral INFO note
   and in `extraction_mode` / `_meta.extraction_mode`.
+
+- supplement_trust:
+
+  How a supplement value resolves against the regex on a conflict.
+  `"fill_gaps"` (default): a supplement value lands only where the regex
+  left a gap; the shell annotation wins a disagreement.
+  `"prefer_supplement"`: a validated, spec-gated supplement value
+  overrides the shell on a conflict, with a WARN recording both and the
+  shell's original kept as a secondary analysis. The hard ADaM-spec gate
+  is never bypassed in either mode. Ignored (with a warning) without
+  `supplement`; recorded at `_meta.supplement_trust`.
 
 - use_llm:
 

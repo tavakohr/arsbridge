@@ -133,20 +133,49 @@ and the package consumes the assistant’s reply as an auxiliary file.</p>
 </h3>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/ars_copilot_instructions.html">ars_copilot_instructions</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-<p>This writes <code>arsbridge_copilot_instructions.md</code> into your
-working directory and prints the workflow. The file is static and
-versioned — it tells the assistant exactly what to read and, critically,
-the exact JSON shape to reply with, so the package can validate the
-answer.</p>
+<p>This writes two files into your working directory — the instruction
+file <code>arsbridge_copilot_instructions.md</code> and the JSON Schema
+<code>arsbridge_supplement_v3.schema.json</code> — and prints the
+workflow. The instruction file is static and versioned: it tells the
+assistant exactly what to read and the exact JSON shape (format version
+3) to reply with, so the package can validate the answer. For a large or
+complex shell where a single pass misses items, use the two-session
+workflow instead:</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/ars_copilot_instructions.html">ars_copilot_instructions</a></span><span class="op">(</span>workflow <span class="op">=</span> <span class="st">"two_phase"</span><span class="op">)</span></span></code></pre></div>
+<p>which writes a Phase-1 (evidence blueprint) and a Phase-2 (semantic
+construction + repair) instruction file. Phase 1 returns
+<code>tlf_extraction_blueprints.json</code>; you feed that back in
+session 2 to produce the supplement.</p>
+</div>
+<div class="section level3">
+<h3 id="typed-conditions-format-v3">Typed conditions (format v3)<a class="anchor" aria-label="anchor" href="#typed-conditions-format-v3"></a>
+</h3>
+<p>The single most important thing to know about the format:
+<strong>every filter, population, and column condition is a typed
+object, not a string.</strong> A row that displays “Completed” is
+expressed as</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode json"><code class="sourceCode json"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">{</span><span class="dt">"rowLabel"</span><span class="fu">:</span> <span class="st">"Completed"</span><span class="fu">,</span> <span class="dt">"variable"</span><span class="fu">:</span> <span class="fu">{</span><span class="dt">"dataset"</span><span class="fu">:</span> <span class="st">"ADSL"</span><span class="fu">,</span> <span class="dt">"variable"</span><span class="fu">:</span> <span class="st">"EOSSTT"</span><span class="fu">},</span></span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a> <span class="dt">"whereClause"</span><span class="fu">:</span> <span class="fu">{</span><span class="dt">"condition"</span><span class="fu">:</span> <span class="fu">{</span><span class="dt">"dataset"</span><span class="fu">:</span> <span class="st">"ADSL"</span><span class="fu">,</span> <span class="dt">"variable"</span><span class="fu">:</span> <span class="st">"EOSSTT"</span><span class="fu">,</span></span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>                               <span class="dt">"comparator"</span><span class="fu">:</span> <span class="st">"EQ"</span><span class="fu">,</span> <span class="dt">"value"</span><span class="fu">:</span> <span class="ot">[</span><span class="st">"COMPLETED"</span><span class="ot">]</span><span class="fu">}}}</span></span></code></pre></div>
+<p>not as <code>"where": "EOSSTT='COMPLETED'"</code>. This is what
+eliminates the old string-parsing failures (double <code>=</code>, smart
+quotes, <code>OR</code> splitting): the assistant hands the package a
+parsed tree, so there is nothing left to mis-parse. The instruction file
+and the shipped JSON Schema spell the shape out in full, with a worked
+example.</p>
 </div>
 <div class="section level3">
 <h3 id="step-2-upload-to-the-assistant">Step 2 — upload to the assistant<a class="anchor" aria-label="anchor" href="#step-2-upload-to-the-assistant"></a>
 </h3>
-<p>Upload <strong>three files together</strong> to your chat
+<p>Upload <strong>four files together</strong> to your chat
 assistant:</p>
 <ul>
 <li>
 <code>arsbridge_copilot_instructions.md</code> (from step 1),</li>
+<li>
+<code>arsbridge_supplement_v3.schema.json</code> (so the assistant
+can self-check),</li>
 <li>your annotated TLF shell <code>.docx</code>,</li>
 <li>your ADaM specification <code>.xlsx</code>.</li>
 </ul>
@@ -156,19 +185,22 @@ assistant:</p>
 <div class="section level3">
 <h3 id="step-3-pre-flight-optional-but-recommended">Step 3 — pre-flight (optional but recommended)<a class="anchor" aria-label="anchor" href="#step-3-pre-flight-optional-but-recommended"></a>
 </h3>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/ars_validate_supplement.html">ars_validate_supplement</a></span><span class="op">(</span><span class="st">"supplement.json"</span>, <span class="st">"adam_spec.xlsx"</span><span class="op">)</span></span></code></pre></div>
-<p>This checks the format version, every binding’s shape and variable
-syntax, the analysis-type enums, and — when you pass the spec — that
-every proposed variable actually exists in your ADaM spec. Any
-<code>FAIL</code> line is worded so you can paste it straight back to
-the assistant to regenerate the file, e.g. <em>“regenerate:
-ADSL.WEIGHTBL is not in the ADaM spec”</em>.</p>
+<p>This checks the format version, every typed condition, the
+analysis-type and method enums, and — when you pass the spec — that
+every referenced variable exists in your ADaM spec. Any
+<code>FAIL</code> line is worded so you can paste it back to the
+assistant, e.g. <em>“regenerate: ADSL.WEIGHTBL is not in the ADaM
+spec”</em>; when there are FAILs the result also carries a
+<code>repair_prompt</code> attribute bundling them into one paste-ready
+block. When <code>jsonvalidate</code> is installed, the file is
+additionally checked against the shipped JSON Schema.</p>
 </div>
 <div class="section level3">
 <h3 id="step-4-run">Step 4 — run<a class="anchor" aria-label="anchor" href="#step-4-run"></a>
 </h3>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/spec_to_ars.html">spec_to_ars</a></span><span class="op">(</span></span>
 <span>  shell_path     <span class="op">=</span> <span class="st">"shell.docx"</span>,</span>
 <span>  adam_spec_path <span class="op">=</span> <span class="st">"adam_spec.xlsx"</span>,</span>
@@ -184,11 +216,18 @@ ADSL.WEIGHTBL is not in the ADaM spec”</em>.</p>
 <p>The supplement is an <strong>assistant, not an override</strong>. Two
 guarantees make it safe to trust a draft it produced:</p>
 <ul>
-<li><p><strong>The regex wins.</strong> A supplement binding lands only
-on a row the deterministic pass left unannotated. If the shell already
-annotated a row, the shell’s annotation stands and any disagreement is
-logged as a <code>WARN</code> for you to review — the assistant can
-never silently rewrite an authored annotation.</p></li>
+<li><p><strong>The regex wins (by default).</strong> A supplement
+binding lands only on a row the deterministic pass left unannotated. If
+the shell already annotated a row, the shell’s annotation stands and any
+disagreement is logged as a <code>WARN</code> for you to review — the
+assistant can never silently rewrite an authored annotation. When you
+<em>do</em> trust the assistant’s reading more than the regex (a shell
+the deterministic pass extracts poorly), pass
+<code>spec_to_ars(supplement_trust = "prefer_supplement")</code>: a
+validated, spec-gated supplement value then overrides the regex on a
+conflict, with a <code>WARN</code> recording both and the shell’s
+original kept as a secondary analysis. The spec gate still applies, so a
+hallucinated variable is rejected in either mode.</p></li>
 <li><p><strong>The spec is the gate.</strong> Every
 <code>DATASET.VARIABLE</code> the supplement proposes is checked against
 your ADaM spec. One that is not in the spec is dropped and logged as a
@@ -254,23 +293,39 @@ double-quotes automatically; if it still fails, ask the assistant to
 </tr>
 <tr class="even">
 <td><code>Supplement version mismatch</code></td>
-<td>file made with a different package version</td>
-<td>rerun <code><a href="../reference/ars_copilot_instructions.html">ars_copilot_instructions()</a></code> from the installed
-version and regenerate</td>
+<td>a v2 file, or one made with a different package version</td>
+<td>v3 conditions are typed objects, not strings — regenerate with
+<code><a href="../reference/ars_copilot_instructions.html">ars_copilot_instructions()</a></code> from the installed version</td>
 </tr>
 <tr class="odd">
 <td>
-<code>binding label 'X' matched no stub row</code>
-(<code>WARN</code>)</td>
-<td>the <code>label</code> is not the stub text verbatim</td>
-<td>ensure <code>label</code> is copied exactly from the shell, footnote
-markers and all</td>
+<code>invalid whereClause</code> / <code>not a where-clause</code>
+(<code>FAIL</code>)</td>
+<td>a condition was written as a string, or with a bad comparator</td>
+<td>use the typed shape
+<code>{"condition": {"dataset", "variable", "comparator", "value": [...]}}</code>;
+paste the <code>repair_prompt</code> back to the assistant</td>
 </tr>
 <tr class="even">
 <td>
+<code>analysis label 'X' matched no stub row</code>
+(<code>WARN</code>)</td>
+<td>the <code>rowLabel</code> is not the stub text verbatim</td>
+<td>copy <code>rowLabel</code> exactly from the shell, footnote markers
+and all</td>
+</tr>
+<tr class="odd">
+<td>
 <code>is not in the ADaM spec</code> (<code>FAIL</code>)</td>
 <td>assistant proposed a variable your spec does not have</td>
-<td>fix the binding or add the variable to the spec</td>
+<td>fix the analysis or add the variable to the spec</td>
+</tr>
+<tr class="even">
+<td>
+<code>Anchor mismatch</code> (<code>WARN</code>)</td>
+<td>the supplement’s first row / row count disagrees with the parsed
+table</td>
+<td>confirm the assistant described the same table arsbridge parsed</td>
 </tr>
 <tr class="odd">
 <td>

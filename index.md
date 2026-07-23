@@ -422,9 +422,14 @@ What differs is **how the rows the regex could not resolve get filled**
 2.  **Regex + Copilot (supplement)** —
     `spec_to_ars(supplement = "supplement.json")`. A chat assistant
     (Copilot/ChatGPT) reads the shell + spec by hand and returns a JSON
-    supplement; its label-keyed bindings fill **only** rows the regex
-    left blank — your authored shell annotations always win a
-    disagreement — and it confirms the table set by title. No API call.
+    supplement (format v3, with typed CDISC ARS conditions — no string
+    parsing); its label-keyed analyses fill **only** rows the regex left
+    blank — your authored shell annotations win a disagreement by
+    default, or pass `supplement_trust = "prefer_supplement"` to let a
+    validated supplement value override — and it confirms the table set
+    by title and row anchors. No API call. For large shells,
+    `ars_copilot_instructions(workflow = "two_phase")` splits it into
+    evidence discovery then construction.
 3.  **LLM API (live)** — opt in with `use_llm = TRUE` and a key.
     `extract_shell_llm()` re-reads each cell and separates the display
     label from the variable reference in any layout, and the LLM
