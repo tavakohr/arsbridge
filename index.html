@@ -24,7 +24,7 @@
 
     <a class="navbar-brand me-2" href="index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9015</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9016</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -194,7 +194,6 @@
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
-<p>You can install <a href="https://github.com/tavakohr/arsbridge" class="external-link">arsbridge</a> from GitHub:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># install.packages("devtools")</span></span>
 <span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">install_github</span><span class="op">(</span><span class="st">"tavakohr/arsbridge"</span><span class="op">)</span></span></code></pre></div>
@@ -202,7 +201,7 @@
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"cardx"</span><span class="op">)</span></span></code></pre></div>
 <blockquote>
-<p><strong>No LLM API key?</strong> You do not need one. <code>arsbridge</code> runs on regex + heuristics alone, and <code><a href="reference/ars_copilot_instructions.html">ars_copilot_instructions()</a></code> sets up a no-API workflow that reaches near-LLM accuracy through a chat assistant. See <a href="#no-api-key-three-tiers-always-runs">No API key? Three tiers, always runs</a>.</p>
+<p><strong>No LLM API key?</strong> You do not need one. <code>arsbridge</code> runs on regex + heuristics alone, and <code><a href="reference/ars_copilot_instructions.html">ars_copilot_instructions()</a></code> sets up a no-API workflow that reaches near-LLM accuracy through a chat assistant (Copilot/ChatGPT) — see <code><a href="articles/no-api-access.html">vignette("no-api-access")</a></code>.</p>
 </blockquote>
 <hr>
 </div>
@@ -249,16 +248,17 @@
 <span></span>
 <span><span class="fu"><a href="reference/show_active_llm.html">show_active_llm</a></span><span class="op">(</span><span class="op">)</span>     <span class="co"># confirm which provider is active</span></span></code></pre></div>
 <p><strong>Provider priority:</strong> when multiple keys are configured, <a href="https://github.com/tavakohr/arsbridge" class="external-link">arsbridge</a> searches in order: Anthropic, OpenAI, Gemini. Override this anytime:</p>
-<pre class="env"><code><span><span class="co"># In .Renviron</span></span>
-<span><span class="va">ARS_LLM_PROVIDER</span><span class="op">=</span><span class="va">openai</span></span></code></pre>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Or at runtime</span></span>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># In .Renviron</span></span>
+<span><span class="va">ARS_LLM_PROVIDER</span><span class="op">=</span><span class="va">openai</span></span>
+<span></span>
+<span><span class="co"># Or at runtime</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">options</a></span><span class="op">(</span>ars.llm.provider <span class="op">=</span> <span class="st">"gemini"</span><span class="op">)</span></span></code></pre></div>
 <p><strong>Switching to a newer model or a different provider</strong> requires almost no effort. To use a newer model from the same provider, pass <code>model =</code>:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/spec_to_ars.html">spec_to_ars</a></span><span class="op">(</span><span class="va">...</span>, model <span class="op">=</span> <span class="st">"claude-opus-4-8"</span><span class="op">)</span></span></code></pre></div>
 <p>To add a brand-new provider (GLM, DeepSeek, OpenRouter), add one entry to the registry in <code>R/llm_providers.R</code>: its key env variable, default model, the <code>ellmer</code> chat constructor, and a <code>base_url</code> if it is OpenAI-compatible. No other code changes.</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/set_llm_key.html">set_llm_key</a></span><span class="op">(</span><span class="st">"glm"</span>, <span class="st">"your-glm-key"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>ARS_LLM_PROVIDER <span class="op">=</span> <span class="st">"glm"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/spec_to_ars.html">spec_to_ars</a></span><span class="op">(</span><span class="va">...</span>, model <span class="op">=</span> <span class="st">"glm-4.6"</span><span class="op">)</span></span></code></pre></div>
@@ -268,7 +268,7 @@
 <h3 id="step-2-extract-ars-json-from-the-annotated-shell">Step 2: Extract ARS JSON from the annotated shell<a class="anchor" aria-label="anchor" href="#step-2-extract-ars-json-from-the-annotated-shell"></a>
 </h3>
 <p><code><a href="reference/spec_to_ars.html">spec_to_ars()</a></code> is the main entry point. Point it at your annotated Word shell and ADaM spec; it writes a CDISC ARS JSON and an Excel validation report.</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/spec_to_ars.html">spec_to_ars</a></span><span class="op">(</span></span>
 <span>  shell_path     <span class="op">=</span> <span class="st">"inputs/APX-DRM-301_TLF_Shells_v1.0_sample_annotated.docx"</span>,</span>
 <span>  adam_spec_path <span class="op">=</span> <span class="st">"inputs/adam_spec_APX-DRM-301.xlsx"</span>,   <span class="co"># or define.xml</span></span>
@@ -356,7 +356,7 @@
 </tbody>
 </table>
 <p>WARN and FAIL are review signals, not automatic blockers — the JSON is written even when they are present, so a qualified programmer can triage them. A cell with no tint simply carries no status.</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Counts by status</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/table.html" class="external-link">table</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">validation</span><span class="op">$</span><span class="va">status</span><span class="op">)</span></span>
 <span></span>
@@ -368,7 +368,7 @@
 <h3 id="step-4-execute-to-a-tidy-ard">Step 4: Execute to a tidy ARD<a class="anchor" aria-label="anchor" href="#step-4-execute-to-a-tidy-ard"></a>
 </h3>
 <p><code><a href="reference/ars_to_ard.html">ars_to_ard()</a></code> runs the ARS JSON against your ADaM datasets and returns a tidy ARD in <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> format. It auto-loads datasets, applies population and data subset filters recursively, and calls the right <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> function for each method.</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ard</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ars_to_ard.html">ars_to_ard</a></span><span class="op">(</span></span>
 <span>  ars_path <span class="op">=</span> <span class="st">"outputs/reporting_event.json"</span>,</span>
 <span>  adam_dir <span class="op">=</span> <span class="st">"inputs/ADaM"</span></span>
@@ -376,7 +376,7 @@
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">ard</span><span class="op">)</span></span></code></pre></div>
 <p>During development, narrow the run to specific outputs or analyses for faster iteration:</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Only the demographics table</span></span>
 <span><span class="va">ard_demog</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ars_to_ard.html">ars_to_ard</a></span><span class="op">(</span></span>
 <span>  ars_path   <span class="op">=</span> <span class="st">"outputs/reporting_event.json"</span>,</span>
@@ -395,7 +395,7 @@
 <div class="section level3">
 <h3 id="step-5-render-the-formatted-table">Step 5: Render the formatted table<a class="anchor" aria-label="anchor" href="#step-5-render-the-formatted-table"></a>
 </h3>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">gt_table</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ars_render_tlf.html">ars_render_tlf</a></span><span class="op">(</span></span>
 <span>  ars_path  <span class="op">=</span> <span class="st">"outputs/reporting_event.json"</span>,</span>
 <span>  ard       <span class="op">=</span> <span class="va">ard</span>,</span>
@@ -404,7 +404,7 @@
 <span><span class="va">gt_table</span></span></code></pre></div>
 <p><code><a href="reference/ars_render_tlf.html">ars_render_tlf()</a></code> handles all the formatting automatically: treatment columns and row groups are detected from the ARD, <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> proportions are rescaled to display percentages, continuous summaries are laid out as <code>Mean (SD)</code> / <code>Median</code> / <code>(Min, Max)</code> rows, and ARS titles and footnotes are attached as GT source notes.</p>
 <p>To inspect or customise the underlying <a href="https://GSK-Biostatistics.github.io/tfrmt/" class="external-link">tfrmt</a> spec before rendering:</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Inspect the tfrmt spec for one output</span></span>
 <span><span class="va">spec</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ars_to_tfrmt.html">ars_to_tfrmt</a></span><span class="op">(</span><span class="st">"outputs/reporting_event.json"</span>, <span class="va">ard</span>, <span class="st">"T_14_1_1"</span><span class="op">)</span></span>
 <span></span>
@@ -418,7 +418,7 @@
 <h3 id="step-6-fill-any-reserved-cells">Step 6: Fill any reserved cells<a class="anchor" aria-label="anchor" href="#step-6-fill-any-reserved-cells"></a>
 </h3>
 <p>Some statistics fall outside what arsbridge can compute today. These are not dropped or replaced with zeros. Instead, each one becomes a keyed <code>manual_pending</code> row in the ARD with a <code>[‡ manual]</code> marker in the rendered table, so every programmer knows exactly what still needs a derivation.</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># See what is waiting</span></span>
 <span><span class="fu"><a href="reference/ars_manual_worklist.html">ars_manual_worklist</a></span><span class="op">(</span><span class="va">ard</span><span class="op">)</span></span>
 <span></span>
@@ -442,92 +442,39 @@
 <p>Two things are the same no matter how you run arsbridge:</p>
 <ul>
 <li>
-<strong>A deterministic regex baseline</strong> (<code>parse_shell_docx()</code>) always runs — a four-layer detector over every stub cell and listing header (colour <code>#C00000</code> runs, bold/italic/underline, plain-text <code>DATASET.VARIABLE</code>, bracketed <code>[DATASET.VAR WHERE ...]</code>), plus flexible TLF-heading recognition (a bare <code>Table 14.1.1</code>, a colon title <code>Table 14.1.1: Title</code>, and one-line headings that also carry the population, an inline annotation, and a <code>[PROGRAMMING DATASETS USED: ...]</code> suffix; values single-, double-, or unquoted-numeric). No API call, no key. A sponsor style the built-ins miss is handled by <code>spec_to_ars(heading_patterns = ...)</code>.</li>
+<strong>A deterministic regex baseline</strong> (<code>parse_shell_docx()</code>) always runs — a four-layer detector over every stub cell and listing header (colour <code>#C00000</code> runs, bold/italic/underline, plain-text <code>DATASET.VARIABLE</code>, bracketed <code>[DATASET.VAR WHERE ...]</code>), plus flexible TLF-heading recognition: a bare <code>Table 14.1.1</code>, a colon title <code>Table 14.1.1: Title</code>, and one-line headings that also carry the population, an inline annotation, and a <code>[PROGRAMMING DATASETS USED: ...]</code> suffix (values single-, double-, or unquoted-numeric). No API call, no key. A sponsor style the built-ins miss is handled by <code>spec_to_ars(heading_patterns = ...)</code>.</li>
 <li>
 <strong>A hard spec gate.</strong> Every <code>DATASET.VARIABLE</code> — whoever proposed it — must exist in your ADaM spec, or it is dropped, never shipped, and logged as a named blocker. The spec is the ground-truth oracle.</li>
 </ul>
 <p>What differs is <strong>how the rows the regex could not resolve get filled</strong> — and that is the three approaches:</p>
-<pre><code>                 annotated shell (.docx)
-                          |
-              regex baseline  (always runs)
-                          |
-                 row still unresolved?
-                          |
-     +--------------------+--------------------+
-     |                    |                    |
-  regex only        regex + Copilot         LLM API
-  (default)          (supplement)         (use_llm = TRUE)
-  leave the gap      a chat assistant       the LLM re-reads
-                     fills gaps by hand      the cell + enriches
-     |                    |                    |
-     +--------------------+--------------------+
-                          |
-                    HARD SPEC GATE
-              (the variable must be in the spec)
-                          |
-                  validated -&gt; ARS JSON</code></pre>
+<div class="sourceCode" id="cb18"><pre class="sourceCode R"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a>                 annotated <span class="fu">shell</span> (.docx)</span>
+<span id="cb18-2"><a href="#cb18-2" tabindex="-1"></a>                          <span class="sc">|</span></span>
+<span id="cb18-3"><a href="#cb18-3" tabindex="-1"></a>              regex <span class="fu">baseline</span>  (always runs)</span>
+<span id="cb18-4"><a href="#cb18-4" tabindex="-1"></a>                          <span class="sc">|</span></span>
+<span id="cb18-5"><a href="#cb18-5" tabindex="-1"></a>                 row still unresolved?</span>
+<span id="cb18-6"><a href="#cb18-6" tabindex="-1"></a>                          <span class="sc">|</span></span>
+<span id="cb18-7"><a href="#cb18-7" tabindex="-1"></a>     <span class="sc">+--------------------+--------------------+</span></span>
+<span id="cb18-8"><a href="#cb18-8" tabindex="-1"></a>     <span class="er">|</span>                    <span class="er">|</span>                    <span class="er">|</span></span>
+<span id="cb18-9"><a href="#cb18-9" tabindex="-1"></a>  regex only        regex <span class="sc">+</span> Copilot         LLM API</span>
+<span id="cb18-10"><a href="#cb18-10" tabindex="-1"></a>  (default)          (supplement)         (<span class="at">use_llm =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb18-11"><a href="#cb18-11" tabindex="-1"></a>  leave the gap      a chat assistant       the LLM re<span class="sc">-</span>reads</span>
+<span id="cb18-12"><a href="#cb18-12" tabindex="-1"></a>                     fills gaps by hand      the cell <span class="sc">+</span> enriches</span>
+<span id="cb18-13"><a href="#cb18-13" tabindex="-1"></a>     <span class="sc">|</span>                    <span class="er">|</span>                    <span class="er">|</span></span>
+<span id="cb18-14"><a href="#cb18-14" tabindex="-1"></a>     <span class="sc">+--------------------+--------------------+</span></span>
+<span id="cb18-15"><a href="#cb18-15" tabindex="-1"></a>                          <span class="er">|</span></span>
+<span id="cb18-16"><a href="#cb18-16" tabindex="-1"></a>                    HARD SPEC GATE</span>
+<span id="cb18-17"><a href="#cb18-17" tabindex="-1"></a>              (the variable must be <span class="cf">in</span> the spec)</span>
+<span id="cb18-18"><a href="#cb18-18" tabindex="-1"></a>                          <span class="sc">|</span></span>
+<span id="cb18-19"><a href="#cb18-19" tabindex="-1"></a>                  validated <span class="ot">-&gt;</span> ARS JSON</span></code></pre></div>
 <ol style="list-style-type: decimal">
 <li>
 <strong>Regex only (deterministic)</strong> — the default; no key. Unresolved rows stay empty. Standard shells still produce valid ARS / ARD / output; variant layouts, groupings, Total columns, and analysis typing degrade, and one <code>WARN</code> records the mode.</li>
 <li>
-<strong>Regex + Copilot (supplement)</strong> — <code>spec_to_ars(supplement = "supplement.json")</code>. A chat assistant (Copilot/ChatGPT) reads the shell + spec by hand and returns a JSON supplement (format v3, with typed CDISC ARS conditions — no string parsing); its label-keyed analyses fill <strong>only</strong> rows the regex left blank — your authored shell annotations win a disagreement by default, or pass <code>supplement_trust = "prefer_supplement"</code> to let a validated supplement value override — and it confirms the table set by title and row anchors. No API call. For large shells, <code>ars_copilot_instructions(workflow = "two_phase")</code> splits it into evidence discovery then construction.</li>
+<strong>Regex + Copilot (supplement)</strong> — <code>spec_to_ars(supplement = "supplement.json")</code>. A chat assistant (Copilot/ChatGPT) reads the shell + spec by hand and returns a JSON supplement (format v3, with typed CDISC ARS conditions — no string parsing); its label-keyed analyses fill <strong>only</strong> rows the regex left blank — your authored shell annotations win a disagreement by default, or pass <code>supplement_trust = "prefer_supplement"</code> to let a validated supplement value override — and it confirms the table set by title and row anchors. No API call. For large shells, <code>ars_copilot_instructions(workflow = "two_phase")</code> splits it into evidence discovery then construction. See <code><a href="articles/no-api-access.html">vignette("no-api-access")</a></code>.</li>
 <li>
-<strong>LLM API (live)</strong> — opt in with <code>use_llm = TRUE</code> and a key. <code>extract_shell_llm()</code> re-reads each cell and separates the display label from the variable reference in any layout, and the LLM enriches each TLF (analysis type, method, groupings), generalising to formats no regex was written for.</li>
+<strong>LLM API (live)</strong> — opt in with <code>use_llm = TRUE</code> and a key. <code>extract_shell_llm()</code> re-reads each cell and separates the display label from the variable reference in any layout, and the LLM enriches each TLF (analysis type, method, groupings), generalising to formats no regex was written for. A key alone does <strong>not</strong> trigger it — you must pass <code>use_llm = TRUE</code>.</li>
 </ol>
-<p>All three feed the same spec gate and emit the same ARS JSON shape; <code>_meta.extraction_mode</code> records which one ran. The next section shows how to run each; <code><a href="articles/reading-engine.html">vignette("reading-engine")</a></code> has the full parsing detail.</p>
-<hr>
-</div>
-<div class="section level2">
-<h2 id="no-api-key-three-tiers-always-runs">No API key? Three tiers, always runs<a class="anchor" aria-label="anchor" href="#no-api-key-three-tiers-always-runs"></a>
-</h2>
-<p>The reading engine has three tiers. Only the first is required — a missing key or missing supplement never stops the run; it degrades and says so.</p>
-<table class="table">
-<colgroup>
-<col width="25%">
-<col width="25%">
-<col width="25%">
-<col width="25%">
-</colgroup>
-<thead><tr>
-<th>Tier</th>
-<th>You supply</th>
-<th>How to run</th>
-<th>Accuracy</th>
-</tr></thead>
-<tbody>
-<tr>
-<td>
-<strong>Regex</strong> (deterministic)</td>
-<td>shell + spec</td>
-<td><code>spec_to_ars(shell, spec)</code></td>
-<td>Regex + heuristics. Standard shells still produce valid ARS/ARD/output; variant layouts, groupings, Total columns, and analysis typing degrade (one <code>WARN</code> records the mode).</td>
-</tr>
-<tr>
-<td>
-<strong>Regex + Copilot</strong> (supplement)</td>
-<td>+ a file from a chat assistant</td>
-<td><code>spec_to_ars(shell, spec, supplement = "supplement.json")</code></td>
-<td>Near-LLM. No API call — you use Copilot/ChatGPT by hand.</td>
-</tr>
-<tr>
-<td><strong>LLM API</strong></td>
-<td>+ an API key</td>
-<td>
-<code><a href="reference/set_anthropic_key.html">set_anthropic_key()</a></code> then <code>spec_to_ars(shell, spec, use_llm = TRUE)</code>
-</td>
-<td>Full. The LLM is opt-in: a key alone does <strong>not</strong> trigger it — you must pass <code>use_llm = TRUE</code>.</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Supplement workflow</strong> (for environments where the LLM API is blocked but a chat assistant is allowed):</p>
-<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="reference/ars_copilot_instructions.html">ars_copilot_instructions</a></span><span class="op">(</span><span class="op">)</span>   <span class="co"># writes arsbridge_copilot_instructions.md + prints the steps</span></span>
-<span><span class="co"># Upload that file + your shell.docx + your adam_spec.xlsx to Copilot/ChatGPT.</span></span>
-<span><span class="co"># Save its JSON reply as supplement.json, then:</span></span>
-<span><span class="fu"><a href="reference/ars_validate_supplement.html">ars_validate_supplement</a></span><span class="op">(</span><span class="st">"supplement.json"</span>, <span class="st">"adam_spec.xlsx"</span><span class="op">)</span>   <span class="co"># optional pre-flight</span></span>
-<span><span class="fu"><a href="reference/spec_to_ars.html">spec_to_ars</a></span><span class="op">(</span><span class="st">"shell.docx"</span>, <span class="st">"adam_spec.xlsx"</span>, supplement <span class="op">=</span> <span class="st">"supplement.json"</span><span class="op">)</span></span></code></pre></div>
-<p>The instruction file ships inside the installed package; <code><a href="reference/ars_copilot_instructions.html">ars_copilot_instructions()</a></code> copies it from there into your working directory, so you never need to know the internal package path (pass a <code>dir</code> to write it elsewhere).</p>
-<p>The supplement fills only the annotations the regex could not find — your authored shell annotations always win a disagreement — and every variable it proposes passes the same hard ADaM-spec gate as a live LLM answer, so a hallucinated variable is rejected, never shipped. <code>_meta.extraction_mode</code> in the ARS JSON records which tier produced the run. See <code><a href="articles/no-api-access.html">vignette("no-api-access")</a></code> for the full walkthrough and the data-governance note.</p>
+<p>All three feed the same spec gate and emit the same ARS JSON shape; <code>_meta.extraction_mode</code> records which one ran. See <code><a href="articles/reading-engine.html">vignette("reading-engine")</a></code> for the complete parsing detail.</p>
 <hr>
 </div>
 <div class="section level2">
@@ -612,11 +559,11 @@
 </h2>
 <p>arsbridge splits the shell into outputs by finding TLF <strong>heading paragraphs</strong>, so the single most important thing you can do to make a shell parse cleanly is to write each heading in an identifiable way.</p>
 <p><strong>Do:</strong> give every output its own ordinary paragraph that begins with <code>Table</code>, <code>Figure</code>, or <code>Listing</code>, followed by the output number and a title. All of these are read:</p>
-<pre><code>Table 14.1.1
-Table 14.1.1: Summary of Demographics
-Table 14.1.1 Summary of Demographics
-Table 14.1.1 Summary of Demographics - Safety Population ADSL.SAFFL='Y'
-Table 14.1.1 Demographics - Screened Subjects ADSL.SCRNFL='Y' [PROGRAMMING DATASETS USED: ADSL]</code></pre>
+<div class="sourceCode" id="cb19"><pre class="sourceCode R"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" tabindex="-1"></a>Table <span class="dv">14</span>.<span class="fl">1.1</span></span>
+<span id="cb19-2"><a href="#cb19-2" tabindex="-1"></a>Table <span class="dv">14</span>.<span class="fl">1.1</span><span class="sc">:</span> Summary of Demographics</span>
+<span id="cb19-3"><a href="#cb19-3" tabindex="-1"></a>Table <span class="dv">14</span>.<span class="fl">1.1</span> Summary of Demographics</span>
+<span id="cb19-4"><a href="#cb19-4" tabindex="-1"></a>Table <span class="dv">14</span>.<span class="fl">1.1</span> Summary of Demographics <span class="sc">-</span> Safety Population ADSL.SAFFL<span class="ot">=</span><span class="st">'Y'</span></span>
+<span id="cb19-5"><a href="#cb19-5" tabindex="-1"></a>Table <span class="dv">14</span>.<span class="fl">1.1</span> Demographics <span class="sc">-</span> Screened Subjects ADSL.SCRNFL<span class="ot">=</span><span class="st">'Y'</span> [PROGRAMMING DATASETS USED<span class="sc">:</span> ADSL]</span></code></pre></div>
 <p>The population, an inline annotation, and a <code>[PROGRAMMING DATASETS USED: ...]</code> suffix may all ride on the same line; annotation values may use single quotes, double quotes, or an unquoted number (<code>ADSL.COHORTN=1</code>). The <strong>recommended</strong> form for a clean, portable shell is the explicit colon title — <code>Table 14.1.1: Descriptive Title</code> — with the population on the next line.</p>
 <p><strong>Avoid:</strong> these are deliberately <em>not</em> treated as headings, so a title hidden this way will be missed:</p>
 <ul>
