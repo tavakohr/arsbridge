@@ -123,10 +123,13 @@ write_validation_report <- function(report_df, output_path, diagnostics = NULL,
     color = openxlsx2::wb_color(hex = "1F4E78")
   )
 
-  ## Tint rows by status / severity.
-  status_col <- match(tint_col, names(df))
-  if (!is.na(status_col)) {
-    .tint_status_rows(wb, df, status_col, sheet = sheet)
+  ## Tint rows by status / severity. Not every sheet has a status to tint by
+  ## (an edit log, for instance), in which case tint_col is NULL.
+  if (!is.null(tint_col)) {
+    status_col <- match(tint_col, names(df))
+    if (!is.na(status_col)) {
+      .tint_status_rows(wb, df, status_col, sheet = sheet)
+    }
   }
 
   ## Auto widths (clamped 12..60).

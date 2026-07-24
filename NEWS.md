@@ -1,5 +1,184 @@
 # arsbridge (development version)
 
+* **A freshly generated reporting event now validates clean against the
+  official CDISC ARS v1.0 schema** (beyond the documented extensions, which
+  `ars_conformance()` strips and reports). All six known divergences are
+  closed:
+  - Every analysis carries the required `reason` and `purpose` controlled
+    terminology. The run-level defaults -- `"SPECIFIED IN SAP"` and
+    `"EXPLORATORY OUTCOME MEASURE"` -- are new `spec_to_ars()` arguments
+    (`analysis_reason` / `analysis_purpose`, validated against the closed
+    CDISC vocabularies), and both fields are editable per line in
+    `edit_ars()`, which is where the handful of endpoint tables get their
+    `PRIMARY`/`SECONDARY` purpose corrected.
+  - `version` fields are integers, as required.
+  - Displays are written in the official `OrderedDisplay{order, display}`
+    wrapper with their own `id`/`name`, and footnotes as
+    `orderedSubSections[]` wrapping `subSection{id, text}`.
+  - `fileSpecifications[].fileType` is a terminology object.
+  - The self-referential operation-role placeholders carry a valid term
+    (`NUMERATOR`) instead of `""`.
+  - Contents-list analysis entries are named.
+
+  siera compatibility was verified by running `siera::readARS()` on the same
+  event in both shapes: identical output. (siera reads none of the changed
+  fields by position, and the new keys are additive.)
+
+* **No compatibility readers for arsbridge's own earlier output shapes.**
+  Early-phase policy: when a correction changes the emitted JSON, the old
+  shape is not carried. Readers target the official shape only -- an
+  unrecognized shape reads as unset rather than crashing or being misread,
+  and the round trip preserves what it does not understand rather than
+  guessing at it. The remedy for an outdated file is regenerating it with
+  `spec_to_ars()`, and `ars_conformance()` names exactly what is wrong with
+  it. The bundled minimal fixture is now official-shaped too.
+
+* **`ars_conformance()` validates a reporting event against the official
+  CDISC ARS v1.0 JSON Schema.** The schema ships with the package, pinned to
+  the `v1.0.0` release of `cdisc-org/analysis-results-standard` alongside its
+  LinkML source (`inst/schema/`, provenance in the README there), so the
+  answer never changes because the standard's development branch did.
+  arsbridge's documented extensions -- `_meta`, `referencedAnalysisIds`, the
+  nested `analysisVariable` duplicate and friends -- are stripped before
+  validating and reported in an attribute, so the findings show genuine
+  divergences instead of burying them under sanctioned fields. The
+  generator's known gaps (missing `reason`/`purpose` terminology on analyses,
+  string `version`s, flat display objects, string `fileType`s, placeholder
+  operation roles) are reported honestly and pinned by tests, and every save
+  from `edit_ars()` prints a one-line conformance count. This resolves the
+  open question of *which* schema to validate against: the LinkML model is
+  the source of truth, vendored at `inst/schema/cdisc_ars_v1.0.0_ldm.yaml`.
+
+* **The editor no longer goes quietly stale around structural changes.**
+  Moving a line now visibly reorders the panel, applying a raw-JSON
+  replacement refreshes the fields it changed, the outputs tree keeps its
+  open panels across edits instead of collapsing, and the entity-library
+  tables update their data in place so row selection survives the very edit
+  it enabled. Same family as the undo-display fix: the model changed and the
+  screen did not.
+
+* **Writing to a derived model column is now refused instead of silently
+  reverted.** Columns computed from the node (`output_id`, `n_analyses`,
+  `condition_summary`, ...) used to accept a write that the next refresh
+  undid; `model_set_field()` now says so instead.
+
+* **A review session can no longer be lost.** Every change is undoable
+  (and redoable) with the arrows in the header -- field edits, added and
+  removed lines, reordering, detaching, library edits, all of it. And every
+  change is written to a crash-recovery copy in the user's cache directory, so
+  a browser or an R session that dies mid-review offers the work back when the
+  editor is next opened on the same file. The file being edited is never
+  touched until an explicit save, and the recovery copy is cleared once the
+  work is safely on disk.
+
+* **Shared entities are editable from the library.** Methods, analysis sets,
+  data subsets and groupings can now be corrected in the Entities tab, which
+  is the right place to fix a population that is wrong everywhere rather than
+  opening thirty analyses. The panel says how many analyses a change will
+  affect, and points at detaching when the intent is to change one line only.
+  Nested shapes the flat fields cannot express -- compound conditions,
+  grouping levels -- have a raw-JSON escape hatch that refuses anything
+  invalid instead of applying it.
+
+* **`export_edit_log()` turns a review session into a QC record.** The sidecar
+  `<name>.edits.json` becomes a styled workbook: what changed, from what to
+  what, who saved it and when. Repeated edits to one field collapse to a
+  single before/after row, and a field edited back to where it started does
+  not appear at all. The ARS JSON still carries no provenance fields, so the
+  deliverable stays CDISC-conformant.
+
+* **`review_ars()`** is an alias for `edit_ars()`, for whichever framing fits.
+
+* **Fixed: the raw-JSON escape hatch silently discarded the edit it reported
+  applying.** Replacing an entity's node re-derived its row by patching the
+  new node from the row's *old* column values, which undid the replacement.
+  Node-replacing edits now treat the node as authoritative.
+
+* **The lines the generator missed can now be added, and a gap tells you
+  exactly which one.** Selecting a coverage finding -- "the shell annotates
+  this but no analysis uses that variable" -- opens the add-analysis wizard
+  pre-filled with the dataset and variable the shell named, at the output it
+  belongs to. The wizard is reuse-first by construction: method, population,
+  data subset and groupings all default to what the output's other lines
+  already use, so the normal outcome of adding a line is that no new shared
+  entity appears and the event stays readable. Display order is meaningful, so
+  the line can be inserted at a chosen position, and an output's lines can be
+  reordered or removed.
+
+  An added line is indistinguishable from a generated one: the same node
+  shape, the same `AN_<TLF>_<nnn>` id convention (collision-checked), the same
+  self-referential operation placeholders siera needs. The tables of contents
+  rebuild themselves, because they were already derived from the outputs.
+  Adding a line and then removing it restores the event byte for byte.
+
+* **A shared population, data subset or grouping can be detached for one
+  analysis.** Editing a population used by thirty analyses changes all thirty;
+  detaching copies it under a new id and repoints only this line, so it can
+  then be changed on its own. Methods deliberately cannot be detached: the
+  engine dispatches on the method id, so a per-analysis copy would have no
+  executor and would quietly degrade a computed line into a generic summary.
+  Changing which method one line uses is what the method dropdown is for.
+
+* **`validate_ars_model()` findings gained a `ref` column** carrying what the
+  finding is about in machine-readable form, which is what lets a coverage gap
+  turn into a pre-filled wizard rather than a re-typing exercise.
+
+* **`edit_ars()` closes the loop: generate, review and correct, then execute.**
+  The same structured viewer, with the detail panels editable. Methods,
+  populations, data subsets and groupings are chosen from what actually
+  exists -- the entities in the file, the methods the engine can execute
+  (labelled with what it will do with each: computed, needs a prerequisite,
+  reserved for manual computation), and, with the ADaM spec supplied, the
+  variables the study really has. Choosing a standard method the file does not
+  carry adds it first, so an analysis can never point at a method that is not
+  there. Every dropdown says how many analyses share the entity, because
+  editing a shared method edits all of them.
+
+  Nothing is written until you save, and saving shows a from/to table of what
+  changed first. The previous file is backed up to `<name>.json.bak-<time>`,
+  the new content is written to a temporary file in the same directory and
+  renamed into place so an interrupted save cannot destroy the file it was
+  replacing, and the edit log is written to `<name>.edits.json` beside it --
+  keeping provenance out of the ARS JSON so the deliverable stays CDISC-clean.
+  `spec_to_ars()` now also returns `adam_spec_path`, so `edit_ars(result)`
+  wires up spec-driven dropdowns and gap detection on its own.
+
+* **`view_ars()` opens a reporting event as the structure a programmer already
+  recognises.** Each output is a collapsible panel with its analysis lines
+  beneath it -- the shell's skeleton, read straight from the standard's
+  `mainListOfContents` -- and validation findings are overlaid as badges, so
+  the displays needing attention are visible before anything is opened.
+  Selecting a line resolves its ids into what they mean: the method's name
+  plus whether the engine can actually execute it, the population's condition,
+  the variables results are grouped by. A shared-entity library shows how many
+  analyses each method, analysis set, data subset and grouping is used by,
+  which is the thing a flat JSON view hides. The viewer never writes anything.
+  `shiny`, `bslib` and `DT` are Suggests, so the package is unaffected when
+  they are not installed.
+
+* **An ARS reporting event can now be read as editable tables and written
+  back losslessly.** `ars_to_model()` turns the nested JSON into one data
+  frame per entity pool (analyses, methods, analysis sets, data subsets,
+  groupings, outputs), each row carrying the flat fields a reviewer edits
+  plus the original untouched node; `model_to_ars()` is its exact inverse.
+  Fields the model does not surface -- including `_meta` and any future ARS
+  key -- ride along untouched, so an unedited model round-trips to a
+  structurally identical event and an edited one differs only where it was
+  edited. The two tables of contents are copied verbatim unless a structural
+  change means they have to be rebuilt from the outputs. This is the
+  foundation of the human review stage between `spec_to_ars()` and
+  `ars_to_ard()`.
+
+* **`validate_ars_model()` checks a reporting event for the problems that
+  matter before execution.** Every reference resolves (an empty
+  `dataSubsetId` correctly means "no subset"), no id is duplicated, and each
+  analysis is classified by how `ars_to_ard()` will actually treat its method
+  -- computed natively, dependent on a prerequisite, silently falling back to
+  the generic summarizer, or reserved for manual computation. Given the ADaM
+  spec it also checks datasets and variables exist, and given the annotation
+  validation report it reports annotated shell lines that no analysis
+  covers -- the lines the generator missed.
+
 * **Spec codelists decode coded categorical variables end to end.**
   `parse_adam_spec()` now reads the spec workbook's Codelists sheet (both the
   `"Codelist Name" / "Term (Code)" / "Decoded Value"` and the

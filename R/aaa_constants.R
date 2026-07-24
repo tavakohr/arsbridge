@@ -43,3 +43,28 @@
   ## Treatment dates
   "TRTSDT", "TRTEDT", "TRTDURD"
 )
+
+## CDISC ARS v1.0 controlled terminology for Analysis.reason and
+## Analysis.purpose (AnalysisReasonEnum / AnalysisPurposeEnum in the bundled
+## schema). The generator stamps a default from each onto every analysis --
+## overridable per run via spec_to_ars() and per line in edit_ars() -- because
+## the standard requires both fields and an absent value fails conformance.
+.ANALYSIS_REASONS <- c(
+  "SPECIFIED IN PROTOCOL",
+  "SPECIFIED IN SAP",
+  "DATA DRIVEN",
+  "REQUESTED BY REGULATORY AGENCY"
+)
+.ANALYSIS_PURPOSES <- c(
+  "PRIMARY OUTCOME MEASURE",
+  "SECONDARY OUTCOME MEASURE",
+  "EXPLORATORY OUTCOME MEASURE"
+)
+
+## The blanket defaults. "SPECIFIED IN SAP" because the annotated shells the
+## pipeline reads are SAP-derived; "EXPLORATORY OUTCOME MEASURE" because it is
+## the safest understatement for the non-endpoint displays that make up most
+## of a TLF package. The reviewer corrects the handful of endpoint tables in
+## the editor.
+.DEFAULT_ANALYSIS_REASON  <- "SPECIFIED IN SAP"
+.DEFAULT_ANALYSIS_PURPOSE <- "EXPLORATORY OUTCOME MEASURE"

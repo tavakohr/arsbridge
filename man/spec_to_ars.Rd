@@ -20,6 +20,8 @@ spec_to_ars(
   spec_column_aliases = NULL,
   extract_with_llm = TRUE,
   ship_annotations = FALSE,
+  analysis_reason = .DEFAULT_ANALYSIS_REASON,
+  analysis_purpose = .DEFAULT_ANALYSIS_PURPOSE,
   heading_patterns = NULL,
   validate = TRUE,
   report_path = file.path(tempdir(), "spec_validation_report.xlsx"),
@@ -115,6 +117,20 @@ NEVER emitted into the ARS Footnote display section -- rendered footnotes
 then contain only true footnotes. Set \code{TRUE} to append them to the
 footnotes (debug escape hatch).}
 
+\item{analysis_reason}{The CDISC controlled term stamped as \code{reason} on
+every generated analysis (the standard requires one). Default
+\code{"SPECIFIED IN SAP"}, since the annotated shells the pipeline reads are
+SAP-derived. One of \code{"SPECIFIED IN PROTOCOL"}, \code{"SPECIFIED IN SAP"},
+\code{"DATA DRIVEN"}, \code{"REQUESTED BY REGULATORY AGENCY"}. Adjust individual
+analyses in \code{\link[=edit_ars]{edit_ars()}}.}
+
+\item{analysis_purpose}{The CDISC controlled term stamped as \code{purpose} on
+every generated analysis. Default \code{"EXPLORATORY OUTCOME MEASURE"} -- the
+safest understatement for the non-endpoint displays that make up most of
+a TLF package; correct the endpoint tables in \code{\link[=edit_ars]{edit_ars()}}. One of
+\code{"PRIMARY OUTCOME MEASURE"}, \code{"SECONDARY OUTCOME MEASURE"},
+\code{"EXPLORATORY OUTCOME MEASURE"}.}
+
 \item{heading_patterns}{Optional character vector of PCRE patterns tried
 BEFORE the built-in TLF heading grammars, for sponsor shells whose
 headings the built-ins do not recognise. Each pattern must use named
@@ -154,6 +170,8 @@ Invisibly returns a named list:
 \code{"deterministic"}. Also stored in the JSON as
 \verb{_meta.extraction_mode}.}
 \item{\code{report_path}}{Path to the validation report (if validate=TRUE).}
+\item{\code{adam_spec_path}}{The ADaM spec this run read, so the review
+stage can be opened with \code{edit_ars(result)} alone.}
 \item{\code{code_dir}}{Directory holding the emitted per-TLF \code{{cards}} \code{.R}
 deliverables.}
 \item{\code{code_paths}}{Named character vector of the emitted \code{.R} paths
