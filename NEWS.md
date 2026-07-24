@@ -1,5 +1,28 @@
 # arsbridge (development version)
 
+* **An ARS reporting event can now be read as editable tables and written
+  back losslessly.** `ars_to_model()` turns the nested JSON into one data
+  frame per entity pool (analyses, methods, analysis sets, data subsets,
+  groupings, outputs), each row carrying the flat fields a reviewer edits
+  plus the original untouched node; `model_to_ars()` is its exact inverse.
+  Fields the model does not surface -- including `_meta` and any future ARS
+  key -- ride along untouched, so an unedited model round-trips to a
+  structurally identical event and an edited one differs only where it was
+  edited. The two tables of contents are copied verbatim unless a structural
+  change means they have to be rebuilt from the outputs. This is the
+  foundation of the human review stage between `spec_to_ars()` and
+  `ars_to_ard()`.
+
+* **`validate_ars_model()` checks a reporting event for the problems that
+  matter before execution.** Every reference resolves (an empty
+  `dataSubsetId` correctly means "no subset"), no id is duplicated, and each
+  analysis is classified by how `ars_to_ard()` will actually treat its method
+  -- computed natively, dependent on a prerequisite, silently falling back to
+  the generic summarizer, or reserved for manual computation. Given the ADaM
+  spec it also checks datasets and variables exist, and given the annotation
+  validation report it reports annotated shell lines that no analysis
+  covers -- the lines the generator missed.
+
 * **Spec codelists decode coded categorical variables end to end.**
   `parse_adam_spec()` now reads the spec workbook's Codelists sheet (both the
   `"Codelist Name" / "Term (Code)" / "Decoded Value"` and the
