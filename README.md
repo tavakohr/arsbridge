@@ -14,23 +14,31 @@ coverage](https://codecov.io/gh/tavakohr/arsbridge/branch/main/graph/badge.svg)]
 MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 <!-- badges: end -->
 
-> **From annotated Word shell to publication-ready clinical table, in one reproducible pipeline.**
+> **From annotated Word shell to publication-ready clinical table, in
+> one reproducible pipeline.**
 
-Clinical programmers spend hours translating a lead programmer's annotated TLF shell into R code, then reformatting output to match the shell layout. `{arsbridge}` automates both halves. It reads the annotations directly from the Word document, checks every variable against your ADaM spec, generates a CDISC Analysis Results Standard (ARS) JSON, executes it against real ADaM datasets with `{cards}`, and renders a formatted GT table ready to ship.
+Clinical programmers spend hours translating a lead programmer’s
+annotated TLF shell into R code, then reformatting output to match the
+shell layout. `{arsbridge}` automates both halves. It reads the
+annotations directly from the Word document, checks every variable
+against your ADaM spec, generates a CDISC Analysis Results Standard
+(ARS) JSON, executes it against real ADaM datasets with `{cards}`, and
+renders a formatted GT table ready to ship.
 
-No manual transcription. No orphan numbers. Every value auditable back to its source.
+No manual transcription. No orphan numbers. Every value auditable back
+to its source.
 
 ------------------------------------------------------------------------
 
 ## What you get
 
 | Capability | What it means for you |
-|---|---|
+|----|----|
 | **Three ways to read the shell** | A deterministic regex baseline always runs; you choose how the gaps it cannot resolve get filled — **regex only** (no key), a **Copilot supplement** (no API call), or a **live LLM** (opt-in with a key). Same spec-gated output from all three. |
 | **Spec-gated validation** | Every variable proposed — by the regex, a supplement, or the LLM — is checked against your ADaM spec. A variable missing from the spec is rejected and logged, never silently invented. |
 | **CDISC ARS JSON output** | The extraction result is a structured, versioned file you can diff, review, and feed to downstream tools like `{siera}`. |
 | **Native ARD execution** | Run ARS JSON directly against `.xpt` or `.csv` datasets using `{cards}`, with no dataset-loading boilerplate. |
-| **Codelist-decoded categories** | A coded categorical variable (e.g. a numeric `DCSREASN`) is decoded through the ADaM spec’s codelist: the ARD and rendered table show `DEATH`, not `1`, in codelist order, with unobserved terms reported as n = 0. Unannotated coded column axes get their column labels from the codelist too. |
+| **Codelist-decoded categories** | A coded categorical variable (e.g. a numeric `DCSREASN`) is decoded through the ADaM spec’s codelist: the ARD and rendered table show `DEATH`, not `1`, in codelist order, with unobserved terms reported as n = 0. Unannotated coded column axes get their column labels from the codelist too. |
 | **Publication-ready tables** | `ars_render_tlf()` builds a formatted GT table: treatment columns detected, percentages rescaled, row groups labelled, ARS footnotes carried through. |
 | **Partial tables, full traceability** | Statistics arsbridge cannot yet compute are reserved as keyed `manual_pending` rows. Each shows a `[‡ manual]` marker in the table until a programmer fills it with a validated script. Nothing is ever an orphan number. |
 
@@ -38,7 +46,7 @@ No manual transcription. No orphan numbers. Every value auditable back to its so
 
 ## The pipeline at a glance
 
-```mermaid
+``` mermaid
 flowchart TD
     SHELL(["Annotated Word Shell\n(.docx)"])
     SPEC(["ADaM Spec\n(define.xml or .xlsx)"])
@@ -112,11 +120,11 @@ corrected <- edit_ars(res)
 ard <- ars_to_ard(corrected, adam_dir = "adam")
 ```
 
-You see the shell's structure rather than JSON – each output with its
+You see the shell’s structure rather than JSON – each output with its
 analysis lines beneath it – with validation findings badged onto the
 lines they concern. Selecting a line resolves its ids into what they
-mean: the method's name plus whether the engine can actually execute it,
-the population's condition, the variables the results are split by.
+mean: the method’s name plus whether the engine can actually execute it,
+the population’s condition, the variables the results are split by.
 Variables come from the ADaM spec, so they cannot be mistyped, and every
 dropdown says how many analyses share the entity, because editing a
 shared method edits all of them.
@@ -124,13 +132,13 @@ shared method edits all of them.
 Nothing is written until you save, and saving shows what changed first.
 The previous file is backed up, the write is atomic, and the edit log
 goes to a sidecar `.edits.json` so the ARS JSON itself stays CDISC-clean
--- `export_edit_log()` turns that sidecar into a QC workbook.
+– `export_edit_log()` turns that sidecar into a QC workbook.
 
 Every change is undoable, and a session that dies is offered back the
 next time you open the same file, so a review cannot be lost to a
-mis-click or a crashed browser. `ars_conformance()` checks any reporting event
-against the official CDISC ARS v1.0 schema (vendored and pinned in the
-package), and a freshly generated event validates clean.
+mis-click or a crashed browser. `ars_conformance()` checks any reporting
+event against the official CDISC ARS v1.0 schema (vendored and pinned in
+the package), and a freshly generated event validates clean.
 
 Use `view_ars()` for the same view without the ability to change
 anything, and `validate_ars_model()` for the findings on the command
@@ -143,8 +151,6 @@ install.packages(c("shiny", "bslib", "DT"))
 ------------------------------------------------------------------------
 
 ## Installation
-
-You can install `{arsbridge}` from GitHub:
 
 ``` r
 # install.packages("devtools")
@@ -160,9 +166,9 @@ install.packages("cardx")
 ```
 
 > **No LLM API key?** You do not need one. `arsbridge` runs on regex +
-> heuristics alone, and `ars_copilot_instructions()` sets up a no-API workflow
-> that reaches near-LLM accuracy through a chat assistant. See
-> [No API key? Three tiers, always runs](#no-api-key-three-tiers-always-runs).
+> heuristics alone, and `ars_copilot_instructions()` sets up a no-API
+> workflow that reaches near-LLM accuracy through a chat assistant
+> (Copilot/ChatGPT) — see `vignette("no-api-access")`.
 
 ------------------------------------------------------------------------
 
@@ -219,12 +225,10 @@ show_active_llm()     # confirm which provider is active
 **Provider priority:** when multiple keys are configured, `{arsbridge}`
 searches in order: Anthropic, OpenAI, Gemini. Override this anytime:
 
-``` env
+``` r
 # In .Renviron
 ARS_LLM_PROVIDER=openai
-```
 
-``` r
 # Or at runtime
 options(ars.llm.provider = "gemini")
 ```
@@ -251,9 +255,9 @@ spec_to_ars(..., model = "glm-4.6")
 
 ### Step 2: Extract ARS JSON from the annotated shell
 
-`spec_to_ars()` is the main entry point. Point it at your annotated
-Word shell and ADaM spec; it writes a CDISC ARS JSON and an Excel
-validation report.
+`spec_to_ars()` is the main entry point. Point it at your annotated Word
+shell and ADaM spec; it writes a CDISC ARS JSON and an Excel validation
+report.
 
 ``` r
 res <- spec_to_ars(
@@ -268,7 +272,7 @@ res <- spec_to_ars(
 ```
 
 | Argument | What to pass |
-|---|---|
+|----|----|
 | `shell_path` | The annotated `.docx` file from the lead programmer |
 | `adam_spec_path` | `define.xml` (preferred) or an ADaM spec `.xlsx` / `.xls` |
 | `output_path` | Where to save the CDISC ARS JSON |
@@ -287,9 +291,9 @@ Each row is tinted by its status, and the workbook’s **Legend** sheet
 spells this out. The colors (and their exact fill hex codes) are:
 
 | Status | Fill | Hex | Meaning |
-|---|---|---|---|
+|----|----|----|----|
 | **PASS** | green | `E2EFDA` | Annotation matched a dataset + variable in the ADaM spec. No action needed. |
-| **WARN** | amber | `FFF2CC` | Needs review (e.g. an uncertain mapping). The ARS JSON is still generated. |
+| **WARN** | amber | `FFF2CC` | Needs review (e.g. an uncertain mapping). The ARS JSON is still generated. |
 | **FAIL** | red | `FCE4D6` | Could not be validated (invalid dataset/variable, or a blocking gap). Fix before use. |
 | **INFO** | blue | `DDEBF7` | Informational note (mainly the Diagnostics sheet). Not a validation failure. |
 
@@ -413,103 +417,69 @@ single detection strategy cannot cover all of these reliably.
 
 Two things are the same no matter how you run arsbridge:
 
-- **A deterministic regex baseline** (`parse_shell_docx()`) always runs — a
-  four-layer detector over every stub cell and listing header (colour
-  `#C00000` runs, bold/italic/underline, plain-text `DATASET.VARIABLE`,
-  bracketed `[DATASET.VAR WHERE ...]`), plus flexible TLF-heading recognition
-  (a bare `Table 14.1.1`, a colon title `Table 14.1.1: Title`, and one-line
-  headings that also carry the population, an inline annotation, and a
-  `[PROGRAMMING DATASETS USED: ...]` suffix; values single-, double-, or
-  unquoted-numeric). No API call, no key. A sponsor style the built-ins miss
-  is handled by `spec_to_ars(heading_patterns = ...)`.
-- **A hard spec gate.** Every `DATASET.VARIABLE` — whoever proposed it — must
-  exist in your ADaM spec, or it is dropped, never shipped, and logged as a
-  named blocker. The spec is the ground-truth oracle.
+- **A deterministic regex baseline** (`parse_shell_docx()`) always runs
+  — a four-layer detector over every stub cell and listing header
+  (colour `#C00000` runs, bold/italic/underline, plain-text
+  `DATASET.VARIABLE`, bracketed `[DATASET.VAR WHERE ...]`), plus
+  flexible TLF-heading recognition: a bare `Table 14.1.1`, a colon title
+  `Table 14.1.1: Title`, and one-line headings that also carry the
+  population, an inline annotation, and a
+  `[PROGRAMMING DATASETS USED: ...]` suffix (values single-, double-, or
+  unquoted-numeric). No API call, no key. A sponsor style the built-ins
+  miss is handled by `spec_to_ars(heading_patterns = ...)`.
+- **A hard spec gate.** Every `DATASET.VARIABLE` — whoever proposed it —
+  must exist in your ADaM spec, or it is dropped, never shipped, and
+  logged as a named blocker. The spec is the ground-truth oracle.
 
-What differs is **how the rows the regex could not resolve get filled** — and
-that is the three approaches:
+What differs is **how the rows the regex could not resolve get filled**
+— and that is the three approaches:
 
-```
-                 annotated shell (.docx)
-                          |
-              regex baseline  (always runs)
-                          |
-                 row still unresolved?
-                          |
-     +--------------------+--------------------+
-     |                    |                    |
-  regex only        regex + Copilot         LLM API
-  (default)          (supplement)         (use_llm = TRUE)
-  leave the gap      a chat assistant       the LLM re-reads
-                     fills gaps by hand      the cell + enriches
-     |                    |                    |
-     +--------------------+--------------------+
-                          |
-                    HARD SPEC GATE
-              (the variable must be in the spec)
-                          |
-                  validated -> ARS JSON
-```
+                     annotated shell (.docx)
+                              |
+                  regex baseline  (always runs)
+                              |
+                     row still unresolved?
+                              |
+         +--------------------+--------------------+
+         |                    |                    |
+      regex only        regex + Copilot         LLM API
+      (default)          (supplement)         (use_llm = TRUE)
+      leave the gap      a chat assistant       the LLM re-reads
+                         fills gaps by hand      the cell + enriches
+         |                    |                    |
+         +--------------------+--------------------+
+                              |
+                        HARD SPEC GATE
+                  (the variable must be in the spec)
+                              |
+                      validated -> ARS JSON
 
-1. **Regex only (deterministic)** — the default; no key. Unresolved rows stay
-   empty. Standard shells still produce valid ARS / ARD / output; variant
-   layouts, groupings, Total columns, and analysis typing degrade, and one
-   `WARN` records the mode.
-2. **Regex + Copilot (supplement)** — `spec_to_ars(supplement = "supplement.json")`.
-   A chat assistant (Copilot/ChatGPT) reads the shell + spec by hand and
-   returns a JSON supplement (format v3, with typed CDISC ARS conditions — no
-   string parsing); its label-keyed analyses fill **only** rows the regex left
-   blank — your authored shell annotations win a disagreement by default, or
-   pass `supplement_trust = "prefer_supplement"` to let a validated supplement
-   value override — and it confirms the table set by title and row anchors. No
-   API call. For large shells, `ars_copilot_instructions(workflow = "two_phase")`
-   splits it into evidence discovery then construction.
-3. **LLM API (live)** — opt in with `use_llm = TRUE` and a key.
-   `extract_shell_llm()` re-reads each cell and separates the display label
-   from the variable reference in any layout, and the LLM enriches each TLF
-   (analysis type, method, groupings), generalising to formats no regex was
-   written for.
+1.  **Regex only (deterministic)** — the default; no key. Unresolved
+    rows stay empty. Standard shells still produce valid ARS / ARD /
+    output; variant layouts, groupings, Total columns, and analysis
+    typing degrade, and one `WARN` records the mode.
+2.  **Regex + Copilot (supplement)** —
+    `spec_to_ars(supplement = "supplement.json")`. A chat assistant
+    (Copilot/ChatGPT) reads the shell + spec by hand and returns a JSON
+    supplement (format v3, with typed CDISC ARS conditions — no string
+    parsing); its label-keyed analyses fill **only** rows the regex left
+    blank — your authored shell annotations win a disagreement by
+    default, or pass `supplement_trust = "prefer_supplement"` to let a
+    validated supplement value override — and it confirms the table set
+    by title and row anchors. No API call. For large shells,
+    `ars_copilot_instructions(workflow = "two_phase")` splits it into
+    evidence discovery then construction. See
+    `vignette("no-api-access")`.
+3.  **LLM API (live)** — opt in with `use_llm = TRUE` and a key.
+    `extract_shell_llm()` re-reads each cell and separates the display
+    label from the variable reference in any layout, and the LLM
+    enriches each TLF (analysis type, method, groupings), generalising
+    to formats no regex was written for. A key alone does **not**
+    trigger it — you must pass `use_llm = TRUE`.
 
 All three feed the same spec gate and emit the same ARS JSON shape;
-`_meta.extraction_mode` records which one ran. The next section shows how to
-run each; `vignette("reading-engine")` has the full parsing detail.
-
-------------------------------------------------------------------------
-
-## No API key? Three tiers, always runs
-
-The reading engine has three tiers. Only the first is required — a missing
-key or missing supplement never stops the run; it degrades and says so.
-
-| Tier | You supply | How to run | Accuracy |
-|---|---|---|---|
-| **Regex** (deterministic) | shell + spec | `spec_to_ars(shell, spec)` | Regex + heuristics. Standard shells still produce valid ARS/ARD/output; variant layouts, groupings, Total columns, and analysis typing degrade (one `WARN` records the mode). |
-| **Regex + Copilot** (supplement) | + a file from a chat assistant | `spec_to_ars(shell, spec, supplement = "supplement.json")` | Near-LLM. No API call — you use Copilot/ChatGPT by hand. |
-| **LLM API** | + an API key | `set_anthropic_key()` then `spec_to_ars(shell, spec, use_llm = TRUE)` | Full. The LLM is opt-in: a key alone does **not** trigger it — you must pass `use_llm = TRUE`. |
-
-**Supplement workflow** (for environments where the LLM API is blocked but a
-chat assistant is allowed):
-
-``` r
-ars_copilot_instructions()   # writes arsbridge_copilot_instructions.md + prints the steps
-# Upload that file + your shell.docx + your adam_spec.xlsx to Copilot/ChatGPT.
-# Save its JSON reply as supplement.json, then:
-ars_validate_supplement("supplement.json", "adam_spec.xlsx")   # optional pre-flight
-spec_to_ars("shell.docx", "adam_spec.xlsx", supplement = "supplement.json")
-```
-
-The instruction file ships inside the installed package;
-`ars_copilot_instructions()` copies it from there into your working directory,
-so you never need to know the internal package path (pass a `dir` to write it
-elsewhere).
-
-The supplement fills only the annotations the regex could not find — your
-authored shell annotations always win a disagreement — and every variable it
-proposes passes the same hard ADaM-spec gate as a live LLM answer, so a
-hallucinated variable is rejected, never shipped. `_meta.extraction_mode` in
-the ARS JSON records which tier produced the run. See
-`vignette("no-api-access")` for the full walkthrough and the data-governance
-note.
+`_meta.extraction_mode` records which one ran. See
+`vignette("reading-engine")` for the complete parsing detail.
 
 ------------------------------------------------------------------------
 
@@ -521,7 +491,7 @@ compute, it reserves a traceable placeholder rather than refusing the
 whole table.
 
 | Statistic | Status | Engine |
-|---|---|---|
+|----|----|----|
 | Summary statistics (mean, SD, median, min, max) | Computed | `cards::ard_continuous()` |
 | Counts and percentages | Computed | `cards::ard_categorical()` |
 | AE frequencies (distinct subjects per event) | Computed | dedup then `cards::ard_categorical()` |
@@ -550,36 +520,35 @@ shell parse cleanly is to write each heading in an identifiable way.
 `Table`, `Figure`, or `Listing`, followed by the output number and a
 title. All of these are read:
 
-```
-Table 14.1.1
-Table 14.1.1: Summary of Demographics
-Table 14.1.1 Summary of Demographics
-Table 14.1.1 Summary of Demographics - Safety Population ADSL.SAFFL='Y'
-Table 14.1.1 Demographics - Screened Subjects ADSL.SCRNFL='Y' [PROGRAMMING DATASETS USED: ADSL]
-```
+    Table 14.1.1
+    Table 14.1.1: Summary of Demographics
+    Table 14.1.1 Summary of Demographics
+    Table 14.1.1 Summary of Demographics - Safety Population ADSL.SAFFL='Y'
+    Table 14.1.1 Demographics - Screened Subjects ADSL.SCRNFL='Y' [PROGRAMMING DATASETS USED: ADSL]
 
 The population, an inline annotation, and a
 `[PROGRAMMING DATASETS USED: ...]` suffix may all ride on the same line;
 annotation values may use single quotes, double quotes, or an unquoted
-number (`ADSL.COHORTN=1`). The **recommended** form for a clean, portable
-shell is the explicit colon title — `Table 14.1.1: Descriptive Title` —
-with the population on the next line.
+number (`ADSL.COHORTN=1`). The **recommended** form for a clean,
+portable shell is the explicit colon title —
+`Table 14.1.1: Descriptive Title` — with the population on the next
+line.
 
 **Avoid:** these are deliberately *not* treated as headings, so a title
 hidden this way will be missed:
 
 - the heading placed inside a **text box, shape, table cell, or
-  field/content control** (keep it a normal body paragraph — page headers
-  are also read);
+  field/content control** (keep it a normal body paragraph — page
+  headers are also read);
 - prose that merely mentions a number (`Table 14.1.1 shows ...`),
   cross-references (`See Table 14.1.1 ...`), or table-of-contents lines;
 - a bare section number with no designator word
   (`14.1 Demographic and Baseline Tables`).
 
-When arsbridge finds no heading — or finds a number but no title — it says
-so, lists the lines it looked at, and repeats this guidance. For a sponsor
-template whose headings genuinely follow a different convention, pass
-`spec_to_ars(heading_patterns = ...)` (a PCRE pattern with named
+When arsbridge finds no heading — or finds a number but no title — it
+says so, lists the lines it looked at, and repeats this guidance. For a
+sponsor template whose headings genuinely follow a different convention,
+pass `spec_to_ars(heading_patterns = ...)` (a PCRE pattern with named
 `number`/`type`/`title` groups; see `?spec_to_ars`) rather than
 reformatting the shell.
 
@@ -591,7 +560,7 @@ The lead programmer marks up the Word shell before handing it off. The
 most common conventions:
 
 | What to annotate | Format | Example |
-|---|---|---|
+|----|----|----|
 | Row variable | `[DATASET.VARIABLE]` | `[ADSL.AGE]` |
 | Row with filter | `[DATASET.VARIABLE WHERE condition]` | `[ADAE.AEDECOD WHERE AEREL='RELATED']` |
 | Population flag (column header) | `[FLAG == "Y"]` | `[SAFFL == "Y"]` |
@@ -599,9 +568,9 @@ most common conventions:
 | Listing column header | Label on line 1, variable on line 2 | `Subject ID` / `USUBJID` |
 | Column group (one filter per column header) | `Label (N=XX) DATASET.VAR=value`, `... IN ('a','b')`, or `... is missing` | `Unknown Cohort (N=XX) ADSL.COHORTN is missing` |
 
-**Column-group headers** define the whole column axis by annotation: when
-two or more header cells filter the *same* variable, each condition
-becomes one display column — so a merged column like an "Unknown" bucket
+**Column-group headers** define the whole column axis by annotation:
+when two or more header cells filter the *same* variable, each condition
+becomes one display column — so a merged column like an “Unknown” bucket
 (`ADSL.COHORTN is missing`) works with **no ADaM change**. Rows matching
 no column are excluded from the group columns (with a `WARN`), and a
 `Total (N=XX) ...` header is recognized as the overall column, not a
@@ -617,15 +586,19 @@ mixed or non-standard layouts.
 
 When `ars_to_ard()` runs, it:
 
-1.  Scans `adam_dir` for `<DATASET>.xpt` files (loaded via `{haven}`) or `<DATASET>.csv` files.
+1.  Scans `adam_dir` for `<DATASET>.xpt` files (loaded via `{haven}`) or
+    `<DATASET>.csv` files.
 2.  Caches each dataset in memory so repeated analyses run fast.
-3.  Applies analysis set (population) filters at the subject level via `USUBJID`, intersecting the population with the analysis dataset.
-4.  Applies data subset filters within the analysis dataset, supporting recursive `AND` / `OR` compound expressions.
+3.  Applies analysis set (population) filters at the subject level via
+    `USUBJID`, intersecting the population with the analysis dataset.
+4.  Applies data subset filters within the analysis dataset, supporting
+    recursive `AND` / `OR` compound expressions.
 
-The ARS method identifier in each analysis maps to a specific `{cards}` function:
+The ARS method identifier in each analysis maps to a specific `{cards}`
+function:
 
 | Method ID | Function called |
-|---|---|
+|----|----|
 | `MTH_SUMMARY_STATISTICS_CONTINUOUS` | `cards::ard_continuous()` |
 | `MTH_COUNT_AND_PERCENTAGE` | `cards::ard_categorical()` |
 | `MTH_AE_FREQUENCY_COUNT` | Distinct-subject dedup, then `cards::ard_categorical()` |
@@ -634,10 +607,9 @@ The ARS method identifier in each analysis maps to a specific `{cards}` function
 | `MTH_CMH_TEST` | `arsbridge::ard_cmh_test()` |
 
 Every row in the ARD carries provenance columns: `analysis_id`,
-`method_id`, `output_id`, `result_status` (`computed`,
-`manual_pending`, or `manual_filled`), `value_source`, and
-`derivation_ref`. Computed and manual values are distinguishable and
-auditable side by side.
+`method_id`, `output_id`, `result_status` (`computed`, `manual_pending`,
+or `manual_filled`), `value_source`, and `derivation_ref`. Computed and
+manual values are distinguishable and auditable side by side.
 
 ------------------------------------------------------------------------
 
