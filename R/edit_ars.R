@@ -154,8 +154,37 @@ review_ars <- edit_ars
 
   findings <- validate_ars_model(result$model, spec, report)
   .report_save(output_path, result$edit_log, findings)
+  .report_conformance(ars)
 
   invisible(output_path)
+}
+
+## A one-line note on how far the saved file is from strict ARS v1.0, when the
+## validator is available. Advisory only: a conformance count must never be
+## the thing that breaks a save.
+#' @noRd
+.report_conformance <- function(ars) {
+  if (!requireNamespace("jsonvalidate", quietly = TRUE)) {
+    return(invisible(NULL))
+  }
+
+  conformance <- tryCatch(
+    ars_conformance(ars),
+    error = function(e) NULL
+  )
+  if (is.null(conformance)) return(invisible(NULL))
+
+  n <- nrow(conformance)
+  if (n == 0) {
+    cli::cli_alert_success(
+      "Conforms to the ARS v1.0 schema (beyond the documented extensions)."
+    )
+  } else {
+    cli::cli_alert_info(
+      "{n} ARS v1.0 schema note{?s} -- list them with {.code ars_conformance()}."
+    )
+  }
+  invisible(NULL)
 }
 
 ## The edit log lives beside the JSON rather than inside it: the ARS file

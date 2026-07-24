@@ -1,5 +1,34 @@
 # arsbridge (development version)
 
+* **`ars_conformance()` validates a reporting event against the official
+  CDISC ARS v1.0 JSON Schema.** The schema ships with the package, pinned to
+  the `v1.0.0` release of `cdisc-org/analysis-results-standard` alongside its
+  LinkML source (`inst/schema/`, provenance in the README there), so the
+  answer never changes because the standard's development branch did.
+  arsbridge's documented extensions -- `_meta`, `referencedAnalysisIds`, the
+  nested `analysisVariable` duplicate and friends -- are stripped before
+  validating and reported in an attribute, so the findings show genuine
+  divergences instead of burying them under sanctioned fields. The
+  generator's known gaps (missing `reason`/`purpose` terminology on analyses,
+  string `version`s, flat display objects, string `fileType`s, placeholder
+  operation roles) are reported honestly and pinned by tests, and every save
+  from `edit_ars()` prints a one-line conformance count. This resolves the
+  open question of *which* schema to validate against: the LinkML model is
+  the source of truth, vendored at `inst/schema/cdisc_ars_v1.0.0_ldm.yaml`.
+
+* **The editor no longer goes quietly stale around structural changes.**
+  Moving a line now visibly reorders the panel, applying a raw-JSON
+  replacement refreshes the fields it changed, the outputs tree keeps its
+  open panels across edits instead of collapsing, and the entity-library
+  tables update their data in place so row selection survives the very edit
+  it enabled. Same family as the undo-display fix: the model changed and the
+  screen did not.
+
+* **Writing to a derived model column is now refused instead of silently
+  reverted.** Columns computed from the node (`output_id`, `n_analyses`,
+  `condition_summary`, ...) used to accept a write that the next refresh
+  undid; `model_set_field()` now says so instead.
+
 * **A review session can no longer be lost.** Every change is undoable
   (and redoable) with the arrows in the header -- field edits, added and
   removed lines, reordering, detaching, library edits, all of it. And every

@@ -75,6 +75,7 @@ reference:
   - ars_to_model
   - model_to_ars
   - validate_ars_model
+  - ars_conformance
   - export_edit_log
 
 - title: Inferential statistics and partial results
