@@ -28,6 +28,28 @@ clinical table out.
 - [`ars_render_figure()`](https://tavakohr.github.io/arsbridge/reference/ars_render_figure.md)
   : Render an ARS figure output to a ggplot
 
+## Review and correct
+
+The human-in-the-loop stage between generation and execution: read the
+reporting event as editable tables, check it for problems, and review it
+in a structured viewer.
+
+- [`edit_ars()`](https://tavakohr.github.io/arsbridge/reference/edit_ars.md)
+  [`review_ars()`](https://tavakohr.github.io/arsbridge/reference/edit_ars.md)
+  : Review and correct an ARS reporting event interactively
+- [`view_ars()`](https://tavakohr.github.io/arsbridge/reference/view_ars.md)
+  : Review an ARS reporting event in a structured, clickable viewer
+- [`ars_to_model()`](https://tavakohr.github.io/arsbridge/reference/ars_to_model.md)
+  : Turn an ARS reporting event into an editable tabular model
+- [`model_to_ars()`](https://tavakohr.github.io/arsbridge/reference/model_to_ars.md)
+  : Serialize an editable ARS model back to a reporting event
+- [`validate_ars_model()`](https://tavakohr.github.io/arsbridge/reference/validate_ars_model.md)
+  : Check an ARS model for integrity, spec and coverage problems
+- [`ars_conformance()`](https://tavakohr.github.io/arsbridge/reference/ars_conformance.md)
+  : Check a reporting event against the official CDISC ARS v1.0 schema
+- [`export_edit_log()`](https://tavakohr.github.io/arsbridge/reference/export_edit_log.md)
+  : Export a review session's changes as a QC workbook
+
 ## Inferential statistics and partial results
 
 Executable descriptors for inferential statistics, and the manual-fill

@@ -24,6 +24,8 @@ spec_to_ars(
   spec_column_aliases = NULL,
   extract_with_llm = TRUE,
   ship_annotations = FALSE,
+  analysis_reason = .DEFAULT_ANALYSIS_REASON,
+  analysis_purpose = .DEFAULT_ANALYSIS_PURPOSE,
   heading_patterns = NULL,
   validate = TRUE,
   report_path = file.path(tempdir(), "spec_validation_report.xlsx"),
@@ -153,6 +155,25 @@ spec_to_ars(
   then contain only true footnotes. Set `TRUE` to append them to the
   footnotes (debug escape hatch).
 
+- analysis_reason:
+
+  The CDISC controlled term stamped as `reason` on every generated
+  analysis (the standard requires one). Default `"SPECIFIED IN SAP"`,
+  since the annotated shells the pipeline reads are SAP-derived. One of
+  `"SPECIFIED IN PROTOCOL"`, `"SPECIFIED IN SAP"`, `"DATA DRIVEN"`,
+  `"REQUESTED BY REGULATORY AGENCY"`. Adjust individual analyses in
+  [`edit_ars()`](https://tavakohr.github.io/arsbridge/reference/edit_ars.md).
+
+- analysis_purpose:
+
+  The CDISC controlled term stamped as `purpose` on every generated
+  analysis. Default `"EXPLORATORY OUTCOME MEASURE"` – the safest
+  understatement for the non-endpoint displays that make up most of a
+  TLF package; correct the endpoint tables in
+  [`edit_ars()`](https://tavakohr.github.io/arsbridge/reference/edit_ars.md).
+  One of `"PRIMARY OUTCOME MEASURE"`, `"SECONDARY OUTCOME MEASURE"`,
+  `"EXPLORATORY OUTCOME MEASURE"`.
+
 - heading_patterns:
 
   Optional character vector of PCRE patterns tried BEFORE the built-in
@@ -214,6 +235,11 @@ Invisibly returns a named list:
 - `report_path`:
 
   Path to the validation report (if validate=TRUE).
+
+- `adam_spec_path`:
+
+  The ADaM spec this run read, so the review stage can be opened with
+  `edit_ars(result)` alone.
 
 - `code_dir`:
 

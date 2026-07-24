@@ -16,6 +16,7 @@
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ard_cmh_test.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ard_proportion_ci_exact.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_blockers.html</loc></url>
+<url><loc>https://tavakohr.github.io/arsbridge/reference/ars_conformance.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_copilot_instructions.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_diagnostics.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_manual_worklist.html</loc></url>
@@ -26,6 +27,7 @@
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_render_split.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_to_ard.html</loc></url>
+<url><loc>https://tavakohr.github.io/arsbridge/reference/ars_to_model.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_to_tfrmt.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_to_tfrmt_list.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_validate_manual_fills.html</loc></url>
@@ -33,8 +35,11 @@
 <url><loc>https://tavakohr.github.io/arsbridge/reference/arsbridge-package.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/arsbridge_example.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/check_anthropic_key.html</loc></url>
+<url><loc>https://tavakohr.github.io/arsbridge/reference/edit_ars.html</loc></url>
+<url><loc>https://tavakohr.github.io/arsbridge/reference/export_edit_log.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/get_active_llm.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/index.html</loc></url>
+<url><loc>https://tavakohr.github.io/arsbridge/reference/model_to_ars.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/set_anthropic_key.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/set_gemini_key.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/set_llm_key.html</loc></url>
@@ -42,6 +47,8 @@
 <url><loc>https://tavakohr.github.io/arsbridge/reference/show_active_llm.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/spec_to_ars.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/spec_to_ars_example.html</loc></url>
+<url><loc>https://tavakohr.github.io/arsbridge/reference/validate_ars_model.html</loc></url>
+<url><loc>https://tavakohr.github.io/arsbridge/reference/view_ars.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/siera_cards_integration_plan.html</loc></url>
 </urlset>
 
