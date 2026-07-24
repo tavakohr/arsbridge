@@ -237,15 +237,18 @@ test_that("ars_render_tlf writes docx and rtf files via flextable", {
   expect_gt(file.info(rtf)$size, 0)
 })
 
-test_that("render falls back to default column order when the fixed order names a missing column", {
+test_that("numeric cohort headers map to their ARD levels; an empty one adds no column", {
   skip_if_not_installed("tfrmt")
   skip_if_not_installed("gt")
   skip_if_not_installed("cards")
 
-  ## Data-driven COHORTN grouping (groups: []) + display columns that imply a
-  ## level with no rows: the fixed col_plan then names a column absent from the
-  ## widened data. The render must NOT abort -- it drops the fixed order, warns,
-  ## and still produces a table.
+  ## Data-driven COHORTN grouping (groups: []) with shell headers "Cohort 1",
+  ## "Cohort 2", "Cohort 99 (N=0)" over data that only has cohorts 1 and 2.
+  ## The tolerant header matcher maps "Cohort N" onto the numeric level N, in
+  ## shell order; the level-less "Cohort 99" header matches nothing and must
+  ## neither invent a column nor trip the fixed-order recovery path.
+  ## (This test once claimed to exercise that recovery fallback -- it cannot:
+  ## build_col_levels only ever returns levels present in the ARD here.)
   td <- withr::local_tempdir()
   utils::write.csv(data.frame(
     USUBJID = sprintf("S%02d", 1:6),
@@ -286,6 +289,23 @@ test_that("render falls back to default column order when the fixed order names 
   writeLines(jsonlite::toJSON(spec, auto_unbox = TRUE, null = "null"), j)
   ard <- suppressMessages(ars_to_ard(j, adam_dir = td))
 
-  gt_tbl <- suppressWarnings(ars_render_tlf(j, ard, "T1", format = "gt"))
+  warnings_seen <- character(0)
+  gt_tbl <- withCallingHandlers(
+    ars_render_tlf(j, ard, "T1", format = "gt"),
+    warning = function(w) {
+      warnings_seen <<- c(warnings_seen, conditionMessage(w))
+      invokeRestart("muffleWarning")
+    }
+  )
   expect_s3_class(gt_tbl, "gt_tbl")
+
+  ## The shell's fixed order applied cleanly -- the recovery path that drops
+  ## it (ars_to_tfrmt.R, "could not apply the shell's fixed column order")
+  ## was not needed.
+  expect_false(any(grepl("could not apply the shell's fixed column order",
+                         warnings_seen)))
+
+  columns <- names(as.data.frame(gt_tbl[["_data"]]))
+  expect_lt(match("1", columns), match("2", columns))
+  expect_false(any(grepl("99", columns)))
 })
