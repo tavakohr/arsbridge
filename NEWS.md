@@ -1,5 +1,34 @@
 # arsbridge (development version)
 
+* **The lines the generator missed can now be added, and a gap tells you
+  exactly which one.** Selecting a coverage finding -- "the shell annotates
+  this but no analysis uses that variable" -- opens the add-analysis wizard
+  pre-filled with the dataset and variable the shell named, at the output it
+  belongs to. The wizard is reuse-first by construction: method, population,
+  data subset and groupings all default to what the output's other lines
+  already use, so the normal outcome of adding a line is that no new shared
+  entity appears and the event stays readable. Display order is meaningful, so
+  the line can be inserted at a chosen position, and an output's lines can be
+  reordered or removed.
+
+  An added line is indistinguishable from a generated one: the same node
+  shape, the same `AN_<TLF>_<nnn>` id convention (collision-checked), the same
+  self-referential operation placeholders siera needs. The tables of contents
+  rebuild themselves, because they were already derived from the outputs.
+  Adding a line and then removing it restores the event byte for byte.
+
+* **A shared population, data subset or grouping can be detached for one
+  analysis.** Editing a population used by thirty analyses changes all thirty;
+  detaching copies it under a new id and repoints only this line, so it can
+  then be changed on its own. Methods deliberately cannot be detached: the
+  engine dispatches on the method id, so a per-analysis copy would have no
+  executor and would quietly degrade a computed line into a generic summary.
+  Changing which method one line uses is what the method dropdown is for.
+
+* **`validate_ars_model()` findings gained a `ref` column** carrying what the
+  finding is about in machine-readable form, which is what lets a coverage gap
+  turn into a pre-filled wizard rather than a re-typing exercise.
+
 * **`edit_ars()` closes the loop: generate, review and correct, then execute.**
   The same structured viewer, with the detail panels editable. Methods,
   populations, data subsets and groupings are chosen from what actually

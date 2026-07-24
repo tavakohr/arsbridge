@@ -21,7 +21,7 @@ test_that("the generated fixture has no blocking findings", {
   expect_s3_class(findings, "data.frame")
   expect_equal(
     names(findings),
-    c("severity", "entity", "id", "field", "problem", "action")
+    c("severity", "entity", "id", "field", "problem", "action", "ref")
   )
   expect_equal(sum(findings$severity == "FAIL"), 0)
   expect_true(all(findings$severity %in% c("FAIL", "WARN", "INFO")))

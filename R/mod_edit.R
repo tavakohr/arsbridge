@@ -159,9 +159,24 @@ apply_edit <- function(state, pool, id, field, value) {
   }
 
   shiny::tagList(
-    shiny::h5(if (is.na(row$label)) row$id else row$label),
-    shiny::div(class = "text-muted small mb-2", row$id),
+    shiny::div(
+      class = "d-flex justify-content-between align-items-start",
+      shiny::div(
+        shiny::h5(if (is.na(row$label)) row$id else row$label),
+        shiny::div(class = "text-muted small mb-2", row$id)
+      ),
+      shiny::tags$button(
+        class = "btn btn-sm btn-outline-danger",
+        onclick = .select_js(ns("remove_analysis"), "analyses", row$id),
+        "Remove line"
+      )
+    ),
     if (nrow(own) > 0) .findings_list(own),
+
+    ## Shared entities can be changed for every analysis that uses them, or
+    ## detached so this line can differ. Both are one click, and which one you
+    ## are about to do is stated rather than implied.
+    .detach_controls(row, model, ns),
 
     bslib::layout_columns(
       col_widths = c(6, 6),
@@ -241,6 +256,76 @@ apply_edit <- function(state, pool, id, field, value) {
       shiny::tags$summary(class = "small text-muted", "Raw JSON"),
       .json_block(row$raw[[1]])
     )
+  )
+}
+
+## A "detach" control for each shared entity this analysis points at, shown
+## only when the entity really is shared. Editing a population used by thirty
+## analyses is sometimes exactly right and sometimes a mistake; the count says
+## which situation you are in, and detaching is the way out of the second.
+##
+## Methods are listed but not detachable: the engine dispatches on the method
+## id, so a per-analysis copy would have no executor. Changing which method a
+## line uses is the method dropdown's job.
+#' @noRd
+.detach_controls <- function(row, model, ns) {
+  usage <- .entity_usage(model)
+
+  shared <- list(
+    list(pool = "methods",       id = row$methodId,      detachable = FALSE),
+    list(pool = "analysis_sets", id = row$analysisSetId, detachable = TRUE),
+    list(pool = "data_subsets",  id = row$dataSubsetId,  detachable = TRUE)
+  )
+  for (grouping_id in .split_values(row$grouping_ids)) {
+    shared[[length(shared) + 1L]] <- list(
+      pool = "groupings", id = grouping_id, detachable = TRUE
+    )
+  }
+
+  controls <- list()
+  for (entry in shared) {
+    if (is.na(entry$id) || !nzchar(entry$id)) next
+    count <- .usage_count(usage[[entry$pool]], entry$id)
+    if (count < 2) next
+
+    controls[[length(controls) + 1L]] <- shiny::div(
+      class = "d-flex justify-content-between align-items-center small py-1",
+      shiny::span(
+        shiny::tags$code(entry$id),
+        shiny::span(class = "text-muted",
+                    paste0(" is shared by ", count, " analyses"))
+      ),
+      if (entry$detachable) {
+        shiny::tags$button(
+          class = "btn btn-sm btn-outline-secondary py-0",
+          onclick = .detach_js(ns("detach"), entry$pool, entry$id, row$id),
+          "Detach for this line"
+        )
+      } else {
+        shiny::span(class = "text-muted",
+                    "change the method above to alter this line only")
+      }
+    )
+  }
+
+  if (length(controls) == 0) return(NULL)
+
+  shiny::div(
+    class = "alert alert-light border py-2 px-3 mb-3",
+    shiny::div(
+      class = "text-muted small mb-1",
+      "Editing these changes every analysis that uses them."
+    ),
+    controls
+  )
+}
+
+#' @noRd
+.detach_js <- function(input_id, pool, entity_id, analysis_id) {
+  paste0(
+    "Shiny.setInputValue('", input_id, "', ",
+    "{pool: '", pool, "', entity: '", entity_id, "', id: '", analysis_id,
+    "'}, {priority: 'event'}); return false;"
   )
 }
 

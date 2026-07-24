@@ -24,6 +24,9 @@
       validate_ars_model(model, spec, report)
     ),
     edit_log    = shiny::reactiveVal(.new_edit_log()),
+    ## Set to an .add_request() to open the add-analysis wizard; the request
+    ## can come from an output panel or from a gap finding.
+    add_request = shiny::reactiveVal(NULL),
     spec        = spec,
     report      = report,
     source_path = source_path,
@@ -140,6 +143,10 @@
     mod_validation_server("validation", state)
     mod_json_server("json", state)
     mod_status_server("status", state, session)
+
+    if (identical(mode, "edit")) {
+      mod_add_analysis_server("add", state)
+    }
   }
 
   shiny::shinyApp(ui, server)

@@ -27,13 +27,17 @@
     field    = character(0),
     problem  = character(0),
     action   = character(0),
+    ref      = character(0),
     stringsAsFactors = FALSE
   )
 }
 
+## `ref` carries whatever the finding is about in machine-readable form -- a
+## DATASET.VARIABLE for a gap, for instance -- so the editor can act on a
+## finding rather than only describe it.
 #' @noRd
 .add_finding <- function(findings, severity, entity, id, field, problem,
-                         action) {
+                         action, ref = NA_character_) {
   rbind(findings, data.frame(
     severity = severity,
     entity   = entity,
@@ -41,6 +45,7 @@
     field    = field,
     problem  = problem,
     action   = action,
+    ref      = ref,
     stringsAsFactors = FALSE
   ))
 }
@@ -431,7 +436,8 @@
       findings, "WARN", "outputs", output_id, "analyses",
       paste0("The shell annotates \"", described, "\" (", variable_ref,
              ") but no analysis in this output uses that variable."),
-      "Add the missing analysis, or confirm the line is not an analysis."
+      "Add the missing analysis, or confirm the line is not an analysis.",
+      ref = variable_ref
     )
   }
 

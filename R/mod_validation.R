@@ -58,8 +58,10 @@ mod_validation_server <- function(id, state) {
     output$findings <- DT::renderDT(
       {
         findings <- state$findings()
+        ## `ref` is machine-readable context for the app, not something a
+        ## reviewer needs to read.
         DT::datatable(
-          findings,
+          findings[, setdiff(names(findings), "ref"), drop = FALSE],
           rownames = FALSE,
           selection = "single",
           options = list(pageLength = 20, scrollX = TRUE)
@@ -69,19 +71,41 @@ mod_validation_server <- function(id, state) {
     )
 
     ## A finding names the entity it is about, so selecting one navigates
-    ## there rather than leaving the reviewer to find it.
+    ## there rather than leaving the reviewer to find it. A gap goes further:
+    ## the shell says a line should exist, so selecting it offers to add that
+    ## line, pre-filled with the variable the shell named.
     shiny::observeEvent(input$findings_rows_selected, {
       findings <- state$findings()
       row <- findings[input$findings_rows_selected, , drop = FALSE]
       if (nrow(row) == 0) return()
-      if (!row$entity %in% names(.pool_registry())) return()
 
+      if (.is_gap_finding(row) && identical(state$mode, "edit")) {
+        parts <- .split_variable_ref(row$ref)
+        state$add_request(.add_request(
+          output_id  = row$id,
+          dataset    = parts$dataset,
+          variable   = parts$variable,
+          annotation = row$ref
+        ))
+        return()
+      }
+
+      if (!row$entity %in% names(.pool_registry())) return()
       model <- state$model()
       if (!row$id %in% model[[row$entity]]$id) return()
 
       state$selected(list(pool = row$entity, id = row$id))
     })
   })
+}
+
+## A gap is the one finding that names something that should exist but does
+## not, so it is the one the app can act on directly.
+#' @noRd
+.is_gap_finding <- function(row) {
+  identical(row$entity, "outputs") &&
+    identical(row$field, "analyses") &&
+    !is.na(row$ref)
 }
 
 

@@ -1044,6 +1044,252 @@ model_add_method_from_catalogue <- function(model, method_id) {
   vapply(.STANDARD_METHODS, function(m) .chr_field(m[["id"]]), character(1))
 }
 
+
+## --- adding, removing and detaching -----------------------------------------
+##
+## The operations that change the SHAPE of the reporting event rather than the
+## content of one node. They all go through the pools, so model_to_ars() sees
+## the structural change and rebuilds the tables of contents by itself.
+
+## A new analysis node, built to exactly the shape .build_analysis() emits so
+## a hand-added line is indistinguishable from a generated one.
+#' @noRd
+.new_analysis_node <- function(id, name, label, dataset, variable,
+                               method_id, analysis_set_id,
+                               data_subset_id = "", grouping_ids = character(0),
+                               annotation = "", include_total = FALSE) {
+  grouping_ids <- grouping_ids[nzchar(grouping_ids %||% character())]
+
+  list(
+    id            = id,
+    name          = name,
+    label         = label,
+    description   = label,
+    version       = "1",
+    categoryIds   = list(),
+    analysisSetId = analysis_set_id,
+    ## Flat for siera, nested for spec-correct consumers -- both, like the
+    ## generator emits and the patcher keeps in sync.
+    dataset          = dataset,
+    variable         = variable,
+    analysisVariable = list(dataset = dataset, variable = variable),
+    dataSubsetId     = data_subset_id %||% "",
+    orderedGroupings = lapply(seq_along(grouping_ids), function(i) {
+      list(order = i, groupingId = grouping_ids[[i]], resultsByGroup = TRUE)
+    }),
+    ## The same self-referential NUM/DEN placeholders the generator emits;
+    ## siera needs them present on at least one analysis.
+    referencedAnalysisOperations = list(
+      list(referencedOperationRelationshipId = "SELF_NUM", analysisId = id),
+      list(referencedOperationRelationshipId = "SELF_DEN", analysisId = id)
+    ),
+    methodId       = method_id,
+    annotation     = annotation,
+    sapDescription = "",
+    variableRole   = "ANALYSIS",
+    includeTotal   = isTRUE(include_total)
+  )
+}
+
+## Mint the next free analysis id for an output, following the generator's
+## AN_<TLF>_<nnn> convention and skipping anything already taken.
+#' @noRd
+.next_analysis_id <- function(model, output_id) {
+  index <- match(output_id, model$outputs$id)
+  if (is.na(index)) {
+    cli::cli_abort("No output {.val {output_id}} in this reporting event.")
+  }
+
+  tlf <- model$outputs$name[index]
+  if (is.na(tlf) || !nzchar(tlf)) tlf <- output_id
+
+  taken <- model$analyses$id
+  next_index <- length(.split_values(
+    model$outputs$referenced_analysis_ids[index]
+  )) + 1L
+
+  repeat {
+    candidate <- make_analysis_id(tlf, next_index)
+    if (!candidate %in% taken) return(candidate)
+    next_index <- next_index + 1L
+  }
+}
+
+## Add an analysis to an output at a chosen position.
+##
+## `after` is the id of the line to insert below, or NULL for the end. Display
+## order is meaningful, so this inserts rather than appending blindly.
+#' @noRd
+model_add_analysis <- function(model, output_id, label, dataset, variable,
+                               method_id, analysis_set_id,
+                               data_subset_id = "",
+                               grouping_ids = character(0),
+                               annotation = "", include_total = FALSE,
+                               after = NULL) {
+  .assert_ars_model(model)
+
+  output_index <- match(output_id, model$outputs$id)
+  if (is.na(output_index)) {
+    cli::cli_abort("No output {.val {output_id}} in this reporting event.")
+  }
+
+  analysis_id <- .next_analysis_id(model, output_id)
+  tlf <- model$outputs$name[output_index]
+  if (is.na(tlf) || !nzchar(tlf)) tlf <- output_id
+
+  node <- .new_analysis_node(
+    id              = analysis_id,
+    name            = paste0("Analysis for ", tlf),
+    label           = label,
+    dataset         = dataset,
+    variable        = variable,
+    method_id       = method_id,
+    analysis_set_id = analysis_set_id,
+    data_subset_id  = data_subset_id,
+    grouping_ids    = grouping_ids,
+    annotation      = annotation,
+    include_total   = include_total
+  )
+
+  ## The pool row is built by the same reader that parses a file, so an added
+  ## line and a read one are the same thing from here on.
+  row <- .pool_analyses(list(analyses = list(node),
+                             outputs = model$outputs$raw))
+  row$output_id <- output_id
+  model$analyses <- rbind(model$analyses, row)
+
+  ## Place it in the output's list at the requested position.
+  references <- .split_values(
+    model$outputs$referenced_analysis_ids[output_index]
+  )
+  position <- if (is.null(after)) {
+    length(references)
+  } else {
+    match(after, references)
+  }
+  if (is.na(position)) position <- length(references)
+
+  references <- append(references, analysis_id, after = position)
+  model$outputs$referenced_analysis_ids[output_index] <- paste(
+    references, collapse = .MODEL_SEP
+  )
+  model <- .model_refresh_row(model, "outputs", output_id)
+
+  attr(model, "last_added") <- analysis_id
+  model
+}
+
+## Remove an analysis and every reference to it, so removing a line cannot
+## leave an output pointing at something that is gone.
+#' @noRd
+model_remove_analysis <- function(model, analysis_id) {
+  .assert_ars_model(model)
+
+  index <- match(analysis_id, model$analyses$id)
+  if (is.na(index)) {
+    cli::cli_abort("No analysis {.val {analysis_id}} in this reporting event.")
+  }
+  model$analyses <- model$analyses[-index, , drop = FALSE]
+
+  for (i in seq_len(nrow(model$outputs))) {
+    references <- .split_values(model$outputs$referenced_analysis_ids[i])
+    if (!analysis_id %in% references) next
+
+    remaining <- setdiff(references, analysis_id)
+    model$outputs$referenced_analysis_ids[i] <- if (length(remaining) == 0) {
+      NA_character_
+    } else {
+      paste(remaining, collapse = .MODEL_SEP)
+    }
+    model <- .model_refresh_row(model, "outputs", model$outputs$id[i])
+  }
+
+  model
+}
+
+## Give one analysis its own copy of a shared entity.
+##
+## Editing a shared population changes every analysis that points at it. When
+## a reviewer wants to change just this line, they detach first: the entity is
+## copied under a new id and only this analysis is repointed at the copy.
+##
+## Only condition-carrying entities can be detached. Analysis sets, data
+## subsets and groupings are consumed by their CONTENT -- the engine reads the
+## condition, not the id -- so a copy behaves exactly like the original until
+## its condition is edited, which is the point. Methods are the opposite: the
+## engine dispatches on the method id itself, so a copy under a new id has no
+## executor and would quietly degrade a computed line into a generic summary.
+## Changing which method a line uses is what the method dropdown is for.
+#' @noRd
+model_detach_entity <- function(model, pool, entity_id, analysis_id) {
+  .assert_ars_model(model)
+
+  if (identical(pool, "methods")) {
+    cli::cli_abort(c(
+      "A method cannot be detached into a per-analysis copy.",
+      "x" = "The engine dispatches on the method id, so a copy under a new id
+             has no executor and would fall back to a generic summary.",
+      "i" = "Choose a different method for this analysis instead."
+    ))
+  }
+
+  field <- switch(
+    pool,
+    analysis_sets = "analysisSetId",
+    data_subsets  = "dataSubsetId",
+    groupings     = "grouping_ids",
+    cli::cli_abort("Cannot detach from the {.val {pool}} pool.")
+  )
+
+  df <- model[[pool]]
+  entity_index <- .row_index(df, entity_id, pool)
+  analysis_index <- .row_index(model$analyses, analysis_id, "analyses")
+
+  variant_id <- .next_variant_id(df$id, entity_id)
+
+  node <- df$raw[[entity_index]]
+  node[["id"]] <- variant_id
+  label <- .chr_field(node[["label"]])
+  if (!is.na(label) && nzchar(label)) {
+    node[["label"]] <- paste0(label, " (variant)")
+  }
+
+  ## Read the copy back through the pool reader so its columns are derived
+  ## the same way every other row's are.
+  copy <- switch(
+    pool,
+    methods       = .pool_methods(list(methods = list(node))),
+    analysis_sets = .pool_analysis_sets(list(analysisSets = list(node))),
+    data_subsets  = .pool_data_subsets(list(dataSubsets = list(node))),
+    groupings     = .pool_groupings(list(analysisGroupings = list(node)))
+  )
+  model[[pool]] <- rbind(df, copy)
+
+  ## Repoint only this analysis.
+  if (identical(field, "grouping_ids")) {
+    current <- .split_values(model$analyses$grouping_ids[analysis_index])
+    current[current == entity_id] <- variant_id
+    value <- paste(current, collapse = .MODEL_SEP)
+  } else {
+    value <- variant_id
+  }
+  model <- model_set_field(model, "analyses", analysis_id, field, value)
+
+  attr(model, "last_added") <- variant_id
+  model
+}
+
+#' @noRd
+.next_variant_id <- function(taken, base_id) {
+  candidate <- paste0(base_id, "_VARIANT")
+  suffix <- 1L
+  while (candidate %in% taken) {
+    suffix <- suffix + 1L
+    candidate <- paste0(base_id, "_VARIANT_", suffix)
+  }
+  candidate
+}
+
 ## How many analyses reference each shared entity. The editor shows this so a
 ## reviewer can see that editing a method touches more than the line in front
 ## of them.

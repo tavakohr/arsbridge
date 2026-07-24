@@ -164,7 +164,7 @@ mod_detail_server <- function(id, state) {
       row <- df[index, , drop = FALSE]
 
       if (!identical(selected$pool, "analyses")) {
-        return(.output_detail_ui(row, model, state))
+        return(.output_detail_ui(row, model, state, ns))
       }
       if (identical(state$mode, "edit")) {
         .analysis_edit_ui(row, model, state, ns)
@@ -173,9 +173,91 @@ mod_detail_server <- function(id, state) {
       }
     })
 
+    ## Selecting from inside this panel (an output's line list) uses the same
+    ## delegated input the tree does.
+    shiny::observeEvent(input$selected, {
+      state$selected(list(pool = input$selected$pool, id = input$selected$id))
+    })
+
     if (identical(state$mode, "edit")) {
       .observe_analysis_inputs(input, state, selected_analysis)
+      .observe_structural_inputs(input, state, ns)
     }
+  })
+}
+
+## Adding, reordering, removing and detaching -- the edits that change the
+## shape of the event rather than the content of one field.
+#' @noRd
+.observe_structural_inputs <- function(input, state, ns) {
+  shiny::observeEvent(input$add_to_output, {
+    state$add_request(.add_request(output_id = input$add_to_output$id))
+  })
+
+  shiny::observeEvent(input$move, {
+    model <- model_move_analysis(
+      state$model(), input$move$output, input$move$id,
+      as.integer(input$move$offset)
+    )
+    .record_structural_edit(
+      state, model, "outputs", input$move$output, "analysis order",
+      input$move$id,
+      if (as.integer(input$move$offset) < 0) "moved up" else "moved down"
+    )
+  })
+
+  shiny::observeEvent(input$remove_analysis, {
+    analysis_id <- input$remove_analysis$id
+    model <- state$model()
+    index <- match(analysis_id, model$analyses$id)
+    if (is.na(index)) return()
+    label <- model$analyses$label[index]
+
+    shiny::showModal(shiny::modalDialog(
+      title = "Remove this analysis?",
+      shiny::p("The line ", shiny::strong(.blank_na(label)),
+               " will be removed from this reporting event, along with every ",
+               "reference to it."),
+      shiny::p(class = "text-muted small",
+               "Nothing is written until you save."),
+      footer = shiny::tagList(
+        shiny::modalButton("Keep it"),
+        shiny::tags$button(
+          class = "btn btn-danger",
+          onclick = .select_js(ns("confirm_remove"), "analyses", analysis_id),
+          "Remove"
+        )
+      )
+    ))
+  })
+
+  shiny::observeEvent(input$confirm_remove, {
+    analysis_id <- input$confirm_remove$id
+    model <- state$model()
+    index <- match(analysis_id, model$analyses$id)
+    if (is.na(index)) return()
+    label <- model$analyses$label[index]
+
+    updated <- model_remove_analysis(model, analysis_id)
+    .record_structural_edit(state, updated, "analyses", analysis_id,
+                            "removed", .blank_na(label), "(removed)")
+    shiny::removeModal()
+    state$selected(NULL)
+  })
+
+  ## Detaching gives this one analysis its own copy of a shared entity, so it
+  ## can be changed without changing every other line that uses it.
+  shiny::observeEvent(input$detach, {
+    analysis_id <- input$detach$id
+    pool <- input$detach$pool
+    entity_id <- input$detach$entity
+
+    model <- model_detach_entity(state$model(), pool, entity_id, analysis_id)
+    variant_id <- attr(model, "last_added")
+
+    .record_structural_edit(state, model, pool, variant_id, "detached",
+                            entity_id, variant_id)
+    state$selected(list(pool = "analyses", id = analysis_id))
   })
 }
 
@@ -203,7 +285,7 @@ mod_detail_server <- function(id, state) {
 }
 
 #' @noRd
-.output_detail_ui <- function(row, model, state) {
+.output_detail_ui <- function(row, model, state, ns) {
   analysis_ids <- .split_values(row$referenced_analysis_ids)
   analyses <- model$analyses[model$analyses$id %in% analysis_ids, , drop = FALSE]
   findings <- state$findings()
@@ -244,14 +326,89 @@ mod_detail_server <- function(id, state) {
       shiny::h6(class = "mt-3", "Footnotes"),
       shiny::tags$ul(class = "small", lapply(footnotes, shiny::tags$li))
     ),
-    shiny::h6(class = "mt-3", "Analyses in this output"),
-    DT::datatable(
-      analyses[, c("id", "label", "dataset", "variable", "methodId"),
-               drop = FALSE],
-      rownames = FALSE,
-      selection = "none",
-      options = list(dom = "tp", pageLength = 10, scrollX = TRUE)
-    )
+    shiny::div(
+      class = "d-flex justify-content-between align-items-center mt-3",
+      shiny::h6(class = "mb-0", "Analyses in this output"),
+      if (identical(state$mode, "edit")) {
+        shiny::actionButton(
+          ns("add_analysis"), "Add analysis",
+          class = "btn-sm btn-primary",
+          onclick = .select_js(ns("add_to_output"), "outputs", row$id)
+        )
+      }
+    ),
+
+    ## Display order is part of the specification, so the lines are listed in
+    ## order with the controls to change it rather than sorted for browsing.
+    if (identical(state$mode, "edit")) {
+      .analysis_order_ui(analysis_ids, model, row$id, ns)
+    } else {
+      DT::datatable(
+        analyses[, c("id", "label", "dataset", "variable", "methodId"),
+                 drop = FALSE],
+        rownames = FALSE,
+        selection = "none",
+        options = list(dom = "tp", pageLength = 10, scrollX = TRUE)
+      )
+    }
+  )
+}
+
+## The output's lines in display order, each with move and remove controls.
+#' @noRd
+.analysis_order_ui <- function(analysis_ids, model, output_id, ns) {
+  if (length(analysis_ids) == 0) {
+    return(shiny::div(
+      class = "text-muted small",
+      "No analyses yet. Add the lines this display should show."
+    ))
+  }
+
+  shiny::div(
+    class = "list-group mt-2",
+    lapply(seq_along(analysis_ids), function(i) {
+      analysis_id <- analysis_ids[i]
+      index <- match(analysis_id, model$analyses$id)
+      label <- if (is.na(index)) {
+        analysis_id
+      } else {
+        value <- model$analyses$label[index]
+        if (is.na(value) || !nzchar(value)) analysis_id else value
+      }
+
+      shiny::div(
+        class = "list-group-item d-flex justify-content-between align-items-center py-1",
+        shiny::tags$a(
+          href = "#", class = "link-body-emphasis text-decoration-none small",
+          onclick = .select_js(ns("selected"), "analyses", analysis_id),
+          label
+        ),
+        shiny::div(
+          class = "btn-group btn-group-sm",
+          shiny::tags$button(
+            class = "btn btn-outline-secondary py-0",
+            disabled = if (i == 1) "disabled",
+            onclick = .move_js(ns("move"), output_id, analysis_id, -1),
+            shiny::HTML("&uarr;")
+          ),
+          shiny::tags$button(
+            class = "btn btn-outline-secondary py-0",
+            disabled = if (i == length(analysis_ids)) "disabled",
+            onclick = .move_js(ns("move"), output_id, analysis_id, 1),
+            shiny::HTML("&darr;")
+          )
+        )
+      )
+    })
+  )
+}
+
+#' @noRd
+.move_js <- function(input_id, output_id, analysis_id, offset) {
+  paste0(
+    "Shiny.setInputValue('", input_id, "', ",
+    "{output: '", output_id, "', id: '", analysis_id, "', offset: ", offset,
+    "}, {priority: 'event'}); return false;"
   )
 }
 
