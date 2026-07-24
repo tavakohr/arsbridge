@@ -100,27 +100,24 @@
   x[[1]]
 }
 
-## The display of an output, in whichever shape it was written: the official
-## OrderedDisplay wrapper `{order, display: {...}}` (arsbridge >= 0.1.0.9012),
-## or the older flat `{order, displayTitle, ...}` object. Readers use this so
-## both generations of file stay openable.
+## The display of an output: the official OrderedDisplay wrapper
+## `{order, display: {...}}`. Anything else reads as empty -- its fields show
+## as unset rather than being misread -- and ars_conformance() is the tool
+## that says what is wrong with such a file.
 #' @noRd
 .display_node <- function(output_node) {
   entry <- .first_or_empty(output_node[["displays"]])
   inner <- entry[["display"]]
-  if (is.list(inner)) inner else entry
+  if (is.list(inner)) inner else list()
 }
 
-## The subsection texts of a display section, in whichever shape: the official
-## orderedSubSections wrapper ({order, subSection: {id, text}}) or the older
-## flat subSections ({text}) list.
+## The subsection texts of a display section: the official orderedSubSections
+## wrapper ({order, subSection: {id, text}}).
 #' @noRd
 .section_subsections <- function(section) {
   ordered <- section[["orderedSubSections"]]
-  if (is.list(ordered)) {
-    return(lapply(ordered, function(entry) entry[["subSection"]] %||% entry))
-  }
-  section[["subSections"]] %||% list()
+  if (!is.list(ordered)) return(list())
+  lapply(ordered, function(entry) entry[["subSection"]] %||% list())
 }
 
 ## Zero-row data frame carrying the full canonical column set, so downstream
@@ -364,7 +361,6 @@
   if (length(nodes) == 0) return(.empty_pool(.GROUPING_COLUMNS))
 
   rows <- lapply(nodes, function(node) {
-    nested <- is.list(node[["groupingVariable"]])
     groups <- node[["groups"]] %||% list()
     labels <- vapply(
       groups,
@@ -372,20 +368,18 @@
       character(1)
     )
 
+    ## Flat strings are the official shape. A groupingVariable that is
+    ## anything else reads as unset rather than misreading, say, a nested
+    ## object's dataset as the variable.
+    grouping_variable <- node[["groupingVariable"]]
+    if (is.list(grouping_variable)) grouping_variable <- NULL
+
     list(
       id               = .chr_field(node[["id"]]),
       name             = .chr_field(node[["name"]]),
       label            = .chr_field(node[["label"]]),
-      groupingDataset  = if (nested) {
-        .chr_field(node[["groupingVariable"]][["dataset"]])
-      } else {
-        .chr_field(node[["groupingDataset"]])
-      },
-      groupingVariable = if (nested) {
-        .chr_field(node[["groupingVariable"]][["variable"]])
-      } else {
-        .chr_field(node[["groupingVariable"]])
-      },
+      groupingDataset  = .chr_field(node[["groupingDataset"]]),
+      groupingVariable = .chr_field(grouping_variable),
       dataDriven       = .lgl_field(node[["dataDriven"]]),
       n_groups         = length(groups),
       group_labels     = if (length(labels) == 0) {
@@ -696,13 +690,10 @@ print.ars_model <- function(x, ...) {
   node <- .set_or_drop(node, "name", row$name)
   node <- .set_or_drop(node, "label", row$label)
 
-  ## Write back in whichever shape the node arrived in.
-  if (is.list(node[["groupingVariable"]])) {
-    nested <- node[["groupingVariable"]]
-    nested <- .set_or_drop(nested, "dataset", row$groupingDataset)
-    nested <- .set_or_drop(nested, "variable", row$groupingVariable)
-    node[["groupingVariable"]] <- nested
-  } else {
+  ## Flat strings are the official shape and the only one written. A node
+  ## carrying something else here read as unset, so there is nothing of the
+  ## reviewer's to write back -- it is preserved untouched, not guessed at.
+  if (!is.list(node[["groupingVariable"]])) {
     node <- .set_or_drop(node, "groupingDataset", row$groupingDataset)
     node <- .set_or_drop(node, "groupingVariable", row$groupingVariable)
   }
@@ -716,18 +707,17 @@ print.ars_model <- function(x, ...) {
   node <- .set_or_drop(node, "label", row$label)
   node <- .set_or_drop(node, "outputType", row$outputType)
 
-  ## The title lives inside the OrderedDisplay wrapper on current files and
-  ## flat on older ones; write back in whichever shape the node arrived in.
+  ## The title lives inside the official OrderedDisplay wrapper, the only
+  ## shape written. A displays entry in any other shape is preserved
+  ## untouched rather than guessed at.
   if (length(node[["displays"]] %||% list()) > 0) {
     entry <- node[["displays"]][[1]]
     if (is.list(entry[["display"]])) {
       entry[["display"]] <- .set_or_drop(
         entry[["display"]], "displayTitle", row$display_title
       )
-    } else {
-      entry <- .set_or_drop(entry, "displayTitle", row$display_title)
+      node[["displays"]][[1]] <- entry
     }
-    node[["displays"]][[1]] <- entry
   }
 
   ## Rebuild the analysis references only on a real change, so untouched

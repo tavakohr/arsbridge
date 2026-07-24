@@ -225,11 +225,12 @@ test_that("the ARD carries the labeled columns incl. the missing bucket", {
 ## --- renderer column mapping ------------------------------------------------
 
 test_that("shell headers map onto the group labels in shell order", {
-  out_obj <- list(displays = list(list(columns = list(
+  out_obj <- list(displays = list(list(order = 1L, display = list(
+    id = "D1", name = "D1", columns = list(
     list(label = " "),
     list(label = "Cohort A (N=XX)"),
     list(label = "Cohort B (N=XX)"),
-    list(label = "Unknown Cohort (N=XX)")))))
+    list(label = "Unknown Cohort (N=XX)"))))))
   ard <- data.frame(group1_level = c("Unknown Cohort", "Cohort B", "Cohort A"))
   lv <- build_col_levels(out_obj, ard, "group1_level", restrict = TRUE)
   expect_identical(lv, c("Cohort A", "Cohort B", "Unknown Cohort"))

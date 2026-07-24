@@ -1,13 +1,14 @@
 ## Column ordering / stub placement for rendered tables.
 
 test_that("build_col_levels orders arms by the shell column-header order", {
-  out_obj <- list(displays = list(list(
+  out_obj <- list(displays = list(list(order = 1L, display = list(
+    id = "D1", name = "D1",
     columns = list(
       list(label = "UPADALIMIB 15 mg\n(N=200) n (%)"),
       list(label = "UPADALIMIB 30 mg\n(N=200) n (%)"),
       list(label = "Placebo (N=200) n (%)")
     )
-  )))
+  ))))
   ## ARD presents the arms alphabetically (Placebo first).
   ard_out <- data.frame(
     TRT01A = c("Placebo", "UPADALIMIB 15 mg", "UPADALIMIB 30 mg"),
@@ -18,7 +19,9 @@ test_that("build_col_levels orders arms by the shell column-header order", {
 })
 
 test_that("build_col_levels falls back to ARD order when no columns are defined", {
-  out_obj <- list(displays = list(list(columns = list())))
+  out_obj <- list(displays = list(list(order = 1L, display = list(
+    id = "D1", name = "D1", columns = list()
+  ))))
   ard_out <- data.frame(TRT01A = c("B", "A"), stringsAsFactors = FALSE)
   expect_equal(suppressWarnings(build_col_levels(out_obj, ard_out, "TRT01A")),
                c("B", "A"))

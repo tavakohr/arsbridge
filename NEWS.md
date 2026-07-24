@@ -14,9 +14,7 @@
   - `version` fields are integers, as required.
   - Displays are written in the official `OrderedDisplay{order, display}`
     wrapper with their own `id`/`name`, and footnotes as
-    `orderedSubSections[]` wrapping `subSection{id, text}`. Every internal
-    reader accepts both the new and the pre-0.1.0.9012 flat shape, so older
-    files stay openable, editable and renderable.
+    `orderedSubSections[]` wrapping `subSection{id, text}`.
   - `fileSpecifications[].fileType` is a terminology object.
   - The self-referential operation-role placeholders carry a valid term
     (`NUMERATOR`) instead of `""`.
@@ -25,6 +23,15 @@
   siera compatibility was verified by running `siera::readARS()` on the same
   event in both shapes: identical output. (siera reads none of the changed
   fields by position, and the new keys are additive.)
+
+* **No compatibility readers for arsbridge's own earlier output shapes.**
+  Early-phase policy: when a correction changes the emitted JSON, the old
+  shape is not carried. Readers target the official shape only -- an
+  unrecognized shape reads as unset rather than crashing or being misread,
+  and the round trip preserves what it does not understand rather than
+  guessing at it. The remedy for an outdated file is regenerating it with
+  `spec_to_ars()`, and `ars_conformance()` names exactly what is wrong with
+  it. The bundled minimal fixture is now official-shaped too.
 
 * **`ars_conformance()` validates a reporting event against the official
   CDISC ARS v1.0 JSON Schema.** The schema ships with the package, pinned to

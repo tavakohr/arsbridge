@@ -1,9 +1,9 @@
 ## ars_conformance(): validation against the official CDISC ARS v1.0 schema.
 ##
-## Two promises are pinned here. The sanctioned extensions never appear in the
-## findings -- stripping them is what makes the findings readable -- and the
-## generator's KNOWN divergences from the standard always do, so they cannot
-## quietly grow or silently disappear when either side changes.
+## Two promises are pinned here. The sanctioned extensions never appear in
+## the findings -- stripping them is what makes the findings readable -- and
+## a freshly generated event reports nothing at all, so a new divergence in
+## the generator cannot slip in unnoticed.
 
 .conformance_fixture <- function() {
   test_path("fixtures", "ars_apx_drm_301_deterministic.json")
@@ -44,8 +44,8 @@ test_that("sanctioned extensions never surface as findings", {
 test_that("a freshly generated event validates clean after stripping", {
   skip_if_not_installed("jsonvalidate")
 
-  ## The headline promise since 0.1.0.9012: beyond the documented extensions,
-  ## the generator emits exactly what the standard requires.
+  ## The headline promise: beyond the documented extensions, the generator
+  ## emits exactly what the standard requires.
   findings <- ars_conformance(.conformance_fixture())
   expect_equal(nrow(findings), 0)
 })
@@ -86,11 +86,12 @@ test_that("the generator now emits what the standard requires", {
   expect_true(nzchar(item$name))
 })
 
-test_that("files from before 0.1.0.9012 still have their divergences reported", {
+test_that("a non-conformant event has its divergences reported, not repaired", {
   skip_if_not_installed("jsonvalidate")
 
-  ## The shapes the generator used to emit: string version, flat display,
-  ## string fileType, no reason/purpose.
+  ## Shapes an early arsbridge once emitted (string version, flat display,
+  ## string fileType, no reason/purpose). There are no compatibility readers
+  ## for these -- the reporter names them and the remedy is regeneration.
   old_shape <- list(
     id = "S", name = "S", version = "1",
     mainListOfContents = list(

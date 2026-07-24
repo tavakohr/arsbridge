@@ -276,7 +276,7 @@ test_that("compound expressions and unparsed populations survive untouched", {
   expect_equal(model_to_ars(model), ars)
 })
 
-test_that("an older reporting event without analyses is tolerated", {
+test_that("a minimal reporting event without analyses is tolerated", {
   path     <- test_path("fixtures", "tfrmt_reporting_event.json")
   original <- .read_json(path)
   model    <- ars_to_model(path)
@@ -294,20 +294,29 @@ test_that("an older reporting event without analyses is tolerated", {
   expect_false("mainListOfContents" %in% names(out))
 })
 
-test_that("a nested groupingVariable is read and written back nested", {
-  path  <- test_path("fixtures", "tfrmt_reporting_event.json")
-  model <- ars_to_model(path)
+test_that("an unrecognized groupingVariable shape reads as unset, untouched", {
+  ## Only the official flat strings are read and written. Anything else --
+  ## here the nested object an early arsbridge once emitted -- must neither
+  ## crash, nor be misread, nor be altered by edits to other fields. The
+  ## remedy for such a file is regenerating it, and ars_conformance() says so.
+  ars <- .hand_built_ars()
+  ars$analysisGroupings[[1]]$groupingVariable <- list(
+    dataset = "ADSL", variable = "TRT01A"
+  )
+  ars$analysisGroupings[[1]]$groupingDataset <- NULL
 
-  expect_equal(model$groupings$groupingVariable[1], "TRT01A")
-  expect_equal(model$groupings$groupingDataset[1], "ADSL")
+  model <- ars_to_model(ars)
+  expect_true(is.na(model$groupings$groupingVariable[1]))
+  expect_true(is.na(model$groupings$groupingDataset[1]))
 
-  edited <- model_set_field(model, "groupings", model$groupings$id[1],
-                            "groupingVariable", "ZZVAR")
-  out <- model_to_ars(edited)
+  expect_equal(model_to_ars(model), ars)
 
-  expect_true(is.list(out$analysisGroupings[[1]]$groupingVariable))
-  expect_equal(out$analysisGroupings[[1]]$groupingVariable$variable, "ZZVAR")
-  expect_equal(out$analysisGroupings[[1]]$groupingVariable$dataset, "ADSL")
+  relabelled <- model_set_field(model, "groupings", model$groupings$id[1],
+                                "label", "Renamed")
+  node <- model_to_ars(relabelled)$analysisGroupings[[1]]
+  expect_equal(node$label, "Renamed")
+  expect_equal(node$groupingVariable,
+               list(dataset = "ADSL", variable = "TRT01A"))
 })
 
 test_that("an output with no displays or file specification is tolerated", {

@@ -43,8 +43,8 @@ find_output <- function(spec, output_id) {
   ))
 }
 
-## First display object of an output, unwrapping the official OrderedDisplay
-## shape ({order, display: {...}}) and accepting the older flat one.
+## First display object of an output, unwrapped from the official
+## OrderedDisplay shape ({order, display: {...}}).
 .first_display <- function(out_obj) {
   display <- .display_node(out_obj)
   if (length(display) == 0) return(NULL)
