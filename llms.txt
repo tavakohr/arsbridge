@@ -150,9 +150,6 @@ install.packages(c("shiny", "bslib", "DT"))
 
 ## Installation
 
-You can install [arsbridge](https://github.com/tavakohr/arsbridge) from
-GitHub:
-
 ``` r
 
 # install.packages("devtools")
@@ -173,8 +170,8 @@ install.packages("cardx")
 > heuristics alone, and
 > [`ars_copilot_instructions()`](https://tavakohr.github.io/arsbridge/reference/ars_copilot_instructions.md)
 > sets up a no-API workflow that reaches near-LLM accuracy through a
-> chat assistant. See [No API key? Three tiers, always
-> runs](#no-api-key-three-tiers-always-runs).
+> chat assistant (Copilot/ChatGPT) — see
+> [`vignette("no-api-access")`](https://tavakohr.github.io/arsbridge/articles/no-api-access.md).
 
 ------------------------------------------------------------------------
 
@@ -234,12 +231,10 @@ show_active_llm()     # confirm which provider is active
 [arsbridge](https://github.com/tavakohr/arsbridge) searches in order:
 Anthropic, OpenAI, Gemini. Override this anytime:
 
-``` env
+``` r
+
 # In .Renviron
 ARS_LLM_PROVIDER=openai
-```
-
-``` r
 
 # Or at runtime
 options(ars.llm.provider = "gemini")
@@ -450,10 +445,10 @@ Two things are the same no matter how you run arsbridge:
   — a four-layer detector over every stub cell and listing header
   (colour `#C00000` runs, bold/italic/underline, plain-text
   `DATASET.VARIABLE`, bracketed `[DATASET.VAR WHERE ...]`), plus
-  flexible TLF-heading recognition (a bare `Table 14.1.1`, a colon title
+  flexible TLF-heading recognition: a bare `Table 14.1.1`, a colon title
   `Table 14.1.1: Title`, and one-line headings that also carry the
   population, an inline annotation, and a
-  `[PROGRAMMING DATASETS USED: ...]` suffix; values single-, double-, or
+  `[PROGRAMMING DATASETS USED: ...]` suffix (values single-, double-, or
   unquoted-numeric). No API call, no key. A sponsor style the built-ins
   miss is handled by `spec_to_ars(heading_patterns = ...)`.
 - **A hard spec gate.** Every `DATASET.VARIABLE` — whoever proposed it —
@@ -463,25 +458,27 @@ Two things are the same no matter how you run arsbridge:
 What differs is **how the rows the regex could not resolve get filled**
 — and that is the three approaches:
 
-                     annotated shell (.docx)
-                              |
-                  regex baseline  (always runs)
-                              |
-                     row still unresolved?
-                              |
-         +--------------------+--------------------+
-         |                    |                    |
-      regex only        regex + Copilot         LLM API
-      (default)          (supplement)         (use_llm = TRUE)
-      leave the gap      a chat assistant       the LLM re-reads
-                         fills gaps by hand      the cell + enriches
-         |                    |                    |
-         +--------------------+--------------------+
-                              |
-                        HARD SPEC GATE
-                  (the variable must be in the spec)
-                              |
-                      validated -> ARS JSON
+``` R
+                 annotated shell (.docx)
+                          |
+              regex baseline  (always runs)
+                          |
+                 row still unresolved?
+                          |
+     +--------------------+--------------------+
+     |                    |                    |
+  regex only        regex + Copilot         LLM API
+  (default)          (supplement)         (use_llm = TRUE)
+  leave the gap      a chat assistant       the LLM re-reads
+                     fills gaps by hand      the cell + enriches
+     |                    |                    |
+     +--------------------+--------------------+
+                          |
+                    HARD SPEC GATE
+              (the variable must be in the spec)
+                          |
+                  validated -> ARS JSON
+```
 
 1.  **Regex only (deterministic)** — the default; no key. Unresolved
     rows stay empty. Standard shells still produce valid ARS / ARD /
@@ -497,58 +494,19 @@ What differs is **how the rows the regex could not resolve get filled**
     validated supplement value override — and it confirms the table set
     by title and row anchors. No API call. For large shells,
     `ars_copilot_instructions(workflow = "two_phase")` splits it into
-    evidence discovery then construction.
+    evidence discovery then construction. See
+    [`vignette("no-api-access")`](https://tavakohr.github.io/arsbridge/articles/no-api-access.md).
 3.  **LLM API (live)** — opt in with `use_llm = TRUE` and a key.
     `extract_shell_llm()` re-reads each cell and separates the display
     label from the variable reference in any layout, and the LLM
     enriches each TLF (analysis type, method, groupings), generalising
-    to formats no regex was written for.
+    to formats no regex was written for. A key alone does **not**
+    trigger it — you must pass `use_llm = TRUE`.
 
 All three feed the same spec gate and emit the same ARS JSON shape;
-`_meta.extraction_mode` records which one ran. The next section shows
-how to run each;
+`_meta.extraction_mode` records which one ran. See
 [`vignette("reading-engine")`](https://tavakohr.github.io/arsbridge/articles/reading-engine.md)
-has the full parsing detail.
-
-------------------------------------------------------------------------
-
-## No API key? Three tiers, always runs
-
-The reading engine has three tiers. Only the first is required — a
-missing key or missing supplement never stops the run; it degrades and
-says so.
-
-| Tier | You supply | How to run | Accuracy |
-|----|----|----|----|
-| **Regex** (deterministic) | shell + spec | `spec_to_ars(shell, spec)` | Regex + heuristics. Standard shells still produce valid ARS/ARD/output; variant layouts, groupings, Total columns, and analysis typing degrade (one `WARN` records the mode). |
-| **Regex + Copilot** (supplement) | \+ a file from a chat assistant | `spec_to_ars(shell, spec, supplement = "supplement.json")` | Near-LLM. No API call — you use Copilot/ChatGPT by hand. |
-| **LLM API** | \+ an API key | [`set_anthropic_key()`](https://tavakohr.github.io/arsbridge/reference/set_anthropic_key.md) then `spec_to_ars(shell, spec, use_llm = TRUE)` | Full. The LLM is opt-in: a key alone does **not** trigger it — you must pass `use_llm = TRUE`. |
-
-**Supplement workflow** (for environments where the LLM API is blocked
-but a chat assistant is allowed):
-
-``` r
-
-ars_copilot_instructions()   # writes arsbridge_copilot_instructions.md + prints the steps
-# Upload that file + your shell.docx + your adam_spec.xlsx to Copilot/ChatGPT.
-# Save its JSON reply as supplement.json, then:
-ars_validate_supplement("supplement.json", "adam_spec.xlsx")   # optional pre-flight
-spec_to_ars("shell.docx", "adam_spec.xlsx", supplement = "supplement.json")
-```
-
-The instruction file ships inside the installed package;
-[`ars_copilot_instructions()`](https://tavakohr.github.io/arsbridge/reference/ars_copilot_instructions.md)
-copies it from there into your working directory, so you never need to
-know the internal package path (pass a `dir` to write it elsewhere).
-
-The supplement fills only the annotations the regex could not find —
-your authored shell annotations always win a disagreement — and every
-variable it proposes passes the same hard ADaM-spec gate as a live LLM
-answer, so a hallucinated variable is rejected, never shipped.
-`_meta.extraction_mode` in the ARS JSON records which tier produced the
-run. See
-[`vignette("no-api-access")`](https://tavakohr.github.io/arsbridge/articles/no-api-access.md)
-for the full walkthrough and the data-governance note.
+for the complete parsing detail.
 
 ------------------------------------------------------------------------
 
@@ -589,11 +547,13 @@ shell parse cleanly is to write each heading in an identifiable way.
 `Table`, `Figure`, or `Listing`, followed by the output number and a
 title. All of these are read:
 
-    Table 14.1.1
-    Table 14.1.1: Summary of Demographics
-    Table 14.1.1 Summary of Demographics
-    Table 14.1.1 Summary of Demographics - Safety Population ADSL.SAFFL='Y'
-    Table 14.1.1 Demographics - Screened Subjects ADSL.SCRNFL='Y' [PROGRAMMING DATASETS USED: ADSL]
+``` R
+Table 14.1.1
+Table 14.1.1: Summary of Demographics
+Table 14.1.1 Summary of Demographics
+Table 14.1.1 Summary of Demographics - Safety Population ADSL.SAFFL='Y'
+Table 14.1.1 Demographics - Screened Subjects ADSL.SCRNFL='Y' [PROGRAMMING DATASETS USED: ADSL]
+```
 
 The population, an inline annotation, and a
 `[PROGRAMMING DATASETS USED: ...]` suffix may all ride on the same line;
