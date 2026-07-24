@@ -391,6 +391,79 @@ test_that("the raw-JSON escape hatch replaces a node but pins the id", {
   )
 })
 
+test_that("column edits and node replacements can be interleaved", {
+  ## The bug class behind the raw-JSON regression: whichever of the row and
+  ## the node changed LAST must win, and nothing earlier may resurface. Each
+  ## step here would have exposed a refresh that patches from the wrong side.
+  model <- ars_to_model(.ars_fixture_path())
+  target <- model$data_subsets$id[1]
+
+  ## 1. Column edit first.
+  model <- model_set_field(model, "data_subsets", target, "label",
+                           "Renamed by column")
+
+  ## 2. Node replacement second -- must not lose the world around it.
+  rewritten <- jsonlite::toJSON(list(
+    id = target, name = "Replaced", label = "Replaced",
+    condition = list(dataset = "ADSL", variable = "AGE",
+                     comparator = "GE", value = list("18")),
+    level = 1L, order = 1L
+  ), auto_unbox = TRUE)
+  model <- model_set_node_json(model, "data_subsets", target, rewritten)
+  expect_equal(model$data_subsets$label[1], "Replaced")
+
+  ## 3. Column edit after the replacement -- must build on it, not on the
+  ##    pre-replacement row.
+  model <- model_set_field(model, "data_subsets", target,
+                           "condition_value", "21")
+
+  node <- model_to_ars(model)$dataSubsets[[1]]
+  expect_equal(node$label, "Replaced")
+  expect_equal(node$condition$variable, "AGE")
+  expect_equal(node$condition$value, list("21"))
+})
+
+test_that("an operation edit survives later column edits on its method", {
+  model <- ars_to_model(.ars_fixture_path())
+  method_id <- model$methods$id[1]
+
+  model <- model_set_operation(model, method_id, 1, "label", "Renamed op")
+  model <- model_set_field(model, "methods", method_id, "description",
+                           "Edited after the operation")
+
+  node <- model_to_ars(model)$methods[[1]]
+  expect_equal(node$operations[[1]]$label, "Renamed op")
+  expect_equal(node$description, "Edited after the operation")
+})
+
+test_that("derived columns refuse writes instead of silently reverting them", {
+  model <- ars_to_model(.ars_fixture_path())
+
+  expect_error(
+    model_set_field(model, "analyses", model$analyses$id[1],
+                    "output_id", "T_ELSEWHERE"),
+    "derived"
+  )
+  expect_error(
+    model_set_field(model, "outputs", model$outputs$id[1], "n_analyses", 99),
+    "derived"
+  )
+  expect_error(
+    model_set_field(model, "data_subsets", model$data_subsets$id[1],
+                    "condition_summary", "x"),
+    "derived"
+  )
+
+  ## Every declared derived column really is a column of its pool, so the
+  ## guard cannot drift from the schema.
+  for (pool in names(.DERIVED_COLUMNS)) {
+    expect_true(
+      all(.DERIVED_COLUMNS[[pool]] %in% names(model[[pool]])),
+      label = paste("derived columns exist in", pool)
+    )
+  }
+})
+
 test_that("method operations are editable and the contract fields are not", {
   model <- ars_to_model(.hand_built_ars())
 

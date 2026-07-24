@@ -76,10 +76,13 @@ mod_entity_library_server <- function(id, state) {
         table_id  <- paste0("table_", this_pool)
         detail_id <- paste0("detail_", this_pool)
 
+        ## Rendered once; later model changes flow through the proxy below.
+        ## Re-rendering the table on every edit would reset its row selection,
+        ## which closes the very panel the reviewer is editing in.
         output[[table_id]] <- DT::renderDT(
           {
             DT::datatable(
-              .library_table(state$model(), this_pool),
+              .library_table(shiny::isolate(state$model()), this_pool),
               rownames = FALSE,
               selection = "single",
               options = list(pageLength = 15, scrollX = TRUE)
@@ -87,6 +90,17 @@ mod_entity_library_server <- function(id, state) {
           },
           server = TRUE
         )
+
+        proxy <- DT::dataTableProxy(table_id)
+        shiny::observe({
+          DT::replaceData(
+            proxy,
+            .library_table(state$model(), this_pool),
+            rownames       = FALSE,
+            resetPaging    = FALSE,
+            clearSelection = "none"
+          )
+        })
 
         output[[detail_id]] <- shiny::renderUI({
           state$refresh()

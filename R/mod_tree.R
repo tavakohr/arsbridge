@@ -185,9 +185,21 @@ mod_tree_server <- function(id, state) {
         )
       })
 
+      ## The tree re-renders whenever the model or the findings change, which
+      ## replaces the accordion wholesale. Carry the open panels across the
+      ## rebuild -- otherwise every edit collapses the output the reviewer is
+      ## working inside.
+      open_panels <- shiny::isolate(input$accordion)
+      open_panels <- intersect(open_panels %||% character(0),
+                               unique(rows$output_id))
+
       do.call(
         bslib::accordion,
-        c(panels, list(id = ns("accordion"), open = FALSE, multiple = TRUE))
+        c(panels, list(
+          id       = ns("accordion"),
+          open     = if (length(open_panels) > 0) open_panels else FALSE,
+          multiple = TRUE
+        ))
       )
     })
 

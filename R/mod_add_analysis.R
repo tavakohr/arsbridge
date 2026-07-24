@@ -288,6 +288,13 @@ mod_add_analysis_server <- function(id, state) {
     stringsAsFactors = FALSE
   )))
   state$findings(validate_ars_model(model, state$spec, state$report))
+
+  ## Unlike a typed field edit, a structural edit comes from a button, so
+  ## there is no cursor to fight -- and the panel showing the old structure
+  ## (a moved line still in its old place, stale values after a raw-JSON
+  ## replacement) must catch up now.
+  state$refresh(state$refresh() + 1L)
+
   .write_autosave(state)
   invisible(TRUE)
 }

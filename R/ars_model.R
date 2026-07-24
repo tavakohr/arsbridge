@@ -865,6 +865,20 @@ model_to_ars <- function(model, template = NULL) {
 ## these helpers, so derived columns stay consistent and the same operations
 ## are available (and testable) from a plain script.
 
+## Columns that are computed FROM the node rather than written back to it.
+## Writing to one would be silently reverted by the refresh that follows every
+## edit, so it is refused instead -- a mutation that reports success and does
+## nothing is the worst kind.
+.DERIVED_COLUMNS <- list(
+  analyses      = "output_id",
+  methods       = c("n_operations", "operation_summary"),
+  analysis_sets = c("is_compound", "condition_summary"),
+  data_subsets  = c("is_compound", "condition_summary"),
+  groupings     = c("n_groups", "group_labels"),
+  outputs       = c("n_analyses", "file_name", "file_type",
+                    "n_footnotes", "source_datasets")
+)
+
 #' @noRd
 .pool_or_abort <- function(model, pool) {
   if (!pool %in% names(.pool_registry())) {
@@ -904,6 +918,13 @@ model_set_field <- function(model, pool, id, field, value) {
     cli::cli_abort(c(
       "Entity ids are read-only.",
       "i" = "Other entities reference {.val {id}}; renaming it would dangle them."
+    ))
+  }
+  if (field %in% .DERIVED_COLUMNS[[pool]]) {
+    cli::cli_abort(c(
+      "{.val {field}} is derived from the entity, not stored on it.",
+      "x" = "Writing to it would be silently reverted by the next refresh.",
+      "i" = "Edit the fields it is computed from instead."
     ))
   }
 

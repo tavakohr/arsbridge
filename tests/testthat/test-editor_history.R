@@ -130,6 +130,28 @@ test_that("structural edits are undoable too", {
   expect_equal(nrow(state$edit_log()), 0)
 })
 
+test_that("structural edits tell the panels to redraw", {
+  skip_if_not_installed("shiny")
+  .with_reactives()
+
+  ## A moved line that stays put on screen and stale fields after a raw-JSON
+  ## replacement were both this: the model changed, the panel did not.
+  state <- .history_state()
+  before <- state$refresh()
+
+  moved <- model_move_analysis(
+    state$model(), "T_14_1_2",
+    .split_values(state$model()$outputs$referenced_analysis_ids[
+      state$model()$outputs$id == "T_14_1_2"
+    ])[2],
+    -1
+  )
+  .record_structural_edit(state, moved, "outputs", "T_14_1_2",
+                          "analysis order", "x", "moved up")
+
+  expect_gt(state$refresh(), before)
+})
+
 test_that("undo tells the panels to redraw", {
   skip_if_not_installed("shiny")
   .with_reactives()
