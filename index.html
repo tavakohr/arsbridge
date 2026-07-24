@@ -24,7 +24,7 @@
 
     <a class="navbar-brand me-2" href="index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9005</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9014</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -138,12 +138,16 @@
         V["Excel validation report\nPASS / WARN / FAIL per annotation"]
     end
 
-    subgraph STEP3 ["Step 3 · Execute"]
+    subgraph STEP3 ["Step 3 · Review and correct"]
+        RV["edit_ars()\nstructured review, spec-driven corrections"]
+    end
+
+    subgraph STEP4 ["Step 4 · Execute"]
         E["ars_to_ard()\nruns cards against ADaM data"]
         MP["manual_pending rows\nfor statistics not yet computable"]
     end
 
-    subgraph STEP4 ["Step 4 · Render"]
+    subgraph STEP5 ["Step 5 · Render"]
         T["ars_render_tlf()\nformatted GT table"]
     end
 
@@ -153,23 +157,49 @@
     G --&gt;|"reject"| BLK["Blocker log\n(named and fixable)"]
     ARS --&gt; STEP2
     ARS --&gt; STEP3
-    ADAM --&gt; STEP3
-    STEP3 --&gt; E
+    STEP2 --&gt;|"gaps overlaid"| RV
+    RV --&gt;|"corrected ARS JSON"| STEP4
+    ADAM --&gt; STEP4
+    STEP4 --&gt; E
     E --&gt; MP
-    E --&gt; STEP4
-    MP --&gt;|"fill + validate"| STEP4
-    STEP4 --&gt; TLF["Clinical table\n(GT · Word-ready)"]</code></pre>
+    E --&gt; STEP5
+    MP --&gt;|"fill + validate"| STEP5
+    STEP5 --&gt; TLF["Clinical table\n(GT · Word-ready)"]</code></pre>
+<hr>
+</div>
+<div class="section level2">
+<h2 id="review-and-correct-before-executing">Review and correct before executing<a class="anchor" aria-label="anchor" href="#review-and-correct-before-executing"></a>
+</h2>
+<p>The semantic enrichment is automated, so the generated ARS JSON is a draft: a method can be misclassified, a population can be wrong, an annotated line can be missed entirely. <code><a href="reference/edit_ars.html">edit_ars()</a></code> is the human-in-the-loop stage between generating and executing.</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/spec_to_ars.html">spec_to_ars</a></span><span class="op">(</span></span>
+<span>  shell_path     <span class="op">=</span> <span class="st">"inputs/annotated_shells.docx"</span>,</span>
+<span>  adam_spec_path <span class="op">=</span> <span class="st">"inputs/adam_spec.xlsx"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Review and correct: the result carries the event, the validation</span></span>
+<span><span class="co"># report and the spec, so nothing else needs passing.</span></span>
+<span><span class="va">corrected</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/edit_ars.html">edit_ars</a></span><span class="op">(</span><span class="va">res</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Execute what you corrected.</span></span>
+<span><span class="va">ard</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ars_to_ard.html">ars_to_ard</a></span><span class="op">(</span><span class="va">corrected</span>, adam_dir <span class="op">=</span> <span class="st">"adam"</span><span class="op">)</span></span></code></pre></div>
+<p>You see the shell’s structure rather than JSON – each output with its analysis lines beneath it – with validation findings badged onto the lines they concern. Selecting a line resolves its ids into what they mean: the method’s name plus whether the engine can actually execute it, the population’s condition, the variables the results are split by. Variables come from the ADaM spec, so they cannot be mistyped, and every dropdown says how many analyses share the entity, because editing a shared method edits all of them.</p>
+<p>Nothing is written until you save, and saving shows what changed first. The previous file is backed up, the write is atomic, and the edit log goes to a sidecar <code>.edits.json</code> so the ARS JSON itself stays CDISC-clean – <code><a href="reference/export_edit_log.html">export_edit_log()</a></code> turns that sidecar into a QC workbook.</p>
+<p>Every change is undoable, and a session that dies is offered back the next time you open the same file, so a review cannot be lost to a mis-click or a crashed browser. <code><a href="reference/ars_conformance.html">ars_conformance()</a></code> checks any reporting event against the official CDISC ARS v1.0 schema (vendored and pinned in the package), and a freshly generated event validates clean.</p>
+<p>Use <code><a href="reference/view_ars.html">view_ars()</a></code> for the same view without the ability to change anything, and <code><a href="reference/validate_ars_model.html">validate_ars_model()</a></code> for the findings on the command line. The viewer needs <code>shiny</code>, <code>bslib</code> and <code>DT</code>, which are optional:</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"shiny"</span>, <span class="st">"bslib"</span>, <span class="st">"DT"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <hr>
 </div>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
 <p>You can install <a href="https://github.com/tavakohr/arsbridge" class="external-link">arsbridge</a> from GitHub:</p>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># install.packages("devtools")</span></span>
 <span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">install_github</span><span class="op">(</span><span class="st">"tavakohr/arsbridge"</span><span class="op">)</span></span></code></pre></div>
 <p>For exact Clopper-Pearson confidence intervals, also install the optional <a href="https://github.com/insightsengineering/cardx" class="external-link">cardx</a>. Without it, those cells degrade gracefully to <code>manual_pending</code> placeholders rather than erroring.</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"cardx"</span><span class="op">)</span></span></code></pre></div>
 <blockquote>
 <p><strong>No LLM API key?</strong> You do not need one. <code>arsbridge</code> runs on regex + heuristics alone, and <code><a href="reference/ars_copilot_instructions.html">ars_copilot_instructions()</a></code> sets up a no-API workflow that reaches near-LLM accuracy through a chat assistant. See <a href="#no-api-key-three-tiers-always-runs">No API key? Three tiers, always runs</a>.</p>
@@ -180,7 +210,7 @@
 <h2 id="quick-start-with-the-bundled-example">Quick start with the bundled example<a class="anchor" aria-label="anchor" href="#quick-start-with-the-bundled-example"></a>
 </h2>
 <p>You do not need any external files to run the full pipeline. The package ships with a complete clinical study example (40 TLF shells, simulated ADaM data) so you can see the whole thing before touching your own study.</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/tavakohr/arsbridge" class="external-link">arsbridge</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># 1. Run the full extraction pipeline on the bundled study</span></span>
@@ -210,7 +240,7 @@
 <h3 id="step-1-set-up-llm-access">Step 1: Set up LLM access<a class="anchor" aria-label="anchor" href="#step-1-set-up-llm-access"></a>
 </h3>
 <p><a href="https://github.com/tavakohr/arsbridge" class="external-link">arsbridge</a> works with Anthropic, OpenAI, Gemini, or any OpenAI-compatible provider. Store keys in <code>~/.Renviron</code> so they persist across sessions.</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/tavakohr/arsbridge" class="external-link">arsbridge</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="reference/set_anthropic_key.html">set_anthropic_key</a></span><span class="op">(</span><span class="op">)</span>   <span class="co"># recommended for clinical text (lowest content-filter false-positive rate)</span></span>
@@ -221,14 +251,14 @@
 <p><strong>Provider priority:</strong> when multiple keys are configured, <a href="https://github.com/tavakohr/arsbridge" class="external-link">arsbridge</a> searches in order: Anthropic, OpenAI, Gemini. Override this anytime:</p>
 <pre class="env"><code><span><span class="co"># In .Renviron</span></span>
 <span><span class="va">ARS_LLM_PROVIDER</span><span class="op">=</span><span class="va">openai</span></span></code></pre>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Or at runtime</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">options</a></span><span class="op">(</span>ars.llm.provider <span class="op">=</span> <span class="st">"gemini"</span><span class="op">)</span></span></code></pre></div>
 <p><strong>Switching to a newer model or a different provider</strong> requires almost no effort. To use a newer model from the same provider, pass <code>model =</code>:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/spec_to_ars.html">spec_to_ars</a></span><span class="op">(</span><span class="va">...</span>, model <span class="op">=</span> <span class="st">"claude-opus-4-8"</span><span class="op">)</span></span></code></pre></div>
 <p>To add a brand-new provider (GLM, DeepSeek, OpenRouter), add one entry to the registry in <code>R/llm_providers.R</code>: its key env variable, default model, the <code>ellmer</code> chat constructor, and a <code>base_url</code> if it is OpenAI-compatible. No other code changes.</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/set_llm_key.html">set_llm_key</a></span><span class="op">(</span><span class="st">"glm"</span>, <span class="st">"your-glm-key"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>ARS_LLM_PROVIDER <span class="op">=</span> <span class="st">"glm"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/spec_to_ars.html">spec_to_ars</a></span><span class="op">(</span><span class="va">...</span>, model <span class="op">=</span> <span class="st">"glm-4.6"</span><span class="op">)</span></span></code></pre></div>
@@ -238,7 +268,7 @@
 <h3 id="step-2-extract-ars-json-from-the-annotated-shell">Step 2: Extract ARS JSON from the annotated shell<a class="anchor" aria-label="anchor" href="#step-2-extract-ars-json-from-the-annotated-shell"></a>
 </h3>
 <p><code><a href="reference/spec_to_ars.html">spec_to_ars()</a></code> is the main entry point. Point it at your annotated Word shell and ADaM spec; it writes a CDISC ARS JSON and an Excel validation report.</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/spec_to_ars.html">spec_to_ars</a></span><span class="op">(</span></span>
 <span>  shell_path     <span class="op">=</span> <span class="st">"inputs/APX-DRM-301_TLF_Shells_v1.0_sample_annotated.docx"</span>,</span>
 <span>  adam_spec_path <span class="op">=</span> <span class="st">"inputs/adam_spec_APX-DRM-301.xlsx"</span>,   <span class="co"># or define.xml</span></span>
@@ -326,7 +356,7 @@
 </tbody>
 </table>
 <p>WARN and FAIL are review signals, not automatic blockers — the JSON is written even when they are present, so a qualified programmer can triage them. A cell with no tint simply carries no status.</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Counts by status</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/table.html" class="external-link">table</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">validation</span><span class="op">$</span><span class="va">status</span><span class="op">)</span></span>
 <span></span>
@@ -338,7 +368,7 @@
 <h3 id="step-4-execute-to-a-tidy-ard">Step 4: Execute to a tidy ARD<a class="anchor" aria-label="anchor" href="#step-4-execute-to-a-tidy-ard"></a>
 </h3>
 <p><code><a href="reference/ars_to_ard.html">ars_to_ard()</a></code> runs the ARS JSON against your ADaM datasets and returns a tidy ARD in <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> format. It auto-loads datasets, applies population and data subset filters recursively, and calls the right <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> function for each method.</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ard</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ars_to_ard.html">ars_to_ard</a></span><span class="op">(</span></span>
 <span>  ars_path <span class="op">=</span> <span class="st">"outputs/reporting_event.json"</span>,</span>
 <span>  adam_dir <span class="op">=</span> <span class="st">"inputs/ADaM"</span></span>
@@ -346,7 +376,7 @@
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">ard</span><span class="op">)</span></span></code></pre></div>
 <p>During development, narrow the run to specific outputs or analyses for faster iteration:</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Only the demographics table</span></span>
 <span><span class="va">ard_demog</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ars_to_ard.html">ars_to_ard</a></span><span class="op">(</span></span>
 <span>  ars_path   <span class="op">=</span> <span class="st">"outputs/reporting_event.json"</span>,</span>
@@ -365,7 +395,7 @@
 <div class="section level3">
 <h3 id="step-5-render-the-formatted-table">Step 5: Render the formatted table<a class="anchor" aria-label="anchor" href="#step-5-render-the-formatted-table"></a>
 </h3>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">gt_table</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ars_render_tlf.html">ars_render_tlf</a></span><span class="op">(</span></span>
 <span>  ars_path  <span class="op">=</span> <span class="st">"outputs/reporting_event.json"</span>,</span>
 <span>  ard       <span class="op">=</span> <span class="va">ard</span>,</span>
@@ -374,7 +404,7 @@
 <span><span class="va">gt_table</span></span></code></pre></div>
 <p><code><a href="reference/ars_render_tlf.html">ars_render_tlf()</a></code> handles all the formatting automatically: treatment columns and row groups are detected from the ARD, <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> proportions are rescaled to display percentages, continuous summaries are laid out as <code>Mean (SD)</code> / <code>Median</code> / <code>(Min, Max)</code> rows, and ARS titles and footnotes are attached as GT source notes.</p>
 <p>To inspect or customise the underlying <a href="https://GSK-Biostatistics.github.io/tfrmt/" class="external-link">tfrmt</a> spec before rendering:</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Inspect the tfrmt spec for one output</span></span>
 <span><span class="va">spec</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ars_to_tfrmt.html">ars_to_tfrmt</a></span><span class="op">(</span><span class="st">"outputs/reporting_event.json"</span>, <span class="va">ard</span>, <span class="st">"T_14_1_1"</span><span class="op">)</span></span>
 <span></span>
@@ -388,7 +418,7 @@
 <h3 id="step-6-fill-any-reserved-cells">Step 6: Fill any reserved cells<a class="anchor" aria-label="anchor" href="#step-6-fill-any-reserved-cells"></a>
 </h3>
 <p>Some statistics fall outside what arsbridge can compute today. These are not dropped or replaced with zeros. Instead, each one becomes a keyed <code>manual_pending</code> row in the ARD with a <code>[‡ manual]</code> marker in the rendered table, so every programmer knows exactly what still needs a derivation.</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># See what is waiting</span></span>
 <span><span class="fu"><a href="reference/ars_manual_worklist.html">ars_manual_worklist</a></span><span class="op">(</span><span class="va">ard</span><span class="op">)</span></span>
 <span></span>
@@ -490,7 +520,7 @@
 </tbody>
 </table>
 <p><strong>Supplement workflow</strong> (for environments where the LLM API is blocked but a chat assistant is allowed):</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/ars_copilot_instructions.html">ars_copilot_instructions</a></span><span class="op">(</span><span class="op">)</span>   <span class="co"># writes arsbridge_copilot_instructions.md + prints the steps</span></span>
 <span><span class="co"># Upload that file + your shell.docx + your adam_spec.xlsx to Copilot/ChatGPT.</span></span>
 <span><span class="co"># Save its JSON reply as supplement.json, then:</span></span>
