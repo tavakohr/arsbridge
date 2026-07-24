@@ -43,11 +43,12 @@ find_output <- function(spec, output_id) {
   ))
 }
 
-## First display object of an output (ARS: output$displays[[1]]).
+## First display object of an output, unwrapped from the official
+## OrderedDisplay shape ({order, display: {...}}).
 .first_display <- function(out_obj) {
-  disp <- out_obj[["displays"]]
-  if (is.null(disp) || length(disp) == 0) return(NULL)
-  disp[[1]]
+  display <- .display_node(out_obj)
+  if (length(display) == 0) return(NULL)
+  display
 }
 
 ## Title: output$label, then display$displayTitle, then output$name.
@@ -74,7 +75,7 @@ extract_footnotes <- function(out_obj) {
   notes <- character(0)
   for (s in secs) {
     if (!identical(tolower(.sc(s[["sectionType"]])), "footnote")) next
-    for (ss in s[["subSections"]]) {
+    for (ss in .section_subsections(s)) {
       txt <- .sc(ss[["text"]])
       if (!is.na(txt) && nzchar(txt)) notes <- c(notes, txt)
     }

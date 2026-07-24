@@ -28,7 +28,11 @@
     id          = paste0(op_id, "_SELF"),
     operationId = op_id,
     description = "",
-    referencedOperationRole = list(controlledTerm = "")
+    ## The role vocabulary is closed (NUMERATOR/DENOMINATOR) and required.
+    ## For a self-referential placeholder either term is semantically vacuous;
+    ## NUMERATOR keeps the object schema-valid. siera carries the value into
+    ## its metadata without branching on it.
+    referencedOperationRole = list(controlledTerm = "NUMERATOR")
   ))
 }
 
@@ -339,7 +343,9 @@ build_ars_json <- function(sections,
                            codelists = NULL,
                            ship_annotations = FALSE,
                            extraction_mode = "llm",
-                           supplement_trust = NULL) {
+                           supplement_trust = NULL,
+                           analysis_reason  = .DEFAULT_ANALYSIS_REASON,
+                           analysis_purpose = .DEFAULT_ANALYSIS_PURPOSE) {
   if (length(sections) == 0) {
     cli::cli_abort("Cannot build ReportingEvent: no TLF sections provided.")
   }
@@ -1004,10 +1010,21 @@ build_ars_json <- function(sections,
     )
   }
 
+  ## The standard requires reason and purpose on every analysis, as
+  ## controlled-terminology objects. One run-level default is stamped here --
+  ## at the assembly point, so every extraction path (LLM, supplement,
+  ## deterministic) gets it -- and the reviewer adjusts the exceptions (e.g.
+  ## the primary-endpoint table) per line in edit_ars().
+  analyses <- lapply(analyses, function(an) {
+    an$reason  <- list(controlledTerm = analysis_reason)
+    an$purpose <- list(controlledTerm = analysis_purpose)
+    an
+  })
+
   list(
     id                    = study_id,
     name                  = study_name %||% study_id,
-    version               = "1",
+    version               = 1L,
     ## siera-required tables of contents (formerly only listOfPlannedAnalyses)
     otherListsOfContents  = .build_lopo(outputs),
     mainListOfContents    = .build_lopa(outputs),
@@ -1400,7 +1417,7 @@ build_ars_json <- function(sections,
     name          = paste0("Analysis ", index, " for ", section$tlf_number),
     label         = row$label %||% "",
     description   = row$label %||% "",
-    version       = "1",
+    version       = 1L,
     categoryIds   = list(),
     analysisSetId = as_id,
     ## siera reads `dataset` and `variable` as FLAT strings (metadata.R
@@ -1453,30 +1470,50 @@ build_ars_json <- function(sections,
   if (length(section$supplement_extras %||% list()) > 0) {
     out_meta$supplement <- section$supplement_extras
   }
+  output_id <- make_output_id(section$tlf_number)
+
   list(
-    id                    = make_output_id(section$tlf_number),
+    id                    = output_id,
     name                  = section$tlf_number,
     label                 = section$title %||% "",
-    version               = "1",
+    version               = 1L,
     outputType            = section$tlf_type %||% "TABLE",
+    ## The official shape: each entry is an OrderedDisplay wrapping the
+    ## display itself, which carries its own id and name.
     displays              = list(list(
-      order        = 1L,
-      displayTitle = section$title %||% "",
-      ## Carry the shell's column-header order so the renderer lays treatment
-      ## columns out as the author wrote them (build_col_levels reads this),
-      ## instead of falling back to alphabetical ARD order.
-      columns      = lapply(
-        Filter(nzchar, as.character(section$col_headers %||% character())),
-        function(h) list(label = h)),
-      displaySections = list(list(
-        sectionType = "Footnote",
-        subSections = lapply(as.list(shipped_notes),
-                             function(f) list(text = f))
-      ))
+      order   = 1L,
+      display = list(
+        id           = paste0(output_id, "_D1"),
+        name         = section$title %||% section$tlf_number,
+        displayTitle = section$title %||% "",
+        ## Carry the shell's column-header order so the renderer lays
+        ## treatment columns out as the author wrote them (build_col_levels
+        ## reads this), instead of falling back to alphabetical ARD order.
+        ## An arsbridge extension; ars_conformance() strips it.
+        columns      = lapply(
+          Filter(nzchar, as.character(section$col_headers %||% character())),
+          function(h) list(label = h)),
+        displaySections = list(list(
+          sectionType = "Footnote",
+          ## Official shape: each footnote is an OrderedSubSection wrapping a
+          ## DisplaySubSection, which requires its own id and text.
+          orderedSubSections = local({
+            notes <- as.list(shipped_notes)
+            lapply(seq_along(notes), function(i) list(
+              order      = i,
+              subSection = list(
+                id   = paste0(output_id, "_D1_FN", i),
+                text = notes[[i]]
+              )
+            ))
+          })
+        ))
+      )
     )),
     fileSpecifications    = list(list(
       name     = paste0(section$tlf_number, ".rtf"),
-      fileType = "rtf"
+      ## A terminology object, per the standard (enum: pdf, rtf, txt).
+      fileType = list(controlledTerm = "rtf")
     )),
     referencedAnalysisIds = as.list(analysis_ids),
     `_meta`               = out_meta
@@ -1583,6 +1620,10 @@ build_ars_json <- function(sections,
           outputId = o$id,
           sublist  = list(
             listItems = lapply(seq_along(an_ids_padded), function(j) list(
+              ## The standard requires a name on every list item. The id is
+              ## the only thing known here (this list is rebuilt from the
+              ## outputs alone), and it is an honest one.
+              name       = an_ids_padded[j],
               analysisId = an_ids_padded[j],
               level      = 2L,
               order      = j

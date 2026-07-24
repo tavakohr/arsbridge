@@ -47,8 +47,9 @@ test_that("ship_annotations = FALSE keeps annotations out of the ARS Footnote se
   re <- suppressMessages(suppressWarnings(
     build_ars_json(secs[1], spec_lookup = p$spec$lookup)))
   notes <- vapply(
-    re$outputs[[1]]$displays[[1]]$displaySections[[1]]$subSections,
-    function(ss) ss$text, character(1))
+    re$outputs[[1]]$displays[[1]]$display$displaySections[[1]]$
+      orderedSubSections,
+    function(ss) ss$subSection$text, character(1))
   expect_length(notes, 1)
   expect_false(any(grepl("->|DATASET|ADSL\\.", notes)))
 
@@ -56,8 +57,9 @@ test_that("ship_annotations = FALSE keeps annotations out of the ARS Footnote se
     build_ars_json(secs[1], spec_lookup = p$spec$lookup,
                    ship_annotations = TRUE)))
   notes2 <- vapply(
-    re2$outputs[[1]]$displays[[1]]$displaySections[[1]]$subSections,
-    function(ss) ss$text, character(1))
+    re2$outputs[[1]]$displays[[1]]$display$displaySections[[1]]$
+      orderedSubSections,
+    function(ss) ss$subSection$text, character(1))
   expect_length(notes2, 6)
 })
 
@@ -187,11 +189,12 @@ test_that("LISTING sections always carry MTH_LISTING regardless of the section m
 ## --- Phase 4: column restriction + layout-driven prep -----------------------
 
 test_that("build_col_levels(restrict=) drops ARD levels missing from the shell headers", {
-  out_obj <- list(displays = list(list(columns = list(
+  out_obj <- list(displays = list(list(order = 1L, display = list(
+    id = "D1", name = "D1", columns = list(
     list(label = "Category"),
     list(label = "Placebo\n(N=86) n (%)"),
     list(label = "Xanomeline Low\n(N=96) n (%)"),
-    list(label = "Xanomeline High\n(N=72) n (%)")))))
+    list(label = "Xanomeline High\n(N=72) n (%)"))))))
   ard <- data.frame(group1_level = c("Placebo", "Xanomeline Low Dose",
                                      "Xanomeline High Dose", "Screen Failure"))
   lv <- build_col_levels(out_obj, ard, "group1_level", restrict = TRUE)
@@ -474,8 +477,10 @@ test_that("ars_render_figure resolves its default dataset from _meta.source_data
   spec <- list(outputs = list(list(
     id = "F_14_3_1", name = "F_14_3_1", label = "Mean Pulse Rate Over Time",
     outputType = "FIGURE",
-    displays = list(list(order = 1, displayTitle = "Mean Pulse Rate Over Time",
-                         displaySections = list())),
+    displays = list(list(order = 1, display = list(
+      id = "F_14_3_1_D1", name = "Mean Pulse Rate Over Time",
+      displayTitle = "Mean Pulse Rate Over Time",
+      displaySections = list()))),
     `_meta` = list(source_datasets = list("ADVS")))))
   ars_path <- withr::local_tempfile(fileext = ".json")
   writeLines(jsonlite::toJSON(spec, auto_unbox = TRUE, null = "null"), ars_path)

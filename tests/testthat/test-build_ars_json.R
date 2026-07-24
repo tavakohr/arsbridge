@@ -89,7 +89,7 @@ test_that("Analysis emits both flat dataset/variable AND nested analysisVariable
   expect_equal(an$variable, "AGE")
   expect_equal(an$analysisVariable$dataset,  "ADSL")  # nested (ARS spec)
   expect_equal(an$analysisVariable$variable, "AGE")
-  expect_equal(an$version, "1")
+  expect_identical(an$version, 1L)
   expect_true(is.list(an$categoryIds))
 })
 

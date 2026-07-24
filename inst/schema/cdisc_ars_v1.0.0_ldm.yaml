@@ -1,0 +1,1498 @@
+id: https://www.cdisc.org/ars/1-0
+title: Analysis Results Standard (ARS)
+name: ars_ldm
+description: >
+  Logical model to support both the prospective specification of analyses and the fully contextualized
+  representation of the results of the analyses.
+
+imports:
+  - linkml:types
+
+prefixes:
+  linkml: https://w3id.org/linkml/
+  ars: https://www.cdisc.org/ars/1-0/
+  NCIT: http://purl.obolibrary.org/obo/NCIT_
+
+default_prefix: ars
+
+default_range: string
+
+classes:
+  NamedObject:
+    description: An object with a name.
+    abstract: true
+    slots:
+      - name
+      - description
+      - label
+
+  ReportingEvent:
+    description: A set of analyses and outputs created to meet a specific reporting requirement, such as a CSR or interim analysis.
+    tree_root: true
+    is_a: NamedObject
+    slots:
+      - id
+      - version
+      - mainListOfContents
+      - otherListsOfContents
+      - referenceDocuments
+      - terminologyExtensions
+      - analysisOutputCategorizations
+      - analysisSets
+      - dataSubsets
+      - analysisGroupings
+      - methods
+      - analyses
+      - globalDisplaySections
+      - outputs
+
+  ListOfContents:
+    description: A structured list of analyses and outputs included in the reporting event.
+    is_a: NamedObject
+    slots:
+      - contentsList
+
+  NestedList:
+    description: A list of items (analyses or outputs) that may be organized within sub-lists.
+    slots:
+      - listItems
+
+  LevelOrder:
+    description: An abstract class containing attributes used to position class instances within a hierarchical tree.
+    mixin: true
+    slots:
+      - level
+      - order
+
+  OrderedListItem:
+    description: An item (analysis, output or sub-list) ordered relative to other items within a list or sub-list.
+    is_a: NamedObject
+    mixins:
+      - LevelOrder
+    slots:
+      - analysisId
+      - outputId
+      - sublist
+
+  ReferenceDocument:
+    description: An external document containing supporting documentation or programming code.
+    is_a: NamedObject
+    slots:
+      - id
+      - location
+
+  TerminologyExtension:
+    description: An extensible set of controlled terminology that has been extended with at least one sponsor-defined term.
+    slots:
+      - id
+      - enumeration
+      - sponsorTerms
+
+  SponsorTerm:
+    description: A sponsor-defined term that is included in an extensible set of controlled terminology.
+    slots:
+      - id
+      - submissionValue
+      - description
+
+  ExtensibleTerminologyTerm:
+    description: The term used for an attribute whose terminology is extensible.
+    abstract: true
+    comments:
+      - Each instance of this class should contain either a controlled term or a sponsor term id, not both.
+    slots:
+      - controlledTerm
+      - sponsorTermId
+
+  AnalysisOutputCategorization:
+    description: A set of related implementer-defined categories that can be used to categorize analyses or outputs.
+    slots:
+      - id
+      - label
+      - categories
+
+  AnalysisOutputCategory:
+    description: An implementer-defined category of analyses/outputs, which may include one or more sub-categorization.
+    slots:
+      - id
+      - label
+      - subCategorizations
+
+  WhereClause:
+    description: >-
+      Selection criteria defined as either a simple condition ([variable] [comparator] [value(s)]) or a compound expression that may combine
+      simple conditions or compound expressions.
+    comments:
+      - Each instance of this class should have either a condition or a compoundExpression, not both.
+    mixins:
+      - LevelOrder
+    slots:
+      - condition
+      - compoundExpression
+    slot_usage:
+      compoundExpression:
+        range: WhereClauseCompoundExpression
+        any_of:
+          - range: CompoundSetExpression
+            inlined: true
+            inlined_as_list: true
+          - range: CompoundSubsetExpression
+            inlined: true
+            inlined_as_list: true
+          - range: CompoundGroupExpression
+            inlined: true
+            inlined_as_list: true
+
+  WhereClauseCondition:
+    description: A simple selection criterion exressed as [dataset].[variable] [comparator] [value(s)]
+    examples:
+      - value: ADSL.SAFFL EQ 'Y'
+    slots:
+      - dataset
+      - variable
+      - comparator
+      - value
+    slot_usage:
+      value:
+        description: The value(s) for comparison with the variable.
+        required: false
+
+  ReferencedWhereClause:
+    description: >-
+      An abstract class indicating an identified where clause (i.e., `AnalysisSet`, `DataSubset` or `Group`) referenced by identifier
+      (`subClauseId`) as the sub-clause in a compound expression.
+    abstract: true
+    mixins:
+      - LevelOrder
+    slots:
+      - subClauseId
+    slot_usage:
+      subClauseId:
+        required: true
+
+  SubClause:
+    description: >-
+      An abstract class containing all attributes that may be specified for
+      a sub-clause of a compound expression. In practice, each sub-clause
+      will be either a fully-defined `WhereClause` (containing either a
+      `condition` or a `compoundExpression`) or a `ReferencedWhereClause`
+      (containing a `subClauseId`).
+    abstract: true
+    mixins:
+      - LevelOrder
+      - WhereClause
+      - ReferencedWhereClause
+    slot_usage:
+      subClauseId:
+        required: false
+
+  WhereClauseCompoundExpression:
+    description: >-
+      An abstract class representing a compound expression consisting of
+      either two or more sub-clauses combined with the `AND` or `OR` logical
+      operator, or a single sub-clause negated with the `NOT` logical operator.
+      Each sub-clause is either a fully-defined `WhereClause` (containing
+      either a `condition` or a `compoundExpression`) or a
+      `ReferencedWhereClause` (containing a `subClauseId`).
+    abstract: true
+    slots:
+      - logicalOperator
+      - whereClauses
+    slot_usage:
+      whereClauses:
+        any_of:
+          - range: WhereClause
+          - range: ReferencedWhereClause
+
+  AnalysisSet:
+    description: >-
+      A set of subjects whose data are to be included in the main analyses.
+      This should be defined in the statistical section of the protocol.
+      NOTE: There are a number of potential analysis sets, including,
+      for example, the set based upon the intent-to-treat principle. [ICH E9]
+    is_a: NamedObject
+    slots:
+      - id
+    mixins:
+      - WhereClause
+    slot_usage:
+      compoundExpression:
+        range: CompoundSetExpression
+
+  ReferencedAnalysisSet:
+    description: >-
+      An `AnalysisSet` referenced by identifier (`subClauseId`) as the
+      sub-clause of a compound expression.
+    is_a: ReferencedWhereClause
+    slot_usage:
+      subClauseId:
+        range: AnalysisSet
+
+  CompoundSetExpression:
+    description: >-
+      A compound expression consisting of either two or more sub-clauses
+      combined with the `AND` or `OR` logical operator, or a single
+      sub-clause negated with the `NOT` logical operator. Each sub-clause
+      is either a fully-defined `WhereClause` (containing either a
+      `condition` or a `compoundExpression`) or a `ReferencedAnalysisSet`
+      (containing a `subClauseId` indicating the `id` of the referenced
+      `AnalysisSet`).
+    is_a: WhereClauseCompoundExpression
+    slot_usage:
+      whereClauses:
+        any_of:
+          - range: ReferencedAnalysisSet
+          - range: WhereClause    
+
+  DataSubset:
+    description: A subset of data identified by selection criteria for inclusion in the analysis.
+    is_a: NamedObject
+    slots:
+      - id
+    mixins:
+      - WhereClause
+    slot_usage:
+      compoundExpression:
+        range: CompoundSubsetExpression
+
+  ReferencedDataSubset:
+    description:  A `DataSubset` referenced by identifier (`subClauseId`) as the sub-clause of a compound expression.
+    is_a: ReferencedWhereClause
+    slot_usage:
+      subClauseId:
+        range: DataSubset
+
+  CompoundSubsetExpression:
+    description: >-
+      A compound expression consisting of either two or more sub-clauses
+      combined with the `AND` or `OR` logical operator, or a single
+      sub-clause negated with the `NOT` logical operator. Each sub-clause
+      is either a fully-defined `WhereClause` (containing either a
+      `condition` or a `compoundExpression`) or a `ReferencedDataSubset`
+      (containing a `subClauseId` indicating the `id` of the referenced
+      `DataSubset`).
+    is_a: WhereClauseCompoundExpression
+    slot_usage:
+      whereClauses:
+        any_of:
+          - range: ReferencedDataSubset
+          - range: WhereClause      
+
+  GroupingFactor:
+    description: A factor used to subdivide either the subject population or data records in an analysis dataset for analysis.
+    is_a: NamedObject
+    slots:
+      - id
+      - groupingDataset
+      - groupingVariable
+      - dataDriven
+      - groups
+
+  Group:
+    description: A subdivision of the subject population or analysis dataset record set based on a defined factor.
+    is_a: NamedObject
+    slots:
+      - id
+    mixins:
+      - WhereClause
+    slot_usage:
+      compoundExpression:
+        range: CompoundGroupExpression
+
+  ReferencedGroup:
+    description: A `Group` referenced by identifier (`subClauseId`) as the sub-clause of a compound expression.
+    is_a: ReferencedWhereClause
+    slot_usage:
+      subClauseId:
+        range: Group
+
+  CompoundGroupExpression:
+    description: >-
+      A compound expression consisting of either two or more sub-clauses
+      combined with the `AND` or `OR` logical operator, or a single
+      sub-clause negated with the `NOT` logical operator. Each sub-clause
+      is either a fully-defined `WhereClause` (containing either a
+      `condition` or a `compoundExpression`) or a `ReferencedGroup`
+      (containing a `subClauseId` indicating the `id` of the referenced
+      `Group`).
+    is_a: WhereClauseCompoundExpression
+    slot_usage:
+      whereClauses:
+        any_of:
+          - range: ReferencedGroup
+          - range: WhereClause
+
+  AnalysisMethod:
+    description: A set of one or more statistical operations.
+    is_a: NamedObject
+    slots:
+      - id
+      - documentRefs
+      - operations
+      - codeTemplate
+
+  DocumentReference:
+    description: A reference to an external document.
+    comments:
+      - One or more pageRefs may be specified to refer to specific part(s) of the document. Omit pageRefs to refer to the document as a whole.
+    slots:
+      - referenceDocumentId
+      - pageRefs
+
+  PageRef:
+    description: >-
+      A reference to a specific part of a document as indicated by a list of one or more page numbers, a range of page numbers,
+      or a list of named destinations in the document (e.g. bookmarks).
+    abstract: true
+    comments:
+      - |
+        Each instance of this class should contain only one of the following page specifications:
+            * pageNumbers
+            * pageNames
+            * firstPage AND lastPage
+    slots:
+      - refType
+      - label
+      - pageNames
+      - pageNumbers
+      - firstPage
+      - lastPage
+    slot_usage:
+      label:
+        description: Alternative label to provide a more specific and description to a page link.
+
+  PageNumberListRef:
+    description: One or more individual pages in the reference document, referenced by page number.
+    is_a: PageRef
+    slot_usage:
+      refType:
+        equals_string: PhysicalRef
+      pageNumbers:
+        required: true
+        value_presence: PRESENT
+      pageNames:
+        description: NOT USED
+        value_presence: ABSENT
+      firstPage:
+        description: NOT USED
+        value_presence: ABSENT
+      lastPage:
+        description: NOT USED
+        value_presence: ABSENT
+    defining_slots:
+      - pageNumbers
+
+  PageNumberRangeRef:
+    description: A range of pages in the reference document, indicated by the first and last page number in the range.
+    is_a: PageRef
+    slot_usage:
+      refType:
+        equals_string: PhysicalRef
+      pageNumbers:
+        description: NOT USED
+        value_presence: ABSENT
+      pageNames:
+        description: NOT USED
+        value_presence: ABSENT
+      firstPage:
+        required: true
+        value_presence: PRESENT
+      lastPage:
+        required: true
+        value_presence: PRESENT
+    defining_slots:
+      - firstPage
+      - lastPage
+
+  PageNameRef:
+    description: One or more pages in the reference document, referenced by named destination.
+    is_a: PageRef
+    slot_usage:
+      refType:
+        equals_string: NamedDestination
+      pageNumbers:
+        description: NOT USED
+        value_presence: ABSENT
+      pageNames:
+        required: true
+        value_presence: PRESENT
+      firstPage:
+        description: NOT USED
+        value_presence: ABSENT
+      lastPage:
+        description: NOT USED
+        value_presence: ABSENT
+    defining_slots:
+      - pageNames
+
+  Operation:
+    description: A statistical operation that produces a single analysis result value as part of an analysis method.
+    is_a: NamedObject
+    slots:
+      - id
+      - order
+      - referencedOperationRelationships
+      - resultPattern
+
+  ReferencedOperationRelationship:
+    description: A reference to a statistical operation whose results are used in the calculation of the result for this operation.
+    slots:
+      - id
+      - referencedOperationRole
+      - operationId
+      - analysisId
+      - description
+
+  OperationRole:
+    description: The role that the referenced operation's result plays in the calculation of the result of this operation.
+    is_a: ExtensibleTerminologyTerm
+    slot_usage:
+      controlledTerm:
+        required: true
+        range: OperationRoleEnum
+        value_presence: PRESENT
+      sponsorTermId:
+        description: NOT USED
+        value_presence: ABSENT
+
+  SponsorOperationRole:
+    description: The sponsor-defined role that the referenced operation's result plays in the calculation of the result of this operation.
+    is_a: ExtensibleTerminologyTerm
+    slot_usage:
+      controlledTerm:
+        description: NOT USED
+        value_presence: ABSENT
+      sponsorTermId:
+        description: A reference to a sponsor term in the TerminologyExtension with enumeration=OperationRoleEnum
+        required: true
+        value_presence: PRESENT
+
+  AnalysisProgrammingCodeTemplate:
+    description: Programming statements and/or a reference to a used as a template for creation of a program to perform method operations for a specific analysis.
+    slots:
+      - context
+      - code
+      - documentRef
+      - parameters
+    slot_usage:
+      parameters:
+        description: Parameters whose values will be used to generate or execute the programming code for a specific analysis.
+        range: TemplateCodeParameter
+
+  CodeParameter:
+    description: A replacement parameter whose value is substituted in template programming code to create statements required for a specific analysis.
+    abstract: true
+    is_a: NamedObject
+
+  TemplateCodeParameter:
+    description: A replacement parameter whose value is substituted in template programming code to create statements required for a specific analysis.
+    is_a: CodeParameter
+    slots:
+      - valueSource
+      - value
+    slot_usage:
+      value:
+        description: The value to be used for the parameter when the method is used in an analysis. Multiple values may be specified to indicate a choice.
+        required: false
+
+  Analysis:
+    description: |-
+      An analysis that is designed to meet a requirement of the reporting event. Each analysis is defined as a set of specifications, including:
+      * The analysis variable that is the subject of the analysis.
+      * The analysis method (set of statistical operations) that is performed for the analysis variable.
+      * The analysis set (subject population) for which the analysis is performed.
+      * The subset of data records on which the analysis is performed (optional).
+      * One or more factors by which either subjects or data records are grouped for analysis (optional).
+    is_a: NamedObject
+    slots:
+      - id
+      - version
+      - reason
+      - purpose
+      - documentRefs
+      - categoryIds
+      - dataset
+      - variable
+      - analysisSetId
+      - dataSubsetId
+      - orderedGroupings
+      - methodId
+      - referencedAnalysisOperations
+      - programmingCode
+      - results
+    slot_usage:
+      categoryIds:
+        description: References to any implementer-defined categories that apply to the analysis.
+      programmingCode:
+        description: Programming statements and/or a reference to the program used to perform the specific analysis.
+
+  AnalysisReason:
+    description: The rationale for performing this analysis.
+    is_a: ExtensibleTerminologyTerm
+    slot_usage:
+      controlledTerm:
+        required: true
+        range: AnalysisReasonEnum
+        value_presence: PRESENT
+      sponsorTermId:
+        description: NOT USED
+        value_presence: ABSENT
+
+  SponsorAnalysisReason:
+    description: The sponsor-defined rationale for performing this analysis.
+    is_a: ExtensibleTerminologyTerm
+    slot_usage:
+      controlledTerm:
+        description: NOT USED
+        value_presence: ABSENT
+      sponsorTermId:
+        description: A reference to a sponsor term in the TerminologyExtension with enumeration=AnalysisReasonEnum
+        required: true
+        value_presence: PRESENT
+
+  AnalysisPurpose:
+    description: The purpose of the analysis within the body of evidence (e.g., section in the clinical study report).
+    is_a: ExtensibleTerminologyTerm
+    slot_usage:
+      controlledTerm:
+        required: true
+        range: AnalysisPurposeEnum
+        value_presence: PRESENT
+      sponsorTermId:
+        description: NOT USED
+        value_presence: ABSENT
+
+  SponsorAnalysisPurpose:
+    description: The sponsor-defined purpose of the analysis within the body of evidence (e.g., section in the clinical study report).
+    is_a: ExtensibleTerminologyTerm
+    slot_usage:
+      controlledTerm:
+        description: NOT USED
+        value_presence: ABSENT
+      sponsorTermId:
+        description: A reference to a sponsor term in the TerminologyExtension with enumeration=AnalysisPurposeEnum
+        required: true
+        value_presence: PRESENT
+
+  OrderedGroupingFactor:
+    description: A reference to a defined factor by which subjects or data records are grouped for the analysis, ordered with respect to other grouping factors.
+    slots:
+      - order
+      - groupingId
+      - resultsByGroup
+
+  ReferencedAnalysisOperation:
+    description: An indication of the analysis that contains results of a referenced operation.
+    slots:
+      - referencedOperationRelationshipId
+      - analysisId
+    slot_usage:
+      analysisId:
+        required: true
+
+  AnalysisOutputProgrammingCode:
+    description: Programming statements and/or a reference to the program used to perform a specific analysis or create a specific output.
+    slots:
+      - context
+      - code
+      - documentRef
+      - parameters
+    slot_usage:
+      parameters:
+        description: Parameter values used to generate or execute the programming code.
+        range: AnalysisOutputCodeParameter
+
+  AnalysisOutputCodeParameter:
+    description: A parameter whose value is used in programming code for a specific analysis or output.
+    is_a: CodeParameter
+    slots:
+      - value
+    slot_usage:
+      value:
+        description: The value of the parameter.
+        maximum_cardinality: 1
+        required: true
+
+  OperationResult:
+    description: The result of an analysis method operation performed on a subdivision of subjects or data records.
+    slots:
+      - operationId
+      - resultGroups
+      - rawValue
+      - formattedValue
+
+  ResultGroup:
+    description: For the specified grouping factor, an indication of the specific group of subjects or data records associated with the analysis result.
+    slots:
+      - groupingId
+      - groupId
+      - groupValue
+
+  GlobalDisplaySection:
+    description: A global definition for part of a tabular display containing one or more pieces of informational text that may be used in multiple displays.
+    slots:
+      - sectionType
+      - subSections
+
+  DisplaySubSection:
+    description: An occurrence of a display section containing text.
+    slots:
+      - id
+      - text
+    slot_usage:
+      text:
+        required: true
+
+  Output:
+    description: A report of results and their evaluation based on planned analyses performed during the course of a trial.
+    is_a: NamedObject
+    slots:
+      - id
+      - version
+      - fileSpecifications
+      - displays
+      - categoryIds
+      - documentRefs
+      - programmingCode
+    slot_usage:
+      categoryIds:
+        description: References to any implementer-defined categories that apply to the output.
+      programmingCode:
+        description: Programming statements and/or a reference to the program used to perform the specific output.
+
+  OutputFile:
+    description: A file containing analysis output displays.
+    is_a: NamedObject
+    slots:
+      - fileType
+      - location
+      - style
+
+  OutputFileType:
+    description: The file format of the file containing output from analyses.
+    is_a: ExtensibleTerminologyTerm
+    slot_usage:
+      controlledTerm:
+        required: true
+        range: OutputFileTypeEnum
+        value_presence: PRESENT
+      sponsorTermId:
+        description: NOT USED
+        value_presence: ABSENT
+
+  SponsorOutputFileType:
+    description: The sponsor-defined file format of the file containing output from analyses.
+    is_a: ExtensibleTerminologyTerm
+    slot_usage:
+      controlledTerm:
+        description: NOT USED
+        value_presence: ABSENT
+      sponsorTermId:
+        description: A reference to a sponsor term in the TerminologyExtension with enumeration=OutputFileTypeEnum
+        required: true
+        value_presence: PRESENT
+
+  OrderedDisplay:
+    description: A display ordered with respect to other displays in an analysis output.
+    slots:
+      - order
+      - display
+
+  OutputDisplay:
+    description: A tabular representation of the results of one or more analyses.
+    is_a: NamedObject
+    slots:
+      - id
+      - version
+      - displayTitle
+      - displaySections
+
+  DisplaySection:
+    description: A part of a tabular display containing one or more pieces of informational text (e.g., title, footnote).
+    slots:
+      - sectionType
+      - orderedSubSections
+
+  OrderedDisplaySubSection:
+    description: A single subsection ordered with respect to other subsections in the same section of a display.
+    comments:
+      - A single subsection should be either defined using subSection or referenced using subSectionId (not both).
+    abstract: true
+    slots:
+      - order
+      - subSection
+      - subSectionId
+
+  OrderedSubSection:
+    description: A subsection ordered with respect to other subsections of the same type.
+    is_a: OrderedDisplaySubSection
+    slot_usage:
+      subSection:
+        required: true
+        value_presence: PRESENT
+      subSectionId:
+        description: NOT USED
+        value_presence: ABSENT
+    defining_slots:
+      - subSection
+
+  OrderedSubSectionRef:
+    description: A reference to a subsection defined either globally or in another display section, ordered with respect to other subsections of the same type.
+    is_a: OrderedDisplaySubSection
+    slot_usage:
+      subSection:
+        description: NOT USED
+        value_presence: ABSENT
+      subSectionId:
+        required: true
+        value_presence: PRESENT
+    defining_slots:
+      - subSectionId
+
+slots:
+  name:
+    description: The name for the instance of the class.
+    range: string
+    required: true
+
+  description:
+    range: string
+    description: A textual description of the instance of the class.
+
+  label:
+    description: A short informative description that may be used for display.
+    range: string
+
+  id:
+    description: The assigned identifying value for the instance of the class.
+    required: true
+    identifier: true
+    range: string
+
+  version:
+    description: An ordinal indicating the version of the identified instance of the class.
+    range: integer
+
+  mainListOfContents:
+    description: The main list of the analyses and outputs defined for the reporting event.
+    required: true
+    range: ListOfContents
+    inlined: true
+    inlined_as_list: true
+
+  otherListsOfContents:
+    description: Other lists of the analyses and outputs defined for the reporting event.
+    required: false
+    range: ListOfContents
+    multivalued: true
+    inlined: true
+    inlined_as_list: true
+
+  contentsList:
+    description: A structured list of the analyses and outputs defined for the reporting event.
+    required: true
+    range: NestedList
+
+  referenceDocuments:
+    description: External documents containing information referenced for the reporting event.
+    comments:
+      - May include specification or report documents (e.g. the SAP or CSR) and program files.
+    multivalued: true
+    range: ReferenceDocument
+    inlined: true
+    inlined_as_list: true
+
+  terminologyExtensions:
+    description: Any sponsor-defined extensions to extensible terminology.
+    range: TerminologyExtension
+    multivalued: true
+    inlined: true
+    inlined_as_list: true
+
+  analysisOutputCategorizations:
+    description: Sets of related implementer-defined categories that can be used to categorize analyses or outputs.
+    multivalued: true
+    range: AnalysisOutputCategorization
+    inlined: true
+    inlined_as_list: true
+
+  analysisSets:
+    description: The analysis sets (subject populations) defined for the reporting event.
+    multivalued: true
+    inlined: true
+    inlined_as_list: true
+    range: AnalysisSet
+
+  dataSubsets:
+    description: Subsets of data identified by selection criteria for inclusion in analysis definitions.
+    multivalued: true
+    inlined: true
+    inlined_as_list: true
+    range: DataSubset
+
+  analysisGroupings:
+    description: >-
+      Characteristics used to subdivide the subject population (e.g., treatment, sex, age group) or
+      data records in analysis datasets (e.g., visit, system organ class).
+    multivalued: true
+    inlined: true
+    inlined_as_list: true
+    range: GroupingFactor
+
+  methods:
+    description: The defined methods used to analyze any analysis variable.
+    multivalued: true
+    inlined: true
+    inlined_as_list: true
+    range: AnalysisMethod
+
+  analyses:
+    description: The analyses defined for the reporting event.
+    multivalued: true
+    inlined: true
+    inlined_as_list: true
+    range: Analysis
+
+  globalDisplaySections:
+    description: Display section specifications that may be applied to any display.
+    multivalued: true
+    inlined: true
+    inlined_as_list: true
+    range: GlobalDisplaySection
+
+  outputs:
+    description: The outputs defined for the reporting event.
+    multivalued: true
+    inlined: true
+    inlined_as_list: true
+    range: Output
+
+  listItems:
+    description: Items in the list. Each item may include a reference to an analysis, a reference to an output, or a sub-list.
+    multivalued: true
+    list_elements_ordered: true
+    inlined: true
+    inlined_as_list: true
+    range: OrderedListItem
+
+  level:
+    description: The level of the entry within a hierarchical structure.
+    comments:
+      - 1 is the top level.
+    range: integer
+    required: true
+
+  order:
+    description: The ordinal of the instance with respect to other instances.
+    range: integer
+    required: true
+
+  sublist:
+    description: A sub-list of items (analyses or outputs) that may be further organized within sub-lists.
+    range: NestedList
+    multivalued: false
+    inlined: true
+
+  analysisId:
+    description: The identifier of the referenced analysis.
+    range: Analysis
+    multivalued: false
+    inlined: false
+
+  outputId:
+    description: The identifier of the referenced output.
+    range: Output
+    multivalued: false
+    inlined: false
+
+  location:
+    description: A path (relative or absolute) indicating the location of the file.
+    range: uri
+
+  enumeration:
+    description: The name of the extensible enumeration.
+    range: ExtensibleTerminologyEnum
+
+  sponsorTerms:
+    description: The sponsor-defined terms added to the extensible terminology.
+    multivalued: true
+    required: true
+    range: SponsorTerm
+    inlined: true
+    inlined_as_list: true
+
+  submissionValue:
+    description: The specific value expected for submissions.
+    range: string
+    required: true
+
+  controlledTerm:
+    description: One of the permissible values from the referenced enumeration.
+    range: string
+    any_of:
+      - range: AnalysisReasonEnum
+      - range: AnalysisPurposeEnum
+      - range: OperationRoleEnum
+      - range: OutputFileTypeEnum
+
+  sponsorTermId:
+    description: The identifier of the referenced sponsor term.
+    range: SponsorTerm
+    inlined: false
+
+  categories:
+    description: Implementer-defined categories of analyses/outputs, each of which may include one or more sub-categorization.
+    multivalued: true
+    range: AnalysisOutputCategory
+    inlined: true
+    inlined_as_list: true
+    required: true
+
+  subCategorizations:
+    description: Sets of related implementer-defined sub-categories that can be used to categorize analyses or outputs.
+    multivalued: true
+    range: AnalysisOutputCategorization
+    inlined: true
+    inlined_as_list: true
+
+  condition:
+    description: A simple selection criterion exressed as [dataset].[variable] [comparator] [value(s)]
+    range: WhereClauseCondition
+
+  compoundExpression:
+    description: >-
+      A compound expression that combines or negates where clauses.
+    any_of:
+      - range: CompoundSetExpression
+        inlined: true
+        inlined_as_list: true
+      - range: CompoundSubsetExpression
+        inlined: true
+        inlined_as_list: true
+      - range: CompoundGroupExpression
+        inlined: true
+        inlined_as_list: true
+
+  dataset:
+    description: The name of the analysis dataset.
+
+  variable:
+    description: The name of the variable.
+
+  comparator:
+    description: Comparison operator indicating how the variable is compared to the value(s).
+    range: ConditionComparatorEnum
+
+  value:
+    description: The prespecified value or values.
+    multivalued: true
+
+  subClauseId:
+    description: The identifier of the analysis set, data subset or group referenced in the compound expression.  
+    inlined: false
+    inlined_as_list: false  
+    any_of:
+      - range: AnalysisSet
+      - range: DataSubset
+      - range: Group
+
+  logicalOperator:
+    description: The boolean operator that is used to combine (AND, OR) or negate (NOT) the where claus(s) in the compound expression.
+    required: true
+    range: ExpressionLogicalOperatorEnum
+
+  whereClauses:
+    description: A list of one or more where clauses (selection criteria) to be combined or negated.
+    comments:
+      - >-
+        Each where clause may be defined as either a simple condition ([variable] [comparator] [value(s)]) or a compound expression that may combine
+        additional simple conditions or compound expressions.
+      - Two or more where clauses should be specified when the logical operator is AND or OR.
+      - Only one where clause should be specfied when the logical operator is NOT. This where clause will usually be a compound expression.
+    multivalued: true
+    list_elements_ordered: true
+    inlined: true
+    inlined_as_list: true
+    range: SubClause
+    any_of:
+      - range: WhereClause
+      - range: ReferencedWhereClause
+
+  groupingDataset:
+    description: For groupings based on a single variable, a reference to the dataset containing the variable upon which grouping is based.
+
+  groupingVariable:
+    description: For groupings based on a single variable, a reference to the dataset variable upon which grouping is based.
+
+  dataDriven:
+    description: Indicates whether the groups defined by the grouping are prespecified (false) or obtained from distinct data values of the groupingVariable (true).
+    range: boolean
+    required: true
+
+  groups:
+    description: The pre-specified groups within the grouping.
+    examples:
+      - value: "'Male' and 'Female' might be groups within a sex grouping."
+      - value: "'Treatment A', 'Treatment B', 'Placebo' might be groups within a treatment grouping."
+    multivalued: true
+    list_elements_ordered: true
+    inlined: true
+    inlined_as_list: true
+    range: Group
+
+  documentRefs:
+    description: References to external documents containing additional information.
+    multivalued: true
+    range: DocumentReference
+    inlined: true
+    inlined_as_list: true
+
+  operations:
+    description: The calculations performed for the method. Each operation generates a statistical result.
+    required: true
+    multivalued: true
+    range: Operation
+    inlined: true
+    inlined_as_list: true
+
+  codeTemplate:
+    description: Template programming statements used to perform the statistical operations for any analysis that uses this method.
+    comments:
+      - Template programming statements may be represented as code or as a reference to the program file.
+    range: AnalysisProgrammingCodeTemplate
+
+  referenceDocumentId:
+    description: The identifier of the referenced document.
+    range: ReferenceDocument
+    required: true
+    inlined: false
+
+  pageRefs:
+    description: >-
+      A list of references to specific parts of a document, which may be referenced as a list of one or more page numbers, a range of page numbers,
+      or a list of named destinations in the document (e.g. bookmarks).
+    multivalued: true
+    range: PageRef
+    inlined: true
+    inlined_as_list: true
+    any_of:
+      - range: PageNumberListRef
+      - range: PageNumberRangeRef
+      - range: PageNameRef
+
+  refType:
+    description: The type of reference for page references.
+    required: true
+    range: PageRefTypeEnum
+
+  pageNames:
+    description: One or more named document references which each correspond with a page.
+    range: string
+    multivalued: true
+
+  pageNumbers:
+    description: One or more page numbers.
+    range: integer
+    multivalued: true
+
+  firstPage:
+    description: The page number of the first page in a range of pages.
+    range: integer
+
+  lastPage:
+    description: The page number of the last page in a range of pages.
+    range: integer
+
+  referencedOperationRelationships:
+    description: >-
+      Relationships to other operations indicating how the result of the referenced operation are used in the calculation of the result for this operation.
+    multivalued: true
+    range: ReferencedOperationRelationship
+    inlined: true
+    inlined_as_list: true
+
+  resultPattern:
+    description: The default pattern or format to apply to the result for display.
+    comments:
+      - May be a textual representation of a generic result to be displayed in a table shell (e.g. XX.X) or a machine readable formatting instruction.
+
+  referencedOperationRole:
+    description: The role that the referenced operation's result plays in the calculation of the result of the parent operation.
+    range: ExtensibleTerminologyTerm
+    required: true
+    any_of:
+      - range: OperationRole
+      - range: SponsorOperationRole
+
+  operationId:
+    description: The identifier of the referenced operation.
+    range: Operation
+    required: true
+    inlined: false
+
+  context:
+    description: The name and version of the computer language used for the actual programming statements provided.
+    examples:
+      - value: SAS Version 9.4
+    range: string
+    required: true
+
+  code:
+    description: Programming statements used to perform the specific analysis.
+    range: string
+
+  documentRef:
+    description: A reference to the document containing programming code.
+    multivalued: false
+    range: DocumentReference
+    inlined: true
+    inlined_as_list: true
+
+  parameters:
+    description: >
+      Replacement parameters that are referenced in the programming code or programming code template and
+      are used to generate or execute the programming code.
+    range: CodeParameter
+    multivalued: true
+    inlined: true
+    inlined_as_list: true
+
+  valueSource:
+    # TODO: restrict to formal references to attributes of instances of the parent Analysis class.
+    description: A reference to the prespecified source of the value for the parameter.
+    range: string
+
+  reason:
+    description: The rationale for performing this analysis. It indicates when the analysis was planned.
+    required: true
+    range: ExtensibleTerminologyTerm
+    any_of:
+      - range: AnalysisReason
+      - range: SponsorAnalysisReason
+
+  purpose:
+    description: The purpose of the analysis within the body of evidence (e.g., section in the clinical study report).
+    required: true
+    range: ExtensibleTerminologyTerm
+    any_of:
+      - range: AnalysisPurpose
+      - range: SponsorAnalysisPurpose
+
+  categoryIds:
+    description: References to any implementer-defined categories that apply to the analysis or output.
+    multivalued: true
+    range: AnalysisOutputCategory
+    inlined: false
+    required: false
+
+  analysisSetId:
+    description: The identifier of the referenced analysis set.
+    range: AnalysisSet
+    multivalued: false
+    inlined: false
+
+  dataSubsetId:
+    description: The identifier of the referenced data subset.
+    inlined: false
+    range: DataSubset
+
+  orderedGroupings:
+    description: An ordered list of grouping factors used in the analysis.
+    range: OrderedGroupingFactor
+    multivalued: true
+    list_elements_ordered: true
+    inlined: true
+    inlined_as_list: true
+
+  methodId:
+    description: A reference to the set of one or more statistical operations performed for the analysis.
+    range: AnalysisMethod
+    required: true
+    inlined: false
+
+  referencedAnalysisOperations:
+    description: Indications of which analysis contains the results for each referenced operation.
+    multivalued: true
+    range: ReferencedAnalysisOperation
+    inlined: true
+    inlined_as_list: true
+
+  programmingCode:
+    description: Programming statements used to perform the specific analysis or create the specific output.
+    comments:
+      - Programming statements may be represented as code or as a reference to the program file.
+    range: AnalysisOutputProgrammingCode
+
+  results:
+    description: The results of the analysis.
+    multivalued: true
+    range: OperationResult
+    inlined: true
+    inlined_as_list: true
+
+  groupingId:
+    description: The identifier of the referenced subject or data grouping factor.
+    range: GroupingFactor
+    inlined: false
+    required: true
+
+  resultsByGroup:
+    description: Indicates whether a result is expected for each group in the grouping.
+    range: boolean
+    required: true
+
+  referencedOperationRelationshipId:
+    description: The identifier of the defined referenced operation relationship.
+    range: ReferencedOperationRelationship
+    required: true
+    inlined: false
+
+  resultGroups:
+    description: The group values associated with the result.
+    comments:
+      - There should be a result group value for each grouping that is indicated as being associated with a separate result (resultsByGroup = True)
+    multivalued: true
+    range: ResultGroup
+    inlined: true
+    inlined_as_list: true
+
+  rawValue:
+    description: The raw result value (e.g., with no rounding applied).
+
+  formattedValue:
+    description: The result value formatted for display according to the resultPattern.
+
+  groupId:
+    description: The identifier of a referenced predefined group within a grouping.
+    range: Group
+    inlined: false
+
+  groupValue:
+    description: The data value used as a group within a data-driven grouping.
+
+  sectionType:
+    description: The type of display section that contains one or more pieces of informational text.
+    range: DisplaySectionTypeEnum
+    examples:
+      - value: Header
+      - value: Title
+      - value: Footnote
+      - value: Legend
+      - value: Abbreviation
+      - value: Footer
+
+  subSections:
+    description: A list of defined pieces of information text that may be displayed in display sections of the same type.
+    multivalued: true
+    inlined: true
+    inlined_as_list: true
+    range: DisplaySubSection
+
+  text:
+    description: The text to be displayed in the display section.
+
+  fileSpecifications:
+    description: Specifications of output files.
+    multivalued: true
+    inlined: true
+    inlined_as_list: true
+    range: OutputFile
+
+  displays:
+    description: An ordered list of the displays included in the output.
+    range: OrderedDisplay
+    multivalued: true
+    inlined: true
+    inlined_as_list: true
+    list_elements_ordered: true
+    required: true
+
+  fileType:
+    description: The format of the output file.
+    range: ExtensibleTerminologyTerm
+    any_of:
+      - range: OutputFileType
+      - range: SponsorOutputFileType
+
+  style:
+    description: Reference to the specification of the style used for the output.
+    comments:
+      - This is a placeholder attribute. Style specifications are not yet included in the model.
+
+  display:
+    description: A display contained in the output.
+    range: OutputDisplay
+    inlined: true
+    required: true
+
+  displayTitle:
+    description: Display description which uniquely identifies the display in the report.
+
+  displaySections:
+    description: The parts of the display containing one or more pieces of informational text (e.g. title, footnote).
+    multivalued: true
+    inlined: true
+    inlined_as_list: true
+    range: DisplaySection
+
+  orderedSubSections:
+    description: An ordered list of the informational text to display in the display section.
+    multivalued: true
+    list_elements_ordered: true
+    inlined: true
+    inlined_as_list: true
+    range: OrderedDisplaySubSection
+    any_of:
+      - range: OrderedSubSection
+      - range: OrderedSubSectionRef
+
+  subSection:
+    description: A defined piece of information text to display in a display section.
+    range: DisplaySubSection
+    inlined: true
+
+  subSectionId:
+    description: The identifier of the referenced subsection.
+    range: DisplaySubSection
+    inlined: false
+
+enums:
+  OutputFileTypeEnum:
+    description: The file format of the file containing output from analyses.
+    permissible_values:
+      pdf:
+        description: Portable Document Format (PDF)
+      rtf:
+        description: Rich Text Format (RTF)
+      txt:
+        description: Plain text
+
+  ExpressionLogicalOperatorEnum:
+    description: Boolean operators denoting a logical operation (e.g., and, or, not).
+    permissible_values:
+      AND:
+      OR:
+      NOT:
+
+  ConditionComparatorEnum:
+    description: Comparison operators indicating how the value of a variable is compared to a (list of) prespecified value(s).
+    permissible_values:
+      EQ:
+        description: Is equal to
+      NE:
+        description: Is not equal to
+      GT:
+        description: Is greater than
+      GE:
+        description: Is greater than or equal to
+      LT:
+        description: Is less than
+      LE:
+        description: Is less than or equal to
+      IN:
+        description: Is in
+      NOTIN:
+        description: Is not in
+
+  DisplaySectionTypeEnum:
+    description: Types of display section that contain one or more pieces of informational text.
+    permissible_values:
+      Header:
+        description: >-
+          Lines of text appearing above the title and containing additional generic information
+          such as study identifier or page numbering.
+      Title:
+        description: >-
+          The title is a caption of a table beginning with "Table" followed by sequenced numbers
+          or letters and separated by full stops. The title includes additional lines describing the content.
+      Rowlabel Header:
+        description: Optional text placed in the column header for a column containing row/stub labels.
+      Legend:
+        description: >-
+          Lines of text placed immediately after the body of the table containing statements
+          explaining the use of terms or values. May be prefaced with a word such as 'Note:'.
+      Abbreviation:
+        description: >-
+          Lines of text defining abbreviations, acronyms, and terms used in the body of the display.
+      Footnote:
+        description: >-
+          Placed after the abbreviations and definitions, if any. Footnotes lead with symbols
+          (asterisk, dagger, double dagger, or section symbol) or superscripted letters (a, b, c)
+          or numbers (1, 2, 3) which are in the table behind units of measure or words.
+          Footnotes add information regarding the associated values where they occur in the body.
+      Footer:
+        description: >-
+          Lines of text appearing below any footnote and containing additional information such as
+          traceability of the source program or page numbering.
+
+  OperationRoleEnum:
+    description: The role that the referenced operation's result plays in the calculation of the result of this operation.
+    permissible_values:
+      NUMERATOR:
+        description: The dividend of a fraction.
+      DENOMINATOR:
+        description: The divisor of a fraction.
+
+  AnalysisReasonEnum:
+    # TODO: change to a dynamic enum based on the NCI or CDISC terminology with extending terms.
+    description: The rationale for performing this analysis. It indicates when the analysis was planned.
+    code_set: NCIT:C117744
+    permissible_values:
+      SPECIFIED IN PROTOCOL:
+        description: The analysis is specified in a protocol.
+        meaning: NCIT:C117752
+      SPECIFIED IN SAP:
+        description: The analysis is specified in a statistical analysis plan.
+        meaning: NCIT:C117753
+      DATA DRIVEN:
+        description: The analysis was triggered by findings in the data.
+        meaning: NCIT:C117750
+      REQUESTED BY REGULATORY AGENCY:
+        description: The analysis has been requested by a regulatory agency.
+        meaning: NCIT:C117751
+
+  AnalysisPurposeEnum:
+    # TODO: change to a dynamic enum based on the NCI or CDISC terminology with extending terms.
+    description: The purpose of the analysis within the body of evidence (e.g., section in the clinical study report).
+    code_set: NCIT:C117745
+    permissible_values:
+      PRIMARY OUTCOME MEASURE:
+        description: >-
+          The outcome measure(s) of greatest importance specified in the protocol, usually the one(s) used in the power
+          calculation, to evaluate the primary endpoint(s) associated with the primary study objective(s). (After
+          Clinicaltrials.gov)
+        meaning: NCIT:C98772
+      SECONDARY OUTCOME MEASURE:
+        description: >-
+          The outcome measure(s) that is part of a pre-specified analysis plan used to evaluate the secondary endpoint(s)
+          associated with secondary study objective(s) and/or used to evaluate any measure(s) ancillary to the primary or
+          secondary endpoint(s). (After Clinicaltrials.gov).
+        meaning: NCIT:C98781
+      EXPLORATORY OUTCOME MEASURE:
+        description: >-
+          The outcome measure(s) that is part of a pre-specified analysis plan used to evaluate the exploratory endpoint(s)
+          associated with exploratory study objective(s) and/or any other measures, excluding post-hoc measures, that are a
+          focus of the study. (After clinicaltrials.gov)
+        meaning: NCIT:C98724
+
+  ExtensibleTerminologyEnum:
+    description: Extensible ARS enumerations.
+    permissible_values:
+      AnalysisReasonEnum:
+        description: The rationale for performing this analysis. It indicates when the analysis was planned.
+        meaning: NCIT:C117744
+      AnalysisPurposeEnum:
+        description: The purpose of the analysis within the body of evidence (e.g., section in the clinical study report).
+        meaning: NCIT:C117745
+      OperationRoleEnum:
+        description: The role that the referenced operation's result plays in the calculation of the result of this operation.
+      OutputFileTypeEnum:
+        description: The file format of the file containing output from analyses.
+
+  PageRefTypeEnum:
+    description: Type of reference for page references.
+    permissible_values:
+      PhysicalRef:
+        description: References are to page numbers.
+      NamedDestination:
+        description: References are to named destinations in the referenced document.

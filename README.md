@@ -60,12 +60,16 @@ flowchart TD
         V["Excel validation report\nPASS / WARN / FAIL per annotation"]
     end
 
-    subgraph STEP3 ["Step 3 · Execute"]
+    subgraph STEP3 ["Step 3 · Review and correct"]
+        RV["edit_ars()\nstructured review, spec-driven corrections"]
+    end
+
+    subgraph STEP4 ["Step 4 · Execute"]
         E["ars_to_ard()\nruns cards against ADaM data"]
         MP["manual_pending rows\nfor statistics not yet computable"]
     end
 
-    subgraph STEP4 ["Step 4 · Render"]
+    subgraph STEP5 ["Step 5 · Render"]
         T["ars_render_tlf()\nformatted GT table"]
     end
 
@@ -75,12 +79,65 @@ flowchart TD
     G -->|"reject"| BLK["Blocker log\n(named and fixable)"]
     ARS --> STEP2
     ARS --> STEP3
-    ADAM --> STEP3
-    STEP3 --> E
+    STEP2 -->|"gaps overlaid"| RV
+    RV -->|"corrected ARS JSON"| STEP4
+    ADAM --> STEP4
+    STEP4 --> E
     E --> MP
-    E --> STEP4
-    MP -->|"fill + validate"| STEP4
-    STEP4 --> TLF["Clinical table\n(GT · Word-ready)"]
+    E --> STEP5
+    MP -->|"fill + validate"| STEP5
+    STEP5 --> TLF["Clinical table\n(GT · Word-ready)"]
+```
+
+------------------------------------------------------------------------
+
+## Review and correct before executing
+
+The semantic enrichment is automated, so the generated ARS JSON is a
+draft: a method can be misclassified, a population can be wrong, an
+annotated line can be missed entirely. `edit_ars()` is the
+human-in-the-loop stage between generating and executing.
+
+``` r
+res <- spec_to_ars(
+  shell_path     = "inputs/annotated_shells.docx",
+  adam_spec_path = "inputs/adam_spec.xlsx"
+)
+
+# Review and correct: the result carries the event, the validation
+# report and the spec, so nothing else needs passing.
+corrected <- edit_ars(res)
+
+# Execute what you corrected.
+ard <- ars_to_ard(corrected, adam_dir = "adam")
+```
+
+You see the shell's structure rather than JSON – each output with its
+analysis lines beneath it – with validation findings badged onto the
+lines they concern. Selecting a line resolves its ids into what they
+mean: the method's name plus whether the engine can actually execute it,
+the population's condition, the variables the results are split by.
+Variables come from the ADaM spec, so they cannot be mistyped, and every
+dropdown says how many analyses share the entity, because editing a
+shared method edits all of them.
+
+Nothing is written until you save, and saving shows what changed first.
+The previous file is backed up, the write is atomic, and the edit log
+goes to a sidecar `.edits.json` so the ARS JSON itself stays CDISC-clean
+-- `export_edit_log()` turns that sidecar into a QC workbook.
+
+Every change is undoable, and a session that dies is offered back the
+next time you open the same file, so a review cannot be lost to a
+mis-click or a crashed browser. `ars_conformance()` checks any reporting event
+against the official CDISC ARS v1.0 schema (vendored and pinned in the
+package), and a freshly generated event validates clean.
+
+Use `view_ars()` for the same view without the ability to change
+anything, and `validate_ars_model()` for the findings on the command
+line. The viewer needs `shiny`, `bslib` and `DT`, which are optional:
+
+``` r
+install.packages(c("shiny", "bslib", "DT"))
 ```
 
 ------------------------------------------------------------------------
