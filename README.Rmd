@@ -36,6 +36,7 @@ No manual transcription. No orphan numbers. Every value auditable back to its so
 |---|---|
 | **Three ways to read the shell** | A deterministic regex baseline always runs; you choose how the gaps it cannot resolve get filled — **regex only** (no key), a **Copilot supplement** (no API call), or a **live LLM** (opt-in with a key). Same spec-gated output from all three. |
 | **Spec-gated validation** | Every variable proposed — by the regex, a supplement, or the LLM — is checked against your ADaM spec. A variable missing from the spec is rejected and logged, never silently invented. |
+| **Human-in-the-loop review** | `edit_ars()` opens the generated ARS in a structured Shiny editor: the shell's outputs and lines with validation findings badged on, spec-constrained dropdowns, add/remove/reorder for missed lines, undo and crash recovery. Every save is backed up, logged to a QC sidecar, and checked against the official ARS v1.0 schema. |
 | **CDISC ARS JSON output** | The extraction result is a structured, versioned file you can diff, review, and feed to downstream tools like `{siera}`. |
 | **Native ARD execution** | Run ARS JSON directly against `.xpt` or `.csv` datasets using `{cards}`, with no dataset-loading boilerplate. |
 | **Codelist-decoded categories** | A coded categorical variable (e.g. a numeric `DCSREASN`) is decoded through the ADaM spec's codelist: the ARD and rendered table show `DEATH`, not `1`, in codelist order, with unobserved terms reported as n = 0. Unannotated coded column axes get their column labels from the codelist too. |
@@ -120,6 +121,10 @@ corrected <- edit_ars(res)
 ard <- ars_to_ard(corrected, adam_dir = "adam")
 ```
 
+![The review stage on the bundled example study: the shell's structure on
+the left, the selected analysis as spec-constrained fields on the
+right.](man/figures/README-editor.png)
+
 You see the shell's structure rather than JSON -- each output with its
 analysis lines beneath it -- with validation findings badged onto the lines
 they concern. Selecting a line resolves its ids into what they mean: the
@@ -183,14 +188,18 @@ res <- spec_to_ars_example()
 # 2. Review the validation findings
 table(res$validation$status)
 
-# 3. Load the bundled simulated ADaM data
+# 3. Review and correct the generated ARS interactively
+#    (needs the optional shiny, bslib and DT packages)
+edit_ars(res)
+
+# 4. Load the bundled simulated ADaM data
 adam_dir <- file.path(tempdir(), "ADaM")
 unzip(arsbridge_example("ADaM.zip"), exdir = adam_dir)
 
-# 4. Execute the ARS JSON into a tidy ARD
+# 5. Execute the ARS JSON into a tidy ARD
 ard <- ars_to_ard(ars_path = res$ars_path, adam_dir = adam_dir)
 
-# 5. Render the Subject Disposition table
+# 6. Render the Subject Disposition table
 ars_render_tlf(res$ars_path, ard, "T_14_1_1")
 ```
 
