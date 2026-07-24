@@ -69,6 +69,7 @@ reference:
     reporting event as editable tables, check it for problems, and review it
     in a structured viewer.
   contents:
+  - edit_ars
   - view_ars
   - ars_to_model
   - model_to_ars

@@ -184,8 +184,15 @@ mod_status_server <- function(id, state, parent_session = NULL) {
         shiny::span(class = "badge text-bg-warning",
                     paste(counts[["WARN"]], "to review")),
         shiny::span(class = "badge text-bg-secondary",
-                    paste(counts[["INFO"]], "notes"))
+                    paste(counts[["INFO"]], "notes")),
+        if (identical(state$mode, "edit")) {
+          shiny::div(class = "ms-auto", mod_save_ui(session$ns("save")))
+        }
       )
     })
+
+    if (identical(state$mode, "edit")) {
+      mod_save_server("save", state)
+    }
   })
 }

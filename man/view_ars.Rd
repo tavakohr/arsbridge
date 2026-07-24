@@ -28,7 +28,7 @@ recognises -- each output with its analysis lines beneath it -- with
 validation findings overlaid, so problems are visible without reading JSON.
 }
 \details{
-This viewer never writes anything.
+This viewer never writes: use \code{\link[=edit_ars]{edit_ars()}} to correct what it surfaces.
 }
 \examples{
 \dontrun{

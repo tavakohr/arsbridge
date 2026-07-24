@@ -93,7 +93,7 @@
 #' recognises -- each output with its analysis lines beneath it -- with
 #' validation findings overlaid, so problems are visible without reading JSON.
 #'
-#' This viewer never writes anything.
+#' This viewer never writes: use [edit_ars()] to correct what it surfaces.
 #'
 #' @param ars What to review. Either a path to an ARS JSON file, an already
 #'   parsed reporting event, or the whole result of [spec_to_ars()] -- which

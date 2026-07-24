@@ -1,5 +1,25 @@
 # arsbridge (development version)
 
+* **`edit_ars()` closes the loop: generate, review and correct, then execute.**
+  The same structured viewer, with the detail panels editable. Methods,
+  populations, data subsets and groupings are chosen from what actually
+  exists -- the entities in the file, the methods the engine can execute
+  (labelled with what it will do with each: computed, needs a prerequisite,
+  reserved for manual computation), and, with the ADaM spec supplied, the
+  variables the study really has. Choosing a standard method the file does not
+  carry adds it first, so an analysis can never point at a method that is not
+  there. Every dropdown says how many analyses share the entity, because
+  editing a shared method edits all of them.
+
+  Nothing is written until you save, and saving shows a from/to table of what
+  changed first. The previous file is backed up to `<name>.json.bak-<time>`,
+  the new content is written to a temporary file in the same directory and
+  renamed into place so an interrupted save cannot destroy the file it was
+  replacing, and the edit log is written to `<name>.edits.json` beside it --
+  keeping provenance out of the ARS JSON so the deliverable stays CDISC-clean.
+  `spec_to_ars()` now also returns `adam_spec_path`, so `edit_ars(result)`
+  wires up spec-driven dropdowns and gap detection on its own.
+
 * **`view_ars()` opens a reporting event as the structure a programmer already
   recognises.** Each output is a collapsible panel with its analysis lines
   beneath it -- the shell's skeleton, read straight from the standard's

@@ -154,6 +154,8 @@ Invisibly returns a named list:
 \code{"deterministic"}. Also stored in the JSON as
 \verb{_meta.extraction_mode}.}
 \item{\code{report_path}}{Path to the validation report (if validate=TRUE).}
+\item{\code{adam_spec_path}}{The ADaM spec this run read, so the review
+stage can be opened with \code{edit_ars(result)} alone.}
 \item{\code{code_dir}}{Directory holding the emitted per-TLF \code{{cards}} \code{.R}
 deliverables.}
 \item{\code{code_paths}}{Named character vector of the emitted \code{.R} paths

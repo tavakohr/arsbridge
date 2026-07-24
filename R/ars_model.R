@@ -90,6 +90,16 @@
   df[, c(columns, "raw"), drop = FALSE]
 }
 
+## First element of a list that may be absent or empty. Reporting events in
+## the wild are not always fully populated -- an output can arrive with no
+## displays or no file specification at all -- and reading one must not be an
+## error.
+#' @noRd
+.first_or_empty <- function(x) {
+  if (is.null(x) || length(x) == 0) return(list())
+  x[[1]]
+}
+
 ## Zero-row data frame carrying the full canonical column set, so downstream
 ## code can rely on the columns existing even for an absent pool.
 #' @noRd
@@ -373,8 +383,8 @@
   if (length(nodes) == 0) return(.empty_pool(.OUTPUT_COLUMNS))
 
   rows <- lapply(nodes, function(node) {
-    display   <- (node[["displays"]] %||% list())[[1]]
-    file_spec <- (node[["fileSpecifications"]] %||% list())[[1]]
+    display   <- .first_or_empty(node[["displays"]])
+    file_spec <- .first_or_empty(node[["fileSpecifications"]])
     analysis_ids <- unlist(node[["referencedAnalysisIds"]] %||% list())
 
     footnotes <- 0L

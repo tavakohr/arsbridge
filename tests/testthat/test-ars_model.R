@@ -281,6 +281,26 @@ test_that("a nested groupingVariable is read and written back nested", {
   expect_equal(out$analysisGroupings[[1]]$groupingVariable$dataset, "ADSL")
 })
 
+test_that("an output with no displays or file specification is tolerated", {
+  ## Hand-written and partially populated events are real; reading one must
+  ## not be an error.
+  ars <- list(
+    id = "S", name = "S", version = "1",
+    analyses = list(list(id = "AN_1", label = "Line", dataset = "ADSL",
+                         variable = "SEX")),
+    outputs = list(list(id = "T_1", name = "T-1",
+                        referencedAnalysisIds = list("AN_1")))
+  )
+
+  model <- ars_to_model(ars)
+
+  expect_equal(nrow(model$outputs), 1)
+  expect_true(is.na(model$outputs$display_title))
+  expect_true(is.na(model$outputs$file_name))
+  expect_equal(model$outputs$n_analyses, 1)
+  expect_equal(model_to_ars(model), ars)
+})
+
 test_that("ars_to_model() accepts a parsed event and rejects anything else", {
   ars   <- .hand_built_ars()
   model <- ars_to_model(ars)

@@ -125,6 +125,19 @@ mod_detail_ui <- function(id) {
 #' @noRd
 mod_detail_server <- function(id, state) {
   shiny::moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+
+    ## Which analysis the inputs currently belong to. The inputs are rebuilt
+    ## only when this changes -- never when the model changes -- so an edit
+    ## does not tear down the field being typed into.
+    selected_analysis <- shiny::reactive({
+      selected <- state$selected()
+      if (is.null(selected) || !identical(selected$pool, "analyses")) {
+        return(NULL)
+      }
+      selected$id
+    })
+
     output$detail <- shiny::renderUI({
       selected <- state$selected()
       if (is.null(selected)) {
@@ -134,7 +147,10 @@ mod_detail_server <- function(id, state) {
         ))
       }
 
-      model <- state$model()
+      ## Read the model without taking a reactive dependency on it: the panel
+      ## belongs to the selection, and re-rendering on every keystroke would
+      ## fight the reviewer for the cursor.
+      model <- shiny::isolate(state$model())
       df <- model[[selected$pool]]
       index <- match(selected$id, df$id)
 
@@ -146,12 +162,20 @@ mod_detail_server <- function(id, state) {
       }
 
       row <- df[index, , drop = FALSE]
-      if (identical(selected$pool, "analyses")) {
-        .analysis_detail_ui(row, model, state)
+
+      if (!identical(selected$pool, "analyses")) {
+        return(.output_detail_ui(row, model, state))
+      }
+      if (identical(state$mode, "edit")) {
+        .analysis_edit_ui(row, model, state, ns)
       } else {
-        .output_detail_ui(row, model, state)
+        .analysis_detail_ui(row, model, state)
       }
     })
+
+    if (identical(state$mode, "edit")) {
+      .observe_analysis_inputs(input, state, selected_analysis)
+    }
   })
 }
 
@@ -186,7 +210,7 @@ mod_detail_server <- function(id, state) {
   own <- findings[findings$id == row$id, , drop = FALSE]
 
   node <- row$raw[[1]]
-  display <- (node[["displays"]] %||% list())[[1]]
+  display <- .first_or_empty(node[["displays"]])
   columns <- vapply(
     display[["columns"]] %||% list(),
     function(column) .chr_field(column[["label"]]),

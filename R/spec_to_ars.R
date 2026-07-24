@@ -113,6 +113,8 @@
 #'       `"deterministic"`. Also stored in the JSON as
 #'       `_meta.extraction_mode`.}
 #'     \item{`report_path`}{Path to the validation report (if validate=TRUE).}
+#'     \item{`adam_spec_path`}{The ADaM spec this run read, so the review
+#'       stage can be opened with `edit_ars(result)` alone.}
 #'     \item{`code_dir`}{Directory holding the emitted per-TLF `{cards}` `.R`
 #'       deliverables.}
 #'     \item{`code_paths`}{Named character vector of the emitted `.R` paths
@@ -538,6 +540,9 @@ spec_to_ars <- function(shell_path,
     ars_path        = output_path,
     extraction_mode = extraction_mode,
     report_path     = if (isTRUE(validate)) report_path else NULL,
+    ## Carried so the review stage can wire up spec-driven dropdowns and
+    ## spec validation from the result alone: edit_ars(result).
+    adam_spec_path  = adam_spec_path,
     code_dir        = code_dir,
     code_paths      = code_paths,
     n_tlfs          = length(enriched),
