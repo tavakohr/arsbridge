@@ -1,5 +1,18 @@
 # arsbridge (development version)
 
+* **`view_ars()` opens a reporting event as the structure a programmer already
+  recognises.** Each output is a collapsible panel with its analysis lines
+  beneath it -- the shell's skeleton, read straight from the standard's
+  `mainListOfContents` -- and validation findings are overlaid as badges, so
+  the displays needing attention are visible before anything is opened.
+  Selecting a line resolves its ids into what they mean: the method's name
+  plus whether the engine can actually execute it, the population's condition,
+  the variables results are grouped by. A shared-entity library shows how many
+  analyses each method, analysis set, data subset and grouping is used by,
+  which is the thing a flat JSON view hides. The viewer never writes anything.
+  `shiny`, `bslib` and `DT` are Suggests, so the package is unaffected when
+  they are not installed.
+
 * **An ARS reporting event can now be read as editable tables and written
   back losslessly.** `ars_to_model()` turns the nested JSON into one data
   frame per entity pool (analyses, methods, analysis sets, data subsets,

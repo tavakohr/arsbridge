@@ -200,6 +200,21 @@
     )
   }
 
+  ## An output with nothing behind it renders empty. The generator leaves
+  ## these behind when it cannot derive any analysis for a display, so this is
+  ## one of the most common things a reviewer has to fix.
+  for (i in seq_len(nrow(model$outputs))) {
+    if (length(.split_values(model$outputs$referenced_analysis_ids[i])) > 0) {
+      next
+    }
+    findings <- .add_finding(
+      findings, "WARN", "outputs", model$outputs$id[i],
+      "referenced_analysis_ids",
+      "This output has no analyses, so it would render empty.",
+      "Add the analyses it should display, or drop the output."
+    )
+  }
+
   ## Tables of contents. These are regenerated on a structural save, so a
   ## stale reference is a note rather than a blocker.
   contents <- .contents_referenced_ids(model$template)

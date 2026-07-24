@@ -63,6 +63,17 @@ reference:
   - ars_render_listing
   - ars_render_figure
 
+- title: Review and correct
+  desc: >
+    The human-in-the-loop stage between generation and execution: read the
+    reporting event as editable tables, check it for problems, and review it
+    in a structured viewer.
+  contents:
+  - view_ars
+  - ars_to_model
+  - model_to_ars
+  - validate_ars_model
+
 - title: Inferential statistics and partial results
   desc: >
     Executable descriptors for inferential statistics, and the manual-fill

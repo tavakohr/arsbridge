@@ -1040,15 +1040,30 @@ model_add_method_from_catalogue <- function(model, method_id) {
 #' @noRd
 .entity_usage <- function(model) {
   analyses <- model$analyses
-  grouping_ids <- unlist(lapply(analyses$grouping_ids, .split_values))
+
+  count_of <- function(ids) {
+    ids <- ids[!is.na(ids) & nzchar(ids)]
+    if (length(ids) == 0) return(stats::setNames(integer(0), character(0)))
+    counts <- table(ids)
+    stats::setNames(as.integer(counts), names(counts))
+  }
 
   list(
-    methods       = table(analyses$methodId[!is.na(analyses$methodId)]),
-    analysis_sets = table(analyses$analysisSetId[!is.na(analyses$analysisSetId)]),
-    data_subsets  = table(
-      analyses$dataSubsetId[!is.na(analyses$dataSubsetId) &
-                              nzchar(analyses$dataSubsetId)]
-    ),
-    groupings     = table(grouping_ids)
+    methods       = count_of(analyses$methodId),
+    analysis_sets = count_of(analyses$analysisSetId),
+    ## An empty dataSubsetId means "no subset", not usage of one.
+    data_subsets  = count_of(analyses$dataSubsetId),
+    groupings     = count_of(
+      unlist(lapply(analyses$grouping_ids, .split_values))
+    )
   )
+}
+
+## Usage lookup that answers zero for an entity nothing references, rather
+## than erroring on a name that is not there.
+#' @noRd
+.usage_count <- function(usage, id) {
+  if (length(usage) == 0) return(0L)
+  count <- usage[id]
+  if (length(count) == 0 || is.na(count)) 0L else as.integer(count)
 }
