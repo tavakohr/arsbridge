@@ -131,7 +131,12 @@ them.
 
 Nothing is written until you save, and saving shows what changed first. The
 previous file is backed up, the write is atomic, and the edit log goes to a
-sidecar `.edits.json` so the ARS JSON itself stays CDISC-clean.
+sidecar `.edits.json` so the ARS JSON itself stays CDISC-clean --
+`export_edit_log()` turns that sidecar into a QC workbook.
+
+Every change is undoable, and a session that dies is offered back the next
+time you open the same file, so a review cannot be lost to a mis-click or a
+crashed browser.
 
 Use `view_ars()` for the same view without the ability to change anything, and
 `validate_ars_model()` for the findings on the command line. The viewer needs

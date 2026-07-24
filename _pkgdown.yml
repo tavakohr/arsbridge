@@ -70,10 +70,12 @@ reference:
     in a structured viewer.
   contents:
   - edit_ars
+  - review_ars
   - view_ars
   - ars_to_model
   - model_to_ars
   - validate_ars_model
+  - export_edit_log
 
 - title: Inferential statistics and partial results
   desc: >

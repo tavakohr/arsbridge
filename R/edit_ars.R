@@ -100,6 +100,15 @@ edit_ars <- function(ars, adam_spec_path = NULL, report_path = NULL,
   .edit_ars_finish(result, output_path, input$spec, input$report)
 }
 
+#' @rdname edit_ars
+#' @details
+#' `review_ars()` is an alias for [edit_ars()]. Both open the same tool; the
+#' name is a matter of which framing fits -- "review" is what a clinical QC
+#' process calls this step, "edit" is what the tool does.
+#' @export
+review_ars <- edit_ars
+
+
 ## Serialize, back up, write atomically, log, re-validate. Returns the path.
 #' @noRd
 .edit_ars_finish <- function(result, output_path, spec = NULL, report = NULL) {
@@ -138,6 +147,10 @@ edit_ars <- function(ars, adam_spec_path = NULL, report_path = NULL,
   }
 
   .write_edit_log(result$edit_log, output_path)
+
+  ## The work is on disk now, so the crash-recovery copy has nothing left to
+  ## protect -- leaving it would offer stale changes on the next open.
+  .clear_autosave(result$source_path %||% output_path)
 
   findings <- validate_ars_model(result$model, spec, report)
   .report_save(output_path, result$edit_log, findings)

@@ -2,9 +2,12 @@
 % Please edit documentation in R/edit_ars.R
 \name{edit_ars}
 \alias{edit_ars}
+\alias{review_ars}
 \title{Review and correct an ARS reporting event interactively}
 \usage{
 edit_ars(ars, adam_spec_path = NULL, report_path = NULL, output_path = NULL)
+
+review_ars(ars, adam_spec_path = NULL, report_path = NULL, output_path = NULL)
 }
 \arguments{
 \item{ars}{What to edit. Either a path to an ARS JSON file, an already
@@ -37,6 +40,10 @@ ADaM spec is supplied) the variables the study really has.
 \details{
 Nothing is written until you choose to save, and saving shows what changed
 first.
+
+\code{review_ars()} is an alias for \code{\link[=edit_ars]{edit_ars()}}. Both open the same tool; the
+name is a matter of which framing fits -- "review" is what a clinical QC
+process calls this step, "edit" is what the tool does.
 }
 \section{What saving does}{
 

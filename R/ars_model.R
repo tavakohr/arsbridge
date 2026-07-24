@@ -913,15 +913,22 @@ model_set_field <- function(model, pool, id, field, value) {
   .model_refresh_row(model, pool, id)
 }
 
-## Recompute the derived columns of one row from its (patched) node, so the
-## model stays self-consistent after an edit.
+## Bring one row and its node back into agreement after an edit.
+##
+## `patch` says which of the two is authoritative. After editing a COLUMN the
+## columns win, so the node is patched from them. After replacing the NODE
+## wholesale -- the raw-JSON escape hatch, an operation edit -- the node wins,
+## and patching from the stale columns would silently undo the replacement.
 #' @noRd
-.model_refresh_row <- function(model, pool, id) {
+.model_refresh_row <- function(model, pool, id, patch = TRUE) {
   df  <- model[[pool]]
   idx <- .row_index(df, id, pool)
   registry <- .pool_registry()
 
-  node <- registry[[pool]]$patch(df$raw[[idx]], df[idx, , drop = FALSE])
+  node <- df$raw[[idx]]
+  if (patch) {
+    node <- registry[[pool]]$patch(node, df[idx, , drop = FALSE])
+  }
   df$raw[[idx]] <- node
 
   refreshed <- switch(
@@ -977,7 +984,8 @@ model_set_node_json <- function(model, pool, id, json_text) {
 
   df$raw[[idx]] <- node
   model[[pool]] <- df
-  .model_refresh_row(model, pool, id)
+  ## The replacement node is the truth here, not the columns it replaced.
+  .model_refresh_row(model, pool, id, patch = FALSE)
 }
 
 ## Edit one field of one operation inside a method. Operations are a nested
@@ -1006,7 +1014,7 @@ model_set_operation <- function(model, method_id, operation_index,
   node[["operations"]][[operation_index]][[field]] <- value
   df$raw[[idx]] <- node
   model$methods <- df
-  .model_refresh_row(model, "methods", method_id)
+  .model_refresh_row(model, "methods", method_id, patch = FALSE)
 }
 
 ## Add one of the standard methods to the file. Selecting a catalogue method

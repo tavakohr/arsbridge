@@ -1,5 +1,37 @@
 # arsbridge (development version)
 
+* **A review session can no longer be lost.** Every change is undoable
+  (and redoable) with the arrows in the header -- field edits, added and
+  removed lines, reordering, detaching, library edits, all of it. And every
+  change is written to a crash-recovery copy in the user's cache directory, so
+  a browser or an R session that dies mid-review offers the work back when the
+  editor is next opened on the same file. The file being edited is never
+  touched until an explicit save, and the recovery copy is cleared once the
+  work is safely on disk.
+
+* **Shared entities are editable from the library.** Methods, analysis sets,
+  data subsets and groupings can now be corrected in the Entities tab, which
+  is the right place to fix a population that is wrong everywhere rather than
+  opening thirty analyses. The panel says how many analyses a change will
+  affect, and points at detaching when the intent is to change one line only.
+  Nested shapes the flat fields cannot express -- compound conditions,
+  grouping levels -- have a raw-JSON escape hatch that refuses anything
+  invalid instead of applying it.
+
+* **`export_edit_log()` turns a review session into a QC record.** The sidecar
+  `<name>.edits.json` becomes a styled workbook: what changed, from what to
+  what, who saved it and when. Repeated edits to one field collapse to a
+  single before/after row, and a field edited back to where it started does
+  not appear at all. The ARS JSON still carries no provenance fields, so the
+  deliverable stays CDISC-conformant.
+
+* **`review_ars()`** is an alias for `edit_ars()`, for whichever framing fits.
+
+* **Fixed: the raw-JSON escape hatch silently discarded the edit it reported
+  applying.** Replacing an entity's node re-derived its row by patching the
+  new node from the row's *old* column values, which undid the replacement.
+  Node-replacing edits now treat the node as authoritative.
+
 * **The lines the generator missed can now be added, and a gap tells you
   exactly which one.** Selecting a coverage finding -- "the shell annotates
   this but no analysis uses that variable" -- opens the add-analysis wizard

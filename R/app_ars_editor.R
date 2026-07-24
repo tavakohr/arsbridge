@@ -27,6 +27,13 @@
     ## Set to an .add_request() to open the add-analysis wizard; the request
     ## can come from an output panel or from a gap finding.
     add_request = shiny::reactiveVal(NULL),
+    ## Snapshots either side of the current state, for undo and redo.
+    history     = shiny::reactiveVal(.new_history()),
+    ## Bumped when the model changes underneath the panels rather than because
+    ## of them -- undo, redo, restoring a recovered session. The detail panels
+    ## deliberately do not follow every model change (that would fight the
+    ## reviewer for the cursor), so they need telling when to catch up.
+    refresh     = shiny::reactiveVal(0L),
     spec        = spec,
     report      = report,
     source_path = source_path,

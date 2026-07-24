@@ -272,9 +272,11 @@ mod_add_analysis_server <- function(id, state) {
 }
 
 ## Structural edits are logged like field edits, so the diff-before-save panel
-## and the sidecar record them the same way.
+## and the sidecar record them the same way -- and, like field edits, they can
+## be undone.
 #' @noRd
 .record_structural_edit <- function(state, model, pool, id, field, old, new) {
+  .push_history(state)
   state$model(model)
   state$edit_log(rbind(state$edit_log(), data.frame(
     time  = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
@@ -286,6 +288,7 @@ mod_add_analysis_server <- function(id, state) {
     stringsAsFactors = FALSE
   )))
   state$findings(validate_ars_model(model, state$spec, state$report))
+  .write_autosave(state)
   invisible(TRUE)
 }
 

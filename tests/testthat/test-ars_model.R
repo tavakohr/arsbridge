@@ -366,6 +366,24 @@ test_that("the raw-JSON escape hatch replaces a node but pins the id", {
     model_set_node_json(model, "data_subsets", "DS_COMPOUND", "{not json"),
     "not valid JSON"
   )
+
+  ## A replacement must survive the refresh that follows it. Refreshing by
+  ## patching from the row's OLD columns would quietly undo the whole edit
+  ## while still reporting success.
+  simple <- ars_to_model(.ars_fixture_path())
+  target <- simple$data_subsets$id[1]
+  rewritten <- jsonlite::toJSON(list(
+    id = target, name = "Rewritten", label = "Rewritten",
+    condition = list(dataset = "ADSL", variable = "AGE",
+                     comparator = "GE", value = list("18")),
+    level = 1L, order = 1L
+  ), auto_unbox = TRUE)
+
+  replaced <- model_set_node_json(simple, "data_subsets", target, rewritten)
+  expect_equal(replaced$data_subsets$condition_variable[1], "AGE")
+  expect_equal(replaced$data_subsets$label[1], "Rewritten")
+  expect_equal(model_to_ars(replaced)$dataSubsets[[1]]$condition$variable,
+               "AGE")
   expect_error(
     model_set_node_json(model, "data_subsets", "DS_COMPOUND",
                         '{"id": "DS_OTHER"}'),

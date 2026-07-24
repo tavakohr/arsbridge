@@ -22,13 +22,16 @@ apply_edit <- function(state, pool, id, field, value) {
 
   old <- df[[field]][index]
 
-  ## An input echoing back its current value is not an edit.
+  ## An input echoing back its current value is not an edit. This has to come
+  ## before the history push, or undo would fill up with no-op steps.
   if (identical(as.character(old), as.character(value))) {
     return(invisible(FALSE))
   }
   if (is.na(old) && (is.null(value) || is.na(value))) {
     return(invisible(FALSE))
   }
+
+  .push_history(state)
 
   updated <- model_set_field(model, pool, id, field, value)
   state$model(updated)
@@ -45,6 +48,7 @@ apply_edit <- function(state, pool, id, field, value) {
   )))
 
   state$findings(validate_ars_model(updated, state$spec, state$report))
+  .write_autosave(state)
   invisible(TRUE)
 }
 
@@ -320,6 +324,15 @@ apply_edit <- function(state, pool, id, field, value) {
   )
 }
 
+## A bare "this happened" input, for buttons that carry no payload.
+#' @noRd
+.event_js <- function(input_id) {
+  paste0(
+    "Shiny.setInputValue('", input_id, "', Date.now(), ",
+    "{priority: 'event'}); return false;"
+  )
+}
+
 #' @noRd
 .detach_js <- function(input_id, pool, entity_id, analysis_id) {
   paste0(
@@ -417,6 +430,7 @@ mod_save_ui <- function(id) {
   ns <- shiny::NS(id)
   shiny::tagList(
     shiny::uiOutput(ns("dirty"), inline = TRUE),
+    shiny::uiOutput(ns("history"), inline = TRUE),
     shiny::actionButton(ns("save"), "Save and close",
                         class = "btn-primary btn-sm"),
     shiny::actionButton(ns("discard"), "Discard", class = "btn-sm")
@@ -435,6 +449,75 @@ mod_save_server <- function(id, state) {
         class = "badge text-bg-primary",
         paste(n, if (n == 1) "unsaved change" else "unsaved changes")
       )
+    })
+
+    output$history <- shiny::renderUI({
+      shiny::div(
+        class = "btn-group btn-group-sm",
+        shiny::tags$button(
+          class = "btn btn-outline-secondary",
+          title = "Undo",
+          disabled = if (!.can_undo(state)) "disabled",
+          onclick = .event_js(session$ns("undo")),
+          shiny::HTML("&larr;")
+        ),
+        shiny::tags$button(
+          class = "btn btn-outline-secondary",
+          title = "Redo",
+          disabled = if (!.can_redo(state)) "disabled",
+          onclick = .event_js(session$ns("redo")),
+          shiny::HTML("&rarr;")
+        )
+      )
+    })
+
+    shiny::observeEvent(input$undo, {
+      .undo(state)
+      .write_autosave(state)
+    })
+
+    shiny::observeEvent(input$redo, {
+      .redo(state)
+      .write_autosave(state)
+    })
+
+    ## A session that died mid-review left its work behind; offer it back
+    ## rather than letting the reviewer discover the loss themselves. Asked
+    ## once, when the editor opens.
+    shiny::observeEvent(TRUE, once = TRUE, {
+      recovered <- .read_autosave(state$source_path)
+      if (is.null(recovered)) return()
+
+      shiny::showModal(shiny::modalDialog(
+        title = "Unsaved changes from an earlier session",
+        shiny::p(
+          "A previous session left ", shiny::strong(nrow(recovered$edit_log)),
+          " unsaved change(s) to this file, last touched ",
+          format(recovered$saved_at, "%Y-%m-%d %H:%M"), "."
+        ),
+        shiny::p(class = "text-muted small",
+                 "The file on disk was never modified."),
+        footer = shiny::tagList(
+          shiny::actionButton(session$ns("discard_recovery"),
+                              "Start fresh"),
+          shiny::actionButton(session$ns("accept_recovery"),
+                              "Restore them", class = "btn-primary")
+        )
+      ))
+    })
+
+    shiny::observeEvent(input$accept_recovery, {
+      recovered <- .read_autosave(state$source_path)
+      if (!is.null(recovered)) {
+        .push_history(state)
+        .restore_snapshot(state, recovered)
+      }
+      shiny::removeModal()
+    })
+
+    shiny::observeEvent(input$discard_recovery, {
+      .clear_autosave(state$source_path)
+      shiny::removeModal()
     })
 
     ## Show what is about to be written before writing it. This doubles as
@@ -470,8 +553,9 @@ mod_save_server <- function(id, state) {
     shiny::observeEvent(input$confirm_save, {
       shiny::removeModal()
       shiny::stopApp(list(
-        model    = state$model(),
-        edit_log = state$edit_log()
+        model       = state$model(),
+        edit_log    = state$edit_log(),
+        source_path = state$source_path
       ))
     })
 

@@ -139,6 +139,10 @@ mod_detail_server <- function(id, state) {
     })
 
     output$detail <- shiny::renderUI({
+      ## Redraw on a new selection, and when something outside the panel
+      ## changed the model beneath it (undo, redo, a restored session).
+      state$refresh()
+
       selected <- state$selected()
       if (is.null(selected)) {
         return(shiny::div(
