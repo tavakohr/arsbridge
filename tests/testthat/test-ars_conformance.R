@@ -41,28 +41,82 @@ test_that("sanctioned extensions never surface as findings", {
   expect_false(any(grepl(pattern, findings$problem)))
 })
 
-test_that("the generator's known divergences are reported, not hidden", {
+test_that("a freshly generated event validates clean after stripping", {
   skip_if_not_installed("jsonvalidate")
 
+  ## The headline promise since 0.1.0.9012: beyond the documented extensions,
+  ## the generator emits exactly what the standard requires.
   findings <- ars_conformance(.conformance_fixture())
-  expect_gt(nrow(findings), 0)
+  expect_equal(nrow(findings), 0)
+})
 
-  ## Every analysis lacks the required reason and purpose.
-  reason <- findings[grepl("'reason'", findings$problem), ]
-  expect_gt(nrow(reason), 0)
-  expect_true(all(grepl("^/analyses/", reason$where)))
-  expect_true(any(grepl("'purpose'", findings$problem)))
+test_that("the generator now emits what the standard requires", {
+  ars <- .read_json(.conformance_fixture())
 
-  ## version is emitted as the string "1" where an integer is required.
-  version <- findings[findings$where == "/version", ]
-  expect_equal(version$problem, "must be integer")
+  analysis <- ars$analyses[[1]]
+  expect_equal(analysis$reason$controlledTerm, "SPECIFIED IN SAP")
+  expect_equal(analysis$purpose$controlledTerm, "EXPLORATORY OUTCOME MEASURE")
 
-  ## displays are flat where the standard wraps them as OrderedDisplay.
-  expect_true(any(grepl("'display'", findings$problem) &
-                    grepl("^/outputs/", findings$where)))
+  ## Integer versions, wrapped displays, terminology fileType, valid role
+  ## terms, named contents entries.
+  expect_identical(ars$version, 1L)
+  expect_identical(analysis$version, 1L)
 
-  ## fileType is a plain string where the standard wants a terminology
-  ## object.
+  entry <- ars$outputs[[1]]$displays[[1]]
+  expect_true(is.list(entry$display))
+  expect_true(nzchar(entry$display$id))
+  expect_true(nzchar(entry$display$name))
+
+  section <- entry$display$displaySections[[1]]
+  if (length(section$orderedSubSections) > 0) {
+    subsection <- section$orderedSubSections[[1]]$subSection
+    expect_true(nzchar(subsection$id))
+    expect_true(nzchar(subsection$text))
+  }
+
+  expect_equal(ars$outputs[[1]]$fileSpecifications[[1]]$fileType$controlledTerm,
+               "rtf")
+
+  role <- ars$methods[[1]]$operations[[1]]$
+    referencedOperationRelationships[[1]]$referencedOperationRole
+  expect_true(role$controlledTerm %in% c("NUMERATOR", "DENOMINATOR"))
+
+  item <- ars$mainListOfContents$contentsList$listItems[[1]]$
+    sublist$listItems[[1]]
+  expect_true(nzchar(item$name))
+})
+
+test_that("files from before 0.1.0.9012 still have their divergences reported", {
+  skip_if_not_installed("jsonvalidate")
+
+  ## The shapes the generator used to emit: string version, flat display,
+  ## string fileType, no reason/purpose.
+  old_shape <- list(
+    id = "S", name = "S", version = "1",
+    mainListOfContents = list(
+      name = "LOPA", label = "LOPA",
+      contentsList = list(listItems = list())
+    ),
+    analyses = list(list(
+      id = "AN_1", name = "AN_1", methodId = "MTH_X", version = "1"
+    )),
+    methods = list(list(
+      id = "MTH_X", name = "X",
+      operations = list(list(id = "OP_1", name = "n"))
+    )),
+    outputs = list(list(
+      id = "T_1", name = "T-1", version = "1",
+      displays = list(list(order = 1L, displayTitle = "Flat display")),
+      fileSpecifications = list(list(name = "T-1.rtf", fileType = "rtf"))
+    ))
+  )
+
+  findings <- ars_conformance(old_shape)
+
+  expect_true(any(grepl("'reason'", findings$problem)))
+  expect_true(any(findings$where == "/version" &
+                    findings$problem == "must be integer"))
+  expect_true(any(grepl("'displayTitle'", findings$problem)))
   expect_true(any(grepl("/fileType$", findings$where)))
 })
 
@@ -143,5 +197,5 @@ test_that("saving mentions the conformance count without ever failing on it", {
     }
   )
 
-  expect_true(any(grepl("schema note", messages)))
+  expect_true(any(grepl("schema note|Conforms to the ARS", messages)))
 })

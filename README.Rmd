@@ -136,7 +136,9 @@ sidecar `.edits.json` so the ARS JSON itself stays CDISC-clean --
 
 Every change is undoable, and a session that dies is offered back the next
 time you open the same file, so a review cannot be lost to a mis-click or a
-crashed browser.
+crashed browser. `ars_conformance()` checks any reporting event against
+the official CDISC ARS v1.0 schema (vendored and pinned in the package), and
+a freshly generated event validates clean.
 
 Use `view_ars()` for the same view without the ability to change anything, and
 `validate_ars_model()` for the findings on the command line. The viewer needs

@@ -1,7 +1,7 @@
 {
   "id": "APX-DRM-301",
   "name": "PROSVALIN Phase 3 in Atopic Dermatitis (training example)",
-  "version": "1",
+  "version": 1,
   "otherListsOfContents": [
     {
       "name": "List of Planned Outputs",
@@ -97,31 +97,37 @@
           "sublist": {
             "listItems": [
               {
+                "name": "AN_T_14_1_1_001",
                 "analysisId": "AN_T_14_1_1_001",
                 "level": 2,
                 "order": 1
               },
               {
+                "name": "AN_T_14_1_1_002",
                 "analysisId": "AN_T_14_1_1_002",
                 "level": 2,
                 "order": 2
               },
               {
+                "name": "AN_T_14_1_1_003",
                 "analysisId": "AN_T_14_1_1_003",
                 "level": 2,
                 "order": 3
               },
               {
+                "name": "AN_T_14_1_1_004",
                 "analysisId": "AN_T_14_1_1_004",
                 "level": 2,
                 "order": 4
               },
               {
+                "name": "AN_T_14_1_1_005",
                 "analysisId": "AN_T_14_1_1_005",
                 "level": 2,
                 "order": 5
               },
               {
+                "name": "AN_T_14_1_1_006",
                 "analysisId": "AN_T_14_1_1_006",
                 "level": 2,
                 "order": 6
@@ -137,91 +143,109 @@
           "sublist": {
             "listItems": [
               {
+                "name": "AN_T_14_1_2_001",
                 "analysisId": "AN_T_14_1_2_001",
                 "level": 2,
                 "order": 1
               },
               {
+                "name": "AN_T_14_1_2_002",
                 "analysisId": "AN_T_14_1_2_002",
                 "level": 2,
                 "order": 2
               },
               {
+                "name": "AN_T_14_1_2_003",
                 "analysisId": "AN_T_14_1_2_003",
                 "level": 2,
                 "order": 3
               },
               {
+                "name": "AN_T_14_1_2_004",
                 "analysisId": "AN_T_14_1_2_004",
                 "level": 2,
                 "order": 4
               },
               {
+                "name": "AN_T_14_1_2_005",
                 "analysisId": "AN_T_14_1_2_005",
                 "level": 2,
                 "order": 5
               },
               {
+                "name": "AN_T_14_1_2_006",
                 "analysisId": "AN_T_14_1_2_006",
                 "level": 2,
                 "order": 6
               },
               {
+                "name": "AN_T_14_1_2_007",
                 "analysisId": "AN_T_14_1_2_007",
                 "level": 2,
                 "order": 7
               },
               {
+                "name": "AN_T_14_1_2_008",
                 "analysisId": "AN_T_14_1_2_008",
                 "level": 2,
                 "order": 8
               },
               {
+                "name": "AN_T_14_1_2_009",
                 "analysisId": "AN_T_14_1_2_009",
                 "level": 2,
                 "order": 9
               },
               {
+                "name": "AN_T_14_1_2_010",
                 "analysisId": "AN_T_14_1_2_010",
                 "level": 2,
                 "order": 10
               },
               {
+                "name": "AN_T_14_1_2_011",
                 "analysisId": "AN_T_14_1_2_011",
                 "level": 2,
                 "order": 11
               },
               {
+                "name": "AN_T_14_1_2_012",
                 "analysisId": "AN_T_14_1_2_012",
                 "level": 2,
                 "order": 12
               },
               {
+                "name": "AN_T_14_1_2_013",
                 "analysisId": "AN_T_14_1_2_013",
                 "level": 2,
                 "order": 13
               },
               {
+                "name": "AN_T_14_1_2_014",
                 "analysisId": "AN_T_14_1_2_014",
                 "level": 2,
                 "order": 14
               },
               {
+                "name": "AN_T_14_1_2_015",
                 "analysisId": "AN_T_14_1_2_015",
                 "level": 2,
                 "order": 15
               },
               {
+                "name": "AN_T_14_1_2_016",
                 "analysisId": "AN_T_14_1_2_016",
                 "level": 2,
                 "order": 16
               },
               {
+                "name": "AN_T_14_1_2_017",
                 "analysisId": "AN_T_14_1_2_017",
                 "level": 2,
                 "order": 17
               },
               {
+                "name": "AN_T_14_1_2_018",
                 "analysisId": "AN_T_14_1_2_018",
                 "level": 2,
                 "order": 18
@@ -237,16 +261,19 @@
           "sublist": {
             "listItems": [
               {
+                "name": "AN_T_14_1_3_001",
                 "analysisId": "AN_T_14_1_3_001",
                 "level": 2,
                 "order": 1
               },
               {
+                "name": "AN_T_14_1_3_001",
                 "analysisId": "AN_T_14_1_3_001",
                 "level": 2,
                 "order": 2
               },
               {
+                "name": "AN_T_14_1_3_001",
                 "analysisId": "AN_T_14_1_3_001",
                 "level": 2,
                 "order": 3
@@ -262,16 +289,19 @@
           "sublist": {
             "listItems": [
               {
+                "name": "AN_T_14_1_4_001",
                 "analysisId": "AN_T_14_1_4_001",
                 "level": 2,
                 "order": 1
               },
               {
+                "name": "AN_T_14_1_4_001",
                 "analysisId": "AN_T_14_1_4_001",
                 "level": 2,
                 "order": 2
               },
               {
+                "name": "AN_T_14_1_4_001",
                 "analysisId": "AN_T_14_1_4_001",
                 "level": 2,
                 "order": 3
@@ -287,31 +317,37 @@
           "sublist": {
             "listItems": [
               {
+                "name": "AN_T_14_1_5_001",
                 "analysisId": "AN_T_14_1_5_001",
                 "level": 2,
                 "order": 1
               },
               {
+                "name": "AN_T_14_1_5_002",
                 "analysisId": "AN_T_14_1_5_002",
                 "level": 2,
                 "order": 2
               },
               {
+                "name": "AN_T_14_1_5_003",
                 "analysisId": "AN_T_14_1_5_003",
                 "level": 2,
                 "order": 3
               },
               {
+                "name": "AN_T_14_1_5_004",
                 "analysisId": "AN_T_14_1_5_004",
                 "level": 2,
                 "order": 4
               },
               {
+                "name": "AN_T_14_1_5_005",
                 "analysisId": "AN_T_14_1_5_005",
                 "level": 2,
                 "order": 5
               },
               {
+                "name": "AN_T_14_1_5_006",
                 "analysisId": "AN_T_14_1_5_006",
                 "level": 2,
                 "order": 6
@@ -327,26 +363,31 @@
           "sublist": {
             "listItems": [
               {
+                "name": "AN_T_14_2_1_001",
                 "analysisId": "AN_T_14_2_1_001",
                 "level": 2,
                 "order": 1
               },
               {
+                "name": "AN_T_14_2_1_002",
                 "analysisId": "AN_T_14_2_1_002",
                 "level": 2,
                 "order": 2
               },
               {
+                "name": "AN_T_14_2_1_003",
                 "analysisId": "AN_T_14_2_1_003",
                 "level": 2,
                 "order": 3
               },
               {
+                "name": "AN_T_14_2_1_004",
                 "analysisId": "AN_T_14_2_1_004",
                 "level": 2,
                 "order": 4
               },
               {
+                "name": "AN_T_14_2_1_005",
                 "analysisId": "AN_T_14_2_1_005",
                 "level": 2,
                 "order": 5
@@ -362,26 +403,31 @@
           "sublist": {
             "listItems": [
               {
+                "name": "AN_T_14_2_2_001",
                 "analysisId": "AN_T_14_2_2_001",
                 "level": 2,
                 "order": 1
               },
               {
+                "name": "AN_T_14_2_2_002",
                 "analysisId": "AN_T_14_2_2_002",
                 "level": 2,
                 "order": 2
               },
               {
+                "name": "AN_T_14_2_2_003",
                 "analysisId": "AN_T_14_2_2_003",
                 "level": 2,
                 "order": 3
               },
               {
+                "name": "AN_T_14_2_2_004",
                 "analysisId": "AN_T_14_2_2_004",
                 "level": 2,
                 "order": 4
               },
               {
+                "name": "AN_T_14_2_2_005",
                 "analysisId": "AN_T_14_2_2_005",
                 "level": 2,
                 "order": 5
@@ -397,36 +443,43 @@
           "sublist": {
             "listItems": [
               {
+                "name": "AN_T_14_3_1_001",
                 "analysisId": "AN_T_14_3_1_001",
                 "level": 2,
                 "order": 1
               },
               {
+                "name": "AN_T_14_3_1_002",
                 "analysisId": "AN_T_14_3_1_002",
                 "level": 2,
                 "order": 2
               },
               {
+                "name": "AN_T_14_3_1_003",
                 "analysisId": "AN_T_14_3_1_003",
                 "level": 2,
                 "order": 3
               },
               {
+                "name": "AN_T_14_3_1_004",
                 "analysisId": "AN_T_14_3_1_004",
                 "level": 2,
                 "order": 4
               },
               {
+                "name": "AN_T_14_3_1_005",
                 "analysisId": "AN_T_14_3_1_005",
                 "level": 2,
                 "order": 5
               },
               {
+                "name": "AN_T_14_3_1_006",
                 "analysisId": "AN_T_14_3_1_006",
                 "level": 2,
                 "order": 6
               },
               {
+                "name": "AN_T_14_3_1_007",
                 "analysisId": "AN_T_14_3_1_007",
                 "level": 2,
                 "order": 7
@@ -840,7 +893,7 @@
               "operationId": "OP_N",
               "description": "",
               "referencedOperationRole": {
-                "controlledTerm": ""
+                "controlledTerm": "NUMERATOR"
               }
             }
           ]
@@ -857,7 +910,7 @@
               "operationId": "OP_PCT",
               "description": "",
               "referencedOperationRole": {
-                "controlledTerm": ""
+                "controlledTerm": "NUMERATOR"
               }
             }
           ]
@@ -874,7 +927,7 @@
               "operationId": "OP_DENOM",
               "description": "",
               "referencedOperationRole": {
-                "controlledTerm": ""
+                "controlledTerm": "NUMERATOR"
               }
             }
           ]
@@ -910,7 +963,7 @@
               "operationId": "OP_N",
               "description": "",
               "referencedOperationRole": {
-                "controlledTerm": ""
+                "controlledTerm": "NUMERATOR"
               }
             }
           ]
@@ -940,7 +993,7 @@
               "operationId": "OP_N",
               "description": "",
               "referencedOperationRole": {
-                "controlledTerm": ""
+                "controlledTerm": "NUMERATOR"
               }
             }
           ]
@@ -957,7 +1010,7 @@
               "operationId": "OP_MEAN",
               "description": "",
               "referencedOperationRole": {
-                "controlledTerm": ""
+                "controlledTerm": "NUMERATOR"
               }
             }
           ]
@@ -974,7 +1027,7 @@
               "operationId": "OP_SD",
               "description": "",
               "referencedOperationRole": {
-                "controlledTerm": ""
+                "controlledTerm": "NUMERATOR"
               }
             }
           ]
@@ -991,7 +1044,7 @@
               "operationId": "OP_MEDIAN",
               "description": "",
               "referencedOperationRole": {
-                "controlledTerm": ""
+                "controlledTerm": "NUMERATOR"
               }
             }
           ]
@@ -1008,7 +1061,7 @@
               "operationId": "OP_Q1",
               "description": "",
               "referencedOperationRole": {
-                "controlledTerm": ""
+                "controlledTerm": "NUMERATOR"
               }
             }
           ]
@@ -1025,7 +1078,7 @@
               "operationId": "OP_Q3",
               "description": "",
               "referencedOperationRole": {
-                "controlledTerm": ""
+                "controlledTerm": "NUMERATOR"
               }
             }
           ]
@@ -1042,7 +1095,7 @@
               "operationId": "OP_MIN",
               "description": "",
               "referencedOperationRole": {
-                "controlledTerm": ""
+                "controlledTerm": "NUMERATOR"
               }
             }
           ]
@@ -1059,7 +1112,7 @@
               "operationId": "OP_MAX",
               "description": "",
               "referencedOperationRole": {
-                "controlledTerm": ""
+                "controlledTerm": "NUMERATOR"
               }
             }
           ]
@@ -1096,7 +1149,7 @@
               "operationId": "OP_STAT",
               "description": "",
               "referencedOperationRole": {
-                "controlledTerm": ""
+                "controlledTerm": "NUMERATOR"
               }
             }
           ]
@@ -1127,7 +1180,7 @@
               "operationId": "OP_STAT",
               "description": "",
               "referencedOperationRole": {
-                "controlledTerm": ""
+                "controlledTerm": "NUMERATOR"
               }
             }
           ]
@@ -1158,7 +1211,7 @@
               "operationId": "OP_MANUAL",
               "description": "",
               "referencedOperationRole": {
-                "controlledTerm": ""
+                "controlledTerm": "NUMERATOR"
               }
             }
           ]
@@ -1188,7 +1241,7 @@
               "operationId": "OP_N",
               "description": "",
               "referencedOperationRole": {
-                "controlledTerm": ""
+                "controlledTerm": "NUMERATOR"
               }
             }
           ]
@@ -1205,7 +1258,7 @@
               "operationId": "OP_PCT",
               "description": "",
               "referencedOperationRole": {
-                "controlledTerm": ""
+                "controlledTerm": "NUMERATOR"
               }
             }
           ]
@@ -1241,7 +1294,7 @@
               "operationId": "OP_PASS",
               "description": "",
               "referencedOperationRole": {
-                "controlledTerm": ""
+                "controlledTerm": "NUMERATOR"
               }
             }
           ]
@@ -1260,7 +1313,7 @@
       "name": "Analysis 1 for T-14-1-1",
       "label": "Randomized",
       "description": "Randomized",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_INTENT_TO_TREAT_POPULATION_ADSL_ITTFL_Y",
       "dataset": "ADSL",
@@ -1291,14 +1344,20 @@
       "annotation": "ADSL.RANDFL='Y'",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_1_002",
       "name": "Analysis 2 for T-14-1-1",
       "label": "Received ≥ 1 dose of study drug",
       "description": "Received ≥ 1 dose of study drug",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_INTENT_TO_TREAT_POPULATION_ADSL_ITTFL_Y",
       "dataset": "ADSL",
@@ -1329,14 +1388,20 @@
       "annotation": "ADSL.SAFFL='Y'",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_1_003",
       "name": "Analysis 3 for T-14-1-1",
       "label": "Completed Week 16 (placebo-controlled period)",
       "description": "Completed Week 16 (placebo-controlled period)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_INTENT_TO_TREAT_POPULATION_ADSL_ITTFL_Y",
       "dataset": "ADSL",
@@ -1367,14 +1432,20 @@
       "annotation": "ADSL.COMPW16='Y'",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_1_004",
       "name": "Analysis 4 for T-14-1-1",
       "label": "Completed Week 52",
       "description": "Completed Week 52",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_INTENT_TO_TREAT_POPULATION_ADSL_ITTFL_Y",
       "dataset": "ADSL",
@@ -1405,14 +1476,20 @@
       "annotation": "ADSL.COMPW52='Y'",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_1_005",
       "name": "Analysis 5 for T-14-1-1",
       "label": "Completed Week 140",
       "description": "Completed Week 140",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_INTENT_TO_TREAT_POPULATION_ADSL_ITTFL_Y",
       "dataset": "ADSL",
@@ -1443,14 +1520,20 @@
       "annotation": "ADSL.COMPW140='Y'",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_1_006",
       "name": "Analysis 6 for T-14-1-1",
       "label": "Discontinued Study Drug Through Week 140",
       "description": "Discontinued Study Drug Through Week 140",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_INTENT_TO_TREAT_POPULATION_ADSL_ITTFL_Y",
       "dataset": "ADSL",
@@ -1481,14 +1564,20 @@
       "annotation": "ADSL.DCSREASN",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_2_001",
       "name": "Analysis 1 for T-14-1-2",
       "label": "Age (years)",
       "description": "Age (years)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADSL",
@@ -1519,14 +1608,20 @@
       "annotation": "ADSL.AGE",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_2_002",
       "name": "Analysis 2 for T-14-1-2",
       "label": "Age Group, n (%)",
       "description": "Age Group, n (%)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADSL",
@@ -1557,14 +1652,20 @@
       "annotation": "ADSL.AGEGR1",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_2_003",
       "name": "Analysis 3 for T-14-1-2",
       "label": "Sex, n (%)",
       "description": "Sex, n (%)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADSL",
@@ -1595,14 +1696,20 @@
       "annotation": "ADSL.SEX",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_2_004",
       "name": "Analysis 4 for T-14-1-2",
       "label": "Race, n (%)",
       "description": "Race, n (%)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADSL",
@@ -1633,14 +1740,20 @@
       "annotation": "ADSL.RACE",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_2_005",
       "name": "Analysis 5 for T-14-1-2",
       "label": "Ethnicity, n (%)",
       "description": "Ethnicity, n (%)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADSL",
@@ -1671,14 +1784,20 @@
       "annotation": "ADSL.ETHNIC",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_2_006",
       "name": "Analysis 6 for T-14-1-2",
       "label": "Geographic Region, n (%)",
       "description": "Geographic Region, n (%)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADSL",
@@ -1709,14 +1828,20 @@
       "annotation": "ADSL.REGION",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_2_007",
       "name": "Analysis 7 for T-14-1-2",
       "label": "Body Weight (kg)",
       "description": "Body Weight (kg)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADSL",
@@ -1747,14 +1872,20 @@
       "annotation": "ADSL.WEIGHT",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_2_008",
       "name": "Analysis 8 for T-14-1-2",
       "label": "Body Mass Index (kg/m²)",
       "description": "Body Mass Index (kg/m²)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADSL",
@@ -1785,14 +1916,20 @@
       "annotation": "ADSL.BMI",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_2_009",
       "name": "Analysis 9 for T-14-1-2",
       "label": "Baseline EASI Total Score (range 0-72)",
       "description": "Baseline EASI Total Score (range 0-72)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADSL",
@@ -1823,14 +1960,20 @@
       "annotation": "ADSL.EASIBL",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_2_010",
       "name": "Analysis 10 for T-14-1-2",
       "label": "Baseline EASI Severity Category, n (%)",
       "description": "Baseline EASI Severity Category, n (%)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADSL",
@@ -1861,14 +2004,20 @@
       "annotation": "ADSL.EASIBLC",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_2_011",
       "name": "Analysis 11 for T-14-1-2",
       "label": "Baseline vIGA-AD, n (%)",
       "description": "Baseline vIGA-AD, n (%)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADSL",
@@ -1899,14 +2048,20 @@
       "annotation": "ADSL.IGABLC",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_2_012",
       "name": "Analysis 12 for T-14-1-2",
       "label": "Baseline % BSA Affected by AD",
       "description": "Baseline % BSA Affected by AD",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADSL",
@@ -1937,14 +2092,20 @@
       "annotation": "ADSL.BSABL",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_2_013",
       "name": "Analysis 13 for T-14-1-2",
       "label": "Baseline WP-NRS Score (range 0-10)",
       "description": "Baseline WP-NRS Score (range 0-10)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADSL",
@@ -1975,14 +2136,20 @@
       "annotation": "ADSL.WPNRSBL",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_2_014",
       "name": "Analysis 14 for T-14-1-2",
       "label": "Baseline POEM Total Score (range 0-28)",
       "description": "Baseline POEM Total Score (range 0-28)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADSL",
@@ -2013,14 +2180,20 @@
       "annotation": "ADSL.POEMBL",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_2_015",
       "name": "Analysis 15 for T-14-1-2",
       "label": "Baseline DLQI / CDLQI Total Score",
       "description": "Baseline DLQI / CDLQI Total Score",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADSL",
@@ -2051,14 +2224,20 @@
       "annotation": "ADSL.DLQIBL",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_2_016",
       "name": "Analysis 16 for T-14-1-2",
       "label": "Duration of Atopic Dermatitis (years)",
       "description": "Duration of Atopic Dermatitis (years)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADSL",
@@ -2089,14 +2268,20 @@
       "annotation": "ADSL.ADDUR",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_2_017",
       "name": "Analysis 17 for T-14-1-2",
       "label": "Atopic Comorbidities, n (%)",
       "description": "Atopic Comorbidities, n (%)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADSL",
@@ -2127,14 +2312,20 @@
       "annotation": "ADSL.ATOPCMB",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_2_018",
       "name": "Analysis 18 for T-14-1-2",
       "label": "Prior Systemic Therapy for AD, n (%)",
       "description": "Prior Systemic Therapy for AD, n (%)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADSL",
@@ -2165,14 +2356,20 @@
       "annotation": "ADSL.PRSYSTAD",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_3_001",
       "name": "Analysis 1 for T-14-1-3",
       "label": "Subjects with ≥ 1 concomitant medication",
       "description": "Subjects with ≥ 1 concomitant medication",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADCM",
@@ -2203,14 +2400,20 @@
       "annotation": "ADCM.CONTRTFL='Y'",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_4_001",
       "name": "Analysis 1 for T-14-1-4",
       "label": "Subjects with ≥ 1 TCS or TCI use during study",
       "description": "Subjects with ≥ 1 TCS or TCI use during study",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADCM",
@@ -2241,14 +2444,20 @@
       "annotation": "ADCM.ADCAT='TOPICAL THERAPY'",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_5_001",
       "name": "Analysis 1 for T-14-1-5",
       "label": "Duration of Exposure (years)",
       "description": "Duration of Exposure (years)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADEX",
@@ -2279,14 +2488,20 @@
       "annotation": "ADEX.TRTDUR",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_5_002",
       "name": "Analysis 2 for T-14-1-5",
       "label": "Total Patient-Years of Exposure",
       "description": "Total Patient-Years of Exposure",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADEX",
@@ -2317,14 +2532,20 @@
       "annotation": "Sum of ADEX.TRTDUR",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_5_003",
       "name": "Analysis 3 for T-14-1-5",
       "label": "Categorical Duration of Exposure, n (%)",
       "description": "Categorical Duration of Exposure, n (%)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADEX",
@@ -2355,14 +2576,20 @@
       "annotation": "ADEX.TRTDURGR",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_5_004",
       "name": "Analysis 4 for T-14-1-5",
       "label": "Cumulative Dose (mg)",
       "description": "Cumulative Dose (mg)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADEX",
@@ -2393,14 +2620,20 @@
       "annotation": "ADEX.CUMDOSE",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_5_005",
       "name": "Analysis 5 for T-14-1-5",
       "label": "Dose Intensity (% of planned)",
       "description": "Dose Intensity (% of planned)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADEX",
@@ -2431,14 +2664,20 @@
       "annotation": "ADEX.DOSEPCT",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_1_5_006",
       "name": "Analysis 6 for T-14-1-5",
       "label": "Subjects with ≥ 1 Dose Interruption, n (%)",
       "description": "Subjects with ≥ 1 Dose Interruption, n (%)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADEX",
@@ -2469,14 +2708,20 @@
       "annotation": "ADEX.DOSEINT",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_2_1_001",
       "name": "Analysis 1 for T-14-2-1",
       "label": "EASI 75 Response at Week 16",
       "description": "EASI 75 Response at Week 16",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_INTENT_TO_TREAT_POPULATION_ADSL_ITTFL_Y",
       "dataset": "ADEFF",
@@ -2507,14 +2752,20 @@
       "annotation": "ADEFF.PARAMCD='EASI75' and AVISITN=16 and AVAL=1",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_2_1_002",
       "name": "Analysis 2 for T-14-2-1",
       "label": "Pairwise Comparison vs. Placebo",
       "description": "Pairwise Comparison vs. Placebo",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_INTENT_TO_TREAT_POPULATION_ADSL_ITTFL_Y",
       "dataset": "ADEFF",
@@ -2545,14 +2796,20 @@
       "annotation": "ADEFF.PARAMCD='EASI75' (CMH at Wk 16)",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_2_1_003",
       "name": "Analysis 3 for T-14-2-1",
       "label": "Proportion of Subjects Achieving EASI 75 at Week 16 (Primary Endpoint)",
       "description": "Proportion of Subjects Achieving EASI 75 at Week 16 (Primary Endpoint)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_INTENT_TO_TREAT_POPULATION_ADSL_ITTFL_Y",
       "dataset": "ADEFF",
@@ -2583,14 +2840,20 @@
       "annotation": "",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_2_1_004",
       "name": "Analysis 4 for T-14-2-1",
       "label": "Proportion of Subjects Achieving EASI 75 at Week 16 (Primary Endpoint)",
       "description": "Proportion of Subjects Achieving EASI 75 at Week 16 (Primary Endpoint)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_INTENT_TO_TREAT_POPULATION_ADSL_ITTFL_Y",
       "dataset": "ADEFF",
@@ -2622,14 +2885,20 @@
       "sapDescription": "",
       "variableRole": "ANALYSIS",
       "includeTotal": false,
-      "strata": "BASELINE"
+      "strata": "BASELINE",
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_2_1_005",
       "name": "Analysis 5 for T-14-2-1",
       "label": "Manual",
       "description": "Manual",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_INTENT_TO_TREAT_POPULATION_ADSL_ITTFL_Y",
       "dataset": "ADEFF",
@@ -2660,14 +2929,20 @@
       "annotation": "",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_2_2_001",
       "name": "Analysis 1 for T-14-2-2",
       "label": "EASI 75 (≥ 75% improvement from baseline in EASI)",
       "description": "EASI 75 (≥ 75% improvement from baseline in EASI)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_INTENT_TO_TREAT_POPULATION_OBSERVED_CASES_WITHOUT_IMPUTATION_ADSL_ITTFL_Y",
       "dataset": "ADEFF",
@@ -2698,14 +2973,20 @@
       "annotation": "ADEFF.PARAMCD='EASI75'",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_2_2_002",
       "name": "Analysis 2 for T-14-2-2",
       "label": "EASI 90 (≥ 90% improvement from baseline in EASI)",
       "description": "EASI 90 (≥ 90% improvement from baseline in EASI)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_INTENT_TO_TREAT_POPULATION_OBSERVED_CASES_WITHOUT_IMPUTATION_ADSL_ITTFL_Y",
       "dataset": "ADEFF",
@@ -2736,14 +3017,20 @@
       "annotation": "ADEFF.PARAMCD='EASI90'",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_2_2_003",
       "name": "Analysis 3 for T-14-2-2",
       "label": "EASI 100 (100% improvement from baseline in EASI)",
       "description": "EASI 100 (100% improvement from baseline in EASI)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_INTENT_TO_TREAT_POPULATION_OBSERVED_CASES_WITHOUT_IMPUTATION_ADSL_ITTFL_Y",
       "dataset": "ADEFF",
@@ -2774,14 +3061,20 @@
       "annotation": "ADEFF.PARAMCD='EASI100'",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_2_2_004",
       "name": "Analysis 4 for T-14-2-2",
       "label": "EASI ≤ 3 (AHEAD optimal target for skin clearance)",
       "description": "EASI ≤ 3 (AHEAD optimal target for skin clearance)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_INTENT_TO_TREAT_POPULATION_OBSERVED_CASES_WITHOUT_IMPUTATION_ADSL_ITTFL_Y",
       "dataset": "ADEFF",
@@ -2812,14 +3105,20 @@
       "annotation": "ADEFF.PARAMCD='EASILE3'",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_2_2_005",
       "name": "Analysis 5 for T-14-2-2",
       "label": "EASI ≤ 7 (AHEAD moderate target for skin clearance)",
       "description": "EASI ≤ 7 (AHEAD moderate target for skin clearance)",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_INTENT_TO_TREAT_POPULATION_OBSERVED_CASES_WITHOUT_IMPUTATION_ADSL_ITTFL_Y",
       "dataset": "ADEFF",
@@ -2850,14 +3149,20 @@
       "annotation": "ADEFF.PARAMCD='EASILE7'",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_3_1_001",
       "name": "Analysis 1 for T-14-3-1",
       "label": "Any TEAE",
       "description": "Any TEAE",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADAE",
@@ -2888,14 +3193,20 @@
       "annotation": "ADAE.AETERM (any)",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_3_1_002",
       "name": "Analysis 2 for T-14-3-1",
       "label": "Any Serious TEAE",
       "description": "Any Serious TEAE",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADAE",
@@ -2926,14 +3237,20 @@
       "annotation": "ADAE.AESER='Y'",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_3_1_003",
       "name": "Analysis 3 for T-14-3-1",
       "label": "Any Severe TEAE",
       "description": "Any Severe TEAE",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADAE",
@@ -2964,14 +3281,20 @@
       "annotation": "ADAE.AESEV='SEVERE'",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_3_1_004",
       "name": "Analysis 4 for T-14-3-1",
       "label": "TEAE possibly related to study drug",
       "description": "TEAE possibly related to study drug",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADAE",
@@ -3002,14 +3325,20 @@
       "annotation": "ADAE.AEREL in ('POSSIBLE','PROBABLE','RELATED')",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_3_1_005",
       "name": "Analysis 5 for T-14-3-1",
       "label": "TEAE leading to study drug discontinuation",
       "description": "TEAE leading to study drug discontinuation",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADAE",
@@ -3040,14 +3369,20 @@
       "annotation": "ADAE.AEACN='DRUG WITHDRAWN'",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_3_1_006",
       "name": "Analysis 6 for T-14-3-1",
       "label": "TEAE leading to dose modification",
       "description": "TEAE leading to dose modification",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADAE",
@@ -3078,14 +3413,20 @@
       "annotation": "ADAE.AEACN in ('DOSE REDUCED','DRUG INTERRUPTED')",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     },
     {
       "id": "AN_T_14_3_1_007",
       "name": "Analysis 7 for T-14-3-1",
       "label": "Deaths",
       "description": "Deaths",
-      "version": "1",
+      "version": 1,
       "categoryIds": [],
       "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
       "dataset": "ADAE",
@@ -3116,7 +3457,13 @@
       "annotation": "ADAE.AESDTH='Y'",
       "sapDescription": "",
       "variableRole": "ANALYSIS",
-      "includeTotal": false
+      "includeTotal": false,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
     }
   ],
   "outputs": [
@@ -3124,42 +3471,52 @@
       "id": "T_14_1_1",
       "name": "T-14-1-1",
       "label": "Subject Disposition Through Week 140",
-      "version": "1",
+      "version": 1,
       "outputType": "TABLE",
       "displays": [
         {
           "order": 1,
-          "displayTitle": "Subject Disposition Through Week 140",
-          "columns": [
-            {
-              "label": "Disposition"
-            },
-            {
-              "label": "UPADALIMIB 15 mg (N=200) n (%)"
-            },
-            {
-              "label": "UPADALIMIB 30 mg (N=200) n (%)"
-            },
-            {
-              "label": "Placebo (N=200) n (%)"
-            }
-          ],
-          "displaySections": [
-            {
-              "sectionType": "Footnote",
-              "subSections": [
-                {
-                  "text": "Percentages are based on the number of randomized subjects in each treatment group. The placebo arm includes subjects through Week 16 only; from Week 16 onward, placebo subjects were re-randomized 1:1 to UPADALIMIB 15 mg or 30 mg."
-                }
-              ]
-            }
-          ]
+          "display": {
+            "id": "T_14_1_1_D1",
+            "name": "Subject Disposition Through Week 140",
+            "displayTitle": "Subject Disposition Through Week 140",
+            "columns": [
+              {
+                "label": "Disposition"
+              },
+              {
+                "label": "UPADALIMIB 15 mg (N=200) n (%)"
+              },
+              {
+                "label": "UPADALIMIB 30 mg (N=200) n (%)"
+              },
+              {
+                "label": "Placebo (N=200) n (%)"
+              }
+            ],
+            "displaySections": [
+              {
+                "sectionType": "Footnote",
+                "orderedSubSections": [
+                  {
+                    "order": 1,
+                    "subSection": {
+                      "id": "T_14_1_1_D1_FN1",
+                      "text": "Percentages are based on the number of randomized subjects in each treatment group. The placebo arm includes subjects through Week 16 only; from Week 16 onward, placebo subjects were re-randomized 1:1 to UPADALIMIB 15 mg or 30 mg."
+                    }
+                  }
+                ]
+              }
+            ]
+          }
         }
       ],
       "fileSpecifications": [
         {
           "name": "T-14-1-1.rtf",
-          "fileType": "rtf"
+          "fileType": {
+            "controlledTerm": "rtf"
+          }
         }
       ],
       "referencedAnalysisIds": [
@@ -3280,42 +3637,52 @@
       "id": "T_14_1_2",
       "name": "T-14-1-2",
       "label": "Subject Demographics and Baseline Atopic Dermatitis Characteristics",
-      "version": "1",
+      "version": 1,
       "outputType": "TABLE",
       "displays": [
         {
           "order": 1,
-          "displayTitle": "Subject Demographics and Baseline Atopic Dermatitis Characteristics",
-          "columns": [
-            {
-              "label": "Characteristic"
-            },
-            {
-              "label": "UPADALIMIB 15 mg (N=200)"
-            },
-            {
-              "label": "UPADALIMIB 30 mg (N=200)"
-            },
-            {
-              "label": "Placebo (N=200)"
-            }
-          ],
-          "displaySections": [
-            {
-              "sectionType": "Footnote",
-              "subSections": [
-                {
-                  "text": "EASI ranges from 0-72 (higher = worse). vIGA-AD ranges from 0 (clear) to 4 (severe). WP-NRS ranges from 0 (no itch) to 10 (worst itch imaginable). POEM ranges from 0-28 (higher = worse). DLQI ranges from 0-30 (CDLQI used for adolescents)."
-                }
-              ]
-            }
-          ]
+          "display": {
+            "id": "T_14_1_2_D1",
+            "name": "Subject Demographics and Baseline Atopic Dermatitis Characteristics",
+            "displayTitle": "Subject Demographics and Baseline Atopic Dermatitis Characteristics",
+            "columns": [
+              {
+                "label": "Characteristic"
+              },
+              {
+                "label": "UPADALIMIB 15 mg (N=200)"
+              },
+              {
+                "label": "UPADALIMIB 30 mg (N=200)"
+              },
+              {
+                "label": "Placebo (N=200)"
+              }
+            ],
+            "displaySections": [
+              {
+                "sectionType": "Footnote",
+                "orderedSubSections": [
+                  {
+                    "order": 1,
+                    "subSection": {
+                      "id": "T_14_1_2_D1_FN1",
+                      "text": "EASI ranges from 0-72 (higher = worse). vIGA-AD ranges from 0 (clear) to 4 (severe). WP-NRS ranges from 0 (no itch) to 10 (worst itch imaginable). POEM ranges from 0-28 (higher = worse). DLQI ranges from 0-30 (CDLQI used for adolescents)."
+                    }
+                  }
+                ]
+              }
+            ]
+          }
         }
       ],
       "fileSpecifications": [
         {
           "name": "T-14-1-2.rtf",
-          "fileType": "rtf"
+          "fileType": {
+            "controlledTerm": "rtf"
+          }
         }
       ],
       "referencedAnalysisIds": [
@@ -3882,42 +4249,52 @@
       "id": "T_14_1_3",
       "name": "T-14-1-3",
       "label": "Concomitant Medications by ATC Level 3 Class and Preferred Term",
-      "version": "1",
+      "version": 1,
       "outputType": "TABLE",
       "displays": [
         {
           "order": 1,
-          "displayTitle": "Concomitant Medications by ATC Level 3 Class and Preferred Term",
-          "columns": [
-            {
-              "label": "ATC Level 3 Class / Preferred Term"
-            },
-            {
-              "label": "UPADALIMIB 15 mg (N=200) n (%)"
-            },
-            {
-              "label": "UPADALIMIB 30 mg (N=200) n (%)"
-            },
-            {
-              "label": "Placebo (N=200) n (%)"
-            }
-          ],
-          "displaySections": [
-            {
-              "sectionType": "Footnote",
-              "subSections": [
-                {
-                  "text": "Concomitant medications are coded using WHO Drug Dictionary. A medication is considered concomitant if taken at any time between first dose of study drug and 30 days after last dose. Subjects are counted once per Preferred Term, regardless of frequency of use."
-                }
-              ]
-            }
-          ]
+          "display": {
+            "id": "T_14_1_3_D1",
+            "name": "Concomitant Medications by ATC Level 3 Class and Preferred Term",
+            "displayTitle": "Concomitant Medications by ATC Level 3 Class and Preferred Term",
+            "columns": [
+              {
+                "label": "ATC Level 3 Class / Preferred Term"
+              },
+              {
+                "label": "UPADALIMIB 15 mg (N=200) n (%)"
+              },
+              {
+                "label": "UPADALIMIB 30 mg (N=200) n (%)"
+              },
+              {
+                "label": "Placebo (N=200) n (%)"
+              }
+            ],
+            "displaySections": [
+              {
+                "sectionType": "Footnote",
+                "orderedSubSections": [
+                  {
+                    "order": 1,
+                    "subSection": {
+                      "id": "T_14_1_3_D1_FN1",
+                      "text": "Concomitant medications are coded using WHO Drug Dictionary. A medication is considered concomitant if taken at any time between first dose of study drug and 30 days after last dose. Subjects are counted once per Preferred Term, regardless of frequency of use."
+                    }
+                  }
+                ]
+              }
+            ]
+          }
         }
       ],
       "fileSpecifications": [
         {
           "name": "T-14-1-3.rtf",
-          "fileType": "rtf"
+          "fileType": {
+            "controlledTerm": "rtf"
+          }
         }
       ],
       "referencedAnalysisIds": [
@@ -4117,42 +4494,52 @@
       "id": "T_14_1_4",
       "name": "T-14-1-4",
       "label": "Topical Corticosteroid (TCS) and Topical Calcineurin Inhibitor (TCI) Use Through Week 140",
-      "version": "1",
+      "version": 1,
       "outputType": "TABLE",
       "displays": [
         {
           "order": 1,
-          "displayTitle": "Topical Corticosteroid (TCS) and Topical Calcineurin Inhibitor (TCI) Use Through Week 140",
-          "columns": [
-            {
-              "label": "Topical Therapy Use"
-            },
-            {
-              "label": "UPADALIMIB 15 mg (N=200) n (%)"
-            },
-            {
-              "label": "UPADALIMIB 30 mg (N=200) n (%)"
-            },
-            {
-              "label": "Placebo (N=200) n (%)"
-            }
-          ],
-          "displaySections": [
-            {
-              "sectionType": "Footnote",
-              "subSections": [
-                {
-                  "text": "Topical therapies for AD include TCS and TCI. Use is captured at each scheduled study visit for the prior 4-week period. The denominator at each visit is the number of subjects on study at that visit."
-                }
-              ]
-            }
-          ]
+          "display": {
+            "id": "T_14_1_4_D1",
+            "name": "Topical Corticosteroid (TCS) and Topical Calcineurin Inhibitor (TCI) Use Through Week 140",
+            "displayTitle": "Topical Corticosteroid (TCS) and Topical Calcineurin Inhibitor (TCI) Use Through Week 140",
+            "columns": [
+              {
+                "label": "Topical Therapy Use"
+              },
+              {
+                "label": "UPADALIMIB 15 mg (N=200) n (%)"
+              },
+              {
+                "label": "UPADALIMIB 30 mg (N=200) n (%)"
+              },
+              {
+                "label": "Placebo (N=200) n (%)"
+              }
+            ],
+            "displaySections": [
+              {
+                "sectionType": "Footnote",
+                "orderedSubSections": [
+                  {
+                    "order": 1,
+                    "subSection": {
+                      "id": "T_14_1_4_D1_FN1",
+                      "text": "Topical therapies for AD include TCS and TCI. Use is captured at each scheduled study visit for the prior 4-week period. The denominator at each visit is the number of subjects on study at that visit."
+                    }
+                  }
+                ]
+              }
+            ]
+          }
         }
       ],
       "fileSpecifications": [
         {
           "name": "T-14-1-4.rtf",
-          "fileType": "rtf"
+          "fileType": {
+            "controlledTerm": "rtf"
+          }
         }
       ],
       "referencedAnalysisIds": [
@@ -4205,42 +4592,52 @@
       "id": "T_14_1_5",
       "name": "T-14-1-5",
       "label": "Study Drug Exposure Through Week 140",
-      "version": "1",
+      "version": 1,
       "outputType": "TABLE",
       "displays": [
         {
           "order": 1,
-          "displayTitle": "Study Drug Exposure Through Week 140",
-          "columns": [
-            {
-              "label": "Exposure Parameter"
-            },
-            {
-              "label": "UPADALIMIB 15 mg (N=200)"
-            },
-            {
-              "label": "UPADALIMIB 30 mg (N=200)"
-            },
-            {
-              "label": "Placebo (N=200)"
-            }
-          ],
-          "displaySections": [
-            {
-              "sectionType": "Footnote",
-              "subSections": [
-                {
-                  "text": "Duration of exposure = (date of last dose - date of first dose + 1) / 365.25. Cumulative dose = sum of all daily doses received. Dose intensity = (cumulative dose / planned dose during exposure period) × 100."
-                }
-              ]
-            }
-          ]
+          "display": {
+            "id": "T_14_1_5_D1",
+            "name": "Study Drug Exposure Through Week 140",
+            "displayTitle": "Study Drug Exposure Through Week 140",
+            "columns": [
+              {
+                "label": "Exposure Parameter"
+              },
+              {
+                "label": "UPADALIMIB 15 mg (N=200)"
+              },
+              {
+                "label": "UPADALIMIB 30 mg (N=200)"
+              },
+              {
+                "label": "Placebo (N=200)"
+              }
+            ],
+            "displaySections": [
+              {
+                "sectionType": "Footnote",
+                "orderedSubSections": [
+                  {
+                    "order": 1,
+                    "subSection": {
+                      "id": "T_14_1_5_D1_FN1",
+                      "text": "Duration of exposure = (date of last dose - date of first dose + 1) / 365.25. Cumulative dose = sum of all daily doses received. Dose intensity = (cumulative dose / planned dose during exposure period) × 100."
+                    }
+                  }
+                ]
+              }
+            ]
+          }
         }
       ],
       "fileSpecifications": [
         {
           "name": "T-14-1-5.rtf",
-          "fileType": "rtf"
+          "fileType": {
+            "controlledTerm": "rtf"
+          }
         }
       ],
       "referencedAnalysisIds": [
@@ -4424,54 +4821,80 @@
       "id": "T_14_2_1",
       "name": "T-14-2-1",
       "label": "Proportion of Subjects Achieving EASI 75 at Week 16 (Primary Endpoint)",
-      "version": "1",
+      "version": 1,
       "outputType": "TABLE",
       "displays": [
         {
           "order": 1,
-          "displayTitle": "Proportion of Subjects Achieving EASI 75 at Week 16 (Primary Endpoint)",
-          "columns": [
-            {
-              "label": "Statistic"
-            },
-            {
-              "label": "UPADALIMIB 15 mg (N=200)"
-            },
-            {
-              "label": "UPADALIMIB 30 mg (N=200)"
-            },
-            {
-              "label": "Placebo (N=200)"
-            }
-          ],
-          "displaySections": [
-            {
-              "sectionType": "Footnote",
-              "subSections": [
-                {
-                  "text": "[a] Number evaluable = subjects with non-missing EASI assessment at Week 16."
-                },
-                {
-                  "text": "[b] 95% CIs computed using the Clopper-Pearson exact method."
-                },
-                {
-                  "text": "[c] Difference in response rate computed using the Newcombe method."
-                },
-                {
-                  "text": "[d] Cochran-Mantel-Haenszel test stratified by baseline vIGA-AD severity (3 vs. 4), age group (Adolescent vs. Adult), and geographic region."
-                },
-                {
-                  "text": "[e] Subjects who received rescue therapy or who had missing EASI at Week 16 are imputed as non-responders."
-                }
-              ]
-            }
-          ]
+          "display": {
+            "id": "T_14_2_1_D1",
+            "name": "Proportion of Subjects Achieving EASI 75 at Week 16 (Primary Endpoint)",
+            "displayTitle": "Proportion of Subjects Achieving EASI 75 at Week 16 (Primary Endpoint)",
+            "columns": [
+              {
+                "label": "Statistic"
+              },
+              {
+                "label": "UPADALIMIB 15 mg (N=200)"
+              },
+              {
+                "label": "UPADALIMIB 30 mg (N=200)"
+              },
+              {
+                "label": "Placebo (N=200)"
+              }
+            ],
+            "displaySections": [
+              {
+                "sectionType": "Footnote",
+                "orderedSubSections": [
+                  {
+                    "order": 1,
+                    "subSection": {
+                      "id": "T_14_2_1_D1_FN1",
+                      "text": "[a] Number evaluable = subjects with non-missing EASI assessment at Week 16."
+                    }
+                  },
+                  {
+                    "order": 2,
+                    "subSection": {
+                      "id": "T_14_2_1_D1_FN2",
+                      "text": "[b] 95% CIs computed using the Clopper-Pearson exact method."
+                    }
+                  },
+                  {
+                    "order": 3,
+                    "subSection": {
+                      "id": "T_14_2_1_D1_FN3",
+                      "text": "[c] Difference in response rate computed using the Newcombe method."
+                    }
+                  },
+                  {
+                    "order": 4,
+                    "subSection": {
+                      "id": "T_14_2_1_D1_FN4",
+                      "text": "[d] Cochran-Mantel-Haenszel test stratified by baseline vIGA-AD severity (3 vs. 4), age group (Adolescent vs. Adult), and geographic region."
+                    }
+                  },
+                  {
+                    "order": 5,
+                    "subSection": {
+                      "id": "T_14_2_1_D1_FN5",
+                      "text": "[e] Subjects who received rescue therapy or who had missing EASI at Week 16 are imputed as non-responders."
+                    }
+                  }
+                ]
+              }
+            ]
+          }
         }
       ],
       "fileSpecifications": [
         {
           "name": "T-14-2-1.rtf",
-          "fileType": "rtf"
+          "fileType": {
+            "controlledTerm": "rtf"
+          }
         }
       ],
       "referencedAnalysisIds": [
@@ -4491,48 +4914,62 @@
       "id": "T_14_2_2",
       "name": "T-14-2-2",
       "label": "Proportion of Subjects Achieving EASI Response Endpoints Through Week 140",
-      "version": "1",
+      "version": 1,
       "outputType": "TABLE",
       "displays": [
         {
           "order": 1,
-          "displayTitle": "Proportion of Subjects Achieving EASI Response Endpoints Through Week 140",
-          "columns": [
-            {
-              "label": "Endpoint"
-            },
-            {
-              "label": "Visit"
-            },
-            {
-              "label": "UPADALIMIB 15 mg (N=200) n/N' (%) [95% CI]"
-            },
-            {
-              "label": "UPADALIMIB 30 mg (N=200) n/N' (%) [95% CI]"
-            },
-            {
-              "label": "Placebo (N=200) n/N' (%) [95% CI]"
-            }
-          ],
-          "displaySections": [
-            {
-              "sectionType": "Footnote",
-              "subSections": [
-                {
-                  "text": "N' = number of subjects with non-missing EASI at the visit (denominator). 95% CIs computed using normal approximation to the binomial."
-                },
-                {
-                  "text": "Observed cases analysis: subjects with missing EASI at the visit are excluded from both numerator and denominator."
-                }
-              ]
-            }
-          ]
+          "display": {
+            "id": "T_14_2_2_D1",
+            "name": "Proportion of Subjects Achieving EASI Response Endpoints Through Week 140",
+            "displayTitle": "Proportion of Subjects Achieving EASI Response Endpoints Through Week 140",
+            "columns": [
+              {
+                "label": "Endpoint"
+              },
+              {
+                "label": "Visit"
+              },
+              {
+                "label": "UPADALIMIB 15 mg (N=200) n/N' (%) [95% CI]"
+              },
+              {
+                "label": "UPADALIMIB 30 mg (N=200) n/N' (%) [95% CI]"
+              },
+              {
+                "label": "Placebo (N=200) n/N' (%) [95% CI]"
+              }
+            ],
+            "displaySections": [
+              {
+                "sectionType": "Footnote",
+                "orderedSubSections": [
+                  {
+                    "order": 1,
+                    "subSection": {
+                      "id": "T_14_2_2_D1_FN1",
+                      "text": "N' = number of subjects with non-missing EASI at the visit (denominator). 95% CIs computed using normal approximation to the binomial."
+                    }
+                  },
+                  {
+                    "order": 2,
+                    "subSection": {
+                      "id": "T_14_2_2_D1_FN2",
+                      "text": "Observed cases analysis: subjects with missing EASI at the visit are excluded from both numerator and denominator."
+                    }
+                  }
+                ]
+              }
+            ]
+          }
         }
       ],
       "fileSpecifications": [
         {
           "name": "T-14-2-2.rtf",
-          "fileType": "rtf"
+          "fileType": {
+            "controlledTerm": "rtf"
+          }
         }
       ],
       "referencedAnalysisIds": [
@@ -4768,39 +5205,49 @@
       "id": "T_14_3_1",
       "name": "T-14-3-1",
       "label": "Overview of Treatment-Emergent Adverse Events Through Week 140 (Exposure-Adjusted)",
-      "version": "1",
+      "version": 1,
       "outputType": "TABLE",
       "displays": [
         {
           "order": 1,
-          "displayTitle": "Overview of Treatment-Emergent Adverse Events Through Week 140 (Exposure-Adjusted)",
-          "columns": [
-            {
-              "label": "Parameter"
-            },
-            {
-              "label": "UPADALIMIB 15 mg (N=200) PY = x,xxx.x E (E/100 PY)"
-            },
-            {
-              "label": "UPADALIMIB 30 mg (N=200) PY = x,xxx.x E (E/100 PY)"
-            }
-          ],
-          "displaySections": [
-            {
-              "sectionType": "Footnote",
-              "subSections": [
-                {
-                  "text": "E = number of events. E/100 PY = (number of events / total patient-years of exposure) × 100. TEAE = adverse event with onset on or after first dose of study drug, or pre-existing event that worsens after first dose. Subjects with multiple events of the same type are counted multiple times in E."
-                }
-              ]
-            }
-          ]
+          "display": {
+            "id": "T_14_3_1_D1",
+            "name": "Overview of Treatment-Emergent Adverse Events Through Week 140 (Exposure-Adjusted)",
+            "displayTitle": "Overview of Treatment-Emergent Adverse Events Through Week 140 (Exposure-Adjusted)",
+            "columns": [
+              {
+                "label": "Parameter"
+              },
+              {
+                "label": "UPADALIMIB 15 mg (N=200) PY = x,xxx.x E (E/100 PY)"
+              },
+              {
+                "label": "UPADALIMIB 30 mg (N=200) PY = x,xxx.x E (E/100 PY)"
+              }
+            ],
+            "displaySections": [
+              {
+                "sectionType": "Footnote",
+                "orderedSubSections": [
+                  {
+                    "order": 1,
+                    "subSection": {
+                      "id": "T_14_3_1_D1_FN1",
+                      "text": "E = number of events. E/100 PY = (number of events / total patient-years of exposure) × 100. TEAE = adverse event with onset on or after first dose of study drug, or pre-existing event that worsens after first dose. Subjects with multiple events of the same type are counted multiple times in E."
+                    }
+                  }
+                ]
+              }
+            ]
+          }
         }
       ],
       "fileSpecifications": [
         {
           "name": "T-14-3-1.rtf",
-          "fileType": "rtf"
+          "fileType": {
+            "controlledTerm": "rtf"
+          }
         }
       ],
       "referencedAnalysisIds": [
@@ -4874,39 +5321,49 @@
       "id": "T_14_3_2",
       "name": "T-14-3-2",
       "label": "Most Common Treatment-Emergent Adverse Events Through Week 140 (≥ 5 E/100 PY in any treatment group, by Preferred Term)",
-      "version": "1",
+      "version": 1,
       "outputType": "TABLE",
       "displays": [
         {
           "order": 1,
-          "displayTitle": "Most Common Treatment-Emergent Adverse Events Through Week 140 (≥ 5 E/100 PY in any treatment group, by Preferred Term)",
-          "columns": [
-            {
-              "label": "Preferred Term"
-            },
-            {
-              "label": "UPADALIMIB 15 mg (N=200) E (E/100 PY)"
-            },
-            {
-              "label": "UPADALIMIB 30 mg (N=200) E (E/100 PY)"
-            }
-          ],
-          "displaySections": [
-            {
-              "sectionType": "Footnote",
-              "subSections": [
-                {
-                  "text": "Most common TEAEs are defined as Preferred Terms with exposure-adjusted event rate ≥ 5 E/100 PY in either UPADALIMIB treatment group through Week 140. Adverse events are coded using MedDRA (current version at database lock). PTs are sorted in descending order by combined event rate across UPADALIMIB arms."
-                }
-              ]
-            }
-          ]
+          "display": {
+            "id": "T_14_3_2_D1",
+            "name": "Most Common Treatment-Emergent Adverse Events Through Week 140 (≥ 5 E/100 PY in any treatment group, by Preferred Term)",
+            "displayTitle": "Most Common Treatment-Emergent Adverse Events Through Week 140 (≥ 5 E/100 PY in any treatment group, by Preferred Term)",
+            "columns": [
+              {
+                "label": "Preferred Term"
+              },
+              {
+                "label": "UPADALIMIB 15 mg (N=200) E (E/100 PY)"
+              },
+              {
+                "label": "UPADALIMIB 30 mg (N=200) E (E/100 PY)"
+              }
+            ],
+            "displaySections": [
+              {
+                "sectionType": "Footnote",
+                "orderedSubSections": [
+                  {
+                    "order": 1,
+                    "subSection": {
+                      "id": "T_14_3_2_D1_FN1",
+                      "text": "Most common TEAEs are defined as Preferred Terms with exposure-adjusted event rate ≥ 5 E/100 PY in either UPADALIMIB treatment group through Week 140. Adverse events are coded using MedDRA (current version at database lock). PTs are sorted in descending order by combined event rate across UPADALIMIB arms."
+                    }
+                  }
+                ]
+              }
+            ]
+          }
         }
       ],
       "fileSpecifications": [
         {
           "name": "T-14-3-2.rtf",
-          "fileType": "rtf"
+          "fileType": {
+            "controlledTerm": "rtf"
+          }
         }
       ],
       "referencedAnalysisIds": [],
@@ -5027,38 +5484,60 @@
       "id": "F_14_2_1",
       "name": "F-14-2-1",
       "label": "EASI 75 / 90 / 100 Response Rates Over Time Through Week 140",
-      "version": "1",
+      "version": 1,
       "outputType": "FIGURE",
       "displays": [
         {
           "order": 1,
-          "displayTitle": "EASI 75 / 90 / 100 Response Rates Over Time Through Week 140",
-          "columns": [],
-          "displaySections": [
-            {
-              "sectionType": "Footnote",
-              "subSections": [
-                {
-                  "text": "[FIGURE PLACEHOLDER — line plot generated by SAS PROC SGPLOT]"
-                },
-                {
-                  "text": "Y-axis: Proportion of subjects (%) (with 95% CI error bars)"
-                },
-                {
-                  "text": "X-axis: Study Week (Baseline, 1, 2, 4, 8, 12, 16, 20, 24, 32, 40, 52, 64, 76, 88, 100, 112, 124, 140)"
-                },
-                {
-                  "text": "Series: one line per treatment arm (UPADALIMIB 15 mg, UPADALIMIB 30 mg, Placebo)"
-                }
-              ]
-            }
-          ]
+          "display": {
+            "id": "F_14_2_1_D1",
+            "name": "EASI 75 / 90 / 100 Response Rates Over Time Through Week 140",
+            "displayTitle": "EASI 75 / 90 / 100 Response Rates Over Time Through Week 140",
+            "columns": [],
+            "displaySections": [
+              {
+                "sectionType": "Footnote",
+                "orderedSubSections": [
+                  {
+                    "order": 1,
+                    "subSection": {
+                      "id": "F_14_2_1_D1_FN1",
+                      "text": "[FIGURE PLACEHOLDER — line plot generated by SAS PROC SGPLOT]"
+                    }
+                  },
+                  {
+                    "order": 2,
+                    "subSection": {
+                      "id": "F_14_2_1_D1_FN2",
+                      "text": "Y-axis: Proportion of subjects (%) (with 95% CI error bars)"
+                    }
+                  },
+                  {
+                    "order": 3,
+                    "subSection": {
+                      "id": "F_14_2_1_D1_FN3",
+                      "text": "X-axis: Study Week (Baseline, 1, 2, 4, 8, 12, 16, 20, 24, 32, 40, 52, 64, 76, 88, 100, 112, 124, 140)"
+                    }
+                  },
+                  {
+                    "order": 4,
+                    "subSection": {
+                      "id": "F_14_2_1_D1_FN4",
+                      "text": "Series: one line per treatment arm (UPADALIMIB 15 mg, UPADALIMIB 30 mg, Placebo)"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
         }
       ],
       "fileSpecifications": [
         {
           "name": "F-14-2-1.rtf",
-          "fileType": "rtf"
+          "fileType": {
+            "controlledTerm": "rtf"
+          }
         }
       ],
       "referencedAnalysisIds": [],
@@ -5072,63 +5551,73 @@
       "id": "L_16_2_4_1",
       "name": "L-16-2-4-1",
       "label": "All Treatment-Emergent Adverse Events",
-      "version": "1",
+      "version": 1,
       "outputType": "LISTING",
       "displays": [
         {
           "order": 1,
-          "displayTitle": "All Treatment-Emergent Adverse Events",
-          "columns": [
-            {
-              "label": "Subject ID USUBJID"
-            },
-            {
-              "label": "Arm ACTARMCD"
-            },
-            {
-              "label": "AE PT (Verbatim) AEDECOD (AETERM)"
-            },
-            {
-              "label": "SOC AEBODSYS"
-            },
-            {
-              "label": "Onset Date AESTDTC"
-            },
-            {
-              "label": "Duration ADUR"
-            },
-            {
-              "label": "Severity AESEV"
-            },
-            {
-              "label": "Serious? AESER"
-            },
-            {
-              "label": "Action AEACN"
-            },
-            {
-              "label": "Relationship AEREL"
-            },
-            {
-              "label": "Outcome AEOUT"
-            }
-          ],
-          "displaySections": [
-            {
-              "sectionType": "Footnote",
-              "subSections": [
-                {
-                  "text": "TEAEs are sorted by USUBJID, then by AE start date. AESI flag and adjudication status (where applicable) are shown in Listing 16.2.4.5."
-                }
-              ]
-            }
-          ]
+          "display": {
+            "id": "L_16_2_4_1_D1",
+            "name": "All Treatment-Emergent Adverse Events",
+            "displayTitle": "All Treatment-Emergent Adverse Events",
+            "columns": [
+              {
+                "label": "Subject ID USUBJID"
+              },
+              {
+                "label": "Arm ACTARMCD"
+              },
+              {
+                "label": "AE PT (Verbatim) AEDECOD (AETERM)"
+              },
+              {
+                "label": "SOC AEBODSYS"
+              },
+              {
+                "label": "Onset Date AESTDTC"
+              },
+              {
+                "label": "Duration ADUR"
+              },
+              {
+                "label": "Severity AESEV"
+              },
+              {
+                "label": "Serious? AESER"
+              },
+              {
+                "label": "Action AEACN"
+              },
+              {
+                "label": "Relationship AEREL"
+              },
+              {
+                "label": "Outcome AEOUT"
+              }
+            ],
+            "displaySections": [
+              {
+                "sectionType": "Footnote",
+                "orderedSubSections": [
+                  {
+                    "order": 1,
+                    "subSection": {
+                      "id": "L_16_2_4_1_D1_FN1",
+                      "text": "TEAEs are sorted by USUBJID, then by AE start date. AESI flag and adjudication status (where applicable) are shown in Listing 16.2.4.5."
+                    }
+                  }
+                ]
+              }
+            ]
+          }
         }
       ],
       "fileSpecifications": [
         {
           "name": "L-16-2-4-1.rtf",
-          "fileType": "rtf"
+          "fileType": {
+            "controlledTerm": "rtf"
+          }
         }
       ],
       "referencedAnalysisIds": [],
@@ -5142,63 +5631,73 @@
       "id": "L_16_2_7_1",
       "name": "L-16-2-7-1",
       "label": "Vital Signs",
-      "version": "1",
+      "version": 1,
       "outputType": "LISTING",
       "displays": [
         {
           "order": 1,
-          "displayTitle": "Vital Signs",
-          "columns": [
-            {
-              "label": "Subject ID USUBJID"
-            },
-            {
-              "label": "Arm ACTARMCD"
-            },
-            {
-              "label": "Visit VISIT"
-            },
-            {
-              "label": "Date ADT"
-            },
-            {
-              "label": "SBP (mmHg) SYSBP"
-            },
-            {
-              "label": "DBP (mmHg) DIABP"
-            },
-            {
-              "label": "HR (bpm) PULSE"
-            },
-            {
-              "label": "Temp (°C) TEMP"
-            },
-            {
-              "label": "Resp Rate RESP"
-            },
-            {
-              "label": "Weight (kg) WEIGHT"
-            },
-            {
-              "label": "Height (cm) HEIGHT"
-            }
-          ],
-          "displaySections": [
-            {
-              "sectionType": "Footnote",
-              "subSections": [
-                {
-                  "text": "Vital signs measured prior to dose administration after subject has been seated and at rest for at least 5 minutes. Height collected at screening only."
-                }
-              ]
-            }
-          ]
+          "display": {
+            "id": "L_16_2_7_1_D1",
+            "name": "Vital Signs",
+            "displayTitle": "Vital Signs",
+            "columns": [
+              {
+                "label": "Subject ID USUBJID"
+              },
+              {
+                "label": "Arm ACTARMCD"
+              },
+              {
+                "label": "Visit VISIT"
+              },
+              {
+                "label": "Date ADT"
+              },
+              {
+                "label": "SBP (mmHg) SYSBP"
+              },
+              {
+                "label": "DBP (mmHg) DIABP"
+              },
+              {
+                "label": "HR (bpm) PULSE"
+              },
+              {
+                "label": "Temp (°C) TEMP"
+              },
+              {
+                "label": "Resp Rate RESP"
+              },
+              {
+                "label": "Weight (kg) WEIGHT"
+              },
+              {
+                "label": "Height (cm) HEIGHT"
+              }
+            ],
+            "displaySections": [
+              {
+                "sectionType": "Footnote",
+                "orderedSubSections": [
+                  {
+                    "order": 1,
+                    "subSection": {
+                      "id": "L_16_2_7_1_D1_FN1",
+                      "text": "Vital signs measured prior to dose administration after subject has been seated and at rest for at least 5 minutes. Height collected at screening only."
+                    }
+                  }
+                ]
+              }
+            ]
+          }
         }
       ],
       "fileSpecifications": [
         {
           "name": "L-16-2-7-1.rtf",
-          "fileType": "rtf"
+          "fileType": {
+            "controlledTerm": "rtf"
+          }
         }
       ],
       "referencedAnalysisIds": [],
@@ -5210,8 +5709,8 @@
     }
   ],
   "_meta": {
-    "generator": "arsbridge 0.1.0.9005",
-    "generated_at_utc": "2026-07-24T00:13:18Z",
+    "generator": "arsbridge 0.1.0.9011",
+    "generated_at_utc": "2026-07-24T02:58:08Z",
     "ars_model_version": "1.0",
     "extraction_mode": "deterministic",
     "supplement_trust": null,

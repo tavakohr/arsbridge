@@ -47,8 +47,9 @@ test_that("ship_annotations = FALSE keeps annotations out of the ARS Footnote se
   re <- suppressMessages(suppressWarnings(
     build_ars_json(secs[1], spec_lookup = p$spec$lookup)))
   notes <- vapply(
-    re$outputs[[1]]$displays[[1]]$displaySections[[1]]$subSections,
-    function(ss) ss$text, character(1))
+    re$outputs[[1]]$displays[[1]]$display$displaySections[[1]]$
+      orderedSubSections,
+    function(ss) ss$subSection$text, character(1))
   expect_length(notes, 1)
   expect_false(any(grepl("->|DATASET|ADSL\\.", notes)))
 
@@ -56,8 +57,9 @@ test_that("ship_annotations = FALSE keeps annotations out of the ARS Footnote se
     build_ars_json(secs[1], spec_lookup = p$spec$lookup,
                    ship_annotations = TRUE)))
   notes2 <- vapply(
-    re2$outputs[[1]]$displays[[1]]$displaySections[[1]]$subSections,
-    function(ss) ss$text, character(1))
+    re2$outputs[[1]]$displays[[1]]$display$displaySections[[1]]$
+      orderedSubSections,
+    function(ss) ss$subSection$text, character(1))
   expect_length(notes2, 6)
 })
 

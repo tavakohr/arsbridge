@@ -100,6 +100,29 @@
   x[[1]]
 }
 
+## The display of an output, in whichever shape it was written: the official
+## OrderedDisplay wrapper `{order, display: {...}}` (arsbridge >= 0.1.0.9012),
+## or the older flat `{order, displayTitle, ...}` object. Readers use this so
+## both generations of file stay openable.
+#' @noRd
+.display_node <- function(output_node) {
+  entry <- .first_or_empty(output_node[["displays"]])
+  inner <- entry[["display"]]
+  if (is.list(inner)) inner else entry
+}
+
+## The subsection texts of a display section, in whichever shape: the official
+## orderedSubSections wrapper ({order, subSection: {id, text}}) or the older
+## flat subSections ({text}) list.
+#' @noRd
+.section_subsections <- function(section) {
+  ordered <- section[["orderedSubSections"]]
+  if (is.list(ordered)) {
+    return(lapply(ordered, function(entry) entry[["subSection"]] %||% entry))
+  }
+  section[["subSections"]] %||% list()
+}
+
 ## Zero-row data frame carrying the full canonical column set, so downstream
 ## code can rely on the columns existing even for an absent pool.
 #' @noRd
@@ -138,6 +161,7 @@
 .ANALYSIS_COLUMNS <- c(
   "id", "name", "label", "description",
   "analysisSetId", "dataSubsetId", "methodId",
+  "reason", "purpose",
   "dataset", "variable", "variableRole",
   "annotation", "sapDescription", "includeTotal", "strata",
   "grouping_ids", "output_id"
@@ -166,6 +190,10 @@
       analysisSetId  = .chr_field(node[["analysisSetId"]]),
       dataSubsetId   = .chr_field(node[["dataSubsetId"]]),
       methodId       = .chr_field(node[["methodId"]]),
+      ## reason/purpose are {controlledTerm: <term>} objects in the file; the
+      ## column carries the term (NA when absent or in sponsor-term form).
+      reason         = .chr_field(node[["reason"]][["controlledTerm"]]),
+      purpose        = .chr_field(node[["purpose"]][["controlledTerm"]]),
       dataset        = .chr_field(node[["dataset"]]),
       variable       = .chr_field(node[["variable"]]),
       variableRole   = .chr_field(node[["variableRole"]]),
@@ -383,13 +411,13 @@
   if (length(nodes) == 0) return(.empty_pool(.OUTPUT_COLUMNS))
 
   rows <- lapply(nodes, function(node) {
-    display   <- .first_or_empty(node[["displays"]])
+    display   <- .display_node(node)
     file_spec <- .first_or_empty(node[["fileSpecifications"]])
     analysis_ids <- unlist(node[["referencedAnalysisIds"]] %||% list())
 
     footnotes <- 0L
     for (section in display[["displaySections"]] %||% list()) {
-      footnotes <- footnotes + length(section[["subSections"]] %||% list())
+      footnotes <- footnotes + length(.section_subsections(section))
     }
 
     list(
@@ -531,8 +559,30 @@ print.ars_model <- function(x, ...) {
 ## touch the keys they own: everything else in the node survives untouched,
 ## which is what makes the round trip lossless.
 
+## reason/purpose live as {controlledTerm: <term>} objects; the model column
+## carries the bare term. Rewritten only on a real change, so a sponsor-term
+## object ({sponsorTermId: ...}, which reads as NA here) survives untouched
+## until the reviewer deliberately replaces it with a controlled term.
+#' @noRd
+.patch_term_field <- function(node, key, value) {
+  current <- .chr_field(node[[key]][["controlledTerm"]])
+
+  no_value <- length(value) == 0 || is.na(value)
+  if (identical(as.character(current), as.character(value))) return(node)
+  if (is.na(current) && no_value) return(node)
+
+  if (no_value) {
+    node[[key]] <- NULL
+  } else {
+    node[[key]] <- list(controlledTerm = value)
+  }
+  node
+}
+
 #' @noRd
 .patch_analysis_node <- function(node, row) {
+  node <- .patch_term_field(node, "reason", row$reason)
+  node <- .patch_term_field(node, "purpose", row$purpose)
   node <- .set_or_drop(node, "name", row$name)
   node <- .set_or_drop(node, "label", row$label)
   node <- .set_or_drop(node, "description", row$description)
@@ -666,10 +716,18 @@ print.ars_model <- function(x, ...) {
   node <- .set_or_drop(node, "label", row$label)
   node <- .set_or_drop(node, "outputType", row$outputType)
 
+  ## The title lives inside the OrderedDisplay wrapper on current files and
+  ## flat on older ones; write back in whichever shape the node arrived in.
   if (length(node[["displays"]] %||% list()) > 0) {
-    node[["displays"]][[1]] <- .set_or_drop(
-      node[["displays"]][[1]], "displayTitle", row$display_title
-    )
+    entry <- node[["displays"]][[1]]
+    if (is.list(entry[["display"]])) {
+      entry[["display"]] <- .set_or_drop(
+        entry[["display"]], "displayTitle", row$display_title
+      )
+    } else {
+      entry <- .set_or_drop(entry, "displayTitle", row$display_title)
+    }
+    node[["displays"]][[1]] <- entry
   }
 
   ## Rebuild the analysis references only on a real change, so untouched
@@ -1116,7 +1174,10 @@ model_add_method_from_catalogue <- function(model, method_id) {
     annotation     = annotation,
     sapDescription = "",
     variableRole   = "ANALYSIS",
-    includeTotal   = isTRUE(include_total)
+    includeTotal   = isTRUE(include_total),
+    ## Required by the standard; the run-level defaults, adjustable per line.
+    reason         = list(controlledTerm = .DEFAULT_ANALYSIS_REASON),
+    purpose        = list(controlledTerm = .DEFAULT_ANALYSIS_PURPOSE)
   )
 }
 

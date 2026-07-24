@@ -33,7 +33,8 @@ test_that(".build_output emits display columns from the shell col_headers", {
     footnotes = list()
   )
   out <- .build_output(section, c("AN_1"))
-  cols <- out$displays[[1]]$columns
+  ## Columns live inside the OrderedDisplay wrapper's display object.
+  cols <- out$displays[[1]]$display$columns
   expect_equal(length(cols), 4L)
   expect_equal(vapply(cols, function(c) c$label, character(1)),
                c("Disposition", "UPADALIMIB 15 mg", "UPADALIMIB 30 mg", "Placebo"))

@@ -1,5 +1,31 @@
 # arsbridge (development version)
 
+* **A freshly generated reporting event now validates clean against the
+  official CDISC ARS v1.0 schema** (beyond the documented extensions, which
+  `ars_conformance()` strips and reports). All six known divergences are
+  closed:
+  - Every analysis carries the required `reason` and `purpose` controlled
+    terminology. The run-level defaults -- `"SPECIFIED IN SAP"` and
+    `"EXPLORATORY OUTCOME MEASURE"` -- are new `spec_to_ars()` arguments
+    (`analysis_reason` / `analysis_purpose`, validated against the closed
+    CDISC vocabularies), and both fields are editable per line in
+    `edit_ars()`, which is where the handful of endpoint tables get their
+    `PRIMARY`/`SECONDARY` purpose corrected.
+  - `version` fields are integers, as required.
+  - Displays are written in the official `OrderedDisplay{order, display}`
+    wrapper with their own `id`/`name`, and footnotes as
+    `orderedSubSections[]` wrapping `subSection{id, text}`. Every internal
+    reader accepts both the new and the pre-0.1.0.9012 flat shape, so older
+    files stay openable, editable and renderable.
+  - `fileSpecifications[].fileType` is a terminology object.
+  - The self-referential operation-role placeholders carry a valid term
+    (`NUMERATOR`) instead of `""`.
+  - Contents-list analysis entries are named.
+
+  siera compatibility was verified by running `siera::readARS()` on the same
+  event in both shapes: identical output. (siera reads none of the changed
+  fields by position, and the new keys are additive.)
+
 * **`ars_conformance()` validates a reporting event against the official
   CDISC ARS v1.0 JSON Schema.** The schema ships with the package, pinned to
   the `v1.0.0` release of `cdisc-org/analysis-results-standard` alongside its

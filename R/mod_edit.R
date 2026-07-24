@@ -237,6 +237,18 @@ apply_edit <- function(state, pool, id, field, value) {
       ),
 
       shiny::selectizeInput(
+        ns("reason"), "Reason (why this analysis is planned)",
+        choices  = c("", .ANALYSIS_REASONS),
+        selected = .blank_na(row$reason)
+      ),
+
+      shiny::selectizeInput(
+        ns("purpose"), "Purpose (role in the body of evidence)",
+        choices  = c("", .ANALYSIS_PURPOSES),
+        selected = .blank_na(row$purpose)
+      ),
+
+      shiny::selectizeInput(
         ns("strata"), "Stratified by",
         choices  = c("", .variable_choices(spec, row$dataset) %||%
                        list(row$strata)),
@@ -362,7 +374,7 @@ apply_edit <- function(state, pool, id, field, value) {
 #' @noRd
 .observe_analysis_inputs <- function(input, state, selected_id) {
   simple_fields <- c("label", "description", "dataset", "variable",
-                     "analysisSetId", "dataSubsetId")
+                     "analysisSetId", "dataSubsetId", "reason", "purpose")
 
   for (field in simple_fields) {
     local({

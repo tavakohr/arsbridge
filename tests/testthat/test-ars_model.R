@@ -132,6 +132,35 @@ test_that("dataset and variable stay in sync with the nested analysisVariable", 
   expect_equal(out$analyses[[1]]$analysisVariable$dataset, "ADZZ")
 })
 
+test_that("reason and purpose read and write as controlled-term objects", {
+  model <- ars_to_model(.ars_fixture_path())
+  target <- model$analyses$id[1]
+
+  expect_equal(model$analyses$reason[1], "SPECIFIED IN SAP")
+  expect_equal(model$analyses$purpose[1], "EXPLORATORY OUTCOME MEASURE")
+
+  ## An edit writes the object form; the untouched field keeps its node.
+  edited <- model_set_field(model, "analyses", target, "purpose",
+                            "PRIMARY OUTCOME MEASURE")
+  node <- model_to_ars(edited)$analyses[[1]]
+  expect_equal(node$purpose, list(controlledTerm = "PRIMARY OUTCOME MEASURE"))
+  expect_equal(node$reason, list(controlledTerm = "SPECIFIED IN SAP"))
+
+  ## Clearing removes the key entirely.
+  cleared <- model_set_field(model, "analyses", target, "reason",
+                             NA_character_)
+  expect_false("reason" %in% names(model_to_ars(cleared)$analyses[[1]]))
+
+  ## A sponsor-term object reads as NA and survives a round trip untouched
+  ## unless the reviewer deliberately replaces it.
+  sponsor <- .read_json(.ars_fixture_path())
+  sponsor$analyses[[1]]$reason <- list(sponsorTermId = "SPONSOR_R1")
+  sponsor_model <- ars_to_model(sponsor)
+  expect_true(is.na(sponsor_model$analyses$reason[1]))
+  expect_equal(model_to_ars(sponsor_model)$analyses[[1]]$reason,
+               list(sponsorTermId = "SPONSOR_R1"))
+})
+
 test_that("an NA in an optional column removes the key, and setting it adds it", {
   model <- ars_to_model(.ars_fixture_path())
 

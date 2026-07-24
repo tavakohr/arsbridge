@@ -80,6 +80,18 @@
 #'   NEVER emitted into the ARS Footnote display section -- rendered footnotes
 #'   then contain only true footnotes. Set `TRUE` to append them to the
 #'   footnotes (debug escape hatch).
+#' @param analysis_reason The CDISC controlled term stamped as `reason` on
+#'   every generated analysis (the standard requires one). Default
+#'   `"SPECIFIED IN SAP"`, since the annotated shells the pipeline reads are
+#'   SAP-derived. One of `"SPECIFIED IN PROTOCOL"`, `"SPECIFIED IN SAP"`,
+#'   `"DATA DRIVEN"`, `"REQUESTED BY REGULATORY AGENCY"`. Adjust individual
+#'   analyses in [edit_ars()].
+#' @param analysis_purpose The CDISC controlled term stamped as `purpose` on
+#'   every generated analysis. Default `"EXPLORATORY OUTCOME MEASURE"` -- the
+#'   safest understatement for the non-endpoint displays that make up most of
+#'   a TLF package; correct the endpoint tables in [edit_ars()]. One of
+#'   `"PRIMARY OUTCOME MEASURE"`, `"SECONDARY OUTCOME MEASURE"`,
+#'   `"EXPLORATORY OUTCOME MEASURE"`.
 #' @param heading_patterns Optional character vector of PCRE patterns tried
 #'   BEFORE the built-in TLF heading grammars, for sponsor shells whose
 #'   headings the built-ins do not recognise. Each pattern must use named
@@ -213,6 +225,8 @@ spec_to_ars <- function(shell_path,
                         spec_column_aliases = NULL,
                         extract_with_llm = TRUE,
                         ship_annotations = FALSE,
+                        analysis_reason  = .DEFAULT_ANALYSIS_REASON,
+                        analysis_purpose = .DEFAULT_ANALYSIS_PURPOSE,
                         heading_patterns = NULL,
                         validate     = TRUE,
                         report_path  = file.path(tempdir(), "spec_validation_report.xlsx"),
@@ -221,6 +235,23 @@ spec_to_ars <- function(shell_path,
                         verbose      = TRUE) {
 
   supplement_trust <- match.arg(supplement_trust)
+
+  ## Closed CDISC vocabularies: fail here, not after six minutes of parsing.
+  if (!is.character(analysis_reason) || length(analysis_reason) != 1 ||
+        !analysis_reason %in% .ANALYSIS_REASONS) {
+    cli::cli_abort(c(
+      "{.arg analysis_reason} must be one of the ARS controlled terms.",
+      "i" = "Allowed: {.val {.ANALYSIS_REASONS}}."
+    ))
+  }
+  if (!is.character(analysis_purpose) || length(analysis_purpose) != 1 ||
+        !analysis_purpose %in% .ANALYSIS_PURPOSES) {
+    cli::cli_abort(c(
+      "{.arg analysis_purpose} must be one of the ARS controlled terms.",
+      "i" = "Allowed: {.val {.ANALYSIS_PURPOSES}}."
+    ))
+  }
+
   if (!identical(supplement_trust, "fill_gaps") && is.null(supplement)) {
     cli::cli_warn(c(
       "{.arg supplement_trust} = {.val {supplement_trust}} has no effect without a {.arg supplement}.",
@@ -486,7 +517,9 @@ spec_to_ars <- function(shell_path,
                        ship_annotations = ship_annotations,
                        extraction_mode = extraction_mode,
                        supplement_trust = if (identical(extraction_mode, "supplement"))
-                         supplement_trust else NULL)
+                         supplement_trust else NULL,
+                       analysis_reason  = analysis_reason,
+                       analysis_purpose = analysis_purpose)
 
   json_text <- jsonlite::toJSON(re, auto_unbox = TRUE, pretty = TRUE, null = "null")
   .write_text(json_text, output_path, "the ARS JSON", useBytes = TRUE)

@@ -80,6 +80,8 @@
     "Variable"         = variable,
     "Method"           = resolve("methods", row$methodId),
     "Executed as"      = .execution_note(row$methodId, row$strata),
+    "Reason"           = row$reason,
+    "Purpose"          = row$purpose,
     "Population"       = population,
     "Data subset"      = subset_text,
     "Grouped by"       = groupings,
@@ -296,7 +298,7 @@ mod_detail_server <- function(id, state) {
   own <- findings[findings$id == row$id, , drop = FALSE]
 
   node <- row$raw[[1]]
-  display <- .first_or_empty(node[["displays"]])
+  display <- .display_node(node)
   columns <- vapply(
     display[["columns"]] %||% list(),
     function(column) .chr_field(column[["label"]]),
@@ -305,7 +307,7 @@ mod_detail_server <- function(id, state) {
   footnotes <- unlist(lapply(
     display[["displaySections"]] %||% list(),
     function(section) {
-      vapply(section[["subSections"]] %||% list(),
+      vapply(.section_subsections(section),
              function(sub) .chr_field(sub[["text"]]), character(1))
     }
   ))
