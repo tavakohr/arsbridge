@@ -1,6 +1,6 @@
 Package: arsbridge
 Title: Convert Annotated TLF Shells and ADaM Spec to CDISC ARS JSON
-Version: 0.1.0.9014
+Version: 0.1.0.9015
 Authors@R:
     person("Hamid", "Tavakoli",
            email = "htavakoli@gmail.com",

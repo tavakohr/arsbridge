@@ -237,18 +237,20 @@ spec_to_ars <- function(shell_path,
   supplement_trust <- match.arg(supplement_trust)
 
   ## Closed CDISC vocabularies: fail here, not after six minutes of parsing.
+  allowed_reasons  <- .ANALYSIS_REASONS
+  allowed_purposes <- .ANALYSIS_PURPOSES
   if (!is.character(analysis_reason) || length(analysis_reason) != 1 ||
-        !analysis_reason %in% .ANALYSIS_REASONS) {
+        !analysis_reason %in% allowed_reasons) {
     cli::cli_abort(c(
       "{.arg analysis_reason} must be one of the ARS controlled terms.",
-      "i" = "Allowed: {.val {.ANALYSIS_REASONS}}."
+      "i" = "Allowed: {.val {allowed_reasons}}."
     ))
   }
   if (!is.character(analysis_purpose) || length(analysis_purpose) != 1 ||
-        !analysis_purpose %in% .ANALYSIS_PURPOSES) {
+        !analysis_purpose %in% allowed_purposes) {
     cli::cli_abort(c(
       "{.arg analysis_purpose} must be one of the ARS controlled terms.",
-      "i" = "Allowed: {.val {.ANALYSIS_PURPOSES}}."
+      "i" = "Allowed: {.val {allowed_purposes}}."
     ))
   }
 

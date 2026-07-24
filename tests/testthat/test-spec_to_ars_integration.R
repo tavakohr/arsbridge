@@ -213,3 +213,19 @@ test_that("the zero-section abort lists near-candidates, gives heading guidance,
   expect_match(msg, "begins with Table")     # recommended heading guidance
   expect_match(msg, "heading_patterns")      # the escape hatch
 })
+
+
+test_that("reason and purpose arguments are gated on the CDISC vocabularies", {
+  ## The vocabularies are closed, and the abort happens before any parsing --
+  ## a typo must not cost six minutes of pipeline first.
+  expect_error(
+    spec_to_ars("shell.docx", "spec.xlsx",
+                analysis_reason = "BECAUSE I SAID SO"),
+    "controlled terms"
+  )
+  expect_error(
+    spec_to_ars("shell.docx", "spec.xlsx",
+                analysis_purpose = "SAFETY"),
+    "controlled terms"
+  )
+})

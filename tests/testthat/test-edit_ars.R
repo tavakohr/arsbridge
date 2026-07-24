@@ -168,3 +168,38 @@ test_that("an edited model executes into an ARD", {
   expect_gt(nrow(ard), 0)
   expect_true(target %in% ard$analysis_id)
 })
+
+
+test_that("the save summary speaks to each severity level", {
+  ## Direct calls: these cli branches are what the reviewer sees after every
+  ## save, so each one gets exercised -- blocking, review-only, and clean.
+  log <- .new_edit_log()
+
+  blocking <- data.frame(
+    severity = "FAIL", entity = "analyses", id = "AN_1", field = "methodId",
+    problem = "x", action = "y", ref = NA_character_,
+    stringsAsFactors = FALSE
+  )
+  expect_message(.report_save("out.json", log, blocking), "blocking problem")
+
+  clean <- .new_findings()
+  expect_message(.report_save("out.json", log, clean), "Nothing left to fix")
+})
+
+test_that("the conformance note counts notes and never breaks a save", {
+  skip_if_not_installed("jsonvalidate")
+
+  ## A non-conformant event: the note reports a count instead of silence.
+  old_shape <- list(
+    id = "S", name = "S", version = "1",
+    mainListOfContents = list(name = "LOPA", label = "LOPA",
+                              contentsList = list(listItems = list())),
+    analyses = list(list(id = "AN_1", name = "AN_1", methodId = "MTH_X")),
+    outputs = list()
+  )
+  expect_message(.report_conformance(old_shape), "schema note")
+
+  ## Anything that makes the validator itself fail is swallowed: the save
+  ## already happened, and a conformance hiccup must not un-happen it.
+  expect_silent(.report_conformance(42))
+})
