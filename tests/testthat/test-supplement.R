@@ -1,4 +1,4 @@
-## Supplement mode (format v3): reading/validating the typed supplement,
+## Supplement mode (format v4): reading/validating the typed supplement,
 ## gap-filling analyses (regex wins), enrichment passthrough, and the 3-tier
 ## mode resolution in spec_to_ars().
 
@@ -30,10 +30,10 @@
 }
 
 .supp_minimal <- function(tlfs) {
-  list(supplement_version = 3L, tlfs = tlfs)
+  list(supplement_version = 4L, tlfs = tlfs)
 }
 
-## A typed v3 where-clause condition, and an analysis-variable object.
+## A typed v4 where-clause condition, and an analysis-variable object.
 .wc <- function(dataset, variable, comparator = "EQ", ...) {
   list(condition = list(dataset = dataset, variable = variable,
                         comparator = comparator, value = list(...)))
@@ -55,7 +55,7 @@ test_that("read_supplement accepts plain, fenced, and smart-quoted JSON", {
     title = "Demographics", analysis_type = "CONTINUOUS", is_supported = TRUE,
     analyses = list(list(rowLabel = "Age (years)", variable = .av("ADSL", "AGE"))))))
   path <- .write_supp(supp)
-  expect_equal(read_supplement(path)$supplement_version, 3L)
+  expect_equal(read_supplement(path)$supplement_version, 4L)
 
   fenced <- tempfile(fileext = ".json")
   writeLines(c("Here is the supplement:", "```json",
@@ -65,7 +65,7 @@ test_that("read_supplement accepts plain, fenced, and smart-quoted JSON", {
 
   smart <- tempfile(fileext = ".json")
   writeLines(gsub('"', "“", readLines(path)), smart)  ## all quotes smart
-  expect_equal(read_supplement(smart)$supplement_version, 3L)
+  expect_equal(read_supplement(smart)$supplement_version, 4L)
 })
 
 test_that("read_supplement aborts on malformed JSON, bad version, missing tlfs", {
@@ -78,7 +78,7 @@ test_that("read_supplement aborts on malformed JSON, bad version, missing tlfs",
                          tlfs = list(`14.1.1` = list())))
   expect_error(read_supplement(v2), "version mismatch")
 
-  no_tlfs <- .write_supp(list(supplement_version = 3L))
+  no_tlfs <- .write_supp(list(supplement_version = 4L))
   expect_error(read_supplement(no_tlfs), "tlfs")
 })
 
@@ -387,9 +387,9 @@ test_that("supplement groupings build the per-column axis when the shell has non
   ## conditions (no string re-parse), the Unknown one carrying the empty-value EQ.
   gf <- .build_grouping(out)
   expect_length(gf$groups, 3)
-  expect_equal(unlist(gf$groups[[1]]$condition$condition$value), "1")
-  expect_equal(gf$groups[[1]]$condition$condition$comparator, "EQ")
-  expect_length(gf$groups[[3]]$condition$condition$value, 0)
+  expect_equal(unlist(gf$groups[[1]]$condition$value), "1")
+  expect_equal(gf$groups[[1]]$condition$comparator, "EQ")
+  expect_length(gf$groups[[3]]$condition$value, 0)
 
   recs <- diag_records()
   expect_true(any(recs$severity == "INFO" &
@@ -427,7 +427,7 @@ test_that("an out-of-spec group condition is dropped with a FAIL; valid ones sta
 
 ## --- enrichment passthrough -------------------------------------------------
 
-test_that(".supplement_enrich_answer maps v3 fields into the live-answer shape", {
+test_that(".supplement_enrich_answer maps supplement fields into the live-answer shape", {
   ans <- .supplement_enrich_answer(list(
     analysis_type = "MIXED_SUMMARY",
     methodId = "MTH_SUMMARY_STATISTICS_CONTINUOUS",
@@ -435,7 +435,7 @@ test_that(".supplement_enrich_answer maps v3 fields into the live-answer shape",
                           dataDriven = TRUE)),
     includeTotal = TRUE,
     is_supported = FALSE, unsupported_reason = "needs ANCOVA"))
-  expect_equal(ans$analysis_type, "CONTINUOUS")               ## folded via .V3_TYPE_MAP
+  expect_equal(ans$analysis_type, "CONTINUOUS")               ## folded via .SUPP_TYPE_MAP
   expect_equal(ans$ars_method_name, "Summary Statistics - Continuous")
   expect_equal(ans$by_variables, list("ADSL.TRT01A"))
   expect_true(ans$include_total)
@@ -523,7 +523,7 @@ test_that("all copilot resources ship with the package", {
     p <- system.file("copilot", f, package = "arsbridge")
     expect_true(nzchar(p) && file.exists(p))
   }
-  s <- system.file("schema", "arsbridge_supplement_v3.schema.json",
+  s <- system.file("schema", "arsbridge_supplement_v4.schema.json",
                    package = "arsbridge")
   expect_true(nzchar(s) && file.exists(s))
 })
@@ -546,7 +546,7 @@ test_that("ars_copilot_instructions writes the single-file set (instructions + s
   paths <- suppressMessages(ars_copilot_instructions(dir, open = FALSE))
   expect_length(paths, 2)
   expect_true(file.exists(file.path(dir, "arsbridge_copilot_instructions.md")))
-  expect_true(file.exists(file.path(dir, "arsbridge_supplement_v3.schema.json")))
+  expect_true(file.exists(file.path(dir, "arsbridge_supplement_v4.schema.json")))
 })
 
 test_that("ars_copilot_instructions(workflow = 'two_phase') writes both phases + schema", {
@@ -556,7 +556,7 @@ test_that("ars_copilot_instructions(workflow = 'two_phase') writes both phases +
   expect_length(paths, 3)
   expect_true(file.exists(file.path(dir, "arsbridge_phase1_blueprint_instructions.md")))
   expect_true(file.exists(file.path(dir, "arsbridge_phase2_build_instructions.md")))
-  expect_true(file.exists(file.path(dir, "arsbridge_supplement_v3.schema.json")))
+  expect_true(file.exists(file.path(dir, "arsbridge_supplement_v4.schema.json")))
 })
 
 ## --- spec_to_ars 3-tier integration (fully offline) --------------------------
@@ -693,7 +693,7 @@ test_that("spec_to_ars emits populated groups[] from typed supplement groupings"
   expect_length(groups, 2)
   expect_setequal(vapply(groups, function(g) g$label, character(1)),
                   c("Male", "Female"))
-  expect_equal(groups[[1]]$condition$condition$variable, "SEX")
+  expect_equal(groups[[1]]$condition$variable, "SEX")
 })
 
 test_that("a compound whereClause reaches the ARS JSON as a compoundExpression subset", {

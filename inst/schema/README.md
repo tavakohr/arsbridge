@@ -1,6 +1,6 @@
 # Bundled schemas
 
-## `arsbridge_supplement_v3.schema.json`
+## `arsbridge_supplement_v4.schema.json`
 
 arsbridge's own schema for the no-API supplement workflow. See
 `ars_copilot_instructions()`.

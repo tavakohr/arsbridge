@@ -900,6 +900,11 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
       labels      = combined$labels[keep],
       annotations = combined$annotations[keep]
     )
+    ## Also keep the raw header-cell geometry (spans, vertical merges) so
+    ## .finalize_section() can build the column tree. The flat labels above
+    ## lose the parent-child structure of a multi-row header; the grid does
+    ## not.
+    current$.pending_header_grid <- .header_grid(header_rows)
   } else {
     headers <- .combine_header_rows(header_rows)
     headers <- headers[nzchar(headers)]
@@ -1158,6 +1163,36 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
   }, character(1))
 
   list(labels = labels, annotations = annotations)
+}
+
+#' Capture the raw geometry of the header rows: one record per physical
+#' header cell with its row, the grid columns it covers, its
+#' annotation-stripped label, any in-cell annotation, and whether it is a
+#' vertical-merge continuation. This is the un-flattened counterpart of
+#' `.combine_header_rows_detected()` -- the input the column tree is built
+#' from, where "Cohort A spans four child columns" is still visible.
+#' @noRd
+.header_grid <- function(header_rows) {
+  grid <- list()
+  for (r in seq_along(header_rows)) {
+    cells <- xml2::xml_find_all(header_rows[[r]], "./*[local-name()='tc']")
+    col <- 1L
+    for (cell in cells) {
+      span <- .grid_span(cell)
+      raw  <- .cell_text(cell)
+      det  <- .detect_annotation(raw, .runs_metadata(cell))
+      grid[[length(grid) + 1L]] <- list(
+        row             = r,
+        col_start       = col,
+        col_end         = col + span - 1L,
+        text            = trimws(det$label %||% raw),
+        annotation      = det$annotation %||% "",
+        vmerge_continue = .is_vmerge_continuation(cell)
+      )
+      col <- col + span
+    }
+  }
+  grid
 }
 
 #' TRUE when a cell is a `vMerge` continuation of the cell above it, not a
@@ -1735,8 +1770,133 @@ bind_annotations <- function(sec) {
   sec
 }
 
+#' Resolve column groups from a hierarchical column tree.
+#'
+#' The tree-mode counterpart of `.resolve_table_column_groups()`. Each tree
+#' level with conditioned nodes contributes one grouping axis; the level-1
+#' axis fills the section's `column_groups`/`column_annotation` exactly as
+#' the flat path would, so everything downstream that only understands one
+#' axis keeps working, while the full hierarchy travels on `sec$column_tree`
+#' (with `$levels` naming the per-level variables) for the path-aware
+#' builder.
+#'
+#' @noRd
+.resolve_column_groups_from_tree <- function(sec, spec_lookup = NULL) {
+  tree  <- sec$column_tree
+  nodes <- tree$nodes
+
+  ## One axis variable per level, from the conditioned nodes at that level.
+  ## Nodes of one level should agree on the variable; when they compete, the
+  ## majority wins and the disagreement is surfaced.
+  max_level <- max(vapply(nodes, function(n) n$level, integer(1)))
+  levels <- list()
+  for (lvl in seq_len(max_level)) {
+    at_level <- Filter(function(n) {
+      n$level == lvl && !is.null(n$condition) && nzchar(n$grouping_ref)
+    }, nodes)
+    if (length(at_level) == 0) next
+    refs <- vapply(at_level, function(n) n$grouping_ref, character(1))
+    tab  <- sort(table(refs), decreasing = TRUE)
+    axis <- names(tab)[[1]]
+    if (length(tab) > 1) {
+      .diag_gap(
+        stage = "parse_shell", severity = "WARN", input = INPUT_SHELL,
+        problem = sprintf(
+          "Level-%d column headers condition on several variables (%s); %s (most columns) was taken as that level's axis.",
+          lvl, paste(names(tab), collapse = ", "), axis),
+        why = "Each header level defines one grouping variable; a second variable at the same level cannot also define columns there.",
+        fix = "Annotate every column at this header level with the same variable.",
+        tlf_number = sec$tlf_number, location = sec$title %||% ""
+      )
+    }
+    levels[[length(levels) + 1L]] <- list(
+      level    = lvl,
+      dataset  = sub("\\..*$", "", axis),
+      variable = sub("^.*\\.", "", axis)
+    )
+    if (!is.null(spec_lookup) && length(spec_lookup) > 0 &&
+        !axis %in% toupper(names(spec_lookup))) {
+      diag_add(
+        stage = "parse_shell", severity = "WARN", input = INPUT_SHELL,
+        problem = sprintf("Column-axis variable %s (header level %d) is not in the ADaM spec", axis, lvl),
+        tlf_number = sec$tlf_number, location = sec$title %||% "",
+        action = "Verify the header annotations name a real spec variable"
+      )
+    }
+  }
+  sec$column_tree$levels <- levels
+
+  ## Level-1 detail columns feed the classic single-axis fields so the
+  ## existing builder keeps producing the outer grouping.
+  if (length(levels) > 0) {
+    axis_l1 <- paste0(levels[[1]]$dataset, ".", levels[[1]]$variable)
+    l1_nodes <- Filter(function(n) {
+      n$level == 1L && !is.null(n$condition) &&
+        identical(n$grouping_ref, axis_l1) &&
+        !n$node_type %in% c("grand_total")
+    }, nodes)
+    l1_nodes <- l1_nodes[order(vapply(l1_nodes, function(n) n$order, integer(1)))]
+    if (length(l1_nodes) >= 2) {
+      groups <- list()
+      for (n in l1_nodes) {
+        groups[[length(groups) + 1L]] <- list(
+          label      = n$label,
+          annotation = n$annotation,
+          order      = length(groups) + 1L
+        )
+      }
+      sec$column_groups <- list(
+        variable = levels[[1]]$variable,
+        dataset  = levels[[1]]$dataset,
+        groups   = groups
+      )
+      sec$column_annotation <- axis_l1
+    }
+  }
+
+  if (any(vapply(nodes, function(n) identical(n$node_type, "grand_total"), logical(1)))) {
+    sec$include_total_hint <- TRUE
+  }
+
+  paths <- column_tree_paths(sec$column_tree)
+  diag_add(
+    stage = "parse_shell", severity = "INFO", input = INPUT_SHELL,
+    problem = sprintf(
+      "Hierarchical column header captured (%s): %d result-column paths across %d level(s)",
+      tree$mode, length(paths), length(levels)),
+    tlf_number = sec$tlf_number, location = sec$title %||% "",
+    action = "Each declared path becomes one display column; verify the tree in the review stage"
+  )
+
+  problems <- .validate_column_tree(sec$column_tree)
+  for (p in problems) {
+    diag_add(
+      stage = "parse_shell", severity = "WARN", input = INPUT_SHELL,
+      problem = paste("Column tree:", p),
+      tlf_number = sec$tlf_number, location = sec$title %||% "",
+      action = "Check the header annotations; the tree must describe each display column once"
+    )
+  }
+
+  sec
+}
+
 #' @noRd
 .finalize_section <- function(sec, spec_lookup = NULL) {
+  ## Build the column tree from the retained header geometry FIRST. When the
+  ## tree shows a real conditioned hierarchy (parent cohort columns with
+  ## conditioned child columns), the per-level resolution takes over;
+  ## otherwise the existing single-axis path below runs untouched.
+  grid <- sec$.pending_header_grid
+  sec$.pending_header_grid <- NULL
+  if (!is.null(grid) && identical(sec$tlf_type, "TABLE")) {
+    tree <- .header_grid_to_tree(grid)
+    if (tree$mode %in% c("NESTED", "ASYMMETRIC_NESTED")) {
+      sec$column_tree <- tree
+      sec$.pending_column_annotations <- NULL
+      sec <- .resolve_column_groups_from_tree(sec, spec_lookup)
+    }
+  }
   ## Resolve per-column header filters into column groups BEFORE
   ## bind_annotations, so an in-cell header annotation claims the column
   ## axis first and the arrow-line fallback's is.null() guard defers to it.

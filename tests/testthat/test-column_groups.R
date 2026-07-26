@@ -147,10 +147,10 @@ test_that("column groups emit per-level groups[] with conditions", {
   expect_length(gf$groups, 2)
   expect_equal(gf$groups[[1]]$label, "Cohort A")
   expect_equal(gf$groups[[1]]$order, 1L)
-  expect_equal(gf$groups[[1]]$condition$condition$comparator, "EQ")
-  expect_equal(unlist(gf$groups[[1]]$condition$condition$value), "1")
+  expect_equal(gf$groups[[1]]$condition$comparator, "EQ")
+  expect_equal(unlist(gf$groups[[1]]$condition$value), "1")
   ## The is-missing level carries an empty value list.
-  expect_length(gf$groups[[2]]$condition$condition$value, 0)
+  expect_length(gf$groups[[2]]$condition$value, 0)
   expect_false(isTRUE(gf$dataDriven))
 
   ## A section without column groups still emits the empty array.
@@ -264,7 +264,7 @@ test_that("spec_to_ars carries the column groups into the ARS JSON", {
   expect_setequal(labels, c("Cohort A", "Cohort B", "Unknown Cohort"))
   ## The is-missing level round-trips as an empty value array.
   unknown <- cohort_gf$groups[[which(labels == "Unknown Cohort")]]
-  expect_length(unknown$condition$condition$value, 0)
+  expect_length(unknown$condition$value, 0)
   ## The Total header switched includeTotal on.
   expect_true(any(vapply(spec$analyses, function(a)
     isTRUE(a$includeTotal), logical(1))))

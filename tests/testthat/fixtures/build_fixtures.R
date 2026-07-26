@@ -908,3 +908,68 @@ doc_colgrp <- read_docx() |>
 out_colgrp <- file.path(here, "annotated_shell_column_groups.docx")
 print(doc_colgrp, target = out_colgrp)
 cat("Wrote:", out_colgrp, "\n")
+
+## ---------------------------------------------------------------------------
+## Asymmetric column-tree fixture: a two-level header where Cohort A spans
+## three severity child columns plus a subtotal, Cohort B is a level-1 leaf
+## (vertically merged down through the sub-header row), and an overall Total
+## closes the row. The subtotal N (88) deliberately exceeds the sum of the
+## displayed children (40+25+15 = 80): eight Cohort A subjects have unknown
+## severity, so the subtotal must be computed from the PARENT condition, not
+## by summing the children. All study content is synthetic (CDSC-ALZ-201
+## family).
+## ---------------------------------------------------------------------------
+
+asymmetric_tree_table_xml <- paste0(
+  '<w:tbl xmlns:w="', .W_NS_URL, '">',
+  '<w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/></w:tblPr>',
+  '<w:tblGrid><w:gridCol/><w:gridCol/><w:gridCol/><w:gridCol/><w:gridCol/><w:gridCol/><w:gridCol/></w:tblGrid>',
+
+  ## Header row 1: stub (vMerge restart), Cohort A spanning 4 columns,
+  ## Cohort B and Total each merged down through row 2.
+  '<w:tr><w:trPr><w:tblHeader/></w:trPr>',
+  '<w:tc><w:tcPr><w:vMerge w:val="restart"/></w:tcPr><w:p/></w:tc>',
+  "<w:tc><w:tcPr><w:gridSpan w:val=\"4\"/></w:tcPr><w:p><w:r><w:t>Cohort A (N=88) ADSL.COHGRPN=1</w:t></w:r></w:p></w:tc>",
+  "<w:tc><w:tcPr><w:vMerge w:val=\"restart\"/></w:tcPr><w:p><w:r><w:t>Cohort B (N=62) ADSL.COHGRPN=2</w:t></w:r></w:p></w:tc>",
+  '<w:tc><w:tcPr><w:vMerge w:val="restart"/></w:tcPr><w:p><w:r><w:t>Total (N=150)</w:t></w:r></w:p></w:tc>',
+  '</w:tr>',
+
+  ## Header row 2: severity children under Cohort A plus its subtotal.
+  '<w:tr><w:trPr><w:tblHeader/></w:trPr>',
+  '<w:tc><w:tcPr><w:vMerge/></w:tcPr><w:p/></w:tc>',
+  "<w:tc><w:tcPr/><w:p><w:r><w:t>Mild (N=40) ADSL.SEVGR1N=1</w:t></w:r></w:p></w:tc>",
+  "<w:tc><w:tcPr/><w:p><w:r><w:t>Moderate (N=25) ADSL.SEVGR1N=2</w:t></w:r></w:p></w:tc>",
+  "<w:tc><w:tcPr/><w:p><w:r><w:t>Severe (N=15) ADSL.SEVGR1N=3</w:t></w:r></w:p></w:tc>",
+  '<w:tc><w:tcPr/><w:p><w:r><w:t>Total[a] (N=88)</w:t></w:r></w:p></w:tc>',
+  '<w:tc><w:tcPr><w:vMerge/></w:tcPr><w:p/></w:tc>',
+  '<w:tc><w:tcPr><w:vMerge/></w:tcPr><w:p/></w:tc>',
+  '</w:tr>',
+
+  ## Body rows: a continuous row and a categorical row.
+  '<w:tr>',
+  '<w:tc><w:tcPr/><w:p><w:r><w:t xml:space="preserve">Age (years)  ADSL.AGE</w:t></w:r></w:p></w:tc>',
+  '<w:tc><w:tcPr/><w:p/></w:tc><w:tc><w:tcPr/><w:p/></w:tc>',
+  '<w:tc><w:tcPr/><w:p/></w:tc><w:tc><w:tcPr/><w:p/></w:tc>',
+  '<w:tc><w:tcPr/><w:p/></w:tc><w:tc><w:tcPr/><w:p/></w:tc>',
+  '</w:tr>',
+  '<w:tr>',
+  '<w:tc><w:tcPr/><w:p><w:r><w:t xml:space="preserve">Sex, n (%)  ADSL.SEX</w:t></w:r></w:p></w:tc>',
+  '<w:tc><w:tcPr/><w:p/></w:tc><w:tc><w:tcPr/><w:p/></w:tc>',
+  '<w:tc><w:tcPr/><w:p/></w:tc><w:tc><w:tcPr/><w:p/></w:tc>',
+  '<w:tc><w:tcPr/><w:p/></w:tc><w:tc><w:tcPr/><w:p/></w:tc>',
+  '</w:tr>',
+
+  '</w:tbl>'
+)
+
+doc_asym <- read_docx() |>
+  body_add_par("Table 14.3.1", style = "heading 2") |>
+  body_add_par("Demographics by Cohort and Baseline Severity") |>
+  body_add_par("Completer Population (ADSL.COMPFL='Y')") |>
+  body_add_par("%%TABLE%%") |>
+  body_add_par("[a] Includes subjects with unknown baseline severity.") |>
+  body_add_par("Source: ADSL")
+out_asym <- file.path(here, "annotated_shell_asymmetric_tree.docx")
+print(doc_asym, target = out_asym)
+inject_raw_table(out_asym, asymmetric_tree_table_xml, "%%TABLE%%")
+cat("Wrote:", out_asym, "\n")

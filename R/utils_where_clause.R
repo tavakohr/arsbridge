@@ -370,6 +370,195 @@ where_to_filter_expr <- function(where) {
   "TRUE"
 }
 
+## --- WhereClause algebra ---------------------------------------------------
+##
+## Small structural helpers for composing and comparing WhereClause objects.
+## They exist so hierarchical column trees can build a leaf column's condition
+## as AND(parent condition, own condition), assert that a subtotal's condition
+## equals the parent condition, and let validation detect duplicate result
+## paths. They operate on the same shapes parse_where_clause() produces:
+## NULL, a `condition` object, or a `compoundExpression`.
+
+#' Combine WhereClause objects into one clause.
+#'
+#' NULL inputs are dropped (NULL means "no condition", the AND identity).
+#' Nested compoundExpressions that use the same operator are flattened, so
+#' AND(AND(a, b), c) becomes AND(a, b, c). Returns NULL when nothing remains,
+#' the single clause unchanged when only one remains, or a compoundExpression.
+#'
+#' @noRd
+combine_conditions <- function(..., operator = "AND") {
+  stopifnot(operator %in% c("AND", "OR"))
+  clauses <- Filter(Negate(is.null), list(...))
+  if (length(clauses) == 0) return(NULL)
+
+  flattened <- list()
+  for (clause in clauses) {
+    ce <- clause[["compoundExpression"]]
+    same_op <- !is.null(ce) && identical(.as_scalar_char(ce[["logicalOperator"]]), operator)
+    if (same_op) {
+      flattened <- c(flattened, ce[["whereClauses"]])
+    } else {
+      flattened <- c(flattened, list(clause))
+    }
+  }
+
+  if (length(flattened) == 1) return(flattened[[1]])
+  list(
+    compoundExpression = list(
+      logicalOperator = operator,
+      whereClauses    = flattened
+    )
+  )
+}
+
+#' Canonical form of a WhereClause, for order-insensitive comparison.
+#'
+#' A single condition becomes a condition with uppercased dataset, variable,
+#' and comparator, and its values as a sorted character vector. A
+#' compoundExpression gets each member canonicalized, same-operator nesting
+#' flattened, and the members sorted by their serialized form. Two clauses
+#' that state the same thing in a different order therefore canonicalize to
+#' identical objects.
+#'
+#' @noRd
+canonicalize_condition <- function(x) {
+  if (is.null(x)) return(NULL)
+
+  if (!is.null(x[["condition"]])) {
+    cond <- x[["condition"]]
+    vals <- as.character(unlist(cond[["value"]]))
+    return(list(
+      condition = list(
+        dataset    = toupper(.as_scalar_char(cond[["dataset"]]) %||% ""),
+        variable   = toupper(.as_scalar_char(cond[["variable"]]) %||% ""),
+        comparator = toupper(.as_scalar_char(cond[["comparator"]]) %||% "EQ"),
+        value      = as.list(sort(vals))
+      )
+    ))
+  }
+
+  if (!is.null(x[["compoundExpression"]])) {
+    ce <- x[["compoundExpression"]]
+    op <- toupper(.as_scalar_char(ce[["logicalOperator"]]) %||% "AND")
+    members <- lapply(ce[["whereClauses"]], canonicalize_condition)
+    members <- Filter(Negate(is.null), members)
+
+    ## Flatten same-operator nesting after canonicalizing the members.
+    flat <- list()
+    for (m in members) {
+      mce <- m[["compoundExpression"]]
+      if (!is.null(mce) && identical(mce[["logicalOperator"]], op)) {
+        flat <- c(flat, mce[["whereClauses"]])
+      } else {
+        flat <- c(flat, list(m))
+      }
+    }
+
+    if (length(flat) == 0) return(NULL)
+    if (length(flat) == 1) return(flat[[1]])
+
+    keys <- vapply(flat, function(m) {
+      paste(deparse(m), collapse = "")
+    }, character(1))
+    flat <- flat[order(keys)]
+
+    return(list(
+      compoundExpression = list(
+        logicalOperator = op,
+        whereClauses    = flat
+      )
+    ))
+  }
+
+  ## A bare condition body (dataset/variable at the top level, as some ARS
+  ## nodes carry) is wrapped so both spellings canonicalize the same way.
+  if (!is.null(x[["variable"]])) {
+    return(canonicalize_condition(list(condition = x)))
+  }
+
+  NULL
+}
+
+#' Are two WhereClauses structurally equivalent?
+#' @noRd
+conditions_equal <- function(a, b) {
+  identical(canonicalize_condition(a), canonicalize_condition(b))
+}
+
+#' The canonical atomic conditions of a pure-AND clause.
+#'
+#' Returns a list of canonical single-condition objects when `x` is NULL (an
+#' empty set), a single condition, or an all-AND compound. Returns NA when the
+#' clause contains an OR anywhere, because it then has no simple atom-set
+#' reading.
+#'
+#' @noRd
+.and_atoms <- function(x) {
+  canon <- canonicalize_condition(x)
+  if (is.null(canon)) return(list())
+  if (!is.null(canon[["condition"]])) return(list(canon))
+
+  ce <- canon[["compoundExpression"]]
+  if (!identical(ce[["logicalOperator"]], "AND")) return(NA)
+
+  atoms <- list()
+  for (m in ce[["whereClauses"]]) {
+    inner <- .and_atoms(m)
+    if (!is.list(inner)) return(NA)
+    atoms <- c(atoms, inner)
+  }
+  atoms
+}
+
+#' Does the child condition imply the parent condition?
+#'
+#' TRUE when every atomic condition of the parent also appears in the child,
+#' so the child's subject set is a subset of the parent's. This is the check
+#' that "COHORT = 1 AND SUBGROUP = 2" is a valid child of "COHORT = 1". A NULL
+#' parent (no condition) is implied by anything. Clauses containing OR are
+#' answered conservatively: TRUE only when the two clauses are structurally
+#' equal, FALSE otherwise.
+#'
+#' @noRd
+condition_implies <- function(child, parent) {
+  if (is.null(parent)) return(TRUE)
+  if (conditions_equal(child, parent)) return(TRUE)
+
+  child_atoms  <- .and_atoms(child)
+  parent_atoms <- .and_atoms(parent)
+  if (!is.list(child_atoms) || !is.list(parent_atoms)) return(FALSE)
+
+  child_keys  <- vapply(child_atoms,  function(a) paste(deparse(a), collapse = ""), character(1))
+  parent_keys <- vapply(parent_atoms, function(a) paste(deparse(a), collapse = ""), character(1))
+  all(parent_keys %in% child_keys)
+}
+
+#' The WhereClause of an ARS Group node, in the wrapped shape the executor
+#' and emitter consume.
+#'
+#' The official ARS v1.0 Group IS-A WhereClause: it carries `level`, `order`,
+#' and either a bare `condition` (a WhereClauseCondition: dataset, variable,
+#' comparator, value) or a `compoundExpression` directly. arsbridge's
+#' internal shape wraps conditions one level deeper. This accessor reads
+#' both and always returns the wrapped shape (or NULL when the group has no
+#' condition at all -- a data-driven level).
+#' @noRd
+.group_where <- function(g) {
+  cond <- g[["condition"]]
+  if (!is.null(cond)) {
+    ## Already-wrapped legacy shape: condition/compoundExpression inside.
+    if (!is.null(cond[["condition"]]) || !is.null(cond[["compoundExpression"]])) {
+      return(cond)
+    }
+    return(list(condition = cond))
+  }
+  if (!is.null(g[["compoundExpression"]])) {
+    return(list(compoundExpression = g[["compoundExpression"]]))
+  }
+  NULL
+}
+
 .cond <- function(dataset, variable, comparator, value) {
   list(
     condition = list(

@@ -227,6 +227,85 @@ enrich_with_llm <- function(section,
   section$by_variable         <- first$variable %||% ""
   section$by_variable_dataset <- first$dataset  %||% "ADSL"
 
+  ## Column-hierarchy classification: the LLM may refine roles and fill
+  ## missing grouping variables on the PARSED tree -- never invent or drop a
+  ## column (geometry is parser truth).
+  if (!is.null(parsed$column_hierarchy) && !is.null(section$column_tree)) {
+    section <- .apply_llm_column_hierarchy(section, parsed$column_hierarchy,
+                                           spec_lookup)
+  }
+
+  section
+}
+
+#' Apply the LLM's column-hierarchy answer onto the parsed column tree.
+#'
+#' Hard grounding rules: the answer must describe exactly the leaf columns
+#' the parser found (same count, same label paths) or it is discarded whole
+#' with a WARN; a proposed grouping variable must resolve against the ADaM
+#' spec or it is ignored. What the LLM may do is (a) reclassify a column's
+#' role (detail vs subtotal vs grand total) and (b) name the grouping
+#' variable of a level whose header carried no annotation.
+#' @noRd
+.apply_llm_column_hierarchy <- function(section, answer, spec_lookup) {
+  tree  <- section$column_tree
+  paths <- column_tree_paths(tree)
+  leaves <- answer$leaf_columns %||% list()
+
+  parsed_labels <- vapply(paths, function(p)
+    paste(p$label_path, collapse = " > "), character(1))
+  answer_labels <- vapply(leaves, function(l)
+    paste(unlist(l$label_path %||% list()), collapse = " > "), character(1))
+
+  if (length(leaves) != length(paths) ||
+      !setequal(parsed_labels, answer_labels)) {
+    diag_add(
+      stage = "enrich_llm", severity = "WARN",
+      problem = "LLM column hierarchy does not match the parsed header tree (different columns); discarded",
+      tlf_number = section$tlf_number,
+      action = "The parsed geometry is authoritative -- roles and level variables stay as parsed"
+    )
+    return(section)
+  }
+
+  role_map <- c(DETAIL = "leaf", SUBTOTAL = "subtotal",
+                GRAND_TOTAL = "grand_total")
+  node_ids <- vapply(tree$nodes, function(n) n$id, character(1))
+  for (i in seq_along(leaves)) {
+    leaf <- leaves[[i]]
+    path <- paths[[match(answer_labels[i], parsed_labels)]]
+    idx  <- match(path$path_id, node_ids)
+    if (is.na(idx)) next
+
+    role <- toupper(trimws(as.character(leaf$role %||% "")))
+    if (role %in% names(role_map) &&
+        !identical(tree$nodes[[idx]]$node_type, "group")) {
+      tree$nodes[[idx]]$node_type <- role_map[[role]]
+    }
+
+    ## Fill a missing grouping reference, gated by the spec.
+    for (proposal in unlist(leaf$grouping_variables %||% list())) {
+      resolved <- .resolve_grouping_from_spec(proposal, spec_lookup)
+      if (is.null(resolved) || isFALSE(resolved$in_spec)) {
+        diag_add(
+          stage = "enrich_llm", severity = "WARN",
+          problem = sprintf("LLM proposed column grouping variable '%s' is not in the ADaM spec; ignored", proposal),
+          tlf_number = section$tlf_number,
+          action = "Only spec variables may define columns"
+        )
+        next
+      }
+      target <- match(path$path_id, node_ids)
+      if (!nzchar(tree$nodes[[target]]$grouping_ref %||% "")) {
+        tree$nodes[[target]]$grouping_ref <-
+          paste0(toupper(resolved$dataset %||% "ADSL"), ".",
+                 toupper(resolved$variable))
+      }
+    }
+  }
+
+  tree$mode <- .detect_grouping_mode(tree)
+  section$column_tree <- tree
   section
 }
 
@@ -241,7 +320,7 @@ enrich_with_llm <- function(section,
 #' @noRd
 .enrich_payload <- function(section, annotated_rows, spec_lookup,
                             available_variables = NULL) {
-  list(
+  payload <- list(
     tlf_number            = section$tlf_number,
     tlf_type              = section$tlf_type,
     title                 = section$title,
@@ -259,6 +338,20 @@ enrich_with_llm <- function(section,
     available_variables   = available_variables %||%
       (if (!is.null(spec_lookup)) names(spec_lookup) else character())
   )
+  ## Hierarchical header: give the model the parsed tree (labels, levels,
+  ## roles, annotations) so it can classify roles and name level variables
+  ## -- but never redraw the geometry.
+  if (!is.null(section$column_tree) &&
+      (section$column_tree$mode %||% "FLAT") %in% c("NESTED", "ASYMMETRIC_NESTED")) {
+    payload$header_tree <- lapply(section$column_tree$nodes, function(n) list(
+      label      = n$label,
+      level      = n$level,
+      node_type  = n$node_type,
+      parent     = n$parent_id %||% "",
+      annotation = n$annotation %||% ""
+    ))
+  }
+  payload
 }
 
 #' Read the prompt template from inst/prompts/ and substitute the payload.
@@ -336,6 +429,43 @@ enrich_with_llm <- function(section,
       paste("TRUE when the output carries an overall/Total column in",
             "addition to the per-group columns."),
       required = FALSE
+    ),
+    column_hierarchy = ellmer::type_object(
+      .description = paste(
+        "ONLY when the payload carries a header_tree: classify each visible",
+        "result column of that tree. Describe exactly the columns the tree",
+        "shows -- never add, drop, or reorder columns."),
+      .required = FALSE,
+      leaf_columns = ellmer::type_array(
+        items = ellmer::type_object(
+          label_path = ellmer::type_array(
+            items = ellmer::type_string(),
+            description = paste(
+              "The column's labels from the top header level down, e.g.",
+              "[\"Cohort A\", \"Mild\"] for a child column or [\"Total\"]",
+              "for the overall column.")),
+          grouping_variables = ellmer::type_array(
+            items = ellmer::type_string(),
+            description = paste(
+              "Bare ADaM variable name(s) from available_variables that",
+              "define this column's header level(s), outermost first.",
+              "Omit when the header annotations already name them."),
+            required = FALSE),
+          role = ellmer::type_enum(
+            values = c("DETAIL", "SUBTOTAL", "GRAND_TOTAL"),
+            description = paste(
+              "DETAIL for a plain column; SUBTOTAL for a per-parent Total",
+              "(scoped by the PARENT's condition, so it may include subjects",
+              "whose child category is unknown); GRAND_TOTAL for the overall",
+              "Total (scoped by the analysis set)."),
+            required = FALSE),
+          includes_undisplayed_children = ellmer::type_boolean(
+            paste("For a SUBTOTAL: TRUE when footnotes/shell indicate it",
+                  "includes subjects outside the displayed child columns."),
+            required = FALSE)
+        ),
+        description = "One entry per visible result column, in display order."
+      )
     ),
     row_enrichments = ellmer::type_array(
       items = ellmer::type_object(

@@ -136,6 +136,7 @@
       id = "main_tabs",
       bslib::nav_panel("Details", mod_detail_ui("detail")),
       bslib::nav_panel("Entities", mod_entity_library_ui("library")),
+      bslib::nav_panel("Columns", mod_column_tree_ui("columns")),
       bslib::nav_panel("Validation", mod_validation_ui("validation")),
       bslib::nav_panel("JSON", mod_json_ui("json"))
     )
@@ -147,6 +148,7 @@
     mod_tree_server("tree", state)
     mod_detail_server("detail", state)
     mod_entity_library_server("library", state)
+    mod_column_tree_server("columns", state)
     mod_validation_server("validation", state)
     mod_json_server("json", state)
     mod_status_server("status", state, session)

@@ -1057,6 +1057,46 @@ model_set_node_json <- function(model, pool, id, json_text) {
   .model_refresh_row(model, pool, id, patch = FALSE)
 }
 
+## Edit one field of one declared result path on an output. Paths are a
+## nested list under the output's resultGroupPaths extension, so they get
+## their own accessor rather than a flat column. An empty value removes the
+## field (e.g. clearing a totalStrategy).
+#' @noRd
+model_set_result_path <- function(model, output_id, path_id, field, value) {
+  .assert_ars_model(model)
+  df  <- model$outputs
+  idx <- .row_index(df, output_id, "outputs")
+
+  node <- df$raw[[idx]]
+  rgp  <- node[["resultGroupPaths"]]
+  if (is.null(rgp)) {
+    cli::cli_abort("Output {.val {output_id}} declares no result-group paths.")
+  }
+
+  paths <- rgp[["paths"]] %||% list()
+  hit <- 0L
+  for (i in seq_along(paths)) {
+    if (identical(.chr_field(paths[[i]][["pathId"]]), path_id)) {
+      hit <- i
+      break
+    }
+  }
+  if (hit == 0L) {
+    cli::cli_abort("Output {.val {output_id}} has no path {.val {path_id}}.")
+  }
+
+  if (is.null(value) || (is.character(value) && !nzchar(value))) {
+    paths[[hit]][[field]] <- NULL
+  } else {
+    paths[[hit]][[field]] <- value
+  }
+  rgp[["paths"]] <- paths
+  node[["resultGroupPaths"]] <- rgp
+  df$raw[[idx]] <- node
+  model$outputs <- df
+  model
+}
+
 ## Edit one field of one operation inside a method. Operations are a nested
 ## list, so they get their own accessor rather than a flat column.
 #' @noRd
@@ -1357,6 +1397,95 @@ model_detach_entity <- function(model, pool, entity_id, analysis_id) {
 
   attr(model, "last_added") <- variant_id
   model
+}
+
+## Add a new (data-driven) grouping factor. Groups/conditions are added
+## afterwards -- via the entity editor's fields or the raw-JSON escape hatch
+## -- so a freshly added grouping behaves like a treatment-arm axis until
+## condition levels are defined.
+#' @noRd
+model_add_grouping <- function(model, dataset, variable, label = NULL) {
+  .assert_ars_model(model)
+  variable <- toupper(trimws(variable %||% ""))
+  dataset  <- toupper(trimws(dataset %||% "ADSL"))
+  if (!nzchar(variable)) {
+    cli::cli_abort("A grouping needs a {.field variable}.")
+  }
+  if (!nzchar(dataset)) dataset <- "ADSL"
+
+  base_id <- make_grouping_id(variable)
+  id <- if (base_id %in% model$groupings$id) {
+    .next_variant_id(model$groupings$id, base_id)
+  } else {
+    base_id
+  }
+
+  node <- list(
+    id               = id,
+    name             = variable,
+    label            = label %||% paste0("Grouping by ", variable),
+    groupingDataset  = dataset,
+    groupingVariable = variable,
+    dataDriven       = TRUE,
+    groups           = list()
+  )
+  row <- .pool_groupings(list(analysisGroupings = list(node)))
+  model$groupings <- rbind(model$groupings, row)
+  attr(model, "last_added") <- id
+  model
+}
+
+## Duplicate a grouping under a new id, groups and all. Nothing is repointed:
+## the copy exists to be edited into a sibling axis without touching the
+## analyses that use the original.
+#' @noRd
+model_clone_grouping <- function(model, grouping_id) {
+  .assert_ars_model(model)
+  idx <- .row_index(model$groupings, grouping_id, "groupings")
+
+  node <- model$groupings$raw[[idx]]
+  new_id <- .next_variant_id(model$groupings$id, grouping_id)
+  node[["id"]] <- new_id
+  label <- .chr_field(node[["label"]])
+  if (!is.na(label) && nzchar(label)) {
+    node[["label"]] <- paste0(label, " (copy)")
+  }
+
+  row <- .pool_groupings(list(analysisGroupings = list(node)))
+  model$groupings <- rbind(model$groupings, row)
+  attr(model, "last_added") <- new_id
+  model
+}
+
+## Remove a grouping factor. Refused while any analysis still references it:
+## deleting a used grouping would leave dangling orderedGroupings, and the
+## right order of operations (unassign, then delete) should be explicit, not
+## implicit.
+#' @noRd
+model_remove_grouping <- function(model, grouping_id) {
+  .assert_ars_model(model)
+  idx <- .row_index(model$groupings, grouping_id, "groupings")
+
+  dependents <- .grouping_dependents(model, grouping_id)
+  if (length(dependents) > 0) {
+    cli::cli_abort(c(
+      "Grouping {.val {grouping_id}} is still used by {length(dependents)} analys{?is/es}.",
+      "i" = "Remove it from those lines' {.field Grouped by} first: {.val {dependents}}."
+    ))
+  }
+
+  model$groupings <- model$groupings[-idx, , drop = FALSE]
+  model
+}
+
+## The analyses whose grouping_ids reference this grouping.
+#' @noRd
+.grouping_dependents <- function(model, grouping_id) {
+  analyses <- model$analyses
+  hits <- vapply(seq_len(nrow(analyses)), function(i) {
+    grouping_id %in% .split_values(analyses$grouping_ids[i] %||% "")
+  }, logical(1))
+  analyses$id[hits]
 }
 
 #' @noRd

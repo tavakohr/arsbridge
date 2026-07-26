@@ -20,15 +20,15 @@
 ##     dropped and logged as blockers, never shipped;
 ##   * versioned format (supplement_version) so old files fail loudly.
 
-.SUPPLEMENT_VERSION <- 3L
+.SUPPLEMENT_VERSION <- 4L
 
 ## Filenames of the static instruction documents (in inst/copilot/) and the
-## shipped v3 JSON Schema (in inst/schema/). ars_copilot_instructions() copies
+## shipped v4 JSON Schema (in inst/schema/). ars_copilot_instructions() copies
 ## the set for the chosen workflow into the user's directory.
 .COPILOT_INSTRUCTIONS_FILE <- "arsbridge_copilot_instructions.md"
 .COPILOT_PHASE1_FILE       <- "arsbridge_phase1_blueprint_instructions.md"
 .COPILOT_PHASE2_FILE       <- "arsbridge_phase2_build_instructions.md"
-.SUPPLEMENT_SCHEMA_FILE    <- "arsbridge_supplement_v3.schema.json"
+.SUPPLEMENT_SCHEMA_FILE    <- "arsbridge_supplement_v4.schema.json"
 
 ## Enum accepted for supplement analysis_type -- must stay in sync with
 ## .enrich_type() in enrich_with_llm.R.
@@ -57,7 +57,7 @@
 #' portal): upload the instruction file(s) this function writes TOGETHER WITH
 #' your annotated shell `.docx`, ADaM spec `.xlsx`, and the shipped JSON
 #' Schema, and the assistant replies with one strict `supplement.json`
-#' (format v3). Pass that file to `spec_to_ars(supplement = "supplement.json")`.
+#' (format v4). Pass that file to `spec_to_ars(supplement = "supplement.json")`.
 #'
 #' Two workflows are offered:
 #' * `"single"` (default): one instruction file. The assistant reads the shell
@@ -71,7 +71,7 @@
 #'
 #' The files are static and versioned -- do not edit them; the format they
 #' request is what `spec_to_ars()` knows how to validate. The JSON Schema
-#' (`arsbridge_supplement_v3.schema.json`) is written alongside so the
+#' (`arsbridge_supplement_v4.schema.json`) is written alongside so the
 #' assistant can self-check its reply, and so can
 #' [ars_validate_supplement()] (when `jsonvalidate` is installed).
 #'
@@ -180,7 +180,7 @@ ars_copilot_instructions <- function(dir = ".",
 #' Strip a markdown code fence (```json ... ```) if the assistant included
 #' one and normalise the "smart" double quotes chat UIs substitute into JSON.
 #'
-#' Format v3 carries conditions as typed objects, not strings, so the v2
+#' Format v3+ carries conditions as typed objects, not strings, so the v2
 #' `="..."` double-quote-value repair is gone: a bare `=` next to a quote can
 #' now only appear inside a legitimate title, and rewriting it would corrupt
 #' the file. Malformed typed JSON is a clean parse error the assistant fixes
@@ -222,7 +222,7 @@ read_supplement <- function(path) {
       cli::cli_abort(c(
         "Supplement file is not valid JSON: {.path {path}}",
         "x" = "{err_msg}",
-        "i" = "In format v3 conditions are typed objects, not strings: a {.code condition} with dataset, variable, comparator, and a value array.",
+        "i" = "In this format conditions are typed objects, not strings: a {.code condition} with dataset, variable, comparator, and a value array.",
         "i" = "Ask the assistant to re-emit ONE fenced strict-JSON block (no trailing commas, no comments, no smart quotes)."
       ))
     }
@@ -232,7 +232,7 @@ read_supplement <- function(path) {
   if (is.na(ver) || ver != .SUPPLEMENT_VERSION) {
     cli::cli_abort(c(
       "Supplement version mismatch: file says {.val {supp$supplement_version %||% 'none'}}, this arsbridge expects {.val {(.SUPPLEMENT_VERSION)}}.",
-      "i" = "Format v3 carries conditions as typed WhereClause objects, not strings -- a v2 file cannot be reused.",
+      "i" = "The supplement format carries conditions as typed WhereClause objects, not strings -- v2 and v3 files cannot be reused; regenerate with the current instructions.",
       "i" = "Regenerate the supplement with the instruction files from {.code ars_copilot_instructions()} of THIS package version."
     ))
   }
@@ -249,7 +249,7 @@ read_supplement <- function(path) {
   supp
 }
 
-## `ars_validate_supplement()` (the v3 pre-flight validator) lives in
+## `ars_validate_supplement()` (the supplement pre-flight validator) lives in
 ## R/supplement_validate.R.
 
 ## ---------------------------------------------------------------------------
@@ -357,7 +357,7 @@ read_supplement <- function(path) {
   findings
 }
 
-#' A supplement v3 `{dataset, variable}` object -> "DATASET.VARIABLE", or "".
+#' A supplement `{dataset, variable}` object -> "DATASET.VARIABLE", or "".
 #' @noRd
 .supp_var_ref <- function(x) {
   if (is.null(x)) return("")
@@ -367,21 +367,21 @@ read_supplement <- function(path) {
   paste0(ds, ".", v)
 }
 
-#' A supplement v3 confidence value -> a detection_confidence. A supplement is
+#' A supplement confidence value -> a detection_confidence. A supplement is
 #' advisory, so even HIGH is only "medium" ground truth; anything else is "low".
 #' @noRd
 .supp_confidence <- function(x) {
   if (identical(toupper(.as_scalar_char(x) %||% ""), "HIGH")) "medium" else "low"
 }
 
-#' A supplement v3 methodId -> the id when it is a catalogue id, else NULL.
+#' A supplement methodId -> the id when it is a catalogue id, else NULL.
 #' @noRd
 .supp_method_id <- function(x) {
   id <- toupper(trimws(.as_scalar_char(x) %||% ""))
   if (nzchar(id) && id %in% .SUPP_METHOD_IDS) id else NULL
 }
 
-#' Apply one TLF's supplement (format v3) to a parsed section.
+#' Apply one TLF's supplement (format v4) to a parsed section.
 #'
 #' Fill-gaps-only policy (decided with the package owner): a supplement
 #' analysis lands ONLY on a row the deterministic pass left unannotated.
@@ -390,7 +390,7 @@ read_supplement <- function(path) {
 #' are never bound (ADR 0003: they are layout rows of the analysis above).
 #' Every variable passes the hard ADaM-spec gate first.
 #'
-#' v3 conditions are TYPED (`whereClause`, `analysisSet`, grouping `groups`):
+#' Supplement conditions are TYPED (`whereClause`, `analysisSet`, grouping `groups`):
 #' they are validated by `.supp_where()` and stored as internal WhereClauses
 #' (`sec$population_where`, `row$supplement_where`, group `condition`), so the
 #' builders consume them without ever re-parsing a string.
@@ -658,6 +658,15 @@ read_supplement <- function(path) {
     sec <- .apply_supplement_groups(sec, groupings, gate_ok)
   }
 
+  ## Hierarchical column tree: explicit author intent, applied whenever
+  ## declared (the deterministic parser's tree is a geometric inference; the
+  ## supplement's is a statement). Every condition passes the hard spec gate,
+  ## and a structurally broken hierarchy is rejected whole -- a partial
+  ## column tree would silently drop display columns.
+  if (!is.null(supp_tlf$columnHierarchy)) {
+    sec <- .apply_supplement_column_tree(sec, supp_tlf, gate_ok)
+  }
+
   ## Channels arsbridge records but does not yet compute: kept on the section
   ## (and later copied to the output _meta) so a reviewer -- and a future
   ## engine -- can see them, with one INFO naming what was recorded.
@@ -828,12 +837,138 @@ read_supplement <- function(path) {
   sec
 }
 
-#' Map one TLF's supplement (v3) fields into the shape `.enrich_structured()`
+#' Apply a supplement `columnHierarchy` as the section's column tree.
+#'
+#' Converts the author-facing node list (v4 `columnHierarchy`) into the same
+#' internal tree the parser builds from header geometry, then runs the shared
+#' per-level resolution so `column_groups` / `column_annotation` /
+#' `include_total_hint` fill exactly as they would from a parsed tree. The
+#' hierarchy is all-or-nothing: one out-of-spec or unparseable node condition
+#' rejects the whole tree with a FAIL, and the section keeps whatever the
+#' shell parse produced.
+#' @noRd
+.apply_supplement_column_tree <- function(sec, supp_tlf, gate_ok) {
+  hierarchy <- supp_tlf$columnHierarchy
+  raw_nodes <- hierarchy$nodes %||% list()
+  where_at  <- sprintf("tlfs/%s/columnHierarchy", sec$tlf_number %||% "?")
+
+  if (isTRUE(as.logical(supp_tlf$includeTotal %||% FALSE))) {
+    .diag_gap(
+      stage = "supplement", severity = "FAIL", input = INPUT_SUPPLEMENT,
+      problem = "columnHierarchy and includeTotal=true are declared together.",
+      why = "In tree mode the overall Total is an explicit GRAND_TOTAL node; a second boolean total is ambiguous.",
+      fix = "Drop includeTotal (or set it false) and declare the Total column as a GRAND_TOTAL node.",
+      tlf_number = sec$tlf_number, location = where_at)
+    return(sec)
+  }
+
+  type_map <- c(GROUP = "group", LEAF = "leaf",
+                SUBTOTAL = "subtotal", GRAND_TOTAL = "grand_total")
+  nodes <- list()
+  for (raw in raw_nodes) {
+    node_id <- trimws(as.character(raw$id %||% ""))
+    label   <- trimws(as.character(raw$label %||% ""))
+    ntype   <- type_map[[toupper(trimws(as.character(raw$nodeType %||% "")))]] %||% ""
+    if (!nzchar(node_id) || !nzchar(label) || !nzchar(ntype)) {
+      .diag_gap(
+        stage = "supplement", severity = "FAIL", input = INPUT_SUPPLEMENT,
+        problem = sprintf("columnHierarchy node '%s' is missing id, label, or a valid nodeType.", node_id %||% label),
+        why = "Every declared column node must be identifiable and typed; a partial tree drops display columns.",
+        fix = "Give each node an id, a label, and one of GROUP/LEAF/SUBTOTAL/GRAND_TOTAL.",
+        tlf_number = sec$tlf_number, location = where_at)
+      return(sec)
+    }
+
+    condition <- NULL
+    if (!is.null(raw$condition) || !is.null(raw$compoundExpression)) {
+      wr <- .supp_where(raw, sprintf("%s/%s", where_at, node_id))
+      bad_refs <- if (is.null(wr$where)) character(0)
+                  else Filter(function(r) !gate_ok(r), .where_refs(wr$where))
+      if (is.null(wr$where) || length(bad_refs) > 0) {
+        detail <- if (length(bad_refs) > 0)
+                    paste("not in spec:", paste(bad_refs, collapse = ", "))
+                  else paste(wr$problems, collapse = "; ")
+        .diag_gap(
+          stage = "supplement", severity = "FAIL", input = INPUT_SUPPLEMENT,
+          problem = sprintf("columnHierarchy node '%s' condition rejected (%s).", node_id, detail),
+          why = "A column condition that does not validate, or names a variable absent from the ADaM spec, is treated as a hallucination -- and one bad node invalidates the declared tree.",
+          fix = "Fix this node's condition in the supplement, or add the variable to the ADaM spec.",
+          tlf_number = sec$tlf_number, location = node_id)
+        return(sec)
+      }
+      condition <- wr$where
+    }
+
+    ds  <- toupper(trimws(as.character(raw$groupingDataset  %||% "")))
+    var <- toupper(trimws(as.character(raw$groupingVariable %||% "")))
+    grouping_ref <- if (nzchar(ds) && nzchar(var)) paste0(ds, ".", var) else ""
+    if (!nzchar(grouping_ref) && !is.null(condition)) {
+      refs <- .where_refs(condition)
+      if (length(refs) > 0) grouping_ref <- toupper(refs[[1]])
+    }
+
+    parent_id <- trimws(as.character(raw$parentId %||% ""))
+    nodes[[length(nodes) + 1L]] <- list(
+      id           = node_id,
+      label        = label,
+      level        = as.integer(raw$level %||% 1L),
+      order        = as.integer(raw$order %||% (length(nodes) + 1L)),
+      parent_id    = if (nzchar(parent_id)) parent_id else NULL,
+      node_type    = ntype,
+      grouping_ref = grouping_ref,
+      annotation   = if (!is.null(condition)) .where_to_annotation(condition) else "",
+      condition    = condition,
+      n_hint       = NA_integer_,
+      source       = NULL   ## supplement-declared, no shell cell to point at
+    )
+  }
+
+  mode <- toupper(trimws(as.character(hierarchy$mode %||% "")))
+  tree <- list(mode = mode, nodes = nodes)
+  problems <- .validate_column_tree(tree)
+  paths    <- column_tree_paths(tree)
+  if (length(paths) < 2) {
+    problems <- c(problems, "fewer than two result-column paths")
+  }
+  if (length(problems) > 0) {
+    .diag_gap(
+      stage = "supplement", severity = "FAIL", input = INPUT_SUPPLEMENT,
+      problem = sprintf("columnHierarchy rejected: %s.", paste(problems, collapse = "; ")),
+      why = "A structurally broken tree cannot describe the display columns reliably.",
+      fix = "Fix the node ids/parents/conditions so each display column appears exactly once.",
+      tlf_number = sec$tlf_number, location = where_at)
+    return(sec)
+  }
+
+  if (!is.null(sec$column_tree)) {
+    diag_add(
+      stage = "supplement", severity = "WARN", input = INPUT_SUPPLEMENT,
+      problem = "Column tree overridden: the supplement's columnHierarchy replaces the tree parsed from the shell header.",
+      tlf_number = sec$tlf_number,
+      action = "Supplement hierarchy used -- review the declared paths against the shell"
+    )
+  }
+
+  sec$column_tree       <- tree
+  sec$column_groups     <- NULL   ## refilled from the tree's level-1 axis
+  sec$column_annotation <- NULL
+  sec <- .resolve_column_groups_from_tree(sec, spec_lookup = NULL)
+  diag_add(
+    stage = "supplement", severity = "INFO", input = INPUT_SUPPLEMENT,
+    problem = sprintf("Hierarchical column tree sourced from the supplement (%s): %d result-column paths",
+                      tree$mode, length(paths)),
+    tlf_number = sec$tlf_number,
+    action = "Each declared path becomes one display column; verify the tree in the review stage"
+  )
+  sec
+}
+
+#' Map one TLF's supplement (v4) fields into the shape `.enrich_structured()`
 #' returns, so `enrich_with_llm()` consumes them through the exact same path
 #' as a live LLM answer. Returns `list()` when the supplement has nothing
 #' for this TLF (the enricher then falls back to heuristics with a WARN).
 #'
-#' The rich v3 analysis family is folded to an engine family via `.V3_TYPE_MAP`
+#' The rich supplement analysis family is folded to an engine family via `.SUPP_TYPE_MAP`
 #' (e.g. MIXED_SUMMARY -> CONTINUOUS); the section-level `methodId` becomes the
 #' catalogue method name; groupings become an ordered, dataset-qualified
 #' `by_variables` list (`.resolve_grouping_from_spec()` accepts "ADSL.TRT01A").
@@ -847,8 +982,8 @@ read_supplement <- function(path) {
   }
 
   at3 <- toupper(nz_chr(supp_tlf$analysis_type) %||% "")
-  if (nzchar(at3) && at3 %in% .SUPPLEMENT_V3_ANALYSIS_TYPES) {
-    out$analysis_type <- unname(.V3_TYPE_MAP[[at3]])
+  if (nzchar(at3) && at3 %in% .SUPP_ANALYSIS_TYPES) {
+    out$analysis_type <- unname(.SUPP_TYPE_MAP[[at3]])
   }
   mn <- .method_name_from_id(supp_tlf$methodId)
   if (!is.null(mn)) out$ars_method_name <- mn

@@ -1,6 +1,6 @@
 ## arsbridge -- supplement_validate.R
 ## ---------------------------------------------------------------------------
-## Pre-flight validation of a format-v3 supplement. The pure-R checks here are
+## Pre-flight validation of a format-v4 supplement. The pure-R checks here are
 ## the in-package authority: they run everywhere (no V8 / jsonvalidate needed),
 ## produce FAIL/WARN/INFO findings worded so a `regenerate:` line can be pasted
 ## straight back to the chat assistant, and -- when there are FAILs -- attach a
@@ -10,15 +10,15 @@
 ## added as extra WARN rows (a structural second opinion), but it is never
 ## required.
 
-## Per-TLF fields the v3 format defines. Unknown fields are an INFO, not fatal.
-.SUPPLEMENT_V3_FIELDS <- c(
+## Per-TLF fields the v4 format defines. Unknown fields are an INFO, not fatal.
+.SUPPLEMENT_TLF_FIELDS <- c(
   "title", "outputType", "analysis_type", "methodId", "is_supported",
   "unsupported_reason", "analysisSet", "recordFilter", "groupings",
-  "includeTotal", "analyses", "listingColumns", "sorting", "anchors",
-  "provenance"
+  "includeTotal", "columnHierarchy", "analyses", "listingColumns", "sorting",
+  "anchors", "provenance"
 )
 
-#' Validate a Copilot supplement file (format v3) before running spec_to_ars()
+#' Validate a Copilot supplement file (format v4) before running spec_to_ars()
 #'
 #' Pre-flight check for the supplement workflow (see
 #' [ars_copilot_instructions()]): parses the file, checks the format version,
@@ -110,9 +110,9 @@ ars_validate_supplement <- function(path, adam_spec_path = NULL) {
         next
       }
 
-      extra <- setdiff(names(entry), .SUPPLEMENT_V3_FIELDS)
+      extra <- setdiff(names(entry), .SUPPLEMENT_TLF_FIELDS)
       for (f in extra) {
-        hit <- .SUPPLEMENT_V3_FIELDS[tolower(.SUPPLEMENT_V3_FIELDS) == tolower(f)]
+        hit <- .SUPPLEMENT_TLF_FIELDS[tolower(.SUPPLEMENT_TLF_FIELDS) == tolower(f)]
         msg <- if (length(hit) > 0) sprintf("unknown field '%s' ignored (did you mean '%s'? field names are case-sensitive)", f, hit[1])
                else sprintf("unknown field '%s' ignored", f)
         note("INFO", tlf, "fields", msg)
@@ -132,11 +132,11 @@ ars_validate_supplement <- function(path, adam_spec_path = NULL) {
       if (!nzchar(at)) {
         note("FAIL", tlf, "analysis_type", sprintf(
           "regenerate: analysis_type is required -- one of %s",
-          paste(.SUPPLEMENT_V3_ANALYSIS_TYPES, collapse = "|")))
-      } else if (!at %in% .SUPPLEMENT_V3_ANALYSIS_TYPES) {
+          paste(.SUPP_ANALYSIS_TYPES, collapse = "|")))
+      } else if (!at %in% .SUPP_ANALYSIS_TYPES) {
         note("FAIL", tlf, "analysis_type", sprintf(
           "regenerate: analysis_type must be one of %s",
-          paste(.SUPPLEMENT_V3_ANALYSIS_TYPES, collapse = "|")))
+          paste(.SUPP_ANALYSIS_TYPES, collapse = "|")))
       }
 
       if (is.null(entry$is_supported)) {
@@ -158,6 +158,7 @@ ars_validate_supplement <- function(path, adam_spec_path = NULL) {
       if (!is.null(entry$recordFilter)) check_where(entry$recordFilter, tlf, "recordFilter")
 
       .validate_groupings(entry$groupings, tlf, note, check_ref, check_where)
+      .validate_column_hierarchy(entry, tlf, note, check_ref, check_where)
       .validate_analyses(entry, tlf, note, check_ref, check_where)
 
       for (i in seq_along(entry$listingColumns %||% list())) {
@@ -279,6 +280,80 @@ ars_validate_supplement <- function(path, adam_spec_path = NULL) {
   }
 }
 
+#' Validate the `columnHierarchy` of one TLF entry (v4 hierarchical column
+#' tree): the includeTotal conflict, node completeness, parent references,
+#' duplicate ids, and each node condition through the shared where/ref
+#' checks.
+#' @noRd
+.validate_column_hierarchy <- function(entry, tlf, note, check_ref, check_where) {
+  hierarchy <- entry$columnHierarchy
+  if (is.null(hierarchy)) return(invisible(NULL))
+
+  if (isTRUE(as.logical(entry$includeTotal %||% FALSE))) {
+    note("FAIL", tlf, "columnHierarchy",
+         "regenerate: columnHierarchy and includeTotal:true cannot be declared together -- declare the overall Total as a GRAND_TOTAL node instead")
+  }
+
+  mode <- toupper(trimws(as.character(hierarchy$mode %||% "")))
+  if (!mode %in% c("NESTED", "ASYMMETRIC_NESTED")) {
+    note("FAIL", tlf, "columnHierarchy",
+         "regenerate: columnHierarchy.mode must be NESTED or ASYMMETRIC_NESTED")
+  }
+
+  nodes <- hierarchy$nodes %||% list()
+  if (length(nodes) < 2) {
+    note("FAIL", tlf, "columnHierarchy",
+         "regenerate: columnHierarchy needs at least two nodes (one per display column, plus spanning parents)")
+    return(invisible(NULL))
+  }
+
+  ids <- vapply(nodes, function(n) trimws(as.character(n$id %||% "")), character(1))
+  if (anyDuplicated(ids[nzchar(ids)])) {
+    note("FAIL", tlf, "columnHierarchy", "regenerate: node ids must be unique")
+  }
+
+  for (i in seq_along(nodes)) {
+    n <- nodes[[i]]
+    where <- sprintf("columnHierarchy.nodes[%d]", i)
+    ntype <- toupper(trimws(as.character(n$nodeType %||% "")))
+
+    if (!nzchar(ids[i])) {
+      note("FAIL", tlf, where, "regenerate: each node needs a non-empty 'id'")
+    }
+    if (!nzchar(trimws(as.character(n$label %||% "")))) {
+      note("FAIL", tlf, where, "regenerate: each node needs a non-empty 'label'")
+    }
+    if (!ntype %in% c("GROUP", "LEAF", "SUBTOTAL", "GRAND_TOTAL")) {
+      note("FAIL", tlf, where,
+           "regenerate: nodeType must be GROUP, LEAF, SUBTOTAL, or GRAND_TOTAL")
+    }
+
+    par <- trimws(as.character(n$parentId %||% ""))
+    if (nzchar(par) && !par %in% ids) {
+      note("FAIL", tlf, where, sprintf(
+        "regenerate: parentId '%s' does not match any node id", par))
+    }
+
+    has_cond <- !is.null(n$condition) || !is.null(n$compoundExpression)
+    if (has_cond) {
+      check_where(n, tlf, where)
+    } else if (ntype %in% c("GROUP", "LEAF")) {
+      note("WARN", tlf, where, sprintf(
+        "a %s node usually needs a condition (which subjects fall in this column?)",
+        ntype))
+    }
+    if (ntype == "GRAND_TOTAL" && has_cond) {
+      note("WARN", tlf, where,
+           "a GRAND_TOTAL node is scoped by the analysis set; its own condition is ignored")
+    }
+    if (ntype == "SUBTOTAL" && !nzchar(par)) {
+      note("FAIL", tlf, where,
+           "regenerate: a SUBTOTAL node needs a parentId -- it totals its parent's column group")
+    }
+  }
+  invisible(NULL)
+}
+
 #' Validate the `analyses` array of one TLF entry.
 #' @noRd
 .validate_analyses <- function(entry, tlf, note, check_ref, check_where) {
@@ -327,6 +402,117 @@ ars_validate_supplement <- function(path, adam_spec_path = NULL) {
       seen_order <- c(seen_order, ord)
     }
   }
+}
+
+#' Pre-flight a Phase-1 blueprint file (tlf_extraction_blueprints.json).
+#'
+#' Advisory by design: arsbridge never consumes the blueprint (only the chat
+#' assistant does, in Phase 2), so this exists to catch a truncated paste or
+#' a wrong-version file BEFORE the user burns a Phase-2 session on it. The
+#' Phase-1 contract pins the version (2) and the one-entry-per-TLF rule but
+#' not exact key names, so the checks are tolerant: FAIL only for unusable
+#' files, WARN/INFO for things worth a look.
+#'
+#' Returns the same findings shape as [ars_validate_supplement()]:
+#' `severity` / `tlf` / `where` / `problem`, zero rows = clean.
+#' @noRd
+.validate_blueprint <- function(path) {
+  findings <- list()
+  note <- function(severity, tlf, where, problem) {
+    findings[[length(findings) + 1L]] <<- data.frame(
+      severity = severity, tlf = tlf %||% NA_character_,
+      where = where, problem = problem, stringsAsFactors = FALSE)
+  }
+  done <- function() {
+    if (length(findings) == 0) {
+      data.frame(severity = character(), tlf = character(),
+                 where = character(), problem = character(),
+                 stringsAsFactors = FALSE)
+    } else {
+      do.call(rbind, findings)
+    }
+  }
+
+  bp <- tryCatch(
+    jsonlite::fromJSON(path, simplifyVector = FALSE),
+    error = function(e) e
+  )
+  if (inherits(bp, "error")) {
+    note("FAIL", NA, "file", sprintf(
+      "Not valid JSON (%s) -- re-copy the complete blueprint from the assistant.",
+      conditionMessage(bp)))
+    return(done())
+  }
+  if (!is.list(bp)) {
+    note("FAIL", NA, "file", "The blueprint must be a JSON object.")
+    return(done())
+  }
+
+  ## Version: the contract says blueprint version 2; the exact key name is
+  ## not pinned, so probe the likely spellings.
+  version <- bp[["blueprint_version"]] %||% bp[["blueprintVersion"]] %||%
+    bp[["version"]]
+  if (is.null(version)) {
+    note("WARN", NA, "version",
+         "No blueprint version field found -- expected blueprint version 2.")
+  } else if (!identical(as.integer(version[[1]]), 2L)) {
+    note("FAIL", NA, "version", sprintf(
+      "Blueprint version is %s but this arsbridge expects 2 -- regenerate Phase 1 with the current instructions.",
+      as.character(version[[1]])))
+  }
+
+  ## The TLF collection: a named object under a likely key, else the largest
+  ## named-list member (tolerant), else nothing usable.
+  collection <- bp[["tlfs"]] %||% bp[["blueprints"]] %||%
+    bp[["tlf_blueprints"]]
+  if (is.null(collection)) {
+    named_lists <- Filter(function(x) {
+      is.list(x) && length(x) > 0 && !is.null(names(x)) && all(nzchar(names(x)))
+    }, bp)
+    if (length(named_lists) > 0) {
+      sizes <- vapply(named_lists, length, integer(1))
+      collection <- named_lists[[which.max(sizes)]]
+    }
+  }
+  if (is.null(collection) || length(collection) == 0) {
+    note("FAIL", NA, "tlfs",
+         "No per-TLF blueprint collection found -- the file must carry one entry per output.")
+    return(done())
+  }
+
+  keys <- names(collection) %||% character(0)
+  dups <- unique(keys[duplicated(keys)])
+  for (d in dups) {
+    note("FAIL", d, "tlfs", "Duplicate TLF key -- every TLF must appear exactly once.")
+  }
+
+  ## Per-TLF status and placeholders, where the entry exposes them.
+  status_of <- function(entry) {
+    toupper(trimws(as.character(
+      entry[["blueprint_status"]] %||% entry[["blueprintStatus"]] %||%
+        entry[["status"]] %||% ""
+    )))
+  }
+  for (key in keys) {
+    entry <- collection[[key]]
+    if (!is.list(entry)) next
+    status <- status_of(entry)
+    if (status %in% c("BLUEPRINT_INCOMPLETE", "FAILED")) {
+      note("WARN", key, "status", sprintf(
+        "Blueprint status is %s -- Phase 2 will struggle with this TLF; consider another Phase 1 pass.",
+        status))
+    } else if (identical(status, "READY_WITH_REVIEW")) {
+      note("INFO", key, "status",
+           "Blueprint status is READY_WITH_REVIEW -- check its review items during Phase 2.")
+    }
+    flat <- paste(unlist(entry), collapse = " ")
+    if (grepl("__REQUIRED_VALUE__|__RESOLVE_OR_REVIEW__", flat)) {
+      note("INFO", key, "placeholders",
+           "Carries unresolved placeholders -- legitimate in a blueprint; Phase 2 must resolve them.")
+    }
+  }
+
+  done()
 }
 
 #' Bundle every FAIL into one paste-ready repair prompt for the assistant --

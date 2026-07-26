@@ -530,6 +530,12 @@ build_ars_json <- function(sections,
     }
     gf_ids <- vapply(gf_objs, function(g) g$id, character(1))
 
+    ## Hierarchical column tree: the declared result-column paths become an
+    ## output-level extension, and the overall Total travels as an explicit
+    ## GRAND_TOTAL path rather than the includeTotal boolean.
+    result_group_paths <- .build_result_group_paths(sec, gf_objs)
+    if (!is.null(result_group_paths)) sec$include_total <- FALSE
+
     ## --- AnalysisMethod (standard catalogue, or declarative-unsupported) ---
     ## A wholesale-gated section's descriptive rows are reserved; a partial
     ## section's descriptive rows compute with the normal method. A LISTING
@@ -986,7 +992,8 @@ build_ars_json <- function(sections,
 
     outputs[[length(outputs) + 1L]] <-
       .build_output(sec, analysis_ids, ship_annotations = ship_annotations,
-                    shell_layout = shell_layout)
+                    shell_layout = shell_layout,
+                    result_group_paths = result_group_paths)
   }
 
   ## Siera iterates `seq_len(nrow(JSON_DataSubsets))` and
@@ -1105,6 +1112,23 @@ build_ars_json <- function(sections,
 #' `by_variable` / `by_variable_dataset` pair.
 #' @noRd
 .build_groupings <- function(sec, codelists = NULL, spec_lookup = NULL) {
+  ## Hierarchical column tree: one standard flat GroupingFactor per header
+  ## level, so siera and every other flat consumer keep working -- the
+  ## hierarchy itself travels as the output's resultGroupPaths extension.
+  tree <- sec$column_tree
+  if (!is.null(tree) &&
+      (tree$mode %||% "FLAT") %in% c("NESTED", "ASYMMETRIC_NESTED") &&
+      length(tree$levels %||% list()) > 0) {
+    out <- lapply(tree$levels, function(lvl) {
+      cg <- if (lvl$level == 1L) sec$column_groups
+            else .tree_level_column_groups(tree, lvl)
+      .build_grouping_one(lvl$variable, lvl$dataset %||% "ADSL",
+                          column_groups = cg,
+                          codelists = codelists, spec_lookup = spec_lookup)
+    })
+    return(Filter(Negate(is.null), out))
+  }
+
   groupings <- sec$groupings
   if (is.null(groupings) || length(groupings) == 0) {
     single <- .build_grouping(sec, codelists, spec_lookup)
@@ -1163,6 +1187,29 @@ build_ars_json <- function(sections,
   gf
 }
 
+#' One officially-shaped ARS Group. Per ARS v1.0, Group IS-A WhereClause:
+#' it must carry `level` and `order`, and its condition sits directly on the
+#' node -- a bare WhereClauseCondition under `condition`, or a
+#' `compoundExpression`. `where` arrives in the internal wrapped shape
+#' (what `parse_where_clause()` returns) and is unwrapped here, at the ARS
+#' boundary; internal consumers keep reading through `.group_where()`.
+#' @noRd
+.official_group <- function(variable, label, order, where) {
+  g <- list(
+    id    = make_group_id(variable, label),
+    name  = label,
+    label = label,
+    level = 1L,
+    order = order
+  )
+  if (!is.null(where[["condition"]])) {
+    g$condition <- where[["condition"]]
+  } else if (!is.null(where[["compoundExpression"]])) {
+    g$compoundExpression <- where[["compoundExpression"]]
+  }
+  g
+}
+
 #' Per-level Group objects derived from the ADaM spec codelist of the
 #' grouping variable -- the fallback when the shell's column headers carried
 #' no parseable conditions. One EQ condition per codelist term, labelled by
@@ -1184,14 +1231,9 @@ build_ars_json <- function(sections,
   out <- list()
   for (i in seq_len(nrow(cl$terms))) {
     label <- cl$terms$decode[i]
-    out[[length(out) + 1L]] <- list(
-      id        = make_group_id(bare_var, label),
-      name      = label,
-      label     = label,
-      order     = length(out) + 1L,
-      ## Same wrapped WhereClause shape parse_where_clause() returns, so the
-      ## executor / emitter consume it with no translation.
-      condition = list(condition = list(
+    out[[length(out) + 1L]] <- .official_group(
+      bare_var, label, length(out) + 1L,
+      list(condition = list(
         dataset    = ds,
         variable   = bare_var,
         comparator = "EQ",
@@ -1204,9 +1246,9 @@ build_ars_json <- function(sections,
 
 #' Per-level Group objects for a grouping factor, from the parser's
 #' `sec$column_groups`. Empty list when the section has none or they belong
-#' to a different variable. Each level's `condition` is the ARS WhereClause
-#' `parse_where_clause()` returns, so the executor and the code emitter
-#' consume it after the jsonlite round-trip with no translation.
+#' to a different variable. Groups are emitted in the OFFICIAL ARS shape
+#' (`.official_group()`); internal consumers read them back through
+#' `.group_where()`.
 #' @noRd
 .build_group_levels <- function(variable, column_groups) {
   if (is.null(column_groups) || length(column_groups$groups %||% list()) == 0) {
@@ -1232,15 +1274,125 @@ build_ars_json <- function(sections,
       )
       next
     }
-    out[[length(out) + 1L]] <- list(
-      id        = make_group_id(bare_var, def$label %||% ""),
-      name      = def$label %||% "",
-      label     = def$label %||% "",
-      order     = def$order %||% (length(out) + 1L),
-      condition = condition
+    out[[length(out) + 1L]] <- .official_group(
+      bare_var, def$label %||% "", def$order %||% (length(out) + 1L),
+      condition
     )
   }
   out
+}
+
+#' Column-groups-shaped level definitions for one deeper tree level: the
+#' detail leaf columns at that level whose grouping variable is the level's
+#' axis. A subtotal node contributes no level (its scope is its parent's
+#' condition), and repeated child labels under different parents collapse to
+#' one level per distinct condition.
+#' @noRd
+.tree_level_column_groups <- function(tree, lvl) {
+  axis <- paste0(toupper(lvl$dataset %||% "ADSL"), ".", toupper(lvl$variable))
+  nodes <- Filter(function(n) {
+    n$level == lvl$level && identical(n$node_type, "leaf") &&
+      identical(n$grouping_ref, axis) && !is.null(n$condition)
+  }, tree$nodes)
+  nodes <- nodes[order(vapply(nodes, function(n) n$order, integer(1)))]
+
+  groups <- list()
+  seen <- character(0)
+  for (n in nodes) {
+    key <- paste(deparse(canonicalize_condition(n$condition)), collapse = "")
+    if (key %in% seen) next
+    seen <- c(seen, key)
+    groups[[length(groups) + 1L]] <- list(
+      label      = n$label,
+      annotation = n$annotation,
+      condition  = n$condition,
+      order      = length(groups) + 1L
+    )
+  }
+  list(variable = lvl$variable, dataset = lvl$dataset %||% "ADSL",
+       groups = groups)
+}
+
+#' The output's `resultGroupPaths` extension: one entry per declared result
+#' column, in display order, each referencing the standard group levels whose
+#' conditions compose the column. NULL when the section has no hierarchical
+#' column tree (flat and crossed tables carry no path metadata).
+#'
+#' Conditions are NOT duplicated here -- a path's condition is the AND of its
+#' referenced groups' conditions, so the GroupingFactors stay the single
+#' source of condition truth. A SUBTOTAL path references only its parent's
+#' group (the parent condition IS its scope); a GRAND_TOTAL path references
+#' no group at all (the analysis set alone scopes it).
+#' @noRd
+.build_result_group_paths <- function(sec, gf_objs) {
+  tree <- sec$column_tree
+  if (is.null(tree) ||
+      !(tree$mode %||% "FLAT") %in% c("NESTED", "ASYMMETRIC_NESTED")) {
+    return(NULL)
+  }
+  paths <- column_tree_paths(tree)
+  if (length(paths) == 0) return(NULL)
+
+  ## Canonical condition -> group id, across every grouping factor.
+  condition_key <- function(x) paste(deparse(canonicalize_condition(x)), collapse = "")
+  index <- list()
+  for (gf in gf_objs) {
+    for (g in gf$groups %||% list()) {
+      key <- condition_key(.group_where(g))
+      if (is.null(index[[key]])) index[[key]] <- g$id
+    }
+  }
+  node_by_id <- stats::setNames(
+    tree$nodes, vapply(tree$nodes, function(n) n$id, character(1)))
+
+  tlf_key <- gsub("[^A-Za-z0-9]+", "_", toupper(sec$tlf_number %||% "TLF"))
+  out_paths  <- list()
+  provenance <- list()
+  for (p in paths) {
+    group_ids <- character(0)
+    for (nid in p$node_ids) {
+      node <- node_by_id[[nid]]
+      if (is.null(node) || is.null(node$condition)) next
+      ## A subtotal's own condition (when annotated) duplicates its parent's;
+      ## a grand total is scoped by the analysis set. Neither is a group.
+      if (node$node_type %in% c("subtotal", "grand_total")) next
+      gid <- index[[condition_key(node$condition)]]
+      if (is.null(gid)) {
+        diag_add(
+          stage = "build_ars", severity = "WARN",
+          problem = sprintf(
+            "Result path '%s': node '%s' has no matching group level; the path may not execute",
+            paste(p$label_path, collapse = " > "), node$label),
+          tlf_number = sec$tlf_number,
+          action = "Check the header annotations -- every detail column needs a group level with the same condition"
+        )
+        next
+      }
+      group_ids <- c(group_ids, gid)
+    }
+
+    entry <- list(
+      pathId    = sprintf("PATH_%s_%02d", tlf_key, p$order),
+      order     = p$order,
+      role      = p$role,
+      nodeId    = p$path_id,
+      labelPath = as.list(p$label_path),
+      groupIds  = as.list(group_ids)
+    )
+    if (!is.null(p$total_strategy)) entry$totalStrategy <- p$total_strategy
+    out_paths[[length(out_paths) + 1L]] <- entry
+
+    if (!is.null(p$source)) {
+      provenance[[length(provenance) + 1L]] <- list(
+        pathId    = entry$pathId,
+        headerRow = p$source$header_row,
+        colStart  = p$source$col_start,
+        colEnd    = p$source$col_end
+      )
+    }
+  }
+
+  list(mode = tree$mode, paths = out_paths, provenance = provenance)
 }
 
 .build_method <- function(sec) {
@@ -1446,7 +1598,7 @@ build_ars_json <- function(sections,
 }
 
 .build_output <- function(section, analysis_ids, ship_annotations = FALSE,
-                          shell_layout = NULL) {
+                          shell_layout = NULL, result_group_paths = NULL) {
   ## Shipped footnotes are the true footnotes only; programmer annotation
   ## lines are mapping instructions, not display text (ADR 0003 Layer B).
   ## ship_annotations = TRUE re-attaches them for debugging.
@@ -1470,9 +1622,32 @@ build_ars_json <- function(sections,
   if (length(section$supplement_extras %||% list()) > 0) {
     out_meta$supplement <- section$supplement_extras
   }
+  ## The parsed/declared column tree travels as provenance so the review
+  ## stage can show it and validation can hold the emitted paths against the
+  ## shell's own column count. Conditions stay out -- the GroupingFactors and
+  ## resultGroupPaths carry the semantics; this is display structure.
+  if (!is.null(section$column_tree)) {
+    out_meta$column_tree <- list(
+      mode  = section$column_tree$mode,
+      nodes = lapply(section$column_tree$nodes, function(n) {
+        node <- list(
+          id         = n$id,
+          label      = n$label,
+          level      = n$level,
+          order      = n$order,
+          nodeType   = n$node_type,
+          annotation = n$annotation %||% ""
+        )
+        if (!is.null(n$parent_id)) node$parentId <- n$parent_id
+        if (!is.na(n$n_hint %||% NA_integer_)) node$nHint <- n$n_hint
+        if (!is.null(n$source)) node$source <- n$source
+        node
+      })
+    )
+  }
   output_id <- make_output_id(section$tlf_number)
 
-  list(
+  out <- list(
     id                    = output_id,
     name                  = section$tlf_number,
     label                 = section$title %||% "",
@@ -1518,6 +1693,13 @@ build_ars_json <- function(sections,
     referencedAnalysisIds = as.list(analysis_ids),
     `_meta`               = out_meta
   )
+  ## Declared result-column paths (arsbridge extension; ars_conformance()
+  ## strips it). Only the paths named here are ever executed -- never a
+  ## Cartesian product of the grouping variables.
+  if (!is.null(result_group_paths)) {
+    out$resultGroupPaths <- result_group_paths
+  }
+  out
 }
 
 

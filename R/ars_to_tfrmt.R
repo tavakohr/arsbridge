@@ -162,6 +162,16 @@ extract_footnotes <- function(out_obj) {
 ## Detect the column variable (treatment groups). Returns one ARD column name.
 detect_col_var <- function(ard, spec) {
   nms      <- names(ard)
+
+  ## Declared-path ARD: every result column already carries its full display
+  ## identity ("Cohort A > Mild", "Cohort A > Total", "Total"), one value per
+  ## declared path -- that IS the column axis. The flat group*_level columns
+  ## duplicate it per level and must not be picked instead.
+  if ("result_group_path" %in% nms &&
+      any(!is.na(.flat_chr(ard[["result_group_path"]])))) {
+    return("result_group_path")
+  }
+
   lvl_cols <- .group_level_cols(nms)
   if (length(lvl_cols) == 0) {
     cli::cli_abort("ARD has no {.field group*_level} columns to use as the column variable.")
@@ -215,6 +225,10 @@ detect_col_var <- function(ard, spec) {
 detect_row_roles <- function(ard, col_var) {
   nms      <- names(ard)
   lvl_cols <- setdiff(.group_level_cols(nms), col_var)
+
+  ## Declared-path column axis: the group*_level columns are the per-level
+  ## decomposition of the SAME column identity, not row groupings.
+  if (identical(col_var, "result_group_path")) lvl_cols <- character(0)
 
   ## group hierarchy: remaining group level cols, then `variable` (each
   ## analysis variable becomes its own row block / header).
@@ -399,6 +413,18 @@ build_body_plan <- function(ard_out, include_spacer = FALSE) {
 ## treatment column. Falls back to append-all when nothing matches.
 build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
                              ard_levels = NULL) {
+  ## Declared-path column axis: the shell order travels with the ARD as
+  ## result_group_order, which beats any label matching against the display
+  ## columns (whose flattened labels do not use the "parent > child" form).
+  if (identical(col_var, "result_group_path") &&
+      "result_group_order" %in% names(ard_out)) {
+    lvl <- .flat_chr(ard_out[["result_group_path"]])
+    ord <- .flat_num(ard_out[["result_group_order"]])
+    keep <- !is.na(lvl)
+    first_order <- tapply(ord[keep], lvl[keep], min, na.rm = TRUE)
+    return(names(sort(first_order)))
+  }
+
   if (is.null(ard_levels)) {
     ard_levels <- unique(stats::na.omit(.flat_chr(ard_out[[col_var]])))
   }

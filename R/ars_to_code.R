@@ -197,6 +197,9 @@
   e <- res$dataset
   e <- .apply_where_expr(e, res$dataset, res$pop_where, res$subject_key)
   e <- .apply_where_expr(e, res$dataset, res$subset_where, res$subject_key)
+  ## Declared-path mode: the current path's composed condition scopes the
+  ## frame to exactly one display column's subjects.
+  e <- .apply_where_expr(e, res$dataset, res$path_where, res$subject_key)
   paste0(e, .group_mutate_expr(res), .decode_mutate_expr(res))
 }
 
@@ -208,6 +211,10 @@
 #' @noRd
 .denom_expr <- function(res) {
   e <- .apply_where_expr("ADSL", "ADSL", res$pop_where, res$subject_key)
+  ## Declared-path mode: percentages are out of the path's own population --
+  ## a subtotal's N is the parent-condition count, the grand total's N the
+  ## analysis-set count.
+  e <- .apply_where_expr(e, "ADSL", res$path_where, res$subject_key)
   paste0(e, .group_mutate_expr(res))
 }
 
@@ -259,10 +266,81 @@
 ## `code` (character vector of lines) and `objs` (block object names to bind).
 #' @noRd
 .emit_block <- function(res) {
+  ## Declared-path mode: one block per declared result column, never a cross
+  ## of the grouping variables. Stratified/inferential methods keep the flat
+  ## path (a per-column pass is meaningless for a CMH).
+  if (length(res$paths %||% list()) > 0 &&
+      !(res$method_id %||% "") %in% c("MTH_CMH_TEST", "MTH_PROPORTION_CI_EXACT")) {
+    return(.emit_block_per_path(res))
+  }
+  .emit_block_flat(res)
+}
+
+## One emitted block per declared result-group path. Each block filters the
+## analysis frame AND the denominator frame by the path's composed condition,
+## runs the method idiom ungrouped, then stamps the display identity: the
+## per-level group columns (group1/group1_level, ...) plus the stable path
+## fields (result_group_id / _path / _order / _level). Only declared paths
+## are emitted -- an undeclared combination can never appear in the ARD.
+#' @noRd
+.emit_block_per_path <- function(res) {
+  comment <- .block_comment(res)
+  obj     <- .blk_name(res$analysis_id)
+  by_all  <- .clean_emit_name(res$by)
+
+  code <- comment
+  objs <- character(0)
+  for (p in res$paths) {
+    ## The path-scoped resolution: its condition filters both frames; no
+    ## grouped pass, no include_total pass, no column-factor derivation.
+    res_p <- res
+    res_p$by            <- character(0)
+    res_p$include_total <- FALSE
+    res_p$group_defs    <- list()
+    res_p$paths         <- NULL
+    res_p$path_where    <- p$condition
+
+    obj_p <- sprintf("%s_p%02d", obj, p$order)
+
+    ## Display identity, in shell order: group columns for the levels this
+    ## path pins, then the stable path fields.
+    stamps <- character(0)
+    for (i in seq_along(by_all)) {
+      level <- p$group_levels[[res$by[[i]]]] %||% p$group_levels[[by_all[[i]]]]
+      if (is.null(level)) next
+      stamps <- c(stamps,
+        sprintf("    group%d = %s", i, encodeString(by_all[[i]], quote = "\"")),
+        sprintf("    group%d_level = %s", i, encodeString(level, quote = "\"")))
+    }
+    stamps <- c(stamps,
+      sprintf("    result_group_id = %s",
+              encodeString(p$path_id, quote = "\"")),
+      sprintf("    result_group_path = %s",
+              encodeString(paste(p$label_path, collapse = " > "), quote = "\"")),
+      sprintf("    result_group_order = %dL", p$order),
+      sprintf("    result_group_level = %dL", length(p$label_path)))
+
+    code <- paste0(
+      code, "\n",
+      sprintf("# Column: %s%s\n", paste(p$label_path, collapse = " > "),
+              if (!identical(p$role, "DETAIL")) paste0(" (", tolower(p$role), ")") else ""),
+      sprintf("%s <- %s |>\n  dplyr::mutate(\n%s\n  )",
+              obj_p, .method_call(res_p, character(0)),
+              paste(stamps, collapse = ",\n"))
+    )
+    objs <- c(objs, obj_p)
+  }
+  list(code = code, objs = objs)
+}
+
+## The cards CALL (no object assignment) for one resolved analysis and a
+## given `by` vector. Selecting the idiom by method here -- once -- lets the
+## flat block, its include_total total pass, and every declared-path block
+## reuse the exact same idiom.
+#' @noRd
+.method_call <- function(res, b) {
   var    <- .clean_emit_name(res$variable)
-  by     <- .clean_emit_name(res$by)
   sk     <- res$subject_key
-  obj    <- .blk_name(res$analysis_id)
   data_e <- .data_expr(res)
   denom  <- .denom_expr(res)
   method <- res$method_id %||% ""
@@ -273,10 +351,7 @@
     sprintf(",\n  by = all_of(%s)", .r_chr_vec(b))
   } else ""
 
-  ## The cards CALL (no object assignment) for a given `by` vector. Selecting
-  ## the idiom by method here -- once -- lets the include_total total pass reuse
-  ## the exact same idiom with `by = character(0)`.
-  mk_call <- function(b) {
+  call_for <- function(b) {
     if (.is_bare_flag(res) &&
         method %in% c("MTH_SUBJECT_COUNT", "MTH_COUNT_AND_PERCENTAGE")) {
       lab <- res$label %||% res$description %||% var
@@ -347,9 +422,17 @@
         data_e, qvar, by_line(b), denom)
     }
   }
+  call_for(b)
+}
+
+#' @noRd
+.emit_block_flat <- function(res) {
+  by     <- .clean_emit_name(res$by)
+  obj    <- .blk_name(res$analysis_id)
+  method <- res$method_id %||% ""
 
   comment <- .block_comment(res)
-  code <- sprintf("%s\n%s <- %s", comment, obj, mk_call(by))
+  code <- sprintf("%s\n%s <- %s", comment, obj, .method_call(res, by))
   objs <- obj
 
   ## include_total: an extra ungrouped pass (shell carries an overall column).
@@ -358,7 +441,8 @@
   if (isTRUE(res$include_total) && length(by) &&
       !method %in% c("MTH_CMH_TEST", "MTH_PROPORTION_CI_EXACT")) {
     obj_t <- paste0(obj, "_total")
-    code  <- paste0(code, "\n", sprintf("%s <- %s", obj_t, mk_call(character(0))))
+    code  <- paste0(code, "\n",
+                    sprintf("%s <- %s", obj_t, .method_call(res, character(0))))
     objs  <- c(objs, obj_t)
   }
   list(code = code, objs = objs)
@@ -388,23 +472,24 @@
 #' @param subject_key Subject identifier (default `"USUBJID"`).
 #' @param adam_dir Default ADaM directory baked into the script header (the
 #'   reader can edit it; the engine overrides it when sourcing).
-#' @param grouping_map,analysis_to_output,grouping_groups Optional pre-built
-#'   lookup maps.
+#' @param grouping_map,analysis_to_output,grouping_groups,output_paths
+#'   Optional pre-built lookup maps.
 #' @return A single character string: the full script for this TLF.
 #' @noRd
 .emit_tlf_script <- function(output_id, spec, subject_key = "USUBJID",
                              adam_dir = ".", grouping_map = NULL,
                              analysis_to_output = NULL,
-                             grouping_groups = NULL) {
+                             grouping_groups = NULL, output_paths = NULL) {
   if (is.null(grouping_map))       grouping_map       <- .build_grouping_map(spec)
   if (is.null(analysis_to_output)) analysis_to_output <- .build_analysis_to_output(spec)
   if (is.null(grouping_groups))    grouping_groups    <- .build_grouping_groups_map(spec)
+  if (is.null(output_paths))       output_paths       <- .build_output_paths_map(spec)
 
   ## Resolve the analyses referenced by this output, in spec (display) order.
   reslist <- list()
   for (ana in spec[["analyses"]]) {
     res <- resolve_analysis(ana, spec, subject_key, grouping_map,
-                            analysis_to_output, grouping_groups)
+                            analysis_to_output, grouping_groups, output_paths)
     if (identical(res$output_id, output_id) &&
         !identical(res$method_id, "MTH_LISTING")) {
       reslist[[length(reslist) + 1L]] <- res
@@ -534,6 +619,7 @@ write_tlf_code <- function(spec_or_path, code_dir, output_ids = NULL,
   grouping_map       <- .build_grouping_map(spec)
   analysis_to_output <- .build_analysis_to_output(spec)
   grouping_groups    <- .build_grouping_groups_map(spec)
+  output_paths       <- .build_output_paths_map(spec)
 
   ## All output ids, optionally filtered (by id or name, case-insensitive).
   all_outputs <- spec[["outputs"]] %||% list()
@@ -552,7 +638,7 @@ write_tlf_code <- function(spec_or_path, code_dir, output_ids = NULL,
     oid <- .as_scalar_char(o[["id"]])
     script <- .emit_tlf_script(oid, spec, subject_key, adam_dir,
                                grouping_map, analysis_to_output,
-                               grouping_groups)
+                               grouping_groups, output_paths)
     fp <- file.path(code_dir, paste0(make.names(oid), ".R"))
     writeLines(script, fp)
     paths[[oid]] <- fp

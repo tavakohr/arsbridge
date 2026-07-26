@@ -45,3 +45,22 @@ Populate the requested fields:
     population flag, give dataset / variable / comparator / value; otherwise
     omit it
   - "variable_role": "ANALYSIS" | "GROUPING" | "COUNT" | "FLAG"
+
+"column_hierarchy": ONLY when the payload carries a "header_tree" (a
+  hierarchical column header: a parent column spanning child columns).
+  Classify each VISIBLE result column of that tree -- never add, drop, or
+  reorder columns; the parsed tree is authoritative geometry.
+  - "leaf_columns": one entry per visible column, in display order:
+    - "label_path": labels from the top header level down, e.g.
+      ["Cohort A", "Mild"], or ["Total"] for the overall column
+    - "grouping_variables": bare ADaM variable name(s) from
+      "available_variables" defining this column's header level(s),
+      outermost first; omit when the header annotations already name them
+    - "role": "DETAIL" | "SUBTOTAL" | "GRAND_TOTAL". A SUBTOTAL is a
+      per-parent Total scoped by the PARENT's condition -- it may include
+      subjects whose child category is unknown, so its N can exceed the sum
+      of the displayed children. A GRAND_TOTAL is the overall Total scoped
+      by the analysis set.
+    - "includes_undisplayed_children": for a SUBTOTAL, true when a footnote
+      or the shell indicates it includes subjects outside the displayed
+      child columns

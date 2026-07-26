@@ -21,8 +21,12 @@
   ## Provenance and review metadata; never semantic.
   reporting_event = "_meta",
   ## referencedAnalysisIds is how siera (and this package) tie an output to
-  ## its analyses; outputType drives the renderer; _meta carries shell layout.
-  output          = c("_meta", "outputType", "referencedAnalysisIds"),
+  ## its analyses; outputType drives the renderer; _meta carries shell layout
+  ## and column-tree provenance; resultGroupPaths declares the hierarchical
+  ## result-column paths (ARS v1.0 has no valid-path construct -- an ordered
+  ## grouping list alone would invite Cartesian products).
+  output          = c("_meta", "outputType", "referencedAnalysisIds",
+                      "resultGroupPaths"),
   ## columns preserves the shell's column-header order for the renderer.
   ## (order is NOT listed: the official shape wraps each display in an
   ## OrderedDisplay, where order is required -- the flat display placement is
@@ -145,8 +149,10 @@
 #'
 #' @section The sanctioned extensions:
 #' arsbridge extends ARS v1.0 in documented places: `_meta` blocks (top level
-#' and per output), `referencedAnalysisIds` and `outputType` on outputs,
-#' display `columns`, the nested `analysisVariable` duplicate plus
+#' and per output), `referencedAnalysisIds`, `outputType`, and
+#' `resultGroupPaths` (the declared hierarchical result-column paths -- ARS
+#' v1.0 has no valid-path construct) on outputs, display `columns`, the
+#' nested `analysisVariable` duplicate plus
 #' `annotation`/`sapDescription`/`includeTotal`/`strata`/`variableRole` on
 #' analyses, `annotationText` on analysis sets, and `supported` on methods.
 #' These exist for siera compatibility, the renderer, and review provenance;

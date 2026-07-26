@@ -28,7 +28,7 @@ Return exactly one strict-JSON file: tlf_extraction_blueprints.json
 - Phase: 1 only
 - Primary output: `tlf_extraction_blueprints.json` (blueprint version 2)
 - Inputs: complete annotated TLF shell (`.docx`) + complete ADaM specification (`.xlsx`) + this file
-- Next step: Phase 2 turns the blueprint into `supplement.json` (format version 3)
+- Next step: Phase 2 turns the blueprint into `supplement.json` (format version 4)
 
 Use the highest available reasoning mode. Do not use a quick-response mode.
 

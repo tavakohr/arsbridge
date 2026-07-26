@@ -433,8 +433,8 @@ test_that(".build_group_levels prefers a typed condition over the annotation str
                                            comparator = "EQ", value = list("F"))))))
   gl <- .build_group_levels("SEX", cg)
   expect_length(gl, 2)
-  expect_equal(gl[[1]]$condition$condition$value, list("M"))   ## typed, not "WRONG"
-  expect_equal(gl[[2]]$condition$condition$value, list("F"))
+  expect_equal(gl[[1]]$condition$value, list("M"))   ## typed, not "WRONG"
+  expect_equal(gl[[2]]$condition$value, list("F"))
 })
 
 test_that("a supplement per-row methodId overrides the section method for that row", {
@@ -569,7 +569,7 @@ test_that("grouping factor groups fall back to the codelist when headers have no
   expect_length(gf$groups, 3)
   expect_equal(vapply(gf$groups, function(g) g$label, character(1)),
                c("Cohort A", "Cohort B", "Missing"))
-  cond1 <- gf$groups[[1]]$condition$condition
+  cond1 <- gf$groups[[1]]$condition
   expect_equal(cond1$variable, "COHORTN")
   expect_equal(cond1$comparator, "EQ")
   expect_equal(unlist(cond1$value), "1")

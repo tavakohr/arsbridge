@@ -3,7 +3,7 @@
 ## How to run this
 
 Start a NEW chat session and attach four files: **this file**,
-`arsbridge_supplement_v3.schema.json`, your annotated TLF shell (`.docx`), and
+`arsbridge_supplement_v4.schema.json`, your annotated TLF shell (`.docx`), and
 the `tlf_extraction_blueprints.json` from Phase 1. Select the highest reasoning
 mode. Paste the prompt below. Save the two replies as `supplement.json` and
 `extraction_validation_report.json`, then run
@@ -21,7 +21,7 @@ Phase 1. Run both internal cycles (2A construct, 2B repair) and all mandatory
 reviews. Every condition must be a typed WhereClause object (never a string).
 Validate the result against the attached JSON Schema before answering.
 
-Return exactly two strict-JSON files: supplement.json (supplement_version 3)
+Return exactly two strict-JSON files: supplement.json (supplement_version 4)
 and extraction_validation_report.json.
 ```
 
@@ -29,8 +29,8 @@ and extraction_validation_report.json.
 
 - Instruction version: 8.1 (packaged with arsbridge)
 - Phase: 2 only
-- Input: `tlf_extraction_blueprints.json` (blueprint version 2) + the annotated shell + this file + `arsbridge_supplement_v3.schema.json`
-- Outputs: `supplement.json` (format version 3) and `extraction_validation_report.json`
+- Input: `tlf_extraction_blueprints.json` (blueprint version 2) + the annotated shell + this file + `arsbridge_supplement_v4.schema.json`
+- Outputs: `supplement.json` (format version 4) and `extraction_validation_report.json`
 
 Use the highest available reasoning mode. Do not use a quick-response mode.
 
@@ -42,7 +42,7 @@ cycles: **2A** construct normalized semantic metadata, **2B** repair incomplete
 or incorrect TLFs and run readiness validation. Do not stop after the first
 draft.
 
-## 2. The target format (supplement version 3)
+## 2. The target format (supplement version 4)
 
 The supplement is a strict JSON document. **Every condition is a typed
 WhereClause object, never a string.**
@@ -63,7 +63,7 @@ Top level:
 
 ```json
 {
-  "supplement_version": 3,
+  "supplement_version": 4,
   "validation_report": "extraction_validation_report.json",
   "generator": {"workflow": "two_phase", "instruction_version": "8.0"},
   "tlfs": { "<TLF number>": { ...entry... } }
@@ -81,7 +81,8 @@ Per-TLF entry (required: `title`, `analysis_type`, `is_supported`):
 | `is_supported` / `unsupported_reason` | bool / string | `false` for inferential/model-based methods |
 | `analysisSet` | object | `{label, condition|compoundExpression}` -- the population |
 | `groupings` | array | ordered result-column axis; each `{groupingDataset, groupingVariable, dataDriven, label, groups}` |
-| `includeTotal` | bool | overall/Total column present |
+| `includeTotal` | bool | overall/Total column present (never together with `columnHierarchy`) |
+| `columnHierarchy` | object | ONLY for a multi-level column header (a parent column spanning conditioned child columns): `{mode: NESTED|ASYMMETRIC_NESTED, nodes[]}` -- one node per column/parent, `{id, label, parentId, level, order, nodeType GROUP|LEAF|SUBTOTAL|GRAND_TOTAL, groupingDataset, groupingVariable, condition|compoundExpression, totalStrategy}`. A SUBTOTAL is scoped by its PARENT's condition (`totalStrategy: condition_based`, no own condition); a GRAND_TOTAL by the analysis set (`totalStrategy: analysis_set`). Declare only the columns the shell shows |
 | `analyses` | array | displayed rows (below) |
 | `listingColumns` | array | `{label, variable{dataset,variable}, order, format}` |
 | `recordFilter` | WhereClause | report-wide record filter |
@@ -102,13 +103,13 @@ Method id catalogue: `MTH_SUMMARY_STATISTICS_CONTINUOUS`,
 `MTH_COUNT_AND_PERCENTAGE`, `MTH_SUBJECT_COUNT`, `MTH_KAPLAN_MEIER_ESTIMATE`,
 `MTH_AE_FREQUENCY_COUNT`, `MTH_LISTING`.
 
-## 3. Mapping Phase-1 evidence to v3 fields
+## 3. Mapping Phase-1 evidence to v4 fields
 
-| Phase-1 role / component | v3 destination |
+| Phase-1 role / component | v4 destination |
 |---|---|
 | POPULATION | `analysisSet.condition` / `.compoundExpression` |
 | RESULT_COLUMN_GROUP, GROUPING_VARIABLE | `groupings[]` (+ `groups[].condition`) |
-| TOTAL_COLUMN_RULE | `includeTotal: true` |
+| TOTAL_COLUMN_RULE | `includeTotal: true` (flat axis) or a `SUBTOTAL`/`GRAND_TOTAL` node in `columnHierarchy` (multi-level header) |
 | DISPLAYED_ROW_VARIABLE, PARAMETER_RULE | `analyses[].variable` |
 | ROW_FILTER | `analyses[].whereClause` |
 | STATISTIC / method | `methodId` (section) or `analyses[].methodId` (per row) |
@@ -176,7 +177,7 @@ unvalidated. Never invent information to reach completion.
 ## 8. Schema gate
 
 Validate the supplement against the uploaded
-`arsbridge_supplement_v3.schema.json`: required properties, property names
+`arsbridge_supplement_v4.schema.json`: required properties, property names
 (case-sensitive), object/array types, allowed enumerations, comparator values,
 and additional-property restrictions. Every condition must be a typed object.
 
@@ -184,7 +185,7 @@ and additional-property restrictions. Every condition must be a typed object.
 
 Create exactly two files:
 
-- `supplement.json` -- every blueprint TLF exactly once, `supplement_version` 3,
+- `supplement.json` -- every blueprint TLF exactly once, `supplement_version` 4,
   no duplicate keys, no placeholders, strict JSON, schema-valid.
 - `extraction_validation_report.json` -- per TLF: extraction status, support
   status, the semantic state of every required field, not-applicable reasons,

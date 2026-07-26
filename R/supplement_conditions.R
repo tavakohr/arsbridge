@@ -1,6 +1,6 @@
 ## arsbridge -- supplement_conditions.R
 ## ---------------------------------------------------------------------------
-## Supplement format v3 ships conditions as TYPED objects, not strings. A v3
+## The supplement format (v3+) ships conditions as TYPED objects, not strings. A typed
 ## where-clause is already the CDISC ARS WhereClause shape:
 ##
 ##   {"condition": {"dataset": "ADSL", "variable": "SAFFL",
@@ -9,9 +9,9 @@
 ##                           "whereClauses": [ <WhereClause>, ... ]}}
 ##
 ## and this is byte-for-byte the internal list shape parse_where_clause()
-## returns for a string annotation (R/utils_where_clause.R). So a v3 clause
+## returns for a string annotation (R/utils_where_clause.R). So a typed clause
 ## needs NO string parsing -- only validation and light normalisation. That is
-## the whole point of v3: the ==/OR/smart-quote string-repair fragility that
+## the whole point of the typed format (introduced in v3): the ==/OR/smart-quote string-repair fragility that
 ## bit real studies simply cannot occur when the assistant hands us the parsed
 ## tree directly.
 ##
@@ -47,21 +47,21 @@
   "MTH_LISTING"
 )
 
-## Analysis families the v3 supplement may declare. Richer than the internal
+## Analysis families the supplement may declare. Richer than the internal
 ## enum (.SUPPLEMENT_ANALYSIS_TYPES in supplement.R) so the assistant can name
-## what it actually sees; .V3_TYPE_MAP folds each down to an engine family.
-.SUPPLEMENT_V3_ANALYSIS_TYPES <- c(
+## what it actually sees; .SUPP_TYPE_MAP folds each down to an engine family.
+.SUPP_ANALYSIS_TYPES <- c(
   "CONTINUOUS", "CATEGORICAL", "CATEGORICAL_HIERARCHICAL", "MIXED_SUMMARY",
   "SUBJECT_COUNT", "SURVIVAL", "AE_FREQUENCY", "SHIFT_TABLE", "LISTING",
   "FIGURE", "MODEL_BASED", "OTHER"
 )
 
-## v3 analysis family -> the internal family the enricher/engine understands.
+## Supplement analysis family -> the internal family the enricher/engine understands.
 ## MIXED_SUMMARY maps to CONTINUOUS: the engine's per-row spec-verdict
 ## correction (build_ars_json.R) then routes the categorical rows to counts,
 ## which is exactly mixed-summary behaviour. SHIFT_TABLE and MODEL_BASED map to
 ## OTHER, which trips the existing "needs review" path in enrich_with_llm.R.
-.V3_TYPE_MAP <- c(
+.SUPP_TYPE_MAP <- c(
   CONTINUOUS               = "CONTINUOUS",
   CATEGORICAL              = "CATEGORICAL",
   CATEGORICAL_HIERARCHICAL = "CATEGORICAL",
@@ -76,7 +76,7 @@
   OTHER                    = "OTHER"
 )
 
-#' Validate and normalise one typed v3 where-clause.
+#' Validate and normalise one typed supplement where-clause.
 #'
 #' Accepts the ARS `{condition: ...}` / `{compoundExpression: ...}` shape (and
 #' tolerates a bare condition object without the wrapper). Uppercases dataset

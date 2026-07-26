@@ -445,6 +445,238 @@
 }
 
 
+#' Structural checks over each output's declared result-group paths (the
+#' hierarchical column model). The codes ride in `ref` so the editor and
+#' tests can key on them:
+#'
+#'   HEADER_TREE_MISSING                      WARN
+#'   DISPLAY_COLUMN_COUNT_MISMATCH            FAIL
+#'   UNMAPPED_LEAF_COLUMN                     FAIL
+#'   INVALID_CARTESIAN_PRODUCT                FAIL
+#'   GROUPING_VARIABLE_NOT_LINKED             FAIL
+#'   SUBTOTAL_SCOPE_UNDEFINED                 FAIL
+#'   DUPLICATE_RESULT_PATH                    FAIL
+#'   GROUPING_ORDER_AMBIGUOUS                 WARN
+#'   SUBTOTAL_EXCLUDES_UNDISPLAYED_CATEGORIES INFO
+#'
+#' @noRd
+.check_result_paths <- function(findings, model) {
+  outputs <- model$outputs
+  if (nrow(outputs) == 0) return(findings)
+
+  ## Group id -> its grouping factor and condition, across the pool.
+  group_index <- list()
+  for (i in seq_len(nrow(model$groupings))) {
+    gf_node <- model$groupings$raw[[i]]
+    for (g in gf_node[["groups"]] %||% list()) {
+      gid <- .chr_field(g[["id"]])
+      if (is.na(gid) || !nzchar(gid)) next
+      group_index[[gid]] <- list(
+        gf_id     = .chr_field(gf_node[["id"]]),
+        condition = .group_where(g)
+      )
+    }
+  }
+
+  path_condition <- function(path) {
+    conds <- lapply(unlist(path[["groupIds"]] %||% list()), function(gid) {
+      entry <- group_index[[gid]]
+      if (is.null(entry)) NULL else entry$condition
+    })
+    do.call(combine_conditions, conds)
+  }
+  path_label <- function(path) {
+    paste(unlist(path[["labelPath"]] %||% list()), collapse = " > ")
+  }
+
+  for (i in seq_len(nrow(outputs))) {
+    node   <- outputs$raw[[i]]
+    out_id <- outputs$id[i]
+    rgp    <- node[["resultGroupPaths"]]
+    tree   <- node[["_meta"]][["column_tree"]]
+    tree_mode <- .chr_field(tree[["mode"]])
+
+    if (is.null(rgp)) {
+      if (!is.na(tree_mode) &&
+          tree_mode %in% c("NESTED", "ASYMMETRIC_NESTED")) {
+        findings <- .add_finding(
+          findings, "WARN", "outputs", out_id, "resultGroupPaths",
+          "The shell header parsed as a hierarchical column tree, but this output declares no result-group paths.",
+          "Regenerate the event -- without declared paths the executor falls back to flat groupings and the child columns are lost.",
+          ref = "HEADER_TREE_MISSING"
+        )
+      }
+      next
+    }
+
+    paths <- rgp[["paths"]] %||% list()
+    tree_nodes <- tree[["nodes"]] %||% list()
+    tree_ids   <- vapply(tree_nodes, function(n) .chr_field(n[["id"]]) %||% "",
+                         character(1))
+    leaf_nodes <- Filter(function(n) {
+      .chr_field(n[["nodeType"]]) %in% c("leaf", "subtotal", "grand_total")
+    }, tree_nodes)
+    path_node_ids <- vapply(paths, function(p) .chr_field(p[["nodeId"]]) %||% "",
+                            character(1))
+
+    ## The shell's own column count is the ground truth: a path list that
+    ## disagrees with it means display columns were added or lost.
+    if (length(leaf_nodes) > 0 && length(paths) != length(leaf_nodes)) {
+      findings <- .add_finding(
+        findings, "FAIL", "outputs", out_id, "resultGroupPaths",
+        sprintf("The shell header has %d result columns but %d path(s) are declared.",
+                length(leaf_nodes), length(paths)),
+        "Each display column needs exactly one declared path -- regenerate or fix the path list.",
+        ref = "DISPLAY_COLUMN_COUNT_MISMATCH"
+      )
+    }
+    for (leaf in leaf_nodes) {
+      leaf_id <- .chr_field(leaf[["id"]])
+      if (!is.na(leaf_id) && nzchar(leaf_id) && !leaf_id %in% path_node_ids) {
+        findings <- .add_finding(
+          findings, "FAIL", "outputs", out_id, "resultGroupPaths",
+          sprintf("Shell column '%s' has no declared result path.",
+                  .chr_field(leaf[["label"]]) %||% leaf_id),
+          "Add the missing path (or regenerate) -- this display column would otherwise be silently dropped.",
+          ref = "UNMAPPED_LEAF_COLUMN"
+        )
+      }
+    }
+
+    used_gf_order <- character(0)
+    seen_conditions <- list()
+    for (p in paths) {
+      label <- path_label(p)
+      role  <- .chr_field(p[["role"]]) %||% "DETAIL"
+      gids  <- unlist(p[["groupIds"]] %||% list())
+
+      ## A path pointing at no shell column is an invented combination --
+      ## exactly the Cartesian product this model exists to prevent.
+      nid <- .chr_field(p[["nodeId"]])
+      if (length(tree_ids) > 0 && !is.na(nid) && nzchar(nid) &&
+          !nid %in% tree_ids) {
+        findings <- .add_finding(
+          findings, "FAIL", "outputs", out_id, "resultGroupPaths",
+          sprintf("Path '%s' matches no column of the shell header tree.", label),
+          "Remove it -- only columns the shell displays may be declared.",
+          ref = "INVALID_CARTESIAN_PRODUCT"
+        )
+      }
+      gf_of <- vapply(gids, function(gid) {
+        entry <- group_index[[gid]]
+        if (is.null(entry)) NA_character_ else entry$gf_id
+      }, character(1))
+      if (anyDuplicated(stats::na.omit(gf_of))) {
+        findings <- .add_finding(
+          findings, "FAIL", "outputs", out_id, "resultGroupPaths",
+          sprintf("Path '%s' references two groups of the same grouping factor.", label),
+          "A column cannot be two levels of one variable at once -- fix the path's groupIds.",
+          ref = "INVALID_CARTESIAN_PRODUCT"
+        )
+      }
+      for (gid in gids) {
+        if (is.null(group_index[[gid]])) {
+          findings <- .add_finding(
+            findings, "FAIL", "outputs", out_id, "resultGroupPaths",
+            sprintf("Path '%s' references unknown group id '%s'.", label, gid),
+            "Point the path at an existing group level, or add the missing group to its grouping factor.",
+            ref = "GROUPING_VARIABLE_NOT_LINKED"
+          )
+        }
+      }
+
+      if (identical(role, "SUBTOTAL") &&
+          (is.na(.chr_field(p[["totalStrategy"]])) || length(gids) == 0)) {
+        findings <- .add_finding(
+          findings, "FAIL", "outputs", out_id, "resultGroupPaths",
+          sprintf("Subtotal path '%s' has no defined scope.", label),
+          "Give it totalStrategy 'condition_based' and its parent group id -- an unscoped subtotal is ambiguous (parent condition vs sum of children).",
+          ref = "SUBTOTAL_SCOPE_UNDEFINED"
+        )
+      }
+
+      cond_key <- paste(deparse(canonicalize_condition(path_condition(p))),
+                        collapse = "")
+      prior <- seen_conditions[[cond_key]]
+      if (!is.null(prior)) {
+        findings <- .add_finding(
+          findings, "FAIL", "outputs", out_id, "resultGroupPaths",
+          sprintf("Paths '%s' and '%s' compose the same condition -- two columns would compute identical results.",
+                  prior, label),
+          "Make each path a distinct subject set (check the groupIds).",
+          ref = "DUPLICATE_RESULT_PATH"
+        )
+      } else {
+        seen_conditions[[cond_key]] <- label
+      }
+
+      used_gf_order <- union(used_gf_order, stats::na.omit(gf_of))
+    }
+
+    ## The subtotal-vs-children scope question is the one a reviewer must
+    ## answer deliberately: a subtotal equal to the OR of its displayed
+    ## children may be excluding unknown-category subjects.
+    detail_paths <- Filter(function(p) identical(.chr_field(p[["role"]]), "DETAIL"), paths)
+    for (p in paths) {
+      if (!identical(.chr_field(p[["role"]]), "SUBTOTAL")) next
+      lp <- unlist(p[["labelPath"]] %||% list())
+      if (length(lp) < 2) next
+      prefix <- lp[-length(lp)]
+      siblings <- Filter(function(d) {
+        dlp <- unlist(d[["labelPath"]] %||% list())
+        length(dlp) == length(lp) && identical(dlp[-length(dlp)], prefix)
+      }, detail_paths)
+      if (length(siblings) == 0) next
+      union_cond <- do.call(
+        combine_conditions,
+        c(lapply(siblings, path_condition), list(operator = "OR"))
+      )
+      if (conditions_equal(path_condition(p), union_cond)) {
+        findings <- .add_finding(
+          findings, "INFO", "outputs", out_id, "resultGroupPaths",
+          sprintf("Subtotal '%s' equals the union of its displayed children -- it may exclude subjects whose category is unknown.",
+                  path_label(p)),
+          "Confirm the intended scope: a parent-condition subtotal includes undisplayed categories; a child-union subtotal does not.",
+          ref = "SUBTOTAL_EXCLUDES_UNDISPLAYED_CATEGORIES"
+        )
+      }
+    }
+
+    ## Every analysis this output displays must link all grouping factors the
+    ## paths reference, in the same level order.
+    analyses <- model$analyses[
+      !is.na(model$analyses$output_id) & model$analyses$output_id == out_id, ,
+      drop = FALSE
+    ]
+    for (j in seq_len(nrow(analyses))) {
+      an_gids <- .split_values(analyses$grouping_ids[j] %||% "")
+      missing <- setdiff(used_gf_order, an_gids)
+      if (length(missing) > 0) {
+        findings <- .add_finding(
+          findings, "FAIL", "analyses", analyses$id[j], "grouping_ids",
+          sprintf("This analysis does not reference grouping factor(s) %s that the output's result paths require.",
+                  paste(missing, collapse = ", ")),
+          "Add the grouping(s) in 'Grouped by' -- without them this line cannot fill the hierarchical columns.",
+          ref = "GROUPING_VARIABLE_NOT_LINKED"
+        )
+        next
+      }
+      shared <- an_gids[an_gids %in% used_gf_order]
+      if (length(shared) > 1 &&
+          !identical(shared, used_gf_order[used_gf_order %in% shared])) {
+        findings <- .add_finding(
+          findings, "WARN", "analyses", analyses$id[j], "grouping_ids",
+          "This analysis orders its groupings differently from the output's header levels.",
+          "Match the 'Grouped by' order to the header (outermost level first) so the columns come out in shell order.",
+          ref = "GROUPING_ORDER_AMBIGUOUS"
+        )
+      }
+    }
+  }
+
+  findings
+}
+
 #' Check an ARS model for integrity, spec and coverage problems
 #'
 #' Runs the checks that make the review stage guided rather than generic: that
@@ -480,6 +712,12 @@
 #'     parsed into a condition, and so filter nothing.}
 #'   \item{Spec}{With `spec`: datasets and variables that are not in the ADaM
 #'     spec.}
+#'   \item{Result paths}{For an output with declared hierarchical result-group
+#'     paths: the path count matches the shell's column count, every shell
+#'     column has a path and every path a shell column (no invented
+#'     Cartesian combinations), subtotals have a defined scope, no two paths
+#'     compose the same condition, and every displayed analysis links all
+#'     required grouping factors in header order.}
 #'   \item{Coverage}{With `report`: shell annotations that no analysis
 #'     carries -- lines the generator missed.}
 #' }
@@ -502,6 +740,7 @@ validate_ars_model <- function(model, spec = NULL, report = NULL) {
   findings <- .check_methods(findings, model)
   findings <- .check_unparsed_populations(findings, model)
   findings <- .check_separator_safety(findings, model)
+  findings <- .check_result_paths(findings, model)
 
   if (!is.null(spec)) {
     findings <- .check_against_spec(findings, model, spec)

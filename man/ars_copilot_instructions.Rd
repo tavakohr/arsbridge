@@ -32,7 +32,7 @@ accuracy with a chat assistant (GitHub Copilot, ChatGPT, an enterprise
 portal): upload the instruction file(s) this function writes TOGETHER WITH
 your annotated shell \code{.docx}, ADaM spec \code{.xlsx}, and the shipped JSON
 Schema, and the assistant replies with one strict \code{supplement.json}
-(format v3). Pass that file to \code{spec_to_ars(supplement = "supplement.json")}.
+(format v4). Pass that file to \code{spec_to_ars(supplement = "supplement.json")}.
 }
 \details{
 Two workflows are offered:
@@ -49,7 +49,7 @@ evidence discovery then semantic construction with review cycles.
 
 The files are static and versioned -- do not edit them; the format they
 request is what \code{spec_to_ars()} knows how to validate. The JSON Schema
-(\code{arsbridge_supplement_v3.schema.json}) is written alongside so the
+(\code{arsbridge_supplement_v4.schema.json}) is written alongside so the
 assistant can self-check its reply, and so can
 \code{\link[=ars_validate_supplement]{ars_validate_supplement()}} (when \code{jsonvalidate} is installed).
 }

@@ -57,7 +57,9 @@
     defs <- list()
     for (grp in gf[["groups"]] %||% list()) {
       label <- .as_scalar_char(grp[["label"]]) %||% .as_scalar_char(grp[["name"]])
-      condition <- grp[["condition"]]
+      ## Groups arrive in the official ARS shape (condition directly on the
+      ## node); .group_where() rewraps for the executor/emitter.
+      condition <- .group_where(grp)
       if (is.null(label) || !nzchar(label) || is.null(condition)) next
       order_val <- suppressWarnings(as.integer(.as_scalar_char(grp[["order"]]) %||% NA))
       if (is.na(order_val)) order_val <- length(defs) + 1L
@@ -70,6 +72,85 @@
     if (length(defs) > 0) {
       defs <- defs[order(vapply(defs, function(d) d$order, integer(1)))]
       out[[gf_id]] <- list(variable = gf_var, groups = defs)
+    }
+  }
+  out
+}
+
+## outputId -> resolved result-group paths, for outputs that declare the
+## hierarchical resultGroupPaths extension. Each resolved path carries its
+## COMPOSED condition (the AND of its referenced groups' conditions), the
+## per-variable display levels, and its role/order, so the executor and the
+## emitter iterate declared columns instead of crossing grouping variables.
+## Empty map when no output declares paths (flat/crossed tables).
+#' @noRd
+.build_output_paths_map <- function(spec) {
+  ## group id -> {variable, label, where} across every grouping factor.
+  group_index <- list()
+  for (gf in spec[["analysisGroupings"]] %||% list()) {
+    gf_var <- if (is.list(gf[["groupingVariable"]])) {
+      .as_scalar_char(gf[["groupingVariable"]][["variable"]])
+    } else {
+      .as_scalar_char(gf[["groupingVariable"]])
+    }
+    for (grp in gf[["groups"]] %||% list()) {
+      gid <- .as_scalar_char(grp[["id"]])
+      if (is.null(gid) || !nzchar(gid)) next
+      group_index[[gid]] <- list(
+        variable = gf_var %||% "",
+        label    = .as_scalar_char(grp[["label"]]) %||%
+                   .as_scalar_char(grp[["name"]]) %||% "",
+        where    = .group_where(grp)
+      )
+    }
+  }
+
+  out <- list()
+  for (output in spec[["outputs"]] %||% list()) {
+    out_id <- .as_scalar_char(output[["id"]])
+    rgp    <- output[["resultGroupPaths"]]
+    if (is.null(out_id) || is.null(rgp)) next
+    raw_paths <- rgp[["paths"]] %||% list()
+    if (length(raw_paths) == 0) next
+
+    resolved <- list()
+    broken   <- FALSE
+    for (p in raw_paths) {
+      gids <- as.character(unlist(p[["groupIds"]] %||% list()))
+      wheres <- list()
+      group_levels <- list()
+      for (gid in gids) {
+        entry <- group_index[[gid]]
+        if (is.null(entry)) {
+          broken <- TRUE
+          break
+        }
+        wheres[[length(wheres) + 1L]] <- entry$where
+        if (nzchar(entry$variable)) group_levels[[entry$variable]] <- entry$label
+      }
+      if (broken) break
+
+      resolved[[length(resolved) + 1L]] <- list(
+        path_id        = .as_scalar_char(p[["pathId"]]) %||% "",
+        order          = as.integer(.as_scalar_char(p[["order"]]) %||%
+                                      (length(resolved) + 1L)),
+        role           = .as_scalar_char(p[["role"]]) %||% "DETAIL",
+        label_path     = as.character(unlist(p[["labelPath"]] %||% list())),
+        group_levels   = group_levels,
+        condition      = do.call(combine_conditions, wheres),
+        total_strategy = .as_scalar_char(p[["totalStrategy"]])
+      )
+    }
+    ## An unresolvable path invalidates the whole declaration: executing a
+    ## partial column set would silently drop display columns. The executor
+    ## gate reports it (validate_ars_model names the exact problem).
+    if (broken) next
+    if (length(resolved) > 0) {
+      resolved <- resolved[order(vapply(resolved, function(x) x$order, integer(1)))]
+      out[[out_id]] <- list(
+        mode  = .as_scalar_char(rgp[["mode"]]) %||% "NESTED",
+        paths = resolved
+      )
     }
   }
   out
@@ -109,10 +190,11 @@
 #' @param ana One analysis object from `spec$analyses`.
 #' @param spec The full ARS spec (parsed with `simplifyVector = FALSE`).
 #' @param subject_key Subject-level identifier (default `"USUBJID"`).
-#' @param grouping_map,analysis_to_output,grouping_groups Optional pre-built
-#'   lookup maps (see `.build_grouping_map` / `.build_analysis_to_output` /
-#'   `.build_grouping_groups_map`); rebuilt from `spec` when `NULL`. Pass
-#'   them in when resolving many analyses to avoid rework.
+#' @param grouping_map,analysis_to_output,grouping_groups,output_paths
+#'   Optional pre-built lookup maps (see `.build_grouping_map` /
+#'   `.build_analysis_to_output` / `.build_grouping_groups_map` /
+#'   `.build_output_paths_map`); rebuilt from `spec` when `NULL`. Pass them in
+#'   when resolving many analyses to avoid rework.
 #'
 #' @return A list with `analysis_id`, `output_id`, `method_id`, `dataset`,
 #'   `variable` (raw, uncleaned), `by` (character vector of grouping vars),
@@ -124,15 +206,18 @@
 #'   `{value, label}` pairs from the spec codelist shipped in the
 #'   ReportingEvent's `_meta$value_decodes` for this analysis variable, or
 #'   `NULL` -- the executor/emitter derive a decoded factor from it),
-#'   `subject_key`, `label`, `annotation`, `description`, and
-#'   `sap_description`.
+#'   `subject_key`, `label`, `annotation`, `description`,
+#'   `sap_description`, plus `paths` (the output's resolved result-group
+#'   paths in display order, or `NULL` for flat/crossed tables) and
+#'   `grouping_mode` (`"FLAT"` unless the output declares a hierarchy).
 #' @noRd
 resolve_analysis <- function(ana, spec, subject_key = "USUBJID",
                              grouping_map = NULL, analysis_to_output = NULL,
-                             grouping_groups = NULL) {
+                             grouping_groups = NULL, output_paths = NULL) {
   if (is.null(grouping_map))       grouping_map       <- .build_grouping_map(spec)
   if (is.null(analysis_to_output)) analysis_to_output <- .build_analysis_to_output(spec)
   if (is.null(grouping_groups))    grouping_groups    <- .build_grouping_groups_map(spec)
+  if (is.null(output_paths))       output_paths       <- .build_output_paths_map(spec)
 
   analysis_id <- .as_scalar_char(ana[["id"]])
   output_id   <- if (!is.null(analysis_id)) analysis_to_output[[analysis_id]] else NULL
@@ -195,6 +280,15 @@ resolve_analysis <- function(ana, spec, subject_key = "USUBJID",
   description <- .as_scalar_char(ana[["description"]]) %||%
     .as_scalar_char(ana[["name"]]) %||% analysis_id
 
+  ## Declared result-group paths of this analysis's output. Non-NULL switches
+  ## the executor/emitter to declared-path mode: one pass per path, never a
+  ## cross of the grouping variables, and no separate include_total pass (the
+  ## grand total is one of the paths).
+  path_entry <- if (!is.null(output_id)) output_paths[[output_id]] else NULL
+  paths <- path_entry$paths
+  grouping_mode <- path_entry$mode %||% "FLAT"
+  if (!is.null(paths)) include_total <- FALSE
+
   list(
     analysis_id     = analysis_id,
     output_id       = output_id,
@@ -208,6 +302,8 @@ resolve_analysis <- function(ana, spec, subject_key = "USUBJID",
     strata          = strata,
     group_defs      = group_defs,
     decode          = decode,
+    paths           = paths,
+    grouping_mode   = grouping_mode,
     subject_key     = subject_key,
     label           = .as_scalar_char(ana[["label"]]),
     annotation      = .as_scalar_char(ana[["annotation"]]),

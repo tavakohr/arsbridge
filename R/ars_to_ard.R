@@ -258,6 +258,28 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
   analysis_to_output <- .build_analysis_to_output(spec)
   grouping_map       <- .build_grouping_map(spec)
   grouping_groups    <- .build_grouping_groups_map(spec)
+  output_paths       <- .build_output_paths_map(spec)
+
+  ## Structural gate: an output that DECLARES result-group paths but whose
+  ## declaration does not resolve (an unknown group id, say) must not fall
+  ## back to flat execution -- that is exactly the three-columns-instead-of-
+  ## six failure this model exists to prevent. Its analyses are skipped with
+  ## a FAIL; validate_ars_model() names the precise problem.
+  unresolvable_path_outputs <- character(0)
+  for (out_node in spec[["outputs"]] %||% list()) {
+    oid <- .as_scalar_char(out_node[["id"]])
+    if (is.null(oid) || is.null(out_node[["resultGroupPaths"]])) next
+    if (is.null(output_paths[[oid]])) {
+      unresolvable_path_outputs <- c(unresolvable_path_outputs, oid)
+      .diag_gap(
+        stage = "execute_ard", severity = "FAIL", input = INPUT_ARS,
+        problem = sprintf(
+          "Output %s declares result-group paths that do not resolve; its analyses were skipped.", oid),
+        why = "Executing with flat groupings instead would silently drop the declared display columns.",
+        fix = "Run validate_ars_model() on this event -- it names the broken path/group reference -- then fix or regenerate."
+      )
+    }
+  }
 
   # Helper functions to clean and evaluate filters
   clean_var_name <- function(var_name, df_names) {
@@ -430,7 +452,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
   ard_list <- list()
   for (ana in spec[["analyses"]]) {
     res <- resolve_analysis(ana, spec, subject_key, grouping_map,
-                            analysis_to_output, grouping_groups)
+                            analysis_to_output, grouping_groups, output_paths)
     analysis_id <- res$analysis_id
     if (is.null(analysis_id)) {
       .diag_gap(
@@ -442,6 +464,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       next
     }
     out_id <- res$output_id
+    if (!is.null(out_id) && out_id %in% unresolvable_path_outputs) next
 
     # Filter by user-selected output_ids and analysis_ids
     if (user_filtered) {

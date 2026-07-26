@@ -40,8 +40,10 @@ pass either one alone.
 \section{The sanctioned extensions}{
 
 arsbridge extends ARS v1.0 in documented places: \verb{_meta} blocks (top level
-and per output), \code{referencedAnalysisIds} and \code{outputType} on outputs,
-display \code{columns}, the nested \code{analysisVariable} duplicate plus
+and per output), \code{referencedAnalysisIds}, \code{outputType}, and
+\code{resultGroupPaths} (the declared hierarchical result-column paths -- ARS
+v1.0 has no valid-path construct) on outputs, display \code{columns}, the
+nested \code{analysisVariable} duplicate plus
 \code{annotation}/\code{sapDescription}/\code{includeTotal}/\code{strata}/\code{variableRole} on
 analyses, \code{annotationText} on analysis sets, and \code{supported} on methods.
 These exist for siera compatibility, the renderer, and review provenance;

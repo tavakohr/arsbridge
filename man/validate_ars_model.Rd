@@ -45,6 +45,12 @@ or will reserve an empty cell for manual computation.}
 parsed into a condition, and so filter nothing.}
 \item{Spec}{With \code{spec}: datasets and variables that are not in the ADaM
 spec.}
+\item{Result paths}{For an output with declared hierarchical result-group
+paths: the path count matches the shell's column count, every shell
+column has a path and every path a shell column (no invented
+Cartesian combinations), subtotals have a defined scope, no two paths
+compose the same condition, and every displayed analysis links all
+required grouping factors in header order.}
 \item{Coverage}{With \code{report}: shell annotations that no analysis
 carries -- lines the generator missed.}
 }

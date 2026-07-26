@@ -1,5 +1,5 @@
-## Supplement v3 typed where-clauses: validation, normalisation, and the small
-## readers the downstream builders and diagnostics use. A v3 clause arrives as
+## Supplement v4 typed where-clauses: validation, normalisation, and the small
+## readers the downstream builders and diagnostics use. A v4 clause arrives as
 ## the parsed JSON tree (jsonlite simplifyVector = FALSE), so these helpers
 ## build clauses the same way.
 
@@ -231,11 +231,11 @@ test_that(".method_name_from_id reverses the catalogue and returns NULL otherwis
   expect_null(.method_name_from_id("MTH_NOT_A_METHOD"))
 })
 
-## --- .V3_TYPE_MAP sanity ---------------------------------------------------
+## --- .SUPP_TYPE_MAP sanity ---------------------------------------------------
 
-test_that(".V3_TYPE_MAP folds every v3 family to an engine family", {
-  expect_setequal(names(.V3_TYPE_MAP), .SUPPLEMENT_V3_ANALYSIS_TYPES)
-  expect_true(all(.V3_TYPE_MAP %in% .SUPPLEMENT_ANALYSIS_TYPES))
-  expect_equal(unname(.V3_TYPE_MAP["MIXED_SUMMARY"]), "CONTINUOUS")
-  expect_equal(unname(.V3_TYPE_MAP["SHIFT_TABLE"]), "OTHER")
+test_that(".SUPP_TYPE_MAP folds every v3 family to an engine family", {
+  expect_setequal(names(.SUPP_TYPE_MAP), .SUPP_ANALYSIS_TYPES)
+  expect_true(all(.SUPP_TYPE_MAP %in% .SUPPLEMENT_ANALYSIS_TYPES))
+  expect_equal(unname(.SUPP_TYPE_MAP["MIXED_SUMMARY"]), "CONTINUOUS")
+  expect_equal(unname(.SUPP_TYPE_MAP["SHIFT_TABLE"]), "OTHER")
 })

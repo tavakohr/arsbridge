@@ -1,5 +1,5 @@
 {
-  "supplement_version": 3,
+  "supplement_version": 4,
   "validation_report": "extraction_validation_report.json",
   "generator": {
     "workflow": "two_phase",

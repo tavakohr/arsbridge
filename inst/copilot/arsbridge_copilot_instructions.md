@@ -1,4 +1,4 @@
-# arsbridge supplement request (format version 3, extraction guidance version 4.1)
+# arsbridge supplement request (format version 4, extraction guidance version 4.1)
 
 You are an expert CDISC clinical statistical programmer. You have been given
 these files from a clinical study:
@@ -11,13 +11,13 @@ these files from a clinical study:
 2. An **ADaM specification** (`.xlsx`) listing datasets, variables, data types,
    labels, controlled terminology, and value-level metadata.
 3. This instruction file.
-4. The **JSON Schema** `arsbridge_supplement_v3.schema.json`. Your reply MUST
+4. The **JSON Schema** `arsbridge_supplement_v4.schema.json`. Your reply MUST
    validate against it. Check it yourself before you answer.
 
 ## How to run this
 
 Attach four files to your chat assistant: **this file**,
-`arsbridge_supplement_v3.schema.json`, your annotated TLF shell (`.docx`), and
+`arsbridge_supplement_v4.schema.json`, your annotated TLF shell (`.docx`), and
 your ADaM specification (`.xlsx`). Select the highest reasoning mode. Paste the
 prompt below. Save the reply as `supplement.json`, then run
 `spec_to_ars(supplement = "supplement.json")` (optionally pre-flight with
@@ -34,13 +34,13 @@ Process every Table, Listing, and Figure. Every condition must be a typed
 WhereClause object (never a string). Validate against the attached JSON Schema
 before answering.
 
-Return exactly one strict-JSON file: supplement.json (supplement_version 3).
+Return exactly one strict-JSON file: supplement.json (supplement_version 4).
 ```
 
 ## Objective
 
 Read every Table, Listing, and Figure in the shell and produce one strict JSON
-document called the **supplement**, format version 3. A validation pipeline
+document called the **supplement**, format version 4. A validation pipeline
 (`arsbridge`) consumes it.
 
 Accuracy is more important than the number of bindings. Do not guess. Do not
@@ -98,7 +98,7 @@ case-sensitive.
 
 ```json
 {
-  "supplement_version": 3,
+  "supplement_version": 4,
   "tlfs": {
     "14.1.1": { ...entry... },
     "14.3.1": { ...entry... }
@@ -138,7 +138,28 @@ Required: `title`, `analysis_type`, `is_supported`.
   `"dataDriven": false` and give `groups` (>= 2), each
   `{"label", "order", "condition"|"compoundExpression"}`.
 - **`includeTotal`** — `true` when the table has an overall/Total column in
-  addition to the group columns. Never encode Total as a group.
+  addition to the group columns. Never encode Total as a group. Never combine
+  `includeTotal: true` with `columnHierarchy` (see below).
+- **`columnHierarchy`** — ONLY for a two-level (or deeper) column header where
+  one parent column spans conditioned child columns — e.g. "Cohort A" spanning
+  "Mild / Moderate / Severe / Total" while "Cohort B" and an overall "Total"
+  stand alone. Flat single-axis tables keep using `groupings` + `includeTotal`.
+  Shape: `{"mode": "NESTED"|"ASYMMETRIC_NESTED", "nodes": [...]}`, one node per
+  header cell that defines a column or a spanning parent:
+  `{"id", "label", "parentId", "level", "order", "nodeType",
+  "groupingDataset", "groupingVariable", "condition"|"compoundExpression",
+  "totalStrategy"}`.
+  - `nodeType`: `GROUP` = a spanning parent; `LEAF` = a detail column;
+    `SUBTOTAL` = a per-parent Total column — its scope is the PARENT's
+    condition, never the sum of the displayed children (it may include
+    subjects whose child category is unknown; give it
+    `"totalStrategy": "condition_based"` and NO condition of its own);
+    `GRAND_TOTAL` = the overall Total column, scoped by the analysis set
+    (`"totalStrategy": "analysis_set"`, no condition).
+  - A `LEAF` node's condition is its OWN level only (`SEVGR1N = 1`); arsbridge
+    composes it with the parent's condition. Declare only the columns the
+    shell actually shows — arsbridge will never cross parents with children
+    that are not declared.
 - **`analyses`** — the displayed analysis rows (see below).
 - **`listingColumns`** — for a LISTING: `{"label", "variable": {"dataset",
   "variable"}, "order", "format"}` per displayed column.
@@ -184,7 +205,7 @@ Per-`analyses` entry:
 
 ```json
 {
-  "supplement_version": 3,
+  "supplement_version": 4,
   "tlfs": {
     "14.1.1": {
       "title": "Summary of Demographic and Baseline Characteristics",
@@ -216,6 +237,6 @@ Per-`analyses` entry:
 
 Read every TLF in the shell. Return exactly ONE fenced strict-JSON block: no
 prose before or after it, no trailing commas, no comments, no smart quotes.
-Validate your JSON against `arsbridge_supplement_v3.schema.json` before you
+Validate your JSON against `arsbridge_supplement_v4.schema.json` before you
 answer. If a variable or value is genuinely unavailable in the spec, omit that
 binding rather than inventing one.

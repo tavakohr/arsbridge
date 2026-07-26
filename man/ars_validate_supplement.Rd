@@ -2,7 +2,7 @@
 % Please edit documentation in R/supplement_validate.R
 \name{ars_validate_supplement}
 \alias{ars_validate_supplement}
-\title{Validate a Copilot supplement file (format v3) before running spec_to_ars()}
+\title{Validate a Copilot supplement file (format v4) before running spec_to_ars()}
 \usage{
 ars_validate_supplement(path, adam_spec_path = NULL)
 }
