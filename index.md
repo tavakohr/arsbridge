@@ -25,6 +25,7 @@ to its source.
 | **Three ways to read the shell** | A deterministic regex baseline always runs; you choose how the gaps it cannot resolve get filled — **regex only** (no key), a **Copilot supplement** (no API call), or a **live LLM** (opt-in with a key). Same spec-gated output from all three. |
 | **Spec-gated validation** | Every variable proposed — by the regex, a supplement, or the LLM — is checked against your ADaM spec. A variable missing from the spec is rejected and logged, never silently invented. |
 | **Human-in-the-loop review** | [`edit_ars()`](https://tavakohr.github.io/arsbridge/reference/edit_ars.md) opens the generated ARS in a structured Shiny editor: the shell’s outputs and lines with validation findings badged on, spec-constrained dropdowns, add/remove/reorder for missed lines, undo and crash recovery. Every save is backed up, logged to a QC sidecar, and checked against the official ARS v1.0 schema. |
+| **A guided end-to-end workflow** | `ars_workflow("my_study/")` walks the whole journey in one app: project folders, the two-phase Copilot instruction files, both manual assistant round-trips (paste the replies straight from the chat, validated on arrival), the [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md) build, and a hand-off into the review editor. Every step’s status is derived from the files on disk, so closing the app never loses progress. |
 | **CDISC ARS JSON output** | The extraction result is a structured, versioned file you can diff, review, and feed to downstream tools like [siera](https://clymbclinical.github.io/siera/). |
 | **Native ARD execution** | Run ARS JSON directly against `.xpt` or `.csv` datasets using [cards](https://github.com/insightsengineering/cards), with no dataset-loading boilerplate. |
 | **Codelist-decoded categories** | A coded categorical variable (e.g. a numeric `DCSREASN`) is decoded through the ADaM spec’s codelist: the ARD and rendered table show `DEATH`, not `1`, in codelist order, with unobserved terms reported as n = 0. Unannotated coded column axes get their column labels from the codelist too. |
@@ -470,27 +471,25 @@ Two things are the same no matter how you run arsbridge:
 What differs is **how the rows the regex could not resolve get filled**
 — and that is the three approaches:
 
-``` R
-                 annotated shell (.docx)
-                          |
-              regex baseline  (always runs)
-                          |
-                 row still unresolved?
-                          |
-     +--------------------+--------------------+
-     |                    |                    |
-  regex only        regex + Copilot         LLM API
-  (default)          (supplement)         (use_llm = TRUE)
-  leave the gap      a chat assistant       the LLM re-reads
-                     fills gaps by hand      the cell + enriches
-     |                    |                    |
-     +--------------------+--------------------+
-                          |
-                    HARD SPEC GATE
-              (the variable must be in the spec)
-                          |
-                  validated -> ARS JSON
-```
+                     annotated shell (.docx)
+                              |
+                  regex baseline  (always runs)
+                              |
+                     row still unresolved?
+                              |
+         +--------------------+--------------------+
+         |                    |                    |
+      regex only        regex + Copilot         LLM API
+      (default)          (supplement)         (use_llm = TRUE)
+      leave the gap      a chat assistant       the LLM re-reads
+                         fills gaps by hand      the cell + enriches
+         |                    |                    |
+         +--------------------+--------------------+
+                              |
+                        HARD SPEC GATE
+                  (the variable must be in the spec)
+                              |
+                      validated -> ARS JSON
 
 1.  **Regex only (deterministic)** — the default; no key. Unresolved
     rows stay empty. Standard shells still produce valid ARS / ARD /
@@ -559,13 +558,11 @@ shell parse cleanly is to write each heading in an identifiable way.
 `Table`, `Figure`, or `Listing`, followed by the output number and a
 title. All of these are read:
 
-``` R
-Table 14.1.1
-Table 14.1.1: Summary of Demographics
-Table 14.1.1 Summary of Demographics
-Table 14.1.1 Summary of Demographics - Safety Population ADSL.SAFFL='Y'
-Table 14.1.1 Demographics - Screened Subjects ADSL.SCRNFL='Y' [PROGRAMMING DATASETS USED: ADSL]
-```
+    Table 14.1.1
+    Table 14.1.1: Summary of Demographics
+    Table 14.1.1 Summary of Demographics
+    Table 14.1.1 Summary of Demographics - Safety Population ADSL.SAFFL='Y'
+    Table 14.1.1 Demographics - Screened Subjects ADSL.SCRNFL='Y' [PROGRAMMING DATASETS USED: ADSL]
 
 The population, an inline annotation, and a
 `[PROGRAMMING DATASETS USED: ...]` suffix may all ride on the same line;
@@ -617,6 +614,20 @@ becomes one display column — so a merged column like an “Unknown” bucket
 no column are excluded from the group columns (with a `WARN`), and a
 `Total (N=XX) ...` header is recognized as the overall column, not a
 group.
+
+**Hierarchical (multi-level) headers** are first-class: a parent column
+spanning conditioned child columns — e.g. a cohort split into severity
+sub-columns with its own per-parent `Total`, next to a sibling cohort
+and an overall `Total` — parses into an explicit column tree, and only
+the *declared* result columns are ever computed (never a Cartesian
+product of the grouping variables). A per-parent subtotal is scoped by
+the **parent’s condition**, so it correctly includes subjects whose
+child category is unknown; the overall Total is scoped by the analysis
+set. The declared paths travel in the ARS JSON as a documented extension
+(`resultGroupPaths`), are checked structurally by
+[`validate_ars_model()`](https://tavakohr.github.io/arsbridge/reference/validate_ars_model.md)
+before any ARD is computed, and are reviewable in the editor’s
+**Columns** panel.
 
 The regex pass handles colour, bold/italic/underline, bracket, and
 plain-text patterns. The LLM pass handles everything else, including

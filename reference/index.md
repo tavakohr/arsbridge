@@ -5,6 +5,8 @@
 The end-to-end pipeline: annotated shell and ADaM spec in, formatted
 clinical table out.
 
+- [`ars_workflow()`](https://tavakohr.github.io/arsbridge/reference/ars_workflow.md)
+  : Run the guided arsbridge workflow
 - [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
   : Convert annotated TLF shell and ADaM spec to CDISC ARS JSON
 - [`spec_to_ars_example()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars_example.md)
@@ -103,7 +105,7 @@ access” article.
 - [`ars_copilot_instructions()`](https://tavakohr.github.io/arsbridge/reference/ars_copilot_instructions.md)
   : Write the Copilot instruction files for the supplement workflow
 - [`ars_validate_supplement()`](https://tavakohr.github.io/arsbridge/reference/ars_validate_supplement.md)
-  : Validate a Copilot supplement file (format v3) before running
+  : Validate a Copilot supplement file (format v4) before running
   spec_to_ars()
 
 ## Examples

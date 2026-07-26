@@ -15,7 +15,7 @@ development branch does."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9017</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9019</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -101,8 +101,10 @@ pass either one alone.</p>
 
 
 <p>arsbridge extends ARS v1.0 in documented places: <code>_meta</code> blocks (top level
-and per output), <code>referencedAnalysisIds</code> and <code>outputType</code> on outputs,
-display <code>columns</code>, the nested <code>analysisVariable</code> duplicate plus
+and per output), <code>referencedAnalysisIds</code>, <code>outputType</code>, and
+<code>resultGroupPaths</code> (the declared hierarchical result-column paths – ARS
+v1.0 has no valid-path construct) on outputs, display <code>columns</code>, the
+nested <code>analysisVariable</code> duplicate plus
 <code>annotation</code>/<code>sapDescription</code>/<code>includeTotal</code>/<code>strata</code>/<code>variableRole</code> on
 analyses, <code>annotationText</code> on analysis sets, and <code>supported</code> on methods.
 These exist for siera compatibility, the renderer, and review provenance;

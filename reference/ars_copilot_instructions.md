@@ -6,7 +6,7 @@ accuracy with a chat assistant (GitHub Copilot, ChatGPT, an enterprise
 portal): upload the instruction file(s) this function writes TOGETHER
 WITH your annotated shell `.docx`, ADaM spec `.xlsx`, and the shipped
 JSON Schema, and the assistant replies with one strict `supplement.json`
-(format v3). Pass that file to
+(format v4). Pass that file to
 `spec_to_ars(supplement = "supplement.json")`.
 
 ## Usage
@@ -64,7 +64,7 @@ The files are static and versioned – do not edit them; the format they
 request is what
 [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
 knows how to validate. The JSON Schema
-(`arsbridge_supplement_v3.schema.json`) is written alongside so the
+(`arsbridge_supplement_v4.schema.json`) is written alongside so the
 assistant can self-check its reply, and so can
 [`ars_validate_supplement()`](https://tavakohr.github.io/arsbridge/reference/ars_validate_supplement.md)
 (when `jsonvalidate` is installed).

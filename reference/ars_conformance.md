@@ -50,8 +50,10 @@ is?". A file can pass either one alone.
 ## The sanctioned extensions
 
 arsbridge extends ARS v1.0 in documented places: `_meta` blocks (top
-level and per output), `referencedAnalysisIds` and `outputType` on
-outputs, display `columns`, the nested `analysisVariable` duplicate plus
+level and per output), `referencedAnalysisIds`, `outputType`, and
+`resultGroupPaths` (the declared hierarchical result-column paths – ARS
+v1.0 has no valid-path construct) on outputs, display `columns`, the
+nested `analysisVariable` duplicate plus
 `annotation`/`sapDescription`/`includeTotal`/`strata`/`variableRole` on
 analyses, `annotationText` on analysis sets, and `supported` on methods.
 These exist for siera compatibility, the renderer, and review

@@ -24,7 +24,7 @@
 
     <a class="navbar-brand me-2" href="index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9017</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9019</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -93,6 +93,11 @@
 <td><strong>Human-in-the-loop review</strong></td>
 <td>
 <code><a href="reference/edit_ars.html">edit_ars()</a></code> opens the generated ARS in a structured Shiny editor: the shell’s outputs and lines with validation findings badged on, spec-constrained dropdowns, add/remove/reorder for missed lines, undo and crash recovery. Every save is backed up, logged to a QC sidecar, and checked against the official ARS v1.0 schema.</td>
+</tr>
+<tr>
+<td><strong>A guided end-to-end workflow</strong></td>
+<td>
+<code>ars_workflow("my_study/")</code> walks the whole journey in one app: project folders, the two-phase Copilot instruction files, both manual assistant round-trips (paste the replies straight from the chat, validated on arrival), the <code><a href="reference/spec_to_ars.html">spec_to_ars()</a></code> build, and a hand-off into the review editor. Every step’s status is derived from the files on disk, so closing the app never loses progress.</td>
 </tr>
 <tr>
 <td><strong>CDISC ARS JSON output</strong></td>
@@ -188,9 +193,10 @@
 <span></span>
 <span><span class="co"># Execute what you corrected.</span></span>
 <span><span class="va">ard</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ars_to_ard.html">ars_to_ard</a></span><span class="op">(</span><span class="va">corrected</span>, adam_dir <span class="op">=</span> <span class="st">"adam"</span><span class="op">)</span></span></code></pre></div>
-<figure><img src="reference/figures/README-editor.png" alt="The review stage on the bundled example study: the shell’s structure on the left, the selected analysis as spec-constrained fields on the right."><figcaption aria-hidden="true">
-The review stage on the bundled example study: the shell’s structure on the left, the selected analysis as spec-constrained fields on the right.
-</figcaption></figure><p>You see the shell’s structure rather than JSON – each output with its analysis lines beneath it – with validation findings badged onto the lines they concern. Selecting a line resolves its ids into what they mean: the method’s name plus whether the engine can actually execute it, the population’s condition, the variables the results are split by. Variables come from the ADaM spec, so they cannot be mistyped, and every dropdown says how many analyses share the entity, because editing a shared method edits all of them.</p>
+<div class="float">
+<img src="reference/figures/README-editor.png" alt="The review stage on the bundled example study: the shell’s structure on the left, the selected analysis as spec-constrained fields on the right."><div class="figcaption">The review stage on the bundled example study: the shell’s structure on the left, the selected analysis as spec-constrained fields on the right.</div>
+</div>
+<p>You see the shell’s structure rather than JSON – each output with its analysis lines beneath it – with validation findings badged onto the lines they concern. Selecting a line resolves its ids into what they mean: the method’s name plus whether the engine can actually execute it, the population’s condition, the variables the results are split by. Variables come from the ADaM spec, so they cannot be mistyped, and every dropdown says how many analyses share the entity, because editing a shared method edits all of them.</p>
 <p>Nothing is written until you save, and saving shows what changed first. The previous file is backed up, the write is atomic, and the edit log goes to a sidecar <code>.edits.json</code> so the ARS JSON itself stays CDISC-clean – <code><a href="reference/export_edit_log.html">export_edit_log()</a></code> turns that sidecar into a QC workbook.</p>
 <p>Every change is undoable, and a session that dies is offered back the next time you open the same file, so a review cannot be lost to a mis-click or a crashed browser. <code><a href="reference/ars_conformance.html">ars_conformance()</a></code> checks any reporting event against the official CDISC ARS v1.0 schema (vendored and pinned in the package), and a freshly generated event validates clean.</p>
 <p>Use <code><a href="reference/view_ars.html">view_ars()</a></code> for the same view without the ability to change anything, and <code><a href="reference/validate_ars_model.html">validate_ars_model()</a></code> for the findings on the command line. The viewer needs <code>shiny</code>, <code>bslib</code> and <code>DT</code>, which are optional:</p>
@@ -458,25 +464,25 @@ The review stage on the bundled example study: the shell’s structure on the le
 <strong>A hard spec gate.</strong> Every <code>DATASET.VARIABLE</code> — whoever proposed it — must exist in your ADaM spec, or it is dropped, never shipped, and logged as a named blocker. The spec is the ground-truth oracle.</li>
 </ul>
 <p>What differs is <strong>how the rows the regex could not resolve get filled</strong> — and that is the three approaches:</p>
-<div class="sourceCode" id="cb18"><pre class="sourceCode R"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a>                 annotated <span class="fu">shell</span> (.docx)</span>
-<span id="cb18-2"><a href="#cb18-2" tabindex="-1"></a>                          <span class="sc">|</span></span>
-<span id="cb18-3"><a href="#cb18-3" tabindex="-1"></a>              regex <span class="fu">baseline</span>  (always runs)</span>
-<span id="cb18-4"><a href="#cb18-4" tabindex="-1"></a>                          <span class="sc">|</span></span>
-<span id="cb18-5"><a href="#cb18-5" tabindex="-1"></a>                 row still unresolved?</span>
-<span id="cb18-6"><a href="#cb18-6" tabindex="-1"></a>                          <span class="sc">|</span></span>
-<span id="cb18-7"><a href="#cb18-7" tabindex="-1"></a>     <span class="sc">+--------------------+--------------------+</span></span>
-<span id="cb18-8"><a href="#cb18-8" tabindex="-1"></a>     <span class="er">|</span>                    <span class="er">|</span>                    <span class="er">|</span></span>
-<span id="cb18-9"><a href="#cb18-9" tabindex="-1"></a>  regex only        regex <span class="sc">+</span> Copilot         LLM API</span>
-<span id="cb18-10"><a href="#cb18-10" tabindex="-1"></a>  (default)          (supplement)         (<span class="at">use_llm =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb18-11"><a href="#cb18-11" tabindex="-1"></a>  leave the gap      a chat assistant       the LLM re<span class="sc">-</span>reads</span>
-<span id="cb18-12"><a href="#cb18-12" tabindex="-1"></a>                     fills gaps by hand      the cell <span class="sc">+</span> enriches</span>
-<span id="cb18-13"><a href="#cb18-13" tabindex="-1"></a>     <span class="sc">|</span>                    <span class="er">|</span>                    <span class="er">|</span></span>
-<span id="cb18-14"><a href="#cb18-14" tabindex="-1"></a>     <span class="sc">+--------------------+--------------------+</span></span>
-<span id="cb18-15"><a href="#cb18-15" tabindex="-1"></a>                          <span class="er">|</span></span>
-<span id="cb18-16"><a href="#cb18-16" tabindex="-1"></a>                    HARD SPEC GATE</span>
-<span id="cb18-17"><a href="#cb18-17" tabindex="-1"></a>              (the variable must be <span class="cf">in</span> the spec)</span>
-<span id="cb18-18"><a href="#cb18-18" tabindex="-1"></a>                          <span class="sc">|</span></span>
-<span id="cb18-19"><a href="#cb18-19" tabindex="-1"></a>                  validated <span class="ot">-&gt;</span> ARS JSON</span></code></pre></div>
+<pre><code>                 annotated shell (.docx)
+                          |
+              regex baseline  (always runs)
+                          |
+                 row still unresolved?
+                          |
+     +--------------------+--------------------+
+     |                    |                    |
+  regex only        regex + Copilot         LLM API
+  (default)          (supplement)         (use_llm = TRUE)
+  leave the gap      a chat assistant       the LLM re-reads
+                     fills gaps by hand      the cell + enriches
+     |                    |                    |
+     +--------------------+--------------------+
+                          |
+                    HARD SPEC GATE
+              (the variable must be in the spec)
+                          |
+                  validated -&gt; ARS JSON</code></pre>
 <ol style="list-style-type: decimal">
 <li>
 <strong>Regex only (deterministic)</strong> — the default; no key. Unresolved rows stay empty. Standard shells still produce valid ARS / ARD / output; variant layouts, groupings, Total columns, and analysis typing degrade, and one <code>WARN</code> records the mode.</li>
@@ -570,11 +576,11 @@ The review stage on the bundled example study: the shell’s structure on the le
 </h2>
 <p>arsbridge splits the shell into outputs by finding TLF <strong>heading paragraphs</strong>, so the single most important thing you can do to make a shell parse cleanly is to write each heading in an identifiable way.</p>
 <p><strong>Do:</strong> give every output its own ordinary paragraph that begins with <code>Table</code>, <code>Figure</code>, or <code>Listing</code>, followed by the output number and a title. All of these are read:</p>
-<div class="sourceCode" id="cb19"><pre class="sourceCode R"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" tabindex="-1"></a>Table <span class="dv">14</span>.<span class="fl">1.1</span></span>
-<span id="cb19-2"><a href="#cb19-2" tabindex="-1"></a>Table <span class="dv">14</span>.<span class="fl">1.1</span><span class="sc">:</span> Summary of Demographics</span>
-<span id="cb19-3"><a href="#cb19-3" tabindex="-1"></a>Table <span class="dv">14</span>.<span class="fl">1.1</span> Summary of Demographics</span>
-<span id="cb19-4"><a href="#cb19-4" tabindex="-1"></a>Table <span class="dv">14</span>.<span class="fl">1.1</span> Summary of Demographics <span class="sc">-</span> Safety Population ADSL.SAFFL<span class="ot">=</span><span class="st">'Y'</span></span>
-<span id="cb19-5"><a href="#cb19-5" tabindex="-1"></a>Table <span class="dv">14</span>.<span class="fl">1.1</span> Demographics <span class="sc">-</span> Screened Subjects ADSL.SCRNFL<span class="ot">=</span><span class="st">'Y'</span> [PROGRAMMING DATASETS USED<span class="sc">:</span> ADSL]</span></code></pre></div>
+<pre><code>Table 14.1.1
+Table 14.1.1: Summary of Demographics
+Table 14.1.1 Summary of Demographics
+Table 14.1.1 Summary of Demographics - Safety Population ADSL.SAFFL='Y'
+Table 14.1.1 Demographics - Screened Subjects ADSL.SCRNFL='Y' [PROGRAMMING DATASETS USED: ADSL]</code></pre>
 <p>The population, an inline annotation, and a <code>[PROGRAMMING DATASETS USED: ...]</code> suffix may all ride on the same line; annotation values may use single quotes, double quotes, or an unquoted number (<code>ADSL.COHORTN=1</code>). The <strong>recommended</strong> form for a clean, portable shell is the explicit colon title — <code>Table 14.1.1: Descriptive Title</code> — with the population on the next line.</p>
 <p><strong>Avoid:</strong> these are deliberately <em>not</em> treated as headings, so a title hidden this way will be missed:</p>
 <ul>
@@ -639,6 +645,7 @@ The review stage on the bundled example study: the shell’s structure on the le
 </tbody>
 </table>
 <p><strong>Column-group headers</strong> define the whole column axis by annotation: when two or more header cells filter the <em>same</em> variable, each condition becomes one display column — so a merged column like an “Unknown” bucket (<code>ADSL.COHORTN is missing</code>) works with <strong>no ADaM change</strong>. Rows matching no column are excluded from the group columns (with a <code>WARN</code>), and a <code>Total (N=XX) ...</code> header is recognized as the overall column, not a group.</p>
+<p><strong>Hierarchical (multi-level) headers</strong> are first-class: a parent column spanning conditioned child columns — e.g. a cohort split into severity sub-columns with its own per-parent <code>Total</code>, next to a sibling cohort and an overall <code>Total</code> — parses into an explicit column tree, and only the <em>declared</em> result columns are ever computed (never a Cartesian product of the grouping variables). A per-parent subtotal is scoped by the <strong>parent’s condition</strong>, so it correctly includes subjects whose child category is unknown; the overall Total is scoped by the analysis set. The declared paths travel in the ARS JSON as a documented extension (<code>resultGroupPaths</code>), are checked structurally by <code><a href="reference/validate_ars_model.html">validate_ars_model()</a></code> before any ARD is computed, and are reviewable in the editor’s <strong>Columns</strong> panel.</p>
 <p>The regex pass handles colour, bold/italic/underline, bracket, and plain-text patterns. The LLM pass handles everything else, including mixed or non-standard layouts.</p>
 <hr>
 </div>

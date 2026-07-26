@@ -1,4 +1,4 @@
-# Validate a Copilot supplement file (format v3) before running spec_to_ars()
+# Validate a Copilot supplement file (format v4) before running spec_to_ars()
 
 Pre-flight check for the supplement workflow (see
 [`ars_copilot_instructions()`](https://tavakohr.github.io/arsbridge/reference/ars_copilot_instructions.md)):
