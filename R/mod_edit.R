@@ -257,6 +257,17 @@ apply_edit <- function(state, pool, id, field, value) {
       )
     ),
 
+    ## One table usually shares one column layout: the same "Grouped by"
+    ## correction should not need repeating on every line.
+    shiny::div(
+      class = "mb-2",
+      shiny::actionButton(
+        ns("apply_groupings_all"),
+        "Apply this line's groupings to every line in this output",
+        class = "btn-sm btn-outline-secondary"
+      )
+    ),
+
     shiny::checkboxInput(ns("includeTotal"), "Include a total column",
                          value = isTRUE(row$includeTotal)),
     shiny::textAreaInput(ns("description"), "Description",
@@ -372,7 +383,7 @@ apply_edit <- function(state, pool, id, field, value) {
 ## (that is just the input being created) and writes through apply_edit(),
 ## which drops no-ops.
 #' @noRd
-.observe_analysis_inputs <- function(input, state, selected_id) {
+.observe_analysis_inputs <- function(input, state, selected_id, session) {
   simple_fields <- c("label", "description", "dataset", "variable",
                      "analysisSetId", "dataSubsetId", "reason", "purpose")
 
@@ -419,6 +430,103 @@ apply_edit <- function(state, pool, id, field, value) {
     apply_edit(state, "analyses", id, "grouping_ids", value)
   }, ignoreInit = TRUE, ignoreNULL = FALSE)
 
+  ## Bulk grouping assignment: copy this line's ordered "Grouped by" onto
+  ## every other analysis of the same output, after a preview of what will
+  ## change. One history push, so one undo reverses the whole action.
+  shiny::observeEvent(input$apply_groupings_all, {
+    id <- selected_id()
+    if (is.null(id)) return()
+    model <- state$model()
+    idx <- match(id, model$analyses$id)
+    if (is.na(idx)) return()
+
+    out_id <- model$analyses$output_id[idx]
+    value  <- model$analyses$grouping_ids[idx]
+    if (is.na(out_id)) return()
+
+    same_output <- !is.na(model$analyses$output_id) &
+      model$analyses$output_id == out_id & model$analyses$id != id
+    targets <- model$analyses$id[same_output]
+    differs <- vapply(targets, function(other) {
+      !identical(model$analyses$grouping_ids[match(other, model$analyses$id)],
+                 value)
+    }, logical(1))
+    targets <- targets[differs]
+
+    if (length(targets) == 0) {
+      shiny::showNotification(
+        "Every line in this output already has these groupings.",
+        type = "message", duration = 5
+      )
+      return()
+    }
+
+    labels <- vapply(targets, function(other) {
+      lbl <- model$analyses$label[match(other, model$analyses$id)]
+      if (is.na(lbl) || !nzchar(lbl)) other else lbl
+    }, character(1))
+    shiny::showModal(shiny::modalDialog(
+      title = "Apply groupings to the whole output?",
+      shiny::p(
+        shiny::tags$code(if (is.na(value)) "(no groupings)" else value),
+        " will replace the groupings of ", shiny::strong(length(targets)),
+        " other line(s):"
+      ),
+      shiny::tags$ul(class = "small",
+                     lapply(labels, function(x) shiny::tags$li(x))),
+      footer = shiny::tagList(
+        shiny::modalButton("Cancel"),
+        shiny::actionButton(session$ns("confirm_apply_groupings_all"),
+                            "Apply to all", class = "btn-primary")
+      )
+    ))
+  })
+
+  shiny::observeEvent(input$confirm_apply_groupings_all, {
+    shiny::removeModal()
+    id <- selected_id()
+    if (is.null(id)) return()
+    model <- state$model()
+    idx <- match(id, model$analyses$id)
+    if (is.na(idx)) return()
+    out_id <- model$analyses$output_id[idx]
+    value  <- model$analyses$grouping_ids[idx]
+
+    same_output <- !is.na(model$analyses$output_id) &
+      model$analyses$output_id == out_id & model$analyses$id != id
+    targets <- model$analyses$id[same_output]
+
+    updated <- model
+    log_rows <- list()
+    for (other in targets) {
+      old <- updated$analyses$grouping_ids[match(other, updated$analyses$id)]
+      if (identical(old, value)) next
+      updated <- model_set_field(updated, "analyses", other,
+                                 "grouping_ids", value)
+      log_rows[[length(log_rows) + 1L]] <- data.frame(
+        time  = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+        pool  = "analyses",
+        id    = other,
+        field = "grouping_ids",
+        old   = if (is.na(old)) "(not set)" else as.character(old),
+        new   = if (is.na(value)) "(not set)" else as.character(value),
+        stringsAsFactors = FALSE
+      )
+    }
+    ## Nothing actually differed: no history entry, no phantom undo step.
+    if (length(log_rows) == 0) return()
+
+    .push_history(state)
+    state$model(updated)
+    state$edit_log(rbind(state$edit_log(), do.call(rbind, log_rows)))
+    state$findings(validate_ars_model(updated, state$spec, state$report))
+    .write_autosave(state)
+    shiny::showNotification(
+      paste("Groupings applied to", length(log_rows), "line(s)."),
+      type = "message", duration = 5
+    )
+  })
+
   ## Choosing a standard method that is not in the file yet adds it first, so
   ## the analysis never points at a method the reporting event does not carry.
   shiny::observeEvent(input$methodId, {
@@ -443,8 +551,13 @@ mod_save_ui <- function(id) {
   shiny::tagList(
     shiny::uiOutput(ns("dirty"), inline = TRUE),
     shiny::uiOutput(ns("history"), inline = TRUE),
-    shiny::actionButton(ns("save"), "Save and close",
+    ## Saving and leaving are separate decisions: Save writes and stays,
+    ## Save As writes a copy elsewhere, Save and close writes and ends the
+    ## session. Each says what it does.
+    shiny::actionButton(ns("save_stay"), "Save",
                         class = "btn-primary btn-sm"),
+    shiny::actionButton(ns("save_as"), "Save As", class = "btn-sm"),
+    shiny::actionButton(ns("save"), "Save and close", class = "btn-sm"),
     shiny::actionButton(ns("discard"), "Discard", class = "btn-sm")
   )
 }
@@ -542,6 +655,16 @@ mod_save_server <- function(id, state) {
         title = "Save these changes?",
         size = "l",
 
+        if (!is.null(state$source_path)) {
+          shiny::p(
+            class = "small",
+            "Destination: ", shiny::tags$code(state$source_path),
+            shiny::br(),
+            shiny::span(class = "text-muted",
+                        "The previous file is backed up with a timestamp first.")
+          )
+        },
+
         if (n_fail > 0) {
           shiny::div(
             class = "alert alert-danger",
@@ -571,6 +694,101 @@ mod_save_server <- function(id, state) {
       ))
     })
 
+    ## Save in place: write now, stay in the editor. Shows the destination
+    ## before writing -- the user should never have to guess which file a
+    ## save will touch.
+    shiny::observeEvent(input$save_stay, {
+      if (is.null(state$source_path)) {
+        shiny::showNotification(
+          "This reporting event was not opened from a file -- use Save As.",
+          type = "warning", duration = 6
+        )
+        return()
+      }
+      findings <- state$findings()
+      n_fail <- sum(findings$severity == "FAIL")
+
+      shiny::showModal(shiny::modalDialog(
+        title = "Save these changes?",
+        size = "l",
+        shiny::p(
+          class = "small",
+          "Destination: ", shiny::tags$code(state$source_path),
+          shiny::br(),
+          shiny::span(class = "text-muted",
+                      "The previous file is backed up with a timestamp first.")
+        ),
+        if (n_fail > 0) {
+          shiny::div(
+            class = "alert alert-danger",
+            shiny::strong(paste(n_fail, "blocking problem(s) remain.")),
+            shiny::br(),
+            "Saving is allowed, but the engine will not be able to execute ",
+            "these analyses until they are fixed."
+          )
+        },
+        .diff_table_ui(state$edit_log()),
+        footer = shiny::tagList(
+          shiny::modalButton("Keep editing"),
+          shiny::actionButton(session$ns("confirm_save_stay"), "Save",
+                              class = "btn-primary")
+        )
+      ))
+    })
+
+    shiny::observeEvent(input$confirm_save_stay, {
+      shiny::removeModal()
+      .app_write_event(state, state$source_path, reset_dirty = TRUE)
+    })
+
+    ## Save As: write a copy elsewhere; the original file and this editing
+    ## session are untouched.
+    shiny::observeEvent(input$save_as, {
+      default_dir <- dirname(state$source_path %||% file.path(getwd(), "x"))
+      default_name <- paste0(
+        sub("\\.json$", "",
+            basename(state$source_path %||% "reporting_event.json")),
+        format(Sys.time(), "_%Y%m%d_%H%M"), ".json"
+      )
+      shiny::showModal(shiny::modalDialog(
+        title = "Save a copy as",
+        size = "l",
+        shiny::textInput(session$ns("save_as_path"), "Destination path",
+                         value = file.path(default_dir, default_name),
+                         width = "100%"),
+        shiny::p(class = "text-muted small",
+                 "The original file stays untouched, and this session keeps ",
+                 "editing it -- Save As is an export, not a switch."),
+        .diff_table_ui(state$edit_log()),
+        footer = shiny::tagList(
+          shiny::modalButton("Cancel"),
+          shiny::actionButton(session$ns("confirm_save_as"), "Save copy",
+                              class = "btn-primary")
+        )
+      ))
+    })
+
+    shiny::observeEvent(input$confirm_save_as, {
+      path <- trimws(input$save_as_path %||% "")
+      if (!nzchar(path)) {
+        shiny::showNotification("Give the copy a destination path.",
+                                type = "warning")
+        return()
+      }
+      if (!grepl("\\.json$", path, ignore.case = TRUE)) {
+        path <- paste0(path, ".json")
+      }
+      if (!dir.exists(dirname(path))) {
+        shiny::showNotification(
+          paste0("Folder does not exist: ", dirname(path)),
+          type = "error", duration = 8
+        )
+        return()
+      }
+      shiny::removeModal()
+      .app_write_event(state, path, reset_dirty = FALSE)
+    })
+
     shiny::observeEvent(input$discard, {
       if (nrow(state$edit_log()) == 0) {
         shiny::stopApp(NULL)
@@ -593,6 +811,51 @@ mod_save_server <- function(id, state) {
       shiny::stopApp(NULL)
     })
   })
+}
+
+## Write the working copy from inside the app, through the same backup +
+## atomic-write + sidecar path a Save-and-close uses. `reset_dirty` marks the
+## session clean afterwards (a Save in place); Save As leaves the dirty state
+## alone because the original file still differs from the working copy.
+#' @noRd
+.app_write_event <- function(state, path, reset_dirty) {
+  result <- list(
+    model    = state$model(),
+    edit_log = state$edit_log(),
+    ## For a Save As, do not clear the ORIGINAL file's crash-recovery copy:
+    ## the working changes are still unsaved relative to that file.
+    source_path = if (isTRUE(reset_dirty)) state$source_path else NULL
+  )
+
+  written <- tryCatch(
+    .edit_ars_finish(result, path, state$spec, state$report),
+    error = function(e) e
+  )
+  if (inherits(written, "error")) {
+    shiny::showNotification(
+      paste("Save failed:", conditionMessage(written)),
+      type = "error", duration = 10
+    )
+    return(invisible(FALSE))
+  }
+
+  if (isTRUE(reset_dirty)) {
+    state$edit_log(state$edit_log()[0, , drop = FALSE])
+  }
+
+  shiny::showModal(shiny::modalDialog(
+    title = "Saved",
+    shiny::p("File: ", shiny::tags$code(path)),
+    shiny::p("Saved: ", format(Sys.time(), "%Y-%m-%d %H:%M:%S")),
+    if (!isTRUE(reset_dirty)) {
+      shiny::p(class = "text-muted small",
+               "This session still edits the original file; the copy is a ",
+               "snapshot of the current working state.")
+    },
+    footer = shiny::modalButton("Continue editing"),
+    easyClose = TRUE
+  ))
+  invisible(TRUE)
 }
 
 ## The edit log as a "what changed" table, collapsed to the latest value per

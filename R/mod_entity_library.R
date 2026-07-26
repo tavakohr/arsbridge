@@ -57,6 +57,11 @@ mod_entity_library_ui <- function(id) {
   panels <- lapply(pools, function(pool) {
     bslib::nav_panel(
       .library_title(pool),
+      ## Groupings are the one pool a reviewer routinely has to CREATE (a
+      ## missing column axis), so that pool gets lifecycle actions.
+      if (identical(pool, "groupings")) {
+        shiny::uiOutput(ns("grouping_actions"))
+      },
       DT::DTOutput(ns(paste0("table_", pool))),
       shiny::uiOutput(ns(paste0("detail_", pool)))
     )
@@ -127,9 +132,168 @@ mod_entity_library_server <- function(id, state) {
       })
     }
 
+    output$grouping_actions <- shiny::renderUI({
+      if (!identical(state$mode, "edit")) return(NULL)
+      shiny::div(
+        class = "d-flex gap-2 mb-2",
+        shiny::actionButton(session$ns("grouping_add"), "Add grouping",
+                            class = "btn-sm btn-outline-primary"),
+        shiny::actionButton(session$ns("grouping_clone"), "Clone selected",
+                            class = "btn-sm btn-outline-secondary"),
+        shiny::actionButton(session$ns("grouping_delete"), "Delete selected",
+                            class = "btn-sm btn-outline-danger")
+      )
+    })
+
     if (identical(state$mode, "edit")) {
       .observe_entity_inputs(input, state, session$ns)
+      .observe_grouping_actions(input, state, session)
     }
+  })
+}
+
+## The grouping lifecycle: add, clone, delete -- each recorded as a
+## structural edit, each guarded by what it would touch. Delete is refused
+## while any analysis still points at the grouping; the dependent lines are
+## named so the unassign-first order of operations is obvious.
+#' @noRd
+.observe_grouping_actions <- function(input, state, session) {
+  selected_grouping <- function() {
+    idx <- input$table_groupings_rows_selected
+    if (length(idx) == 0) return(NULL)
+    model <- shiny::isolate(state$model())
+    if (idx > nrow(model$groupings)) return(NULL)
+    model$groupings$id[idx]
+  }
+
+  shiny::observeEvent(input$grouping_add, {
+    spec <- state$spec
+    dataset_input <- if (is.null(spec)) {
+      shiny::textInput(session$ns("new_grouping_dataset"), "Dataset",
+                       value = "ADSL")
+    } else {
+      shiny::selectizeInput(session$ns("new_grouping_dataset"), "Dataset",
+                            choices = unique(spec$variables$dataset),
+                            selected = "ADSL")
+    }
+    variable_input <- if (is.null(spec)) {
+      shiny::textInput(session$ns("new_grouping_variable"), "Variable")
+    } else {
+      shiny::selectizeInput(session$ns("new_grouping_variable"), "Variable",
+                            choices = .variable_choices(spec, NULL),
+                            options = list(create = TRUE))
+    }
+    shiny::showModal(shiny::modalDialog(
+      title = "Add a grouping",
+      bslib::layout_columns(
+        col_widths = c(6, 6),
+        dataset_input,
+        variable_input
+      ),
+      shiny::textInput(session$ns("new_grouping_label"), "Label (optional)"),
+      shiny::p(class = "text-muted small",
+               "The grouping starts data-driven (columns = the variable's ",
+               "observed values). Define condition-based column levels ",
+               "afterwards in this panel's raw-JSON editor, or regenerate ",
+               "from an annotated shell."),
+      footer = shiny::tagList(
+        shiny::modalButton("Cancel"),
+        shiny::actionButton(session$ns("confirm_grouping_add"), "Add",
+                            class = "btn-primary")
+      )
+    ))
+  })
+
+  shiny::observeEvent(input$confirm_grouping_add, {
+    variable <- trimws(input$new_grouping_variable %||% "")
+    if (!nzchar(variable)) {
+      shiny::showNotification("The grouping needs a variable.",
+                              type = "warning")
+      return()
+    }
+    shiny::removeModal()
+    updated <- tryCatch(
+      model_add_grouping(state$model(),
+                         dataset  = input$new_grouping_dataset %||% "ADSL",
+                         variable = variable,
+                         label    = .input_to_value(input$new_grouping_label)),
+      error = function(e) e
+    )
+    if (inherits(updated, "error")) {
+      shiny::showNotification(conditionMessage(updated), type = "error")
+      return()
+    }
+    new_id <- attr(updated, "last_added")
+    .record_structural_edit(state, updated, "groupings", new_id,
+                            "grouping", "(none)", "(added)")
+    shiny::showNotification(paste("Added", new_id), type = "message",
+                            duration = 5)
+  })
+
+  shiny::observeEvent(input$grouping_clone, {
+    id <- selected_grouping()
+    if (is.null(id)) {
+      shiny::showNotification("Select a grouping to clone.", type = "warning")
+      return()
+    }
+    updated <- model_clone_grouping(state$model(), id)
+    new_id <- attr(updated, "last_added")
+    .record_structural_edit(state, updated, "groupings", new_id,
+                            "grouping", "(none)", paste("(cloned from", id, ")"))
+    shiny::showNotification(paste("Cloned", id, "as", new_id),
+                            type = "message", duration = 5)
+  })
+
+  shiny::observeEvent(input$grouping_delete, {
+    id <- selected_grouping()
+    if (is.null(id)) {
+      shiny::showNotification("Select a grouping to delete.", type = "warning")
+      return()
+    }
+    dependents <- .grouping_dependents(shiny::isolate(state$model()), id)
+    if (length(dependents) > 0) {
+      shiny::showModal(shiny::modalDialog(
+        title = "This grouping is in use",
+        shiny::p(shiny::strong(id), " is referenced by ",
+                 shiny::strong(length(dependents)), " analysis line(s):"),
+        shiny::tags$ul(class = "small",
+                       lapply(dependents, function(x) shiny::tags$li(x))),
+        shiny::p("Remove it from those lines' ", shiny::em("Grouped by"),
+                 " first, then delete it here."),
+        footer = shiny::modalButton("Close")
+      ))
+      return()
+    }
+    shiny::showModal(shiny::modalDialog(
+      title = "Delete this grouping?",
+      shiny::p(shiny::strong(id),
+               " is not referenced by any analysis and will be removed from ",
+               "the reporting event."),
+      footer = shiny::tagList(
+        shiny::modalButton("Cancel"),
+        shiny::actionButton(session$ns("confirm_grouping_delete"), "Delete",
+                            class = "btn-danger")
+      )
+    ))
+  })
+
+  shiny::observeEvent(input$confirm_grouping_delete, {
+    shiny::removeModal()
+    id <- selected_grouping()
+    if (is.null(id)) return()
+    updated <- tryCatch(
+      model_remove_grouping(state$model(), id),
+      error = function(e) e
+    )
+    if (inherits(updated, "error")) {
+      shiny::showNotification(conditionMessage(updated), type = "error",
+                              duration = 8)
+      return()
+    }
+    .record_structural_edit(state, updated, "groupings", id,
+                            "grouping", "(present)", "(deleted)")
+    shiny::showNotification(paste("Deleted", id), type = "message",
+                            duration = 5)
   })
 }
 
@@ -349,7 +513,7 @@ mod_entity_library_server <- function(id, state) {
       )
     ),
     if (nrow(own) > 0) .findings_list(own),
-    shiny::div(class = "mt-2", .entity_detail_rows(row, pool)),
+    shiny::div(class = "mt-2", .entity_detail_rows(row, pool, model)),
     shiny::tags$details(
       class = "mt-2",
       shiny::tags$summary(class = "small text-muted", "Raw JSON"),
@@ -359,7 +523,7 @@ mod_entity_library_server <- function(id, state) {
 }
 
 #' @noRd
-.entity_detail_rows <- function(row, pool) {
+.entity_detail_rows <- function(row, pool, model = NULL) {
   if (identical(pool, "methods")) {
     operations <- row$raw[[1]][["operations"]] %||% list()
     return(shiny::tagList(
@@ -377,12 +541,17 @@ mod_entity_library_server <- function(id, state) {
   }
 
   if (identical(pool, "groupings")) {
+    dependents <- if (is.null(model)) character(0) else
+      .grouping_dependents(model, row$id)
     return(shiny::tagList(
       .detail_row("Id", row$id),
       .detail_row("Variable",
                   paste0(row$groupingDataset, ".", row$groupingVariable)),
       .detail_row("Data driven", row$dataDriven),
-      .detail_row("Groups", row$group_labels)
+      .detail_row("Groups", row$group_labels),
+      if (length(dependents) > 0) {
+        .detail_row("Used by", paste(dependents, collapse = ", "))
+      }
     ))
   }
 

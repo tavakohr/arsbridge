@@ -186,7 +186,7 @@ mod_detail_server <- function(id, state) {
     })
 
     if (identical(state$mode, "edit")) {
-      .observe_analysis_inputs(input, state, selected_analysis)
+      .observe_analysis_inputs(input, state, selected_analysis, session)
       .observe_structural_inputs(input, state, ns)
     }
   })
