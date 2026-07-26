@@ -1,5 +1,161 @@
 # arsbridge (development version)
 
+* **`ars_workflow()`: a guided app for the whole journey.** One stepper
+  walks a study project from an annotated shell to a reviewed reporting
+  event: project setup (fixed folder layout -- `copilot/`, `phase1/`,
+  `phase2/`, `ars/` -- plus a small `arsbridge_project.json`), writing the
+  two-phase Copilot instruction files, the two manual assistant round-trips
+  (paste or upload the replies straight from the chat; a new blueprint
+  pre-flight catches truncated or wrong-version files before they cost a
+  Phase 2 session, and `ars_validate_supplement()` runs the moment
+  `supplement.json` lands, with the repair prompt shown on FAILs), the
+  `spec_to_ars()` build (supplement-driven, or deterministic when the
+  Copilot phases are skipped), and a hand-off into `edit_ars()` -- when the
+  editor closes, the workflow returns with every status re-derived from the
+  files on disk, so closing the app never loses progress. Launchable
+  standalone via `inst/shiny/ars_workflow/`. In passing, the shipped
+  Copilot instruction files' stale "format version 3" doc-control strings
+  were corrected to version 4.
+
+* **Declared result-group paths in the ARS JSON (`resultGroupPaths`).** An
+  output built from a hierarchical column tree now declares its result
+  columns explicitly: one path per display column, in shell order, each
+  referencing the standard group levels whose conditions compose it. The
+  grouping factors themselves stay fully standard (one flat factor per
+  header level, all linked from every analysis through `orderedGroupings`,
+  outermost first) -- the extension only records WHICH combinations are
+  valid, because ARS v1.0 has no valid-path construct and an ordered
+  grouping list alone would invite Cartesian products. A SUBTOTAL path
+  references only its parent's group (`totalStrategy: condition_based`); a
+  GRAND_TOTAL path references no group (`totalStrategy: analysis_set`) and
+  replaces the `includeTotal` boolean for these outputs. `ars_conformance()`
+  strips the documented extension; the parsed column tree travels in the
+  output's `_meta` as provenance. `validate_ars_model()` gains structural
+  checks keyed by machine-readable codes (`DISPLAY_COLUMN_COUNT_MISMATCH`,
+  `UNMAPPED_LEAF_COLUMN`, `INVALID_CARTESIAN_PRODUCT`,
+  `GROUPING_VARIABLE_NOT_LINKED`, `SUBTOTAL_SCOPE_UNDEFINED`,
+  `DUPLICATE_RESULT_PATH`, `GROUPING_ORDER_AMBIGUOUS`,
+  `HEADER_TREE_MISSING`, `SUBTOTAL_EXCLUDES_UNDISPLAYED_CATEGORIES`), so a
+  structurally damaged event fails review before any ARD is computed.
+
+* **Path-aware rendering.** `ars_to_tfrmt()` recognizes a declared-path ARD:
+  the column axis is the stable `result_group_path` ("Cohort A > Mild", ...,
+  "Total"), one display column per declared path, locked to shell order via
+  `result_group_order`; the per-level `group*_level` columns are treated as
+  the same column identity, never as row groups. Spanning parent headers
+  (a two-level `tfrmt::span_structure`) are deliberately deferred to a
+  visual-QA cycle -- the flat "parent > child" labels carry the full
+  identity meanwhile.
+
+* **LLM enrichment understands the header tree.** When the parser found a
+  hierarchical header, the enrichment payload includes the parsed tree and
+  the response schema gains an optional `column_hierarchy` answer. Hard
+  grounding: the model may only reclassify a column's role
+  (DETAIL/SUBTOTAL/GRAND_TOTAL) or name the grouping variable of an
+  unannotated level -- an answer describing different columns is discarded
+  whole, and a variable outside the ADaM spec is ignored, both with WARNs.
+  Geometry is parser truth; the LLM never redraws it.
+
+* **Saving and leaving the editor are now separate decisions.** The review
+  stage gains **Save** (writes to the opened file and stays in the editor,
+  after a confirmation showing the destination path, the change summary, and
+  the validation status; the previous file is backed up first and the dirty
+  state resets) and **Save As** (writes a timestamped copy elsewhere; the
+  original file and the editing session are untouched). *Save and close* and
+  *Discard* keep their existing behavior, and every save modal now names the
+  exact file it will touch.
+
+* **Bulk grouping assignment.** One table usually shares one column layout,
+  so the analysis panel gains "Apply this line's groupings to every line in
+  this output": a preview modal lists the affected lines, the ordered
+  `Grouped by` set is copied across in one action, one undo reverses all of
+  it, and each changed line is recorded in the edit log.
+
+* **Grouping lifecycle in the entity library.** The Groupings pool gains
+  Add (spec-gated dataset/variable choices, starts data-driven), Clone, and
+  Delete. Delete is refused while any analysis still references the grouping
+  -- the dependent analysis lines are named, so unassign-then-delete is
+  explicit -- and a grouping's detail view now lists the analyses that use
+  it, not just the count.
+
+* **A "Columns" panel in the review stage.** `view_ars()` / `edit_ars()` gain
+  a tab that shows the parsed header tree (node type badges, N hints, raw
+  header annotations), the declared result paths in shell order, and the
+  structural warnings for the selected output. In edit mode a path's `role`
+  and `totalStrategy` are editable in place -- the one judgment a reviewer
+  must make deliberately is a subtotal's scope (parent condition, which
+  includes unknown-category subjects, vs the sum of the displayed children)
+  -- with full history/undo, edit-log, and re-validation like every other
+  edit. Deeper surgery (adding/removing paths, changing conditions) stays in
+  the raw-JSON escape hatch by design.
+
+* **Declared-path execution.** For an output carrying `resultGroupPaths`,
+  `ars_to_ard()` and the emitted `{cards}` deliverable scripts compute one
+  pass per declared result column instead of crossing the grouping
+  variables: each pass filters both the analysis frame and the denominator
+  frame by the path's composed condition and runs the method idiom
+  ungrouped, so a subtotal's N is the parent-condition count (unknown child
+  categories included), the grand total's N the analysis-set count, and an
+  undeclared combination (a sibling cohort crossed with another parent's
+  child levels) can never appear in the ARD. Each row carries its display
+  identity -- the per-level `group*`/`group*_level` columns plus stable
+  `result_group_id` / `result_group_path` / `result_group_order` /
+  `result_group_level` fields. The emitted script IS the executor (the
+  emitted == executed invariant is unchanged), and a declaration that does
+  not resolve blocks the whole output with a FAIL instead of silently
+  degrading to flat groupings. Flat and crossed tables execute exactly as
+  before.
+
+* **Condition-defined `groups[]` now ship in the official ARS v1.0 Group
+  shape.** Per the standard, a Group IS-A WhereClause: it carries `level`
+  and `order`, with its `condition` (or `compoundExpression`) directly on
+  the node. arsbridge previously emitted its internal wrapped WhereClause
+  under `condition`, which the official schema rejects -- a gap the
+  conformance suite never saw because no conformance fixture used
+  condition-defined groups. Emission is now official at the boundary
+  (`.official_group()`), and internal consumers read both shapes through
+  one accessor (`.group_where()`), so existing fixtures and supplements
+  keep working.
+
+* **Supplement format v4: `columnHierarchy`.** A supplement TLF entry can now
+  declare the hierarchical column tree explicitly -- one typed node per
+  display column or spanning parent (`GROUP`/`LEAF`/`SUBTOTAL`/`GRAND_TOTAL`,
+  each with its own condition), mirroring what the parser infers from header
+  geometry. The declared tree wins over the parsed one, passes the same hard
+  ADaM-spec gate (one bad node rejects the whole hierarchy -- a partial tree
+  would silently drop display columns), and `ars_validate_supplement()`
+  pre-flights the structure: the `includeTotal`/`columnHierarchy` conflict,
+  node completeness, parent references, and every node condition. v4 is the
+  single supported version (early-phase policy: no readers for older
+  arsbridge formats); the shipped schema and both Copilot instruction files
+  are updated, and a v2/v3 file fails loudly with a regenerate message.
+
+* **Hierarchical and asymmetric column headers parse into an explicit column
+  tree.** The shell parser now retains the raw header-cell geometry (grid
+  spans, vertical merges) instead of only the flattened per-column labels,
+  and builds `sec$column_tree`: every visible result column becomes one
+  declared path with a composed condition. A parent column spanning
+  conditioned child columns (with an optional per-parent subtotal), a
+  sibling column with no children, and an overall Total therefore all
+  survive parsing as first-class structure -- the child grouping variable is
+  no longer dropped with a "several variables" warning. A subtotal column's
+  condition is the parent's condition by construction (not the union of the
+  displayed children), so a subtotal that includes unknown-category subjects
+  computes correctly. Detection is condition-driven: spanned headers over
+  statistic sub-columns ("n" / "(%)") and classic one-row conditioned
+  headers keep the existing flat single-axis behavior exactly.
+
+* **WhereClause algebra helpers** (internal groundwork for hierarchical
+  column groupings): `combine_conditions()` composes clauses under AND/OR
+  with NULL-tolerant, same-operator flattening; `canonicalize_condition()`
+  produces an order-insensitive, case-normalized canonical form;
+  `conditions_equal()` compares two clauses structurally; and
+  `condition_implies(child, parent)` answers whether a child column's
+  condition sits inside its parent's scope (conservative FALSE when a
+  clause contains OR). These let a hierarchical column tree build a leaf
+  condition as AND(ancestor conditions, own condition) and assert that a
+  parent subtotal's condition is exactly the parent condition.
+
 * **A freshly generated reporting event now validates clean against the
   official CDISC ARS v1.0 schema** (beyond the documented extensions, which
   `ars_conformance()` strips and reports). All six known divergences are
