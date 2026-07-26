@@ -51,6 +51,7 @@ reference:
     The end-to-end pipeline: annotated shell and ADaM spec in, formatted
     clinical table out.
   contents:
+  - ars_workflow
   - spec_to_ars
   - spec_to_ars_example
   - ars_to_ard
