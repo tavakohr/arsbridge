@@ -120,6 +120,17 @@ test_that("validator passes a clean supplement and flags bad fields", {
   expect_true(any(out$severity == "INFO" & grepl("mystery_field", out$problem)))
 })
 
+test_that("validator strips ANSI escape codes from a malformed-JSON FAIL message", {
+  bad <- tempfile(fileext = ".json")
+  writeLines("{not json", bad)
+  out <- withr::with_options(list(cli.num_colors = 256), {
+    suppressMessages(ars_validate_supplement(bad))
+  })
+  msg <- out$problem[out$severity == "FAIL" & out$where == "file"]
+  expect_false(grepl("\033", msg, fixed = TRUE))
+  expect_match(msg, "not valid JSON")
+})
+
 test_that("validator attaches a paste-ready repair prompt when there are FAILs", {
   dirty <- .write_supp(.supp_minimal(list(`14.1.1` = list(
     title = "x", analysis_type = "CATEGORICAL", is_supported = TRUE,
