@@ -973,3 +973,84 @@ out_asym <- file.path(here, "annotated_shell_asymmetric_tree.docx")
 print(doc_asym, target = out_asym)
 inject_raw_table(out_asym, asymmetric_tree_table_xml, "%%TABLE%%")
 cat("Wrote:", out_asym, "\n")
+
+## ---------------------------------------------------------------------------
+## Corrupted-annotation fixture: a below-table legend line split across two
+## runs with different colours (FF0000 then EE0000), the second carrying
+## typographic quotes -- the visual signature of a hand-edit/paste-over
+## rather than a line typed fresh in one pass. Regression fixture for the
+## annotation run-integrity lint (.lint_annotation_run_integrity()). All
+## content here is synthetic, built directly by this script -- not derived
+## from any real study file.
+## ---------------------------------------------------------------------------
+
+#' Replace one paragraph's run(s) with two runs of different colours, the
+#' second containing `value_part` verbatim (including any typographic
+#' quotes it carries) -- reproduces a hand-edited/pasted-over annotation run
+#' split. Finds the paragraph whose full text exactly equals `marker`.
+#' @noRd
+corrupt_annotation_paragraph <- function(docx_path, marker, label_part, value_part) {
+  td <- tempfile()
+  dir.create(td)
+  utils::unzip(docx_path, exdir = td)
+  doc_xml_path <- file.path(td, "word", "document.xml")
+  d <- xml2::read_xml(doc_xml_path)
+
+  paras <- xml2::xml_find_all(d, ".//*[local-name()='p']")
+  target <- Filter(function(p) {
+    txt <- paste(xml2::xml_text(xml2::xml_find_all(p, ".//*[local-name()='t']")),
+                collapse = "")
+    identical(txt, marker)
+  }, paras)
+  if (length(target) != 1) {
+    stop("expected exactly one paragraph matching marker, found ", length(target))
+  }
+  p <- target[[1]]
+
+  runs <- xml2::xml_find_all(p, "./*[local-name()='r']")
+  for (r in runs) xml2::xml_remove(r)
+
+  ## `&` must be escaped FIRST -- escaping `<`/`>` before `&` would double-
+  ## escape the `&` those introduce (a real "->" arrow triggers exactly this).
+  escape_xml_text <- function(x) gsub(">", "&gt;", gsub("<", "&lt;", gsub("&", "&amp;", x)))
+
+  run1 <- xml2::read_xml(sprintf(
+    '<w:r xmlns:w="%s"><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">%s</w:t></w:r>',
+    .W_NS_URL, escape_xml_text(label_part)
+  ))
+  run2 <- xml2::read_xml(sprintf(
+    '<w:r xmlns:w="%s"><w:rPr><w:color w:val="EE0000"/></w:rPr><w:t xml:space="preserve">%s</w:t></w:r>',
+    .W_NS_URL, escape_xml_text(value_part)
+  ))
+  xml2::xml_add_child(p, run1)
+  xml2::xml_add_child(p, run2)
+
+  xml2::write_xml(d, doc_xml_path)
+  rezip_docx(td, docx_path)
+}
+
+doc_corrupted <- read_docx() |>
+  body_add_par("Table 14.3.1", style = "heading 2") |>
+  body_add_par("Overview of Treatment-Emergent Adverse Events") |>
+  body_add_par("Safety Population (ADSL.SAFFL='Y')") |>
+  body_add_table(
+    value = data.frame(
+      Category = c("Serious TEAE, n (%)", "  n (%)"),
+      `Treatment A` = rep("", 2),
+      `Placebo`     = rep("", 2),
+      check.names   = FALSE,
+      stringsAsFactors = FALSE
+    ),
+    style = "table_template"
+  ) |>
+  body_add_par("Serious TEAE -> ADAE.AESER MARKER") |>
+  body_add_par("Source: ADAE")
+out_corrupted <- file.path(here, "annotated_shell_corrupted_annotation.docx")
+print(doc_corrupted, target = out_corrupted)
+corrupt_annotation_paragraph(
+  out_corrupted,
+  marker     = "Serious TEAE -> ADAE.AESER MARKER",
+  label_part = "Serious TEAE -> ADAE.AESER=",
+  value_part = "”Severe”"
+)
+cat("Wrote:", out_corrupted, "\n")
