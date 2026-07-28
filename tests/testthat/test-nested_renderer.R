@@ -2,7 +2,7 @@
 ## nested block -- each parent level's own line, then the child terms
 ## observed under it -- instead of stacking two flat blocks.
 
-.nr_section <- function() {
+.nr_section <- function(parent_ann = "ADAE.AESOC") {
   token_row <- function(label, annotation) {
     list(label = label, annotation = annotation, has_annot = TRUE,
          detection_method = "pattern", detection_confidence = "high")
@@ -19,7 +19,7 @@
                          "Drug A", "Placebo"),
     n_data_cols      = 2L,
     stub_rows        = list(
-      token_row("<System Organ Class>", "ADAE.AESOC"),
+      token_row("<System Organ Class>", parent_ann),
       token_row("<Preferred Term>", "ADAE.AEDECOD"),
       token_row("<Preferred Term>", "ADAE.AEDECOD")
     ),
@@ -57,12 +57,38 @@
   invisible(NULL)
 }
 
+## A study where frequency order disagrees with alphabetical order at BOTH
+## levels: "Nervous system disorders" (3 subjects) outranks
+## "Gastrointestinal disorders" (1), and under NSD "Headache" (2) outranks
+## "Dizziness" (1). Placebo-only basis inverts the PT order again
+## (Dizziness: 1 Placebo subject, Headache: 0).
+.nr_study_skewed <- function(dir) {
+  adsl <- data.frame(
+    USUBJID = c("S1", "S2", "S3", "S5", "S6", "S7"),
+    TRT01A  = c("Drug A", "Drug A", "Drug A", "Placebo", "Placebo", "Placebo"),
+    SAFFL   = "Y",
+    stringsAsFactors = FALSE
+  )
+  adae <- data.frame(
+    USUBJID = c("S1", "S2", "S5", "S1"),
+    AESOC   = c("Nervous system disorders", "Nervous system disorders",
+                "Nervous system disorders", "Gastrointestinal disorders"),
+    AEDECOD = c("Headache", "Headache", "Dizziness", "Nausea"),
+    TRTEMFL = "Y",
+    stringsAsFactors = FALSE
+  )
+  adae$TRT01A <- adsl$TRT01A[match(adae$USUBJID, adsl$USUBJID)]
+  utils::write.csv(adsl, file.path(dir, "ADSL.csv"), row.names = FALSE)
+  utils::write.csv(adae, file.path(dir, "ADAE.csv"), row.names = FALSE)
+  invisible(NULL)
+}
+
 ## The prepared display frame, exactly as ars_render_tlf() builds it.
-.nr_prepped <- function() {
+.nr_prepped <- function(parent_ann = "ADAE.AESOC", study = .nr_study) {
   dir <- tempfile("nested_renderer_")
   dir.create(dir)
-  .nr_study(dir)
-  re <- build_ars_json(list(.nr_section()), study_id = "S-N3")
+  study(dir)
+  re <- build_ars_json(list(.nr_section(parent_ann)), study_id = "S-N3")
   ars_path <- file.path(dir, "reporting_event.json")
   jsonlite::write_json(re, ars_path, auto_unbox = TRUE, null = "null")
   ard <- suppressWarnings(ars_to_ard(ars_path, dir))
@@ -96,7 +122,9 @@ test_that("the rendered rows interleave each SOC with its own PTs", {
   on.exit(unlink(run$dir, recursive = TRUE))
   prepped <- run$prepped
 
-  ## One label per display line, in shell order.
+  ## One label per display line, in shell order. Default order is
+  ## descending frequency: GI (3 subjects) before NSD (2); within NSD,
+  ## Headache (2) before Fatigue (1).
   ords <- sort(unique(prepped[[.ARS_SHELL_ORD]]))
   lines <- vapply(ords, function(o) {
     unique(prepped[[.ARS_SHELL_LBL]][prepped[[.ARS_SHELL_ORD]] == o])[1]
@@ -104,7 +132,7 @@ test_that("the rendered rows interleave each SOC with its own PTs", {
 
   expect_equal(lines, c(
     "Gastrointestinal disorders", "Fatigue", "Nausea",
-    "Nervous system disorders", "Fatigue", "Headache"
+    "Nervous system disorders", "Headache", "Fatigue"
   ))
 
   ## The authored tokens themselves never print.
@@ -117,7 +145,69 @@ test_that("the rendered rows interleave each SOC with its own PTs", {
     ])
   }
   expect_equal(grp_of("Nausea", ords[3]), "Gastrointestinal disorders")
-  expect_equal(grp_of("Headache", ords[6]), "Nervous system disorders")
+  expect_equal(grp_of("Headache", ords[5]), "Nervous system disorders")
+})
+
+test_that("default order is descending frequency, parent then child", {
+  skip_if_not_installed("tfrmt")
+
+  run <- .nr_prepped(study = .nr_study_skewed)
+  on.exit(unlink(run$dir, recursive = TRUE))
+  prepped <- run$prepped
+
+  ords <- sort(unique(prepped[[.ARS_SHELL_ORD]]))
+  lines <- vapply(ords, function(o) {
+    unique(prepped[[.ARS_SHELL_LBL]][prepped[[.ARS_SHELL_ORD]] == o])[1]
+  }, character(1))
+
+  ## NSD (3 subjects) outranks GI (1) even though GI sorts first A-Z;
+  ## under NSD, Headache (2) outranks Dizziness (1).
+  expect_equal(lines, c(
+    "Nervous system disorders", "Headache", "Dizziness",
+    "Gastrointestinal disorders", "Nausea"
+  ))
+})
+
+test_that("sort: alphabetical restores A-Z at both levels", {
+  skip_if_not_installed("tfrmt")
+
+  run <- .nr_prepped(parent_ann = "ADAE.AESOC; sort: alphabetical",
+                     study = .nr_study_skewed)
+  on.exit(unlink(run$dir, recursive = TRUE))
+  prepped <- run$prepped
+
+  ords <- sort(unique(prepped[[.ARS_SHELL_ORD]]))
+  lines <- vapply(ords, function(o) {
+    unique(prepped[[.ARS_SHELL_LBL]][prepped[[.ARS_SHELL_ORD]] == o])[1]
+  }, character(1))
+
+  expect_equal(lines, c(
+    "Gastrointestinal disorders", "Nausea",
+    "Nervous system disorders", "Dizziness", "Headache"
+  ))
+})
+
+test_that("sort: desc-freq('<column>') counts only that column", {
+  skip_if_not_installed("tfrmt")
+
+  run <- .nr_prepped(parent_ann = "ADAE.AESOC; sort: desc-freq('Placebo')",
+                     study = .nr_study_skewed)
+  on.exit(unlink(run$dir, recursive = TRUE))
+  prepped <- run$prepped
+
+  ords <- sort(unique(prepped[[.ARS_SHELL_ORD]]))
+  lines <- vapply(ords, function(o) {
+    unique(prepped[[.ARS_SHELL_LBL]][prepped[[.ARS_SHELL_ORD]] == o])[1]
+  }, character(1))
+
+  ## In the Placebo column NSD (1: Dizziness/S5) outranks GI (0); under
+  ## NSD, Dizziness (1) outranks Headache (0). GI has no Placebo events at
+  ## all, so its block falls back to the all-column count -- Nausea still
+  ## renders under it.
+  expect_equal(lines, c(
+    "Nervous system disorders", "Dizziness", "Headache",
+    "Gastrointestinal disorders", "Nausea"
+  ))
 })
 
 test_that("the empty cartesian combinations never render", {

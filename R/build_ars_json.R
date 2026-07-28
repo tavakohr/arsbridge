@@ -305,6 +305,41 @@
   toupper(trimws(sub("(?i)^once\\s*/\\s*subject\\s+", "", hit, perl = TRUE)))
 }
 
+#' The "sort: ..." clause of a nested parent row's annotation, or NULL when
+#' the annotation carries none. Shell authors use it to pick the row order of
+#' a nested block; without a clause the block defaults to descending
+#' frequency (most frequent parent first, its child terms descending under
+#' it). Recognised forms (case-insensitive):
+#'   sort: alphabetical          -- A-Z at both levels
+#'   sort: desc-freq             -- descending count, all columns combined
+#'   sort: desc-freq('Drug A')   -- descending count in that column (quotes
+#'                                  optional)
+#' @return list(basis, column, raw); an unreadable clause comes back with
+#'   basis = NA so the caller can warn and keep the default.
+#' @noRd
+.nested_sort_clause <- function(ann) {
+  ann <- as.character(ann %||% "")
+  if (!nzchar(trimws(ann))) return(NULL)
+  hit <- regmatches(ann, regexpr("(?i)\\bsort\\s*:\\s*[^;]+", ann, perl = TRUE))
+  if (length(hit) == 0) return(NULL)
+  body <- trimws(sub("(?i)^sort\\s*:\\s*", "", hit, perl = TRUE))
+  if (grepl("(?i)^(alphabetical|alpha)$", body, perl = TRUE)) {
+    return(list(basis = "alphabetical", column = NULL, raw = body))
+  }
+  if (grepl("(?i)^desc[-_ ]?freq$", body, perl = TRUE)) {
+    return(list(basis = "desc-freq", column = NULL, raw = body))
+  }
+  m <- regmatches(
+    body,
+    regexec("(?i)^desc[-_ ]?freq\\s*\\(\\s*'?([^')]+?)'?\\s*\\)$", body,
+            perl = TRUE)
+  )[[1]]
+  if (length(m) == 2) {
+    return(list(basis = "desc-freq", column = trimws(m[2]), raw = body))
+  }
+  list(basis = NA_character_, column = NULL, raw = body)
+}
+
 #' Nested two-level token blocks (AE by SOC/PT, MH by body system, ConMeds by
 #' ATC class): the shell authors a data-driven parent token row
 #' ("<System Organ Class>" annotated ADAE.AESOC) followed by child token rows
@@ -1146,6 +1181,38 @@ build_ars_json <- function(sections,
       if (identical(nested_role, "nested_child") &&
             !is.null(nested_parent_ctx)) {
         layout_entry$parent_order <- nested_parent_ctx$order
+      }
+      ## An authored "sort: ..." clause on the parent token row travels on
+      ## the layout entry; the renderer defaults to descending frequency
+      ## when there is none.
+      if (identical(nested_role, "nested_parent")) {
+        sort_clause <- .nested_sort_clause(row$annotation)
+        if (!is.null(sort_clause)) {
+          if (is.na(sort_clause$basis)) {
+            diag_add(
+              stage = "build_ars", severity = "WARN",
+              problem = sprintf(
+                "Row '%s' carries a sort clause I can't read: 'sort: %s'",
+                row$label %||% "?", sort_clause$raw),
+              tlf_number = sec$tlf_number,
+              action = "Keeping the default order (descending frequency, parent then child)"
+            )
+          } else {
+            layout_entry$sort <- if (is.null(sort_clause$column)) {
+              sort_clause$basis
+            } else {
+              paste0(sort_clause$basis, ":", sort_clause$column)
+            }
+            diag_add(
+              stage = "build_ars", severity = "INFO",
+              problem = sprintf(
+                "Row '%s' declares its own sort order (sort: %s)",
+                row$label %||% "?", sort_clause$raw),
+              tlf_number = sec$tlf_number,
+              action = sprintf("Nested block sorts by %s", layout_entry$sort)
+            )
+          }
+        }
       }
       shell_layout[[length(shell_layout) + 1L]] <- layout_entry
       if (identical(nested_role, "nested_parent")) {

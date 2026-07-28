@@ -110,6 +110,14 @@ extract_footnotes <- function(out_obj) {
       if (is.null(v) || length(v) == 0 || is.na(v[[1]])) NA_integer_
       else as.integer(v[[1]])
     }, integer(1)),
+    ## Authored "sort: ..." clause on a nested parent row ("alphabetical",
+    ## "desc-freq", "desc-freq:<column>"). NA means the default order
+    ## (descending frequency).
+    sort = vapply(sl, function(e) {
+      v <- e[["sort"]]
+      if (is.null(v) || length(v) == 0 || is.na(v[[1]])) NA_character_
+      else as.character(v[[1]])
+    }, character(1)),
     stringsAsFactors = FALSE
   )
   df[order(df$order), , drop = FALSE]
@@ -701,8 +709,13 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
     ## parent's own line for that level, then every child term observed
     ## under it -- exactly the SOC-then-its-PTs presentation the shell
     ## authored. The token labels themselves never print; the data levels
-    ## take their place. Sort order is alphabetical (the frequency-sort
-    ## annotation is a later phase).
+    ## take their place.
+    ##
+    ## Row order: descending frequency by default (most frequent parent
+    ## first, its child terms descending under it, ties A-Z) -- the standard
+    ## AE/MH/ConMed presentation. An authored "sort:" clause on the parent
+    ## row overrides: "alphabetical" sorts both levels A-Z,
+    ## "desc-freq:<column>" counts only that column.
     if (identical(le$kind, "nested_parent")) {
       child_idx <- which(layout$kind == "nested_child" &
                            !is.na(layout$parent_order) &
@@ -715,10 +728,42 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
       cdat <- flat[!is.na(flat$analysis_id) &
                      flat$analysis_id %in% child_ids, , drop = FALSE]
 
-      parent_levels <- sort(unique(c(
+      sort_spec <- if ("sort" %in% names(layout)) le$sort else NA_character_
+      alpha <- identical(sort_spec, "alphabetical")
+      basis_col <- NULL
+      if (!is.na(sort_spec) && startsWith(sort_spec, "desc-freq:")) {
+        basis_col <- sub("^desc-freq:", "", sort_spec)
+      }
+
+      ## Summed "n" per level (keys), the frequency each level sorts on.
+      ## When the clause names a column, only that column counts -- unless
+      ## the data never saw it (an authoring typo), then all columns do.
+      freq_of <- function(dat, keys, sel = rep(TRUE, nrow(dat))) {
+        ok <- sel & !is.na(keys) & dat$stat_name == "n" & !is.na(dat$stat)
+        if (!is.null(basis_col)) {
+          in_col <- ok & toupper(dat$colv) == toupper(basis_col)
+          if (any(in_col)) ok <- in_col
+        }
+        if (!any(ok)) return(stats::setNames(numeric(0), character(0)))
+        tapply(dat$stat[ok], keys[ok], sum)
+      }
+      by_freq <- function(levels, freq) {
+        if (alpha || length(levels) == 0) return(sort(levels))
+        f <- as.numeric(freq[levels])
+        f[is.na(f)] <- -Inf
+        levels[order(-f, levels)]
+      }
+
+      parent_levels <- unique(c(
         pdat$variable_level[!is.na(pdat$variable_level)],
         cdat$nest_lvl[!is.na(cdat$nest_lvl)]
-      )))
+      ))
+      ## A parent sorts on its own distinct-subject count; a level only the
+      ## child observed falls back to the sum over its child terms.
+      parent_freq <- freq_of(cdat, cdat$nest_lvl)
+      own <- freq_of(pdat, pdat$variable_level)
+      if (length(own) > 0) parent_freq[names(own)] <- own
+      parent_levels <- by_freq(parent_levels, parent_freq)
       if (length(parent_levels) == 0) {
         rows[[length(rows) + 1L]] <- blank_row(le, ord)
         next
@@ -752,8 +797,9 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
         }
 
         in_block <- !is.na(cdat$nest_lvl) & cdat$nest_lvl == parent_level
-        terms <- sort(unique(cdat$variable_level[in_block &
-                                                   !is.na(cdat$variable_level)]))
+        terms <- unique(cdat$variable_level[in_block &
+                                              !is.na(cdat$variable_level)])
+        terms <- by_freq(terms, freq_of(cdat, cdat$variable_level, in_block))
         for (term in terms) {
           t_sel <- in_block & cdat$variable_level == term
           if (!observed(cdat, t_sel)) next
