@@ -2,6 +2,12 @@
 
 ## arsbridge (development version)
 
+- **Workflow projects use a single `copilot/` exchange folder.** The
+  `phase1/` and `phase2/` subfolders are gone; the blueprint,
+  `supplement.json`, and the extraction validation report now land in
+  `copilot/` beside the instruction files, so a project folder is just
+  `copilot/` + `ars/` + the state file.
+
 - **Nested AE/MH/ConMed blocks sort by descending frequency by
   default.** A nested SOC/PT (or body-system/term, ATC/medication) block
   now renders the most frequent parent level first, with the child terms
