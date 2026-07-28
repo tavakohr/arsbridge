@@ -1968,6 +1968,20 @@ bind_annotations <- function(sec) {
   }
   sec$header_rows <- hdr_rows
 
+  ## The DISPLAY column labels must be the annotation-stripped header text.
+  ## col_headers was captured raw at parse time (label plus the bracketed
+  ## annotation), and flowed straight into the ARS display columns and from
+  ## there into the rendered listing's header -- production output showing
+  ## "Subject[ADAE.USUBJID]" instead of "Subject". The stripped labels the
+  ## header detection just produced are the authoritative display text.
+  stripped_labels <- vapply(hdr_rows, function(r) {
+    trimws(as.character(r$label %||% ""))
+  }, character(1))
+  if (any(nzchar(stripped_labels))) {
+    sec$col_headers <- stripped_labels[nzchar(stripped_labels)]
+    sec$n_data_cols <- max(0L, length(sec$col_headers) - 1L)
+  }
+
   ## Append annotated headers to stub_rows so validate/enrich/build see
   ## them with no special-case branch.
   annotated_headers <- Filter(function(r) isTRUE(r$has_annot), hdr_rows)
@@ -2418,6 +2432,34 @@ split_label_annotation <- function(cell_text) {
   }
   if (!nzchar(trimws(candidate_text))) return(no_match)
 
+  ## A fully qualified DATASET.VAR reference in the annotation region is
+  ## authoritative and must be taken whole -- tokenising "ADAE.TRT01A"
+  ## reads the dataset name as a variable and fabricates ADAE.ADAE.
+  dotted_refs <- unique(toupper(extract_annotation_vars(candidate_text)))
+  if (length(dotted_refs) > 0) {
+    qualified <- dotted_refs
+    annotation <- if (length(qualified) == 1) {
+      qualified
+    } else {
+      sprintf("%s (%s)", qualified[1], paste(qualified[-1], collapse = ", "))
+    }
+    label <- if (identical(source_method, "listing_header_colour")) {
+      cleaned <- .strip_annotation_from_text(cell_text, candidate_text)
+      cleaned <- trimws(strsplit(cleaned, "\n", fixed = TRUE)[[1]][1] %||% "")
+      if (nzchar(cleaned)) cleaned else trimws(lines[1])
+    } else if (length(lines) > 0) {
+      lines[1]
+    } else {
+      trimws(cell_text)
+    }
+    return(list(
+      label = label, annotation = annotation,
+      method = source_method,
+      confidence = if (identical(source_method, "listing_header_colour"))
+                     "high" else "medium"
+    ))
+  }
+
   ## Candidate variable tokens. With a spec available, scan
   ## case-insensitively and keep only tokens that are real spec variables
   ## (catches mixed-case conventions like "AeDecod"; no blocklist needed --
@@ -2460,7 +2502,20 @@ split_label_annotation <- function(cell_text) {
     sprintf("%s (%s)", qualified[1], paste(qualified[-1], collapse = ", "))
   }
 
-  label <- if (length(lines) > 0) lines[1] else trimws(cell_text)
+  ## The display label. When the COLOUR layer found the annotation, it can
+  ## sit inline in the first line ("Treatment[ADAE.TRT01A]" with the
+  ## bracket run in red) -- line 1 alone is not clean, so cut the detected
+  ## text out of the cell first. Otherwise line 1 is the display text and
+  ## the annotation lived on the later lines.
+  label <- if (identical(source_method, "listing_header_colour")) {
+    cleaned <- .strip_annotation_from_text(cell_text, candidate_text)
+    cleaned <- trimws(strsplit(cleaned, "\n", fixed = TRUE)[[1]][1] %||% "")
+    if (nzchar(cleaned)) cleaned else trimws(lines[1])
+  } else if (length(lines) > 0) {
+    lines[1]
+  } else {
+    trimws(cell_text)
+  }
 
   list(label = label, annotation = annotation,
        method = source_method,

@@ -84,3 +84,21 @@ test_that("Coloured run is picked up at Layer 1 (HIGH confidence)", {
   expect_equal(res$method,     "listing_header_colour")
   expect_equal(res$confidence, "high")
 })
+
+test_that("an inline coloured bracket annotation is stripped from the label", {
+  ## Single-paragraph cell: "Treatment[ADAE.TRT01A]" with the bracket run
+  ## in red -- the production defect where the annotation reached the
+  ## rendered listing header.
+  runs <- list(
+    list(text = "Treatment", color_hex = NA_character_, bold = FALSE,
+         italic = FALSE, underline = FALSE),
+    list(text = "[ADAE.TRT01A]", color_hex = "FF0000", bold = FALSE,
+         italic = FALSE, underline = FALSE)
+  )
+  res <- arsbridge:::.detect_listing_header_annotation(
+    "Treatment[ADAE.TRT01A]", runs, "ADAE"
+  )
+  expect_equal(res$label, "Treatment")
+  expect_equal(res$annotation, "ADAE.TRT01A")
+  expect_equal(res$method, "listing_header_colour")
+})

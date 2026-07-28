@@ -675,3 +675,23 @@ test_that("the authored SOC/PT token blocks emerge nested from the real shell", 
                      c("NESTED_CHILD_UNLINKED", "NESTED_GROUPING_MISSING"),
                    na.rm = TRUE), 0)
 })
+
+test_that("listing display headers are annotation-stripped", {
+  skip_if_not(file.exists(fixture_shell))
+  p <- parse_cdsc()
+  listings <- Filter(function(s) identical(s$tlf_type, "LISTING"), p$secs)
+  skip_if_not(length(listings) > 0)
+
+  for (sec in listings) {
+    ## No bracketed in-cell annotation and no arrow line may survive into
+    ## the display labels -- they were reaching the production header.
+    expect_false(any(grepl("[", sec$col_headers, fixed = TRUE)))
+    expect_false(any(grepl("->", sec$col_headers, fixed = TRUE)))
+    expect_true(all(nzchar(sec$col_headers)))
+  }
+
+  ## Stripping the display labels must not cost the variable binding: the
+  ## annotated headers still reach stub_rows for the build.
+  expect_true(any(vapply(listings[[1]]$stub_rows,
+                         function(r) isTRUE(r$has_annot), logical(1))))
+})
