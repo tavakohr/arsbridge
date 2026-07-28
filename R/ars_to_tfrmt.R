@@ -103,6 +103,13 @@ extract_footnotes <- function(out_obj) {
       v <- e[["level"]]
       if (is.null(v) || length(v) == 0) NA_character_ else as.character(v[[1]])
     }, character(1)),
+    ## Nested blocks (AE SOC/PT): a nested_child row points at its
+    ## nested_parent row's order. NA everywhere else.
+    parent_order = vapply(sl, function(e) {
+      v <- e[["parent_order"]]
+      if (is.null(v) || length(v) == 0 || is.na(v[[1]])) NA_integer_
+      else as.integer(v[[1]])
+    }, integer(1)),
     stringsAsFactors = FALSE
   )
   df[order(df$order), , drop = FALSE]
@@ -609,6 +616,18 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
     stringsAsFactors = FALSE
   )
 
+  ## A nested child analysis carries its parent's level in a second
+  ## group*_level column (the pair that is not the column axis). Pull it out
+  ## once so the nested_parent branch below can key each child row to its
+  ## parent block. NA for every non-nested row.
+  nest_cols <- setdiff(.group_level_cols(names(ard_out)), col_var)
+  flat$nest_lvl <- rep(NA_character_, n)
+  for (nest_col in nest_cols) {
+    v <- fc(nest_col)
+    fill <- is.na(flat$nest_lvl) & !is.na(v)
+    flat$nest_lvl[fill] <- v[fill]
+  }
+
   ## Subject-count rows: treatment value arrives in variable_level (see
   ## .layout_col_values) -- move it into the column slot.
   swing <- is.na(flat$colv) & !is.na(flat$variable) &
@@ -661,6 +680,82 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
     } else {
       le$label_grp <- le$label
     }
+
+    ## Nested block interleave (HANDOFF_nested_soc_pt_hierarchy, Phase N3):
+    ## the authored parent/child token pair expands per PARENT level -- the
+    ## parent's own line for that level, then every child term observed
+    ## under it -- exactly the SOC-then-its-PTs presentation the shell
+    ## authored. The token labels themselves never print; the data levels
+    ## take their place. Sort order is alphabetical (the frequency-sort
+    ## annotation is a later phase).
+    if (identical(le$kind, "nested_parent")) {
+      child_idx <- which(layout$kind == "nested_child" &
+                           !is.na(layout$parent_order) &
+                           layout$parent_order == le$order)
+      consumed[child_idx] <- TRUE
+      child_ids <- unique(stats::na.omit(layout$analysis_id[child_idx]))
+
+      pdat <- flat[!is.na(flat$analysis_id) &
+                     flat$analysis_id == le$analysis_id, , drop = FALSE]
+      cdat <- flat[!is.na(flat$analysis_id) &
+                     flat$analysis_id %in% child_ids, , drop = FALSE]
+
+      parent_levels <- sort(unique(c(
+        pdat$variable_level[!is.na(pdat$variable_level)],
+        cdat$nest_lvl[!is.na(cdat$nest_lvl)]
+      )))
+      if (length(parent_levels) == 0) {
+        rows[[length(rows) + 1L]] <- blank_row(le, ord)
+        next
+      }
+
+      ## {cards} expands the full parent x child level cartesian; a child
+      ## term belongs under a parent only where at least one subject was
+      ## observed, so the empty combinations never render.
+      observed <- function(dat, sel) {
+        n_sel <- sel & dat$stat_name == "n"
+        any(!is.na(dat$stat[n_sel]) & dat$stat[n_sel] > 0)
+      }
+
+      step <- 0L
+      for (parent_level in parent_levels) {
+        step <- step + 1L
+        p_sel <- !is.na(pdat$variable_level) &
+          pdat$variable_level == parent_level
+        rows[[length(rows) + 1L]] <- if (any(p_sel)) {
+          data.frame(
+            grp = parent_level, lbl = parent_level,
+            colv = pdat$colv[p_sel],
+            stat_name = pdat$stat_name[p_sel], stat = pdat$stat[p_sel],
+            ordv = ord + step, stringsAsFactors = FALSE)
+        } else {
+          ## A level only the child observed: keep the header line, blank.
+          data.frame(
+            grp = parent_level, lbl = parent_level, colv = first_col,
+            stat_name = .ARS_SPACER_PARAM, stat = NA_real_,
+            ordv = ord + step, stringsAsFactors = FALSE)
+        }
+
+        in_block <- !is.na(cdat$nest_lvl) & cdat$nest_lvl == parent_level
+        terms <- sort(unique(cdat$variable_level[in_block &
+                                                   !is.na(cdat$variable_level)]))
+        for (term in terms) {
+          t_sel <- in_block & cdat$variable_level == term
+          if (!observed(cdat, t_sel)) next
+          step <- step + 1L
+          rows[[length(rows) + 1L]] <- data.frame(
+            grp = parent_level, lbl = term, colv = cdat$colv[t_sel],
+            stat_name = cdat$stat_name[t_sel], stat = cdat$stat[t_sel],
+            ordv = ord + step, stringsAsFactors = FALSE)
+        }
+      }
+      next
+    }
+
+    ## An orphaned nested child (its parent row is gone): fall back to the
+    ## flat categorical expansion under the authored label.
+    if (identical(le$kind, "nested_child")) le$kind <- "categorical"
+
     dat <- if (!is.na(le$analysis_id)) {
       flat[!is.na(flat$analysis_id) & flat$analysis_id == le$analysis_id, ,
            drop = FALSE]
