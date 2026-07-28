@@ -2,6 +2,25 @@
 
 ## arsbridge (development version)
 
+- **Nested two-level row hierarchies, generation side** (nested SOC/PT
+  handoff, Phase N1). The shell generator now recognises the nested
+  token-block pattern AE/MH/ConMed shells author – a data-driven parent
+  token row (“”, `ADAE.AESOC`) followed by child token rows on a second
+  variable of the same dataset (“”, `ADAE.AEDECOD`), repeating as
+  further mock examples – and stops flattening it into unrelated
+  analyses. The first parent/child pair now becomes two linked analyses:
+  both count DISTINCT subjects (`MTH_AE_FREQUENCY_COUNT`, previously
+  record-counting count-and-percentage), and the child carries the
+  parent’s variable as a new data-driven row grouping in
+  `orderedGroupings` – standard ARS vocabulary, so {cards}, siera and
+  the ARD engine all see the hierarchy. The authored skeleton records
+  the pair as `nested_parent` / `nested_child` layout rows linked by
+  `parent_order`; template repeats collapse with an INFO diagnostic.
+  Separately, the previously ignored `once/subject VAR` annotation
+  clause now routes a count row to the distinct-subject method.
+  Rendering still shows the two blocks unmerged – the interleaved
+  SOC-then-its-PTs presentation is Phase N3 (renderer).
+
 - **Shell-faithful review view** (shell-faithful editor handoff, Phases
   1-2). The Details tab of
   [`view_ars()`](https://tavakohr.github.io/arsbridge/reference/view_ars.md)
