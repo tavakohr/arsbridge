@@ -29,9 +29,15 @@
     )
   },
   MTH_AE_FREQUENCY_COUNT = function(df, var, by, denom, subject_key) {
+    ## Distinct per subject WITHIN each by-cell, not just per term: a nested
+    ## analysis is keyed by (arm, parent level, term), and dirty data can
+    ## repeat one term string under two parents -- a subject must count once
+    ## in EACH cell it appears in, never be swallowed by another cell's copy.
     df_unique <- df |>
-      dplyr::distinct(!!rlang::sym(subject_key), !!rlang::sym(var),
-                      .keep_all = TRUE)
+      dplyr::distinct(
+        dplyr::across(dplyr::all_of(c(subject_key, by, var))),
+        .keep_all = TRUE
+      )
     cards::ard_categorical(
       data = df_unique,
       variables = all_of(var),
