@@ -1,5 +1,20 @@
 # arsbridge (development version)
 
+* **Listing headers no longer leak annotations into production output.**
+  Rendering the CDSC-ALZ-201 listings surfaced three related parser
+  defects. (1) A listing's DISPLAY column labels were captured raw at
+  parse time, so the in-cell programmer annotation travelled into the ARS
+  display columns and the rendered header ("Subject[ADAE.USUBJID]"
+  instead of "Subject"); the annotation-stripped labels the header
+  detection produces are now the display text. (2) When the colour layer
+  found an annotation inline in a single-paragraph header cell, the label
+  kept the annotation text; the detected text is now cut out of the
+  label. (3) A fully qualified DATASET.VAR reference in a header
+  annotation was tokenised -- the dataset name read as a variable,
+  fabricating "ADAE.ADAE (ADSL.TRT01A)" from "[ADAE.TRT01A]"; dotted
+  references are now taken whole. Net effect on the incident study: clean
+  listing headers end to end and eight fewer pipeline warnings.
+
 * **Layout renderer: three containment fixes for corrupt cells** (found
   rendering the regenerated CDSC-ALZ-201 study end to end). (1) A
   `supplement_added` row whose analysis computed a multi-level
