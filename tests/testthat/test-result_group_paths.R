@@ -25,7 +25,7 @@ test_that("the asymmetric shell builds six declared result paths", {
     paste(unlist(p$labelPath), collapse = " > "), character(1))
   expect_identical(labels, c(
     "Cohort A > Mild", "Cohort A > Moderate", "Cohort A > Severe",
-    "Cohort A > Total[a]", "Cohort B", "Total"
+    "Cohort A > Total", "Cohort B", "Total"
   ))
   expect_identical(
     vapply(paths, function(p) p$role, character(1)),

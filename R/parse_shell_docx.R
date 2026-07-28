@@ -112,6 +112,10 @@
 ## at ingestion (.normalize_docx_text), so only ' and " can reach a regex.
 .QUOTED_VALUE <- "(?:'[^']*'|\"[^\"]*\")"
 
+## A value inside an IN (...) list: quoted either style, or bare numeric --
+## real-world shells annotate pooled columns as "ADSL.COHORTN IN (1,2)".
+.IN_VALUE <- paste0("(?:", .QUOTED_VALUE, "|[-+]?\\d+(?:\\.\\d+)?)")
+
 ## Multi-pattern union for annotation detection (Layer 3 + validation gate
 ## for Layers 1 and 2). Order matters: PCRE alternation returns the leftmost
 ## match of the leftmost branch that fits, so MORE-SPECIFIC patterns must
@@ -122,11 +126,12 @@
   ## DATASET.VAR WHERE OTHERVAR='val'  (longest -- match first)
   paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR,
          "\\s+(?i:where)\\s+", .ADAM_VAR, "\\s*=\\s*", .QUOTED_VALUE),
-  ## DATASET.VAR IN ('a','b') / NOT IN ("a","b")  (parenthesized value list;
-  ## either quote style -- .canon_annotation rewrites double to single quotes)
+  ## DATASET.VAR IN ('a','b') / NOT IN ("a","b") / IN (1,2)  (parenthesized
+  ## value list; either quote style or bare numerics -- .canon_annotation
+  ## rewrites double to single quotes)
   paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR,
-         "\\s+(?i:NOT\\s*IN|NOTIN|IN)\\s*\\(\\s*", .QUOTED_VALUE,
-         "(?:\\s*,\\s*", .QUOTED_VALUE, ")*\\s*\\)"),
+         "\\s+(?i:NOT\\s*IN|NOTIN|IN)\\s*\\(\\s*", .IN_VALUE,
+         "(?:\\s*,\\s*", .IN_VALUE, ")*\\s*\\)"),
   ## DATASET.VAR EQ 'val' / NE 'val' / ... (ARS comparator form)
   paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR,
          "\\s+(?:EQ|NE|IN|NOTIN|GT|GE|LT|LE)\\s+", .QUOTED_VALUE),
@@ -169,6 +174,205 @@
 #' @noRd
 .canon_annotation <- function(x) {
   gsub("\"([^\"]*)\"", "'\\1'", x)
+}
+
+## ---------------------------------------------------------------------------
+## Bracket normalization -- real-world "standardized bracket" shells
+## (HANDOFF_realworld_bracket_shells, Phase R1)
+## ---------------------------------------------------------------------------
+
+#' Start/end character positions of the TOP-LEVEL `[...]` spans of `text`,
+#' tracked with a nesting counter: real shells legally nest a
+#' "[PROGRAMMING DATASETS USED: ...]" directive INSIDE a filter annotation.
+#' An unclosed bracket contributes no span (an annotation continuing in the
+#' next paragraph is a later phase).
+#' @noRd
+.bracket_spans <- function(text) {
+  chars <- strsplit(text, "", fixed = TRUE)[[1]]
+  depth <- 0L
+  start <- NA_integer_
+  spans <- list()
+  for (i in seq_along(chars)) {
+    if (chars[i] == "[") {
+      if (depth == 0L) start <- i
+      depth <- depth + 1L
+    } else if (chars[i] == "]" && depth > 0L) {
+      depth <- depth - 1L
+      if (depth == 0L && !is.na(start)) {
+        spans[[length(spans) + 1L]] <- c(start, i)
+        start <- NA_integer_
+      }
+    }
+  }
+  spans
+}
+
+#' Collapse an accidental space after the dataset dot ("ADSL. COMPLFL" --
+#' Word authors line-break there) so the reference matches the ADaM regex.
+#' Anchored on the dataset-name shape, so sentence periods never collapse.
+#' @noRd
+.collapse_ds_dot_space <- function(x) {
+  gsub(paste0("\\b(", .ADAM_DS, ")\\.\\s+(?=[A-Z])"), "\\1.", x, perl = TRUE)
+}
+
+#' Rewrite ONE bracket span's content. Returns list(keep, text, datasets,
+#' dropped): `keep` FALSE removes the span from the cell text entirely;
+#' `datasets` carries any lifted PROGRAMMING DATASETS names; `dropped` is
+#' the prose removed with nothing machine-readable in it (for diagnostics).
+#' @noRd
+.rewrite_bracket_content <- function(content) {
+  out <- list(keep = FALSE, text = "", datasets = character(0),
+              dropped = character(0))
+
+  ## Lift nested "[PROGRAMMING DATASETS USED: ...]" directives out first --
+  ## they have no nesting of their own, so the flat regex is safe here.
+  prog <- regmatches(content,
+                     gregexpr(.PROGRAMMING_DATASETS_RE, content, perl = TRUE))[[1]]
+  if (length(prog) > 0) {
+    inner <- sub(.PROGRAMMING_DATASETS_RE, "\\1", prog, perl = TRUE)
+    out$datasets <- unique(unlist(lapply(inner, .split_source_list)))
+    content <- gsub(.PROGRAMMING_DATASETS_RE, "", content, perl = TRUE)
+  }
+  ## The span itself may BE the directive (unnested form, brackets already
+  ## consumed by the span scan).
+  bare_dir <- regexpr("(?i)^\\s*PROGRAMMING\\s+DATASETS?\\s+USED\\s*:\\s*(.+)$",
+                      content, perl = TRUE)
+  if (bare_dir > 0) {
+    inner <- sub("(?i)^\\s*PROGRAMMING\\s+DATASETS?\\s+USED\\s*:\\s*", "",
+                 content, perl = TRUE)
+    out$datasets <- unique(c(out$datasets, .split_source_list(inner)))
+    return(out)
+  }
+
+  content <- trimws(content)
+  if (!nzchar(content)) return(out)
+
+  ## Footnote marker ("[a]", "[c]", "[1]"): display apparatus, never an
+  ## annotation -- drop it from the label silently.
+  if (grepl("^(?:[A-Za-z]|[0-9]{1,2})$", content)) return(out)
+
+  content <- .collapse_ds_dot_space(content)
+
+  ## Repeat directive ("[Repeat the applicable row or section ...]"):
+  ## template expansion is its own later phase -- drop it here so its drug
+  ## list never masquerades as this row's filter, and report it.
+  if (grepl("(?i)^\\s*Repeat\\b", content, perl = TRUE)) {
+    out$dropped <- content
+    return(out)
+  }
+
+  ## Instruction wrapper carrying the condition in the sentence:
+  ## "...apply the stated condition: <COND>. Keep the display label ...".
+  ## The subject-counting prefixes ("USUBJID WHERE", "UNIQUE SUBJECTS
+  ## WITH", "All Patients WHERE") become the count-of-unique-USUBJID
+  ## marker AFTER the condition, so the condition leads and the label
+  ## split stays clean.
+  if (grepl("(?i)\\bcondition\\s*:", content, perl = TRUE)) {
+    cond <- sub("(?i)^.*?condition\\s*:\\s*", "", content, perl = TRUE)
+    cond <- sub("(?i)\\.?\\s*Keep\\s+the\\s+display.*$", "", cond, perl = TRUE)
+    cond <- trimws(sub("\\.\\s*$", "", cond))
+    subject_count <- FALSE
+    strip <- c(
+      "(?i)^(?:count\\s+of\\s+)?(?:all\\s+)?(?:patients|subjects)\\s+WHERE\\s+",
+      "(?i)^(?:unique\\s+)?USUBJID\\s+WHERE\\s+",
+      "(?i)^UNIQUE\\s+SUBJECTS?\\s+WITH\\s+"
+    )
+    for (re in strip) {
+      if (grepl(re, cond, perl = TRUE)) {
+        cond <- sub(re, "", cond, perl = TRUE)
+        subject_count <- TRUE
+        break
+      }
+    }
+    if (nzchar(cond)) {
+      out$keep <- TRUE
+      out$text <- if (subject_count) {
+        paste0(cond, "; count of unique USUBJID")
+      } else {
+        cond
+      }
+    }
+    return(out)
+  }
+
+  ## Per-row variant: "Use DS.VAR for this displayed row; apply <FILTER>
+  ## only as the row or record filter ..." -> "DS.VAR WHERE FILTER".
+  use_re <- paste0("(?i)^use\\s+(", .ADAM_DS, "\\.", .ADAM_VAR,
+                   ")\\s+for\\s+this\\s+displayed\\s+row")
+  um <- regexpr(use_re, content, perl = TRUE)
+  if (um > 0) {
+    var <- sub(paste0(use_re, ".*$"), "\\1", content, perl = TRUE)
+    rest <- substr(content, um + attr(um, "match.length"), nchar(content))
+    fm <- regexpr(.ANNOTATION_PATTERN, rest, perl = TRUE)
+    out$keep <- TRUE
+    out$text <- if (fm > 0) {
+      paste0(var, " WHERE ", substr(rest, fm, fm + attr(fm, "match.length") - 1L))
+    } else {
+      var
+    }
+    return(out)
+  }
+
+  ## Machine annotation (or a compound one): keep as-is.
+  if (grepl(.ANNOTATION_PATTERN, content, perl = TRUE)) {
+    ## Prose count instruction without the "condition:" scaffolding
+    ## ("Count distinct subjects using USUBJID ... ADMH.MHCAT=...").
+    if (grepl("(?i)count\\s+distinct\\s+subjects|(?i)unique\\s+subjects",
+              content, perl = TRUE)) {
+      fm <- regexpr(.ANNOTATION_PATTERN, content, perl = TRUE)
+      cond <- trimws(sub("\\.\\s*$", "",
+                         substr(content, fm, nchar(content))))
+      out$keep <- TRUE
+      out$text <- paste0(cond, "; count of unique USUBJID")
+      return(out)
+    }
+    out$keep <- TRUE
+    out$text <- content
+    return(out)
+  }
+
+  ## Pure guidance prose: nothing machine-readable -- remove, report.
+  out$dropped <- content
+  out
+}
+
+#' Normalize every top-level bracket span of a cell / heading text for the
+#' real-world "standardized bracket" conventions: nested PROGRAMMING
+#' DATASETS directives are lifted out, instruction wrappers are unwrapped to
+#' the condition they carry, footnote markers and pure guidance prose are
+#' removed. Text outside brackets is untouched. When the text has no
+#' brackets at all (a coloured-run candidate arrives bare), the wrapper
+#' rules are still applied to the whole string -- but a bare string is never
+#' DROPPED, only rewritten.
+#' @return list(text, source_datasets, dropped)
+#' @noRd
+.unwrap_bracket_instructions <- function(text) {
+  text <- as.character(text %||% "")
+  out <- list(text = text, source_datasets = character(0),
+              dropped = character(0))
+  if (!nzchar(trimws(text))) return(out)
+
+  spans <- .bracket_spans(text)
+  if (length(spans) == 0) {
+    rewritten <- .rewrite_bracket_content(text)
+    out$source_datasets <- rewritten$datasets
+    if (rewritten$keep) out$text <- rewritten$text
+    return(out)
+  }
+
+  for (sp in rev(spans)) {
+    content <- substr(text, sp[1] + 1L, sp[2] - 1L)
+    rewritten <- .rewrite_bracket_content(content)
+    out$source_datasets <- unique(c(out$source_datasets, rewritten$datasets))
+    out$dropped <- c(rewritten$dropped, out$dropped)
+    replacement <- if (rewritten$keep) paste0("[", rewritten$text, "]") else ""
+    text <- paste0(substr(text, 1, sp[1] - 1L), replacement,
+                   substr(text, sp[2] + 1L, nchar(text)))
+  }
+
+  text <- gsub("[ \t]{2,}", " ", text)
+  out$text <- trimws(text)
+  out
 }
 
 ## ---------------------------------------------------------------------------
@@ -330,13 +534,13 @@
   tail <- trimws(tail %||% "")
   if (!nzchar(tail)) return(out)
 
-  prog <- regmatches(tail, gregexpr(.PROGRAMMING_DATASETS_RE, tail, perl = TRUE))[[1]]
-  if (length(prog) > 0) {
-    inner <- sub(.PROGRAMMING_DATASETS_RE, "\\1", prog, perl = TRUE)
-    out$source_datasets <- unique(unlist(lapply(inner, .split_source_list)))
-    tail <- trimws(gsub(.PROGRAMMING_DATASETS_RE, "", tail, perl = TRUE))
-    if (!nzchar(tail)) return(out)
-  }
+  ## Bracket normalization lifts PROGRAMMING DATASETS directives (nested or
+  ## not), unwraps instruction wrappers, and drops footnote markers /
+  ## guidance prose before the title / population split runs.
+  norm <- .unwrap_bracket_instructions(tail)
+  out$source_datasets <- norm$source_datasets
+  tail <- norm$text
+  if (!nzchar(tail)) return(out)
 
   seps <- gregexpr(.HEADING_SEP_RE, tail, perl = TRUE)[[1]]
   if (seps[1] != -1) {
@@ -2238,11 +2442,13 @@ bind_annotations <- function(sec) {
 #' to Layer 3 plain-text detection on the full paragraph text.
 #' @noRd
 .extract_population_annot <- function(p_node, full_text) {
+  full_text <- .unwrap_bracket_instructions(full_text)$text
   meta <- .runs_metadata(p_node)
   coloured <- Filter(.is_annotation_styled_run, meta)
   if (length(coloured) > 0) {
     out <- paste(vapply(coloured, function(m) m$text, character(1)), collapse = "")
-    out <- trimws(out)
+    out <- .unwrap_bracket_instructions(trimws(out))$text
+    out <- sub("^\\[(.*)\\]$", "\\1", out, perl = TRUE)
     if (grepl(.ANNOTATION_PATTERN, out, perl = TRUE)) {
       return(.canon_annotation(out))
     }
@@ -2265,13 +2471,25 @@ bind_annotations <- function(sec) {
 #' Returns list(label, annotation, method, confidence).
 #' @noRd
 .detect_annotation <- function(cell_text, runs_meta) {
+  ## Real-world bracket conventions first (nested directives, instruction
+  ## wrappers, footnote markers) -- every layer below sees normalized text.
+  cell_text <- .unwrap_bracket_instructions(cell_text)$text
+
+  ## A styled candidate normalizes the same way, then sheds one enclosing
+  ## bracket pair (real shells paint the WHOLE "[...]" red; the brackets
+  ## are display syntax, not annotation content).
+  norm_candidate <- function(candidate) {
+    candidate <- .unwrap_bracket_instructions(candidate)$text
+    sub("^\\[(.*)\\]$", "\\1", candidate, perl = TRUE)
+  }
+
   ## Layer 1: coloured or highlighted runs that additionally match the
   ## ADaM pattern.
   coloured_runs <- Filter(.is_annotation_styled_run, runs_meta)
   if (length(coloured_runs) > 0) {
-    candidate <- trimws(paste(vapply(coloured_runs, function(m) m$text,
-                                     character(1)),
-                              collapse = ""))
+    candidate <- norm_candidate(trimws(paste(
+      vapply(coloured_runs, function(m) m$text, character(1)),
+      collapse = "")))
     if (grepl(.ANNOTATION_PATTERN, candidate, perl = TRUE)) {
       label <- trimws(.strip_annotation_from_text(cell_text, candidate))
       return(list(label = label, annotation = .canon_annotation(candidate),
@@ -2285,9 +2503,9 @@ bind_annotations <- function(sec) {
       nzchar(m$text)
   }, runs_meta)
   if (length(formatted_runs) > 0) {
-    candidate <- trimws(paste(vapply(formatted_runs, function(m) m$text,
-                                     character(1)),
-                              collapse = ""))
+    candidate <- norm_candidate(trimws(paste(
+      vapply(formatted_runs, function(m) m$text, character(1)),
+      collapse = "")))
     if (grepl(.ANNOTATION_PATTERN, candidate, perl = TRUE)) {
       label <- trimws(.strip_annotation_from_text(cell_text, candidate))
       return(list(label = label, annotation = .canon_annotation(candidate),

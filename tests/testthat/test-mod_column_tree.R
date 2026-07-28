@@ -26,7 +26,7 @@ test_that("the panel lists the path-mode output and its declared paths", {
 
     paths <- paths_df()
     expect_identical(nrow(paths), 6L)
-    expect_identical(paths$column[4], "Cohort A > Total[a]")
+    expect_identical(paths$column[4], "Cohort A > Total")
     expect_identical(paths$role[4], "SUBTOTAL")
     expect_identical(paths$total_strategy[4], "condition_based")
   })
