@@ -2015,7 +2015,10 @@ bind_annotations <- function(sec) {
 .cell_text <- function(cell_node) .paragraph_text(cell_node)
 
 #' Returns a list of per-run metadata for every run inside the node.
-#' Each entry: list(text, color_hex, highlight, bold, italic, underline).
+#' Each entry: list(text, raw_text, color_hex, highlight, bold, italic,
+#' underline). `raw_text` is the pre-normalization text (curly quotes and
+#' other authoring artifacts intact) -- kept alongside the normalized `text`
+#' so a run-integrity lint can see what the shell author actually typed.
 #' @noRd
 .runs_metadata <- function(node) {
   runs <- xml2::xml_find_all(
@@ -2024,7 +2027,8 @@ bind_annotations <- function(sec) {
   for (i in seq_along(runs)) {
     r <- runs[[i]]
     t_nodes <- xml2::xml_find_all(r, ".//*[local-name()='t']")
-    txt <- .normalize_docx_text(paste(xml2::xml_text(t_nodes), collapse = ""))
+    raw <- paste(xml2::xml_text(t_nodes), collapse = "")
+    txt <- .normalize_docx_text(raw)
 
     color_node <- xml2::xml_find_first(r, "./*[local-name()='rPr']/*[local-name()='color']")
     color <- if (inherits(color_node, "xml_missing")) NA_character_
@@ -2038,8 +2042,9 @@ bind_annotations <- function(sec) {
     italic    <- !inherits(xml2::xml_find_first(r, "./*[local-name()='rPr']/*[local-name()='i']"),  "xml_missing")
     underline <- !inherits(xml2::xml_find_first(r, "./*[local-name()='rPr']/*[local-name()='u']"),  "xml_missing")
 
-    out[[i]] <- list(text = txt, color_hex = color, highlight = highlight,
-                     bold = bold, italic = italic, underline = underline)
+    out[[i]] <- list(text = txt, raw_text = raw, color_hex = color,
+                     highlight = highlight, bold = bold, italic = italic,
+                     underline = underline)
   }
   out
 }
@@ -2072,6 +2077,45 @@ bind_annotations <- function(sec) {
   if (length(meta) == 0) return(FALSE)
   cols <- vapply(meta, function(m) m$color_hex %||% NA_character_, character(1))
   all(!is.na(cols) & cols == .GREY_HEX)
+}
+
+.TYPOGRAPHIC_QUOTES_RE <- "[\u2018\u2019\u201C\u201D]"
+
+#' Lint one programmer-annotation paragraph for authoring corruption: raw
+#' typographic quotes (the visual sign a line was hand-edited/pasted over
+#' rather than typed fresh -- this package straightens them in memory, but a
+#' chat assistant reading the raw file sees them as authored and can copy
+#' them verbatim into a JSON string, breaking its syntax), and colour drift
+#' mid-annotation (a line typed fresh is one run in one colour).
+#' @return Character vector of human-readable issues (possibly empty).
+#' @noRd
+.lint_annotation_run_integrity <- function(p_node) {
+  meta <- Filter(.is_annotation_styled_run, .runs_metadata(p_node))
+  if (length(meta) == 0) return(character())
+  issues <- character()
+
+  raw_joined <- paste(vapply(meta, function(m) m$raw_text %||% "", character(1)),
+                      collapse = "")
+  if (grepl(.TYPOGRAPHIC_QUOTES_RE, raw_joined, perl = TRUE)) {
+    issues <- c(issues, paste0(
+      "uses typographic quotes instead of straight quotes -- this package ",
+      "straightens them in memory, but a chat assistant reading the raw file ",
+      "sees them as authored and can copy them into a JSON string verbatim, ",
+      "breaking the JSON syntax of anything it writes back"
+    ))
+  }
+
+  colours <- unique(vapply(meta, function(m) m$color_hex %||% NA_character_, character(1)))
+  colours <- colours[!is.na(colours)]
+  if (length(colours) > 1) {
+    issues <- c(issues, sprintf(
+      paste("mixes %d colours within one annotation (%s) -- an annotation",
+           "typed fresh is one run in one colour; a colour change partway",
+           "through usually means the line was pasted or hand-edited over"),
+      length(colours), paste(colours, collapse = " then ")
+    ))
+  }
+  issues
 }
 
 ## ---------------------------------------------------------------------------
@@ -2149,6 +2193,18 @@ bind_annotations <- function(sec) {
   ## a footnote.
   if (.is_programmer_annotation_paragraph(p_node, stripped)) {
     current$programmer_annotations <- c(current$programmer_annotations, stripped)
+    issues <- .lint_annotation_run_integrity(p_node)
+    for (issue in issues) {
+      diag_add(
+        stage = "parse_shell", severity = "WARN", input = INPUT_SHELL,
+        problem = sprintf("Annotation line %s: \"%s\"", issue, stripped),
+        tlf_number = current$tlf_number,
+        location = current$title %||% "",
+        action = paste("In the shell, delete this line and retype it fresh as",
+                       "one run, one colour, straight quotes -- do not edit",
+                       "the existing run in place")
+      )
+    }
     return(current)
   }
 

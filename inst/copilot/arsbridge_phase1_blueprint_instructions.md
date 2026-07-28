@@ -84,6 +84,12 @@ Create one evidence record for every annotation and analytical instruction:
   `INVALID_REFERENCE`, `OUT_OF_SCOPE`, or `UNRESOLVED` (with a reason for every
   non-consumed disposition)
 
+When a disposition reason or any other note must quote the shell's own
+annotation text, never paste it character-for-character if it contains a
+quote mark -- either escape every `"` as `\"`, or paraphrase instead of
+quoting. A raw quote character copied into a JSON string ends that string
+early and breaks the entire file's JSON syntax.
+
 Allowed primary roles include: `OUTPUT_IDENTITY`, `POPULATION`,
 `SOURCE_DATASET`, `SUBJECT_IDENTIFIER`, `JOIN_RULE`, `RECORD_FILTER`,
 `ROW_FILTER`, `SECTION_FILTER`, `RESULT_COLUMN_GROUP`, `TOTAL_COLUMN_RULE`,

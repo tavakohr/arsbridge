@@ -440,3 +440,30 @@ test_that("the no-heading warning repeats the recommended heading guidance", {
     "begins with Table"
   )
 })
+
+## --- Annotation run-integrity lint (Fix B) ---------------------------------
+
+test_that("a run-split annotation with typographic quotes and colour drift WARNs twice", {
+  diag_reset()
+  secs <- parse_shell_docx(test_path("fixtures/annotated_shell_corrupted_annotation.docx"))
+  expect_length(secs, 1)
+
+  d <- ars_diagnostics()
+  hits <- d[d$severity == "WARN" & grepl("^Annotation line", d$problem), , drop = FALSE]
+  expect_equal(nrow(hits), 2)
+  expect_true(any(grepl("typographic quotes", hits$problem)))
+  expect_true(any(grepl("mixes 2 colours", hits$problem)))
+})
+
+test_that("no existing clean fixture trips the annotation run-integrity lint", {
+  fixtures <- list.files(test_path("fixtures"), pattern = "^annotated_shell.*\\.docx$",
+                        full.names = TRUE)
+  fixtures <- setdiff(fixtures, test_path("fixtures/annotated_shell_corrupted_annotation.docx"))
+  for (f in fixtures) {
+    diag_reset()
+    suppressMessages(suppressWarnings(parse_shell_docx(f)))
+    d <- ars_diagnostics()
+    hits <- d[d$severity == "WARN" & grepl("^Annotation line", d$problem), , drop = FALSE]
+    expect_equal(nrow(hits), 0, info = f)
+  }
+})

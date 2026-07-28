@@ -55,7 +55,12 @@ ars_validate_supplement <- function(path, adam_spec_path = NULL) {
   }
 
   supp <- tryCatch(read_supplement(path), error = function(e) {
-    note("FAIL", NA, "file", conditionMessage(e))
+    ## conditionMessage() on a cli::cli_abort() condition can carry raw
+    ## ANSI/OSC-8 escape codes when the session that raised it had colour
+    ## detection on (RStudio, a real terminal). This finding's `problem` is
+    ## surfaced verbatim in the Shiny app's plain-text repair-prompt panel
+    ## (no ANSI rendering there), so strip it here.
+    note("FAIL", NA, "file", cli::ansi_strip(conditionMessage(e)))
     NULL
   })
 
@@ -64,7 +69,7 @@ ars_validate_supplement <- function(path, adam_spec_path = NULL) {
     spec <- tryCatch(parse_adam_spec(adam_spec_path), error = function(e) {
       note("WARN", NA, "spec",
            sprintf("Could not parse the ADaM spec for the gate check: %s",
-                   conditionMessage(e)))
+                   cli::ansi_strip(conditionMessage(e))))
       NULL
     })
     if (!is.null(spec)) spec_keys <- toupper(names(spec$lookup %||% list()))

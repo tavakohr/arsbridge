@@ -192,6 +192,12 @@ Create exactly two files:
   missing / incorrect-role / raw-evidence-only fields, annotation dispositions,
   logical-filter checks, hierarchy checks, schema status, and review items.
 
+When a review item or provenance note must quote the shell's own annotation
+text, never paste it character-for-character if it contains a quote mark --
+either escape every `"` as `\"`, or paraphrase instead of quoting. A raw
+quote character copied into a JSON string ends that string early and breaks
+the entire file's JSON syntax.
+
 Before delivery: compare inventory counts against the blueprint; reject
 duplicates and placeholders; confirm no incomplete TLF is labelled complete;
 confirm the report agrees with the supplement; parse both as strict JSON.

@@ -404,7 +404,7 @@ spec_to_ars <- function(shell_path,
   validation <- NULL
   if (isTRUE(validate)) {
     if (verbose) cli::cli_alert_info("Cross-referencing annotations against ADaM spec...")
-    validation <- validate_annotations_spec(sections, spec$lookup)
+    validation <- validate_annotations_spec(sections, spec$lookup, spec$codelists)
     n_warn <- sum(validation$status %in% c("WARN", "FAIL"))
     if (n_warn > 0) {
       cli::cli_alert_warning("{n_warn} validation finding{?s} -- see {.path {report_path}}")
