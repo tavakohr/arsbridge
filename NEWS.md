@@ -1,5 +1,20 @@
 # arsbridge (development version)
 
+* **Nested two-level row hierarchies, renderer interleave** (nested SOC/PT
+  handoff, Phase N3). The layout renderer now expands a
+  `nested_parent`/`nested_child` pair per parent level: the parent's own
+  line (SOC counts), then every child term observed under it, repeating
+  per level -- the standard interleaved AE presentation the shell
+  authored, replacing the two stacked flat blocks. The authored token
+  labels never print; the data levels take their place. {cards}' full
+  parent-by-child level cartesian is filtered to observed cells, so a term
+  never lists under a parent it did not occur in, while a term genuinely
+  coded under two parents renders in both blocks with per-cell counts.
+  Levels sort alphabetically (the frequency-sort annotation is a later
+  phase). `.shell_layout()` carries the new `parent_order` linkage; an
+  orphaned child row (parent removed) degrades to the flat categorical
+  block instead of erroring.
+
 * **Nested two-level row hierarchies, engine verification** (nested SOC/PT
   handoff, Phase N2). The distinct-subject counting behind
   `MTH_AE_FREQUENCY_COUNT` now includes the analysis's grouping variables:
