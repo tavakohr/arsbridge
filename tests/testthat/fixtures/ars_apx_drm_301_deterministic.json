@@ -5709,8 +5709,8 @@
     }
   ],
   "_meta": {
-    "generator": "arsbridge 0.1.0.9011",
-    "generated_at_utc": "2026-07-24T02:58:08Z",
+    "generator": "arsbridge 0.1.0.9025",
+    "generated_at_utc": "2026-07-28T16:03:48Z",
     "ars_model_version": "1.0",
     "extraction_mode": "deterministic",
     "supplement_trust": null,

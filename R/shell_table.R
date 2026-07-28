@@ -367,6 +367,9 @@
         row$label,
         if (identical(row$kind, "supplement_added")) {
           shiny::span(class = "badge text-bg-info ms-2", "supplement")
+        },
+        if (row$kind %in% c("nested_parent", "nested_child")) {
+          shiny::span(class = "badge text-bg-secondary ms-2", "nested")
         }
       ),
       lapply(seq_len(max(data$n_body_cols, 0L)), function(j) {

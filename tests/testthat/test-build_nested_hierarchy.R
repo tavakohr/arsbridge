@@ -217,6 +217,64 @@ test_that("the pattern generalises beyond AE: conmed ATC class / term", {
                c("nested_parent", "nested_child"))
 })
 
+## --- validation (Phase N4) ---------------------------------------------------
+
+test_that("a well-formed nested event raises no nested findings", {
+  re <- build_ars_json(list(.nested_section()), study_id = "S-NEST")
+  findings <- validate_ars_model(ars_to_model(re))
+  expect_equal(sum(findings$ref %in%
+                     c("NESTED_CHILD_UNLINKED", "NESTED_GROUPING_MISSING"),
+                   na.rm = TRUE), 0)
+})
+
+test_that("a child without the parent grouping is flagged", {
+  re <- build_ars_json(list(.nested_section()), study_id = "S-NEST")
+  ## Strip the row grouping from the child analysis (index 3: TEAE, SOC, PT).
+  re$analyses[[3]]$orderedGroupings <- re$analyses[[3]]$orderedGroupings[1]
+
+  findings <- validate_ars_model(ars_to_model(re))
+  hit <- findings[findings$ref %in% "NESTED_GROUPING_MISSING", , drop = FALSE]
+  expect_equal(nrow(hit), 1)
+  expect_equal(hit$id, re$analyses[[3]]$id)
+  expect_equal(hit$severity, "WARN")
+})
+
+test_that("a child whose parent link is severed is flagged", {
+  re <- build_ars_json(list(.nested_section()), study_id = "S-NEST")
+  layout <- re$outputs[[1]][["_meta"]][["shell_layout"]]
+  for (k in seq_along(layout)) {
+    if (identical(layout[[k]]$kind, "nested_child")) {
+      layout[[k]]$parent_order <- NULL
+    }
+  }
+  re$outputs[[1]][["_meta"]][["shell_layout"]] <- layout
+
+  findings <- validate_ars_model(ars_to_model(re))
+  hit <- findings[findings$ref %in% "NESTED_CHILD_UNLINKED", , drop = FALSE]
+  expect_equal(nrow(hit), 1)
+  expect_equal(hit$id, re$outputs[[1]]$id)
+})
+
+
+## --- editor (Phase N4) -------------------------------------------------------
+
+test_that("the shell view badges nested rows", {
+  skip_if_not_installed("shiny")
+
+  re <- build_ars_json(list(.nested_section()), study_id = "S-NEST")
+  model <- ars_to_model(re)
+  index <- match(re$outputs[[1]]$id, model$outputs$id)
+  data <- .shell_table_data(model$outputs$raw[[index]], model)
+
+  expect_equal(sum(data$rows$kind %in% c("nested_parent", "nested_child")), 2)
+
+  html <- as.character(
+    .shell_table_ui(data, shiny::NS("detail"), re$outputs[[1]]$id, "view")
+  )
+  expect_equal(lengths(regmatches(html, gregexpr(">nested<", html))), 2L)
+})
+
+
 test_that("an ordinary demographics section is untouched by the detection", {
   ## The exact section test-build_ars_json.R builds everywhere: one
   ## continuous row, one label row -- no token pattern, no new kinds.

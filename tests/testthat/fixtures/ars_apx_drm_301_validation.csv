@@ -50,7 +50,7 @@
 "T-14-3-1","Any Serious TEAE","ADAE.AESER='Y'","ADAE.AESER","PASS","Variable found in ADaM spec"
 "T-14-3-1","Any Severe TEAE","ADAE.AESEV='SEVERE'","ADAE.AESEV","PASS","Variable found in ADaM spec"
 "T-14-3-1","TEAE possibly related to study drug","ADAE.AEREL in ('POSSIBLE','PROBABLE','RELATED')","ADAE.AEREL","PASS","Variable found in ADaM spec"
-"T-14-3-1","TEAE leading to study drug discontinuation","ADAE.AEACN='DRUG WITHDRAWN'","ADAE.AEACN","PASS","Variable found in ADaM spec"
+"T-14-3-1","TEAE leading to study drug discontinuation","ADAE.AEACN='DRUG WITHDRAWN'","ADAE.AEACN","WARN","Value 'DRUG WITHDRAWN' is not in the spec's declared codelist for this variable ((study-specific)) -- check for a typo or a different variable"
 "T-14-3-1","TEAE leading to dose modification","ADAE.AEACN in ('DOSE REDUCED','DRUG INTERRUPTED')","ADAE.AEACN","PASS","Variable found in ADaM spec"
 "T-14-3-1","Deaths","ADAE.AESDTH='Y'","ADAE.AESDTH","PASS","Variable found in ADaM spec"
 "T-14-3-2","<population>","ADSL.SAFFL='Y'","ADSL.SAFFL","PASS","Variable found in ADaM spec"

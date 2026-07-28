@@ -1,5 +1,20 @@
 # arsbridge (development version)
 
+* **Nested two-level row hierarchies, validation and polish** (nested
+  SOC/PT handoff, Phase N4 -- completes the handoff). Two
+  `validate_ars_model()` checks guard the new structure:
+  `NESTED_CHILD_UNLINKED` (WARN) when a nested_child layout row no longer
+  resolves to its parent row, and `NESTED_GROUPING_MISSING` (WARN) when
+  the child analysis lost the parent's variable from its groupings --
+  each naming the repair. The editor's shell view badges nested rows. An
+  integration test now proves the whole chain from the real annotated
+  shell document: parsing the authored `<System Organ Class>` /
+  `<Preferred Term>` token blocks yields the linked analyses, the
+  data-driven SOC grouping, the distinct-subject method, and a clean
+  validation. The deterministic fixture was regenerated through the new
+  generator -- a near-no-op (version stamp plus one validation row from a
+  newer codelist check), confirming non-nested studies are untouched.
+
 * **Nested two-level row hierarchies, renderer interleave** (nested SOC/PT
   handoff, Phase N3). The layout renderer now expands a
   `nested_parent`/`nested_child` pair per parent level: the parent's own
