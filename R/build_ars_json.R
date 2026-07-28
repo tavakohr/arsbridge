@@ -700,7 +700,7 @@ build_ars_json <- function(sections,
     ## accumulators in place, and never touches `cat_parent` (a free-standing
     ## analysis is never a level of the block above it). Returns invisibly.
     emit_extra_analysis <- function(label, annotation, indent = 0L,
-                                    where = NULL) {
+                                    where = NULL, default_method_id = NULL) {
       annotation <- trimws(as.character(annotation %||% ""))
       refs <- if (nzchar(annotation)) extract_annotation_vars(annotation) else character()
       if (length(refs) == 0) return(invisible(NULL))
@@ -771,6 +771,21 @@ build_ars_json <- function(sections,
           methods[[length(methods) + 1L]] <<-
             .with_op_self_rels(.STANDARD_METHODS[["Count and Percentage"]])
           seen_mth <<- c(seen_mth, count_method_id)
+        }
+      }
+      ## A conflict secondary is the SAME authored row under a different
+      ## filter, so it inherits the winning row's counting discipline: a
+      ## distinct-subject AE count must never degrade to record counting
+      ## (records over a subject denominator renders p > 1). An explicit
+      ## once/subject clause in the annotation does the same on its own.
+      if (identical(method2_id, count_method_id) &&
+            (identical(default_method_id, "MTH_AE_FREQUENCY_COUNT") ||
+               !is.null(.once_per_subject_var(annotation)))) {
+        method2_id <- "MTH_AE_FREQUENCY_COUNT"
+        if (!method2_id %in% seen_mth) {
+          methods[[length(methods) + 1L]] <<-
+            .with_op_self_rels(.STANDARD_METHODS[["AE Frequency Count"]])
+          seen_mth <<- c(seen_mth, method2_id)
         }
       }
       row_sig2 <- paste(method2_id,
@@ -1162,7 +1177,8 @@ build_ars_json <- function(sections,
         row$secondary_annotation %||% row$supplement_proposed_annotation %||% ""))
       if (build_layout && nzchar(extra_ann)) {
         extra_id <- emit_extra_analysis(row$label %||% "", extra_ann, indent,
-                                        where = row$secondary_where)
+                                        where = row$secondary_where,
+                                        default_method_id = row_method_id)
         if (!is.null(extra_id)) {
           diag_add(
             stage = "build_ars", severity = "INFO",

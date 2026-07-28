@@ -217,6 +217,28 @@ test_that("the pattern generalises beyond AE: conmed ATC class / term", {
                c("nested_parent", "nested_child"))
 })
 
+test_that("a conflict secondary inherits the distinct-subject method", {
+  ## The incident shape: the nested SOC row wins with AE Frequency Count;
+  ## the supplement's conflicting proposal (same variable, extra filter)
+  ## must count subjects the same way -- record counting over the subject
+  ## denominator rendered p > 1 in production.
+  sec <- .nested_section()
+  sec$stub_rows[[2]]$secondary_annotation <-
+    "ADAE.AESOC WHERE ADAE.TRTEMFL='Y'"
+  re <- build_ars_json(list(sec), study_id = "S-NEST")
+
+  layout <- re$outputs[[1]][["_meta"]][["shell_layout"]]
+  kinds <- vapply(layout, function(e) e$kind, character(1))
+  supp_at <- which(kinds == "supplement_added")
+  expect_length(supp_at, 1)
+
+  supp_id <- layout[[supp_at]]$analysis_id
+  supp <- Filter(function(a) identical(a$id, supp_id), re$analyses)[[1]]
+  expect_equal(supp$methodId, "MTH_AE_FREQUENCY_COUNT")
+  expect_equal(supp$variable, "AESOC")
+})
+
+
 ## --- validation (Phase N4) ---------------------------------------------------
 
 test_that("a well-formed nested event raises no nested findings", {
