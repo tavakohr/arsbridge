@@ -2,6 +2,26 @@
 
 ## arsbridge (development version)
 
+- **Annotation corruption guardrails.** Four independent fixes closing
+  gaps surfaced by a real hand-edited annotation that arsbridge’s own
+  validation passed as clean. `validate_annotations_spec()` now
+  cross-checks the *value* bound to a DATASET.VARIABLE reference against
+  the spec’s declared length and codelist, not just that the variable
+  exists – so a seriousness flag bound to a multi-character severity
+  term (right variable, wrong literal) is now a FAIL instead of a silent
+  PASS. `parse_shell_docx()` lints each programmer annotation for
+  authoring corruption – typographic quotes and mid-annotation colour
+  drift, both visual signs a line was hand-edited/pasted over rather
+  than typed fresh – and WARNs through the existing diagnostics stream.
+  [`ars_validate_supplement()`](https://tavakohr.github.io/arsbridge/reference/ars_validate_supplement.md)
+  strips ANSI/OSC-8 escape codes from caught condition messages before
+  they reach a FAIL/WARN finding, so a parse error never renders as
+  literal escape-code soup in the Shiny repair-prompt panel. The
+  two-phase Copilot instruction files now warn against pasting quoted
+  annotation text into a JSON string unescaped, the gap that let a chat
+  assistant’s own repair-prompt explanation break its own JSON in the
+  incident that surfaced all of this.
+
 - **[`ars_workflow()`](https://tavakohr.github.io/arsbridge/reference/ars_workflow.md):
   a guided app for the whole journey.** One stepper walks a study
   project from an annotated shell to a reviewed reporting event: project
