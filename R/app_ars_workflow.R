@@ -23,7 +23,7 @@
 #'
 #' 1. **Project setup** -- pick a project folder and name the annotated shell
 #'    (`.docx`), the ADaM spec (`.xlsx`/`.xml`), and a study id. The folder
-#'    gets a fixed layout (`copilot/`, `phase1/`, `phase2/`, `ars/`) and a
+#'    gets a fixed layout (`copilot/`, `ars/`) and a
 #'    small `arsbridge_project.json` state file.
 #' 2. **Instruction files** -- writes the two-phase Copilot instructions and
 #'    the supplement JSON schema into `copilot/` (see
@@ -180,7 +180,7 @@ ars_workflow <- function(project_dir = NULL) {
         shiny::actionButton("init_project", "Create / update project",
                             class = "btn-primary btn-sm"),
         shiny::div(class = "text-muted small mt-2",
-                   "The folder gets copilot/, phase1/, phase2/, and ars/ ",
+                   "The folder gets copilot/ and ars/ ",
                    "subfolders plus arsbridge_project.json. Reopening the ",
                    "same folder resumes the journey.")
       ),
@@ -545,7 +545,7 @@ ars_workflow <- function(project_dir = NULL) {
       if (file.exists(paths$supplement)) {
         shiny::p(class = "small",
                  "Mode: ", shiny::strong("supplement"),
-                 " -- phase2/supplement.json will drive the extraction.")
+                 " -- copilot/supplement.json will drive the extraction.")
       } else {
         shiny::p(class = "small",
                  "Mode: ", shiny::strong("deterministic"),
