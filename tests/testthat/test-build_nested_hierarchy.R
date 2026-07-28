@@ -354,3 +354,85 @@ test_that("once/subject upgrades a secondary and registers the method itself", {
   expect_true("MTH_AE_FREQUENCY_COUNT" %in%
                 vapply(re$methods, function(m) m$id, character(1)))
 })
+
+
+## --- the frequency-sort annotation ------------------------------------------
+
+test_that(".nested_sort_clause reads the clause and nothing else", {
+  expect_null(.nested_sort_clause("ADAE.AESOC"))
+  expect_null(.nested_sort_clause(""))
+  expect_null(.nested_sort_clause(NULL))
+
+  expect_equal(
+    .nested_sort_clause("ADAE.AESOC; sort: alphabetical")$basis,
+    "alphabetical"
+  )
+  expect_equal(.nested_sort_clause("sort: alpha")$basis, "alphabetical")
+
+  plain <- .nested_sort_clause("ADAE.AESOC; sort: desc-freq")
+  expect_equal(plain$basis, "desc-freq")
+  expect_null(plain$column)
+
+  quoted <- .nested_sort_clause("ADAE.AESOC; sort: desc-freq('Drug A')")
+  expect_equal(quoted$basis, "desc-freq")
+  expect_equal(quoted$column, "Drug A")
+
+  bare <- .nested_sort_clause("sort: desc-freq(Total)")
+  expect_equal(bare$column, "Total")
+
+  ## An unreadable clause comes back flagged, never guessed.
+  junk <- .nested_sort_clause("ADAE.AESOC; sort: by magic")
+  expect_true(is.na(junk$basis))
+  expect_equal(junk$raw, "by magic")
+})
+
+test_that("a sort clause on the parent row lands on the layout entry", {
+  sec <- .nested_section()
+  sec$stub_rows[[2]]$annotation <- "ADAE.AESOC; sort: alphabetical"
+  re <- build_ars_json(list(sec), study_id = "S-SORT")
+
+  layout <- re$outputs[[1]][["_meta"]][["shell_layout"]]
+  kinds <- vapply(layout, function(e) e$kind, character(1))
+  parent <- layout[[which(kinds == "nested_parent")]]
+  expect_equal(parent$sort, "alphabetical")
+
+  ## The clause never leaks onto other rows.
+  others <- layout[kinds != "nested_parent"]
+  expect_false(any(vapply(others, function(e) "sort" %in% names(e),
+                          logical(1))))
+})
+
+test_that("a column-basis sort clause round-trips through .shell_layout", {
+  sec <- .nested_section()
+  sec$stub_rows[[2]]$annotation <-
+    "ADAE.AESOC; sort: desc-freq('Treatment A')"
+  re <- build_ars_json(list(sec), study_id = "S-SORT2")
+
+  layout <- .shell_layout(re$outputs[[1]])
+  expect_true("sort" %in% names(layout))
+  expect_equal(layout$sort[layout$kind == "nested_parent"],
+               "desc-freq:Treatment A")
+  expect_true(all(is.na(layout$sort[layout$kind != "nested_parent"])))
+})
+
+test_that("no sort clause means no sort field (renderer default applies)", {
+  re <- build_ars_json(list(.nested_section()), study_id = "S-SORT3")
+  layout <- .shell_layout(re$outputs[[1]])
+  expect_true(all(is.na(layout$sort)))
+})
+
+test_that("an unreadable sort clause warns and keeps the default", {
+  diag_reset()
+  sec <- .nested_section()
+  sec$stub_rows[[2]]$annotation <- "ADAE.AESOC; sort: by magic"
+  re <- build_ars_json(list(sec), study_id = "S-SORT4")
+
+  layout <- .shell_layout(re$outputs[[1]])
+  expect_true(all(is.na(layout$sort)))
+
+  d <- diag_records()
+  hit <- d[d$severity == "WARN" &
+             grepl("sort clause I can't read", d$problem), , drop = FALSE]
+  expect_equal(nrow(hit), 1)
+  expect_true(grepl("descending frequency", hit$action))
+})
