@@ -459,6 +459,74 @@
 #'   GROUPING_ORDER_AMBIGUOUS                 WARN
 #'   SUBTOTAL_EXCLUDES_UNDISPLAYED_CATEGORIES INFO
 #'
+## Nested block integrity (HANDOFF_nested_soc_pt_hierarchy, Phase N4). A
+## nested_child layout row must resolve to a nested_parent row through
+## parent_order, and its analysis must carry the parent's variable as a row
+## grouping -- without the link the renderer degrades to a flat block,
+## without the grouping the child's results cannot nest at all.
+##
+##   NESTED_CHILD_UNLINKED    WARN
+##   NESTED_GROUPING_MISSING  WARN
+#' @noRd
+.check_nested_layout <- function(findings, model) {
+  for (i in seq_len(nrow(model$outputs))) {
+    layout <- .shell_layout(model$outputs$raw[[i]])
+    if (is.null(layout)) next
+    output_id <- model$outputs$id[i]
+
+    for (j in which(layout$kind == "nested_child")) {
+      parent_hit <- if (is.na(layout$parent_order[j])) {
+        integer(0)
+      } else {
+        which(layout$order == layout$parent_order[j] &
+                layout$kind == "nested_parent")
+      }
+      if (length(parent_hit) != 1) {
+        findings <- .add_finding(
+          findings, "WARN", "outputs", output_id, "shell_layout",
+          sprintf(
+            "Nested child row '%s' (order %d) has no linked parent row",
+            layout$label[j], layout$order[j]),
+          paste0("Relink parent_order to the parent-level row (or re-author ",
+                 "the block) -- the renderer falls back to a flat block ",
+                 "until then"),
+          ref = "NESTED_CHILD_UNLINKED"
+        )
+        next
+      }
+
+      child_id  <- layout$analysis_id[j]
+      parent_id <- layout$analysis_id[parent_hit]
+      child_at  <- match(child_id, model$analyses$id)
+      parent_at <- match(parent_id, model$analyses$id)
+      ## Dangling analysis references are another check's finding.
+      if (is.na(child_at) || is.na(parent_at)) next
+
+      parent_var <- model$analyses$variable[parent_at]
+      if (is.na(parent_var) || !nzchar(parent_var)) next
+      parent_var <- toupper(parent_var)
+
+      grouping_ids <- .split_values(model$analyses$grouping_ids[child_at])
+      grouping_vars <- toupper(model$groupings$groupingVariable[
+        match(grouping_ids, model$groupings$id)
+      ])
+      if (!parent_var %in% stats::na.omit(grouping_vars)) {
+        findings <- .add_finding(
+          findings, "WARN", "analyses", child_id, "grouping_ids",
+          sprintf(
+            "Nested child analysis does not group by its parent's variable (%s)",
+            parent_var),
+          paste0("Add ", parent_var, " as a data-driven grouping on this ",
+                 "analysis -- without it the child's results cannot nest ",
+                 "under the parent levels"),
+          ref = "NESTED_GROUPING_MISSING"
+        )
+      }
+    }
+  }
+  findings
+}
+
 #' @noRd
 .check_result_paths <- function(findings, model) {
   outputs <- model$outputs
@@ -741,6 +809,7 @@ validate_ars_model <- function(model, spec = NULL, report = NULL) {
   findings <- .check_unparsed_populations(findings, model)
   findings <- .check_separator_safety(findings, model)
   findings <- .check_result_paths(findings, model)
+  findings <- .check_nested_layout(findings, model)
 
   if (!is.null(spec)) {
     findings <- .check_against_spec(findings, model, spec)

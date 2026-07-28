@@ -548,3 +548,44 @@ test_that("decoded level slots fill from the decoded computed pool", {
   ## The unmatched decoded level still expands under the parent header.
   expect_true("LOST TO FOLLOW-UP" %in% prep[[.ARS_SHELL_LBL]])
 })
+
+## --- nested SOC/PT blocks (HANDOFF_nested_soc_pt_hierarchy) -----------------
+
+test_that("the authored SOC/PT token blocks emerge nested from the real shell", {
+  skip_if_not(file.exists(fixture_shell))
+  p <- parse_cdsc()
+  secs <- enrich_offline(p$secs)
+
+  is_ae <- vapply(secs, function(s) {
+    grepl("System Organ Class and Preferred Term", s$title %||% "")
+  }, logical(1))
+  skip_if_not(any(is_ae))
+  sec <- secs[[which(is_ae)[1]]]
+
+  re <- suppressMessages(suppressWarnings(
+    build_ars_json(list(sec), spec_lookup = p$spec$lookup)))
+
+  ## The token pair became linked layout rows...
+  layout <- re$outputs[[1]][["_meta"]][["shell_layout"]]
+  kinds <- vapply(layout, function(e) e$kind, character(1))
+  expect_true("nested_parent" %in% kinds)
+  expect_true("nested_child" %in% kinds)
+  parent <- layout[[which(kinds == "nested_parent")[1]]]
+  child  <- layout[[which(kinds == "nested_child")[1]]]
+  expect_equal(child$parent_order, parent$order)
+
+  ## ...whose child analysis rides the SOC grouping with the distinct-subject
+  ## method, straight from the authored document.
+  child_an <- Filter(function(a) identical(a$id, child$analysis_id),
+                     re$analyses)[[1]]
+  gids <- vapply(child_an$orderedGroupings, function(g) g$groupingId,
+                 character(1))
+  expect_true("GF_AESOC" %in% gids)
+  expect_equal(child_an$methodId, "MTH_AE_FREQUENCY_COUNT")
+
+  ## And the nested validation checks find nothing to complain about.
+  findings <- validate_ars_model(ars_to_model(re))
+  expect_equal(sum(findings$ref %in%
+                     c("NESTED_CHILD_UNLINKED", "NESTED_GROUPING_MISSING"),
+                   na.rm = TRUE), 0)
+})
