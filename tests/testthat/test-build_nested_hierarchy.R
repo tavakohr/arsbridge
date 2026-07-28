@@ -330,3 +330,27 @@ test_that("an ordinary demographics section is untouched by the detection", {
   expect_equal(re$analyses[[1]]$methodId,
                "MTH_SUMMARY_STATISTICS_CONTINUOUS")
 })
+
+test_that("once/subject upgrades a secondary and registers the method itself", {
+  ## Covers the branch #23 left unexercised: no nested primary here, so
+  ## AE Frequency Count is NOT already in the method pool -- the
+  ## secondary's own once/subject clause must trigger the upgrade AND
+  ## register the method entity.
+  sec <- .nested_section()
+  sec$stub_rows <- list(list(
+    label = "Any AE, n (%)", annotation = "ADAE.AEDECOD", has_annot = TRUE,
+    detection_method = "pattern", detection_confidence = "high",
+    secondary_annotation =
+      "ADAE.AEDECOD WHERE ADAE.TRTEMFL='Y'; once/subject ADAE.AOCCIFL"
+  ))
+  re <- build_ars_json(list(sec), study_id = "S-ONCE2")
+
+  expect_length(re$analyses, 2)
+  ## The shell's own row keeps the record-counting verdict...
+  expect_equal(re$analyses[[1]]$methodId, "MTH_COUNT_AND_PERCENTAGE")
+  ## ...the secondary upgraded through its once/subject clause...
+  expect_equal(re$analyses[[2]]$methodId, "MTH_AE_FREQUENCY_COUNT")
+  ## ...and registered the method entity on its own.
+  expect_true("MTH_AE_FREQUENCY_COUNT" %in%
+                vapply(re$methods, function(m) m$id, character(1)))
+})
