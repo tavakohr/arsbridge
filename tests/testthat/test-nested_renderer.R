@@ -299,3 +299,48 @@ test_that("an orphaned nested child falls back to a flat block", {
   ## Still renders rows (flat categorical fallback), never errors.
   expect_gt(nrow(prepped), 0)
 })
+
+test_that("a parent analysis with no computed rows still orders by child counts", {
+  skip_if_not_installed("tfrmt")
+
+  ## Covers the freq_of empty-return guard the #25 patch left unexercised:
+  ## with every parent-analysis row gone from the ARD, the parent's own
+  ## frequency lookup finds nothing and the block must fall back to the
+  ## child sums -- SOC headers survive as blank lines, still in descending
+  ## frequency order.
+  run <- .nr_prepped(study = .nr_study_skewed)
+  on.exit(unlink(run$dir, recursive = TRUE))
+
+  spec <- .read_json(run$ars_path)
+  layout <- .shell_layout(spec$outputs[[1]])
+  parent_id <- layout$analysis_id[layout$kind == "nested_parent"]
+
+  aid <- .flat_chr(run$ard$analysis_id)
+  ard <- run$ard[is.na(aid) | aid != parent_id, , drop = FALSE]
+
+  tf <- ars_to_tfrmt(run$ars_path, run$ard, "T_14_3_2")
+  prepped <- .tfrmt_prep_ard_layout(
+    ard, "T_14_3_2", layout,
+    attr(tf, "arsbridge_col_var"),
+    attr(tf, "arsbridge_keep_params"),
+    col_levels = attr(tf, "arsbridge_col_levels"),
+    fixed_vars = attr(tf, "arsbridge_fixed_vars"),
+    params_map = attr(tf, "arsbridge_params_map") %||% list()
+  )
+
+  ords <- sort(unique(prepped[[.ARS_SHELL_ORD]]))
+  lines <- vapply(ords, function(o) {
+    unique(prepped[[.ARS_SHELL_LBL]][prepped[[.ARS_SHELL_ORD]] == o])[1]
+  }, character(1))
+
+  expect_equal(lines, c(
+    "Nervous system disorders", "Headache", "Dizziness",
+    "Gastrointestinal disorders", "Nausea"
+  ))
+
+  ## The SOC lines carry no statistics -- they render as blank headers.
+  soc_stats <- prepped$stat_name[
+    prepped[[.ARS_SHELL_LBL]] %in% c("Nervous system disorders",
+                                     "Gastrointestinal disorders")]
+  expect_true(all(soc_stats == .ARS_SPACER_PARAM))
+})
