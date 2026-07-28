@@ -563,6 +563,10 @@ read_supplement <- function(path) {
           ## report) can surface the disagreement and the proposal is never lost.
           sec$stub_rows[[idx]]$supplement_proposed_annotation <- annotation
           sec$stub_rows[[idx]]$secondary_annotation           <- annotation
+          ## The typed clause travels WITH the losing proposal, so the
+          ## secondary analysis the builder emits for it filters exactly as
+          ## declared -- a compound clause must not silently unfilter there.
+          sec$stub_rows[[idx]]$secondary_where                <- parsed_where
           sec$stub_rows[[idx]]$supplement_conflict            <- TRUE
           sec$stub_rows[[idx]]$supplement_conflict_with       <- existing
           diag_add(

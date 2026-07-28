@@ -615,3 +615,174 @@ test_that("no codelists means no decodes and unchanged groupings", {
   expect_length(re$`_meta`$value_decodes, 0)
   expect_length(re$analysisGroupings[[1]]$groups, 0)
 })
+
+## --- Compound-clause awareness (render-fidelity handoff, Phase 1) ----------
+## RC-1: a leaf row whose supplement filter is a compound AND must still be
+## recognised as a LEVEL of the categorical block above it. RC-2: an extra
+## (secondary / free-standing) analysis carrying a typed compound clause must
+## build a compoundExpression DataSubset, never an empty dataSubsetId.
+
+.cmp_lookup <- function() {
+  list(
+    "ADAE.TRTEMFL"  = list(dataset = "ADAE", variable = "TRTEMFL",
+                           type = "Char", codelist = "NY"),
+    "ADAE.ASEV"     = list(dataset = "ADAE", variable = "ASEV",
+                           type = "Char", codelist = ""),
+    "ADAE.AESER"    = list(dataset = "ADAE", variable = "AESER",
+                           type = "Char", codelist = "NY"),
+    "ADAE.AEDECOD"  = list(dataset = "ADAE", variable = "AEDECOD",
+                           type = "Char", codelist = ""),
+    "ADAE.TRT01A"   = list(dataset = "ADAE", variable = "TRT01A",
+                           type = "Char", codelist = ""),
+    "ADSL.SAFFL"    = list(dataset = "ADSL", variable = "SAFFL",
+                           type = "Char", codelist = "NY")
+  )
+}
+
+.cmp_cond <- function(dataset, variable, value) {
+  list(condition = list(dataset = dataset, variable = variable,
+                        comparator = "EQ", value = list(value)))
+}
+.cmp_and <- function(...) {
+  list(compoundExpression = list(logicalOperator = "AND",
+                                 whereClauses = list(...)))
+}
+
+## The T-14-3-1 incident shape: a categorical severity block whose authored
+## leaf rows arrive from the supplement with AND(TRTEMFL='Y', ASEV=<level>).
+.cmp_section <- function() {
+  lvl_row <- function(label, level) {
+    list(label = label,
+         annotation = sprintf(
+           "ADAE.ASEV WHERE ADAE.TRTEMFL='Y' and ADAE.ASEV='%s'", level),
+         has_annot = TRUE, detection_method = "supplement",
+         raw_text = paste0("  ", label),
+         supplement_where = .cmp_and(.cmp_cond("ADAE", "TRTEMFL", "Y"),
+                                     .cmp_cond("ADAE", "ASEV", level)))
+  }
+  list(
+    tlf_number       = "T-14-3-1",
+    tlf_type         = "TABLE",
+    title            = "Overview of Treatment-Emergent Adverse Events",
+    population_text  = "Safety Population",
+    population_annot = "ADSL.SAFFL='Y'",
+    source_datasets  = "ADAE",
+    col_headers      = c("", "Drug", "Placebo"),
+    n_data_cols      = 2L,
+    stub_rows        = list(
+      list(label = "TEAE by maximum severity", annotation = "ADAE.ASEV",
+           has_annot = TRUE, detection_method = "supplement",
+           raw_text = "TEAE by maximum severity",
+           supplement_where = .cmp_cond("ADAE", "TRTEMFL", "Y")),
+      lvl_row("Mild", "MILD"),
+      lvl_row("Moderate", "MODERATE"),
+      lvl_row("Severe", "SEVERE")
+    ),
+    analysis_type    = "CATEGORICAL",
+    ars_method_name  = "Count and Percentage",
+    by_variable      = "TRT01A",
+    by_variable_dataset = "ADAE",
+    enriched_rows    = list()
+  )
+}
+
+test_that("compound AND leaves under a categorical parent become level rows, not analyses", {
+  re  <- build_ars_json(list(.cmp_section()), spec_lookup = .cmp_lookup())
+  lay <- re$outputs[[1]]$`_meta`$shell_layout
+
+  expect_equal(vapply(lay, function(e) e$kind, character(1)),
+               c("categorical", "level", "level", "level"))
+  ## Every leaf renders from the single parent analysis.
+  parent_id <- lay[[1]]$analysis_id
+  for (e in lay[-1]) expect_identical(e$analysis_id, parent_id)
+  expect_equal(vapply(lay[-1], function(e) e$level, character(1)),
+               c("MILD", "MODERATE", "SEVERE"))
+
+  ## Exactly ONE analysis -- the parent's; the leaves added none.
+  expect_length(re$analyses, 1)
+
+  ## Fully-specified supplement: no analysis may lose its filter.
+  n_empty <- sum(vapply(re$analyses,
+                        function(a) !nzchar(a$dataSubsetId %||% ""),
+                        logical(1)))
+  expect_equal(n_empty, 0)
+})
+
+test_that("a compound leaf with NO categorical parent still builds its compound subset", {
+  sec <- .cmp_section()
+  ## Only the leaf rows: no parent block above them, so each must fall
+  ## through to its own analysis with a compoundExpression DataSubset
+  ## (the pre-existing working path -- must not regress).
+  sec$stub_rows <- sec$stub_rows[-1]
+  re <- build_ars_json(list(sec), spec_lookup = .cmp_lookup())
+
+  expect_length(re$analyses, 3)
+  expect_true(all(vapply(re$analyses,
+                         function(a) nzchar(a$dataSubsetId %||% ""),
+                         logical(1))))
+  expect_true(all(vapply(re$dataSubsets,
+                         function(d) !is.null(d$compoundExpression),
+                         logical(1))))
+})
+
+test_that("a conflicting proposal with a typed compound clause builds a filtered secondary analysis", {
+  sec <- .cmp_section()
+  sec$stub_rows <- list(list(
+    label = "Serious TEAE", annotation = "ADAE.AESER='Y'", has_annot = TRUE,
+    raw_text = "Serious TEAE",
+    secondary_annotation =
+      "ADAE.AESER WHERE ADAE.TRTEMFL='Y' and ADAE.AESER='Y'",
+    secondary_where = .cmp_and(.cmp_cond("ADAE", "TRTEMFL", "Y"),
+                               .cmp_cond("ADAE", "AESER", "Y"))
+  ))
+  re <- build_ars_json(list(sec), spec_lookup = .cmp_lookup())
+
+  ## Both sides of the conflict computed (traceability), BOTH filtered.
+  expect_length(re$analyses, 2)
+  expect_true(all(vapply(re$analyses,
+                         function(a) nzchar(a$dataSubsetId %||% ""),
+                         logical(1))))
+  lay <- re$outputs[[1]]$`_meta`$shell_layout
+  expect_equal(vapply(lay, function(e) e$kind, character(1))[2],
+               "supplement_added")
+  ## The secondary's subset is the compound, carried as a compoundExpression.
+  sec_an <- re$analyses[[2]]
+  ds <- Filter(function(d) identical(d$id, sec_an$dataSubsetId), re$dataSubsets)
+  expect_length(ds, 1)
+  expect_false(is.null(ds[[1]]$compoundExpression))
+})
+
+test_that("a free-standing supplement row with a typed compound clause keeps its filter", {
+  sec <- .cmp_section()
+  sec$stub_rows <- list()
+  sec$supplement_extra_rows <- list(list(
+    label = "Dizziness",
+    annotation = "ADAE.AEDECOD WHERE ADAE.TRTEMFL='Y' and ADAE.AEDECOD='DIZZINESS'",
+    where = .cmp_and(.cmp_cond("ADAE", "TRTEMFL", "Y"),
+                     .cmp_cond("ADAE", "AEDECOD", "DIZZINESS"))
+  ))
+  re <- build_ars_json(list(sec), spec_lookup = .cmp_lookup())
+
+  expect_length(re$analyses, 1)
+  expect_true(nzchar(re$analyses[[1]]$dataSubsetId %||% ""))
+  expect_false(is.null(re$dataSubsets[[1]]$compoundExpression))
+})
+
+test_that("a declared-but-unparseable filter on an extra analysis raises a WARN", {
+  diag_reset()
+  sec <- .cmp_section()
+  ## No typed clause at all: only the compound annotation STRING, which
+  ## .subset_from_annotation() cannot parse -- the analysis computes
+  ## unfiltered, and the guard must surface that in the diagnostics.
+  sec$stub_rows <- list(list(
+    label = "Serious TEAE", annotation = "ADAE.AESER='Y'", has_annot = TRUE,
+    raw_text = "Serious TEAE",
+    secondary_annotation =
+      "ADAE.AESER WHERE ADAE.TRTEMFL='Y' and ADAE.AESER='Y'"
+  ))
+  re <- build_ars_json(list(sec), spec_lookup = .cmp_lookup())
+
+  d <- ars_diagnostics()
+  expect_true(any(d$severity == "WARN" &
+                    grepl("could not be parsed into a DataSubset", d$problem)))
+})

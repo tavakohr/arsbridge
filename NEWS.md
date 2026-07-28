@@ -1,5 +1,24 @@
 # arsbridge (development version)
 
+* **Compound-clause awareness in the supplement merge** (render-fidelity
+  handoff, Phase 1: RC-1 + RC-2). Two build paths inspected only simple
+  (single-condition) where-clauses while the compound machinery already
+  existed and worked; a supplement that declared leaf rows as
+  `AND(TRTEMFL='Y', ASEV='MILD')` therefore rendered every categorical
+  level twice, and 28 of 43 analyses on the incident study ran with no row
+  filter at all (an unfiltered `ard_categorical()` whose full value
+  distribution then deparsed into single cells as `c(" 69", " 0")`).
+  Level-row detection now sees through a compound AND via the new
+  `.where_leaf_on()` helper -- the single EQ term on the parent block's own
+  variable is extracted, so clause *shape* no longer decides whether an
+  authored row is a level. And `emit_extra_analysis()` (conflict
+  secondaries, free-standing supplement rows) now receives the typed
+  whereClause instead of re-parsing the annotation string, so a compound
+  clause builds the same `compoundExpression` DataSubset the primary row
+  path already produced. A new WARN diagnostic surfaces any extra analysis
+  whose declared filter could not be parsed into a DataSubset, so the next
+  occurrence lands in the validation report instead of a rendered cell.
+
 * **Annotation corruption guardrails.** Four independent fixes closing gaps
   surfaced by a real hand-edited annotation that arsbridge's own validation
   passed as clean. `validate_annotations_spec()` now cross-checks the

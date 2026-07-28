@@ -185,6 +185,71 @@ test_that(".where_flat returns the single-condition shape and NULL for compounds
   expect_null(.where_flat(compound))
 })
 
+## --- .where_leaf_on ---------------------------------------------------------
+
+.leaf_cond <- function(dataset, variable, comparator = "EQ", ...) {
+  list(condition = list(dataset = dataset, variable = variable,
+                        comparator = comparator, value = list(...)))
+}
+.leaf_and <- function(...) {
+  list(compoundExpression = list(logicalOperator = "AND",
+                                 whereClauses = list(...)))
+}
+
+test_that(".where_leaf_on pulls the single EQ term on the variable out of an AND", {
+  wc <- .leaf_and(.leaf_cond("ADAE", "TRTEMFL", "EQ", "Y"),
+                  .leaf_cond("ADAE", "ASEV", "EQ", "MILD"))
+  leaf <- .where_leaf_on(wc, "ASEV")
+  expect_equal(leaf$variable, "ASEV")
+  expect_equal(leaf$comparator, "EQ")
+  expect_equal(leaf$value, list("MILD"))
+  ## Case-insensitive on the parent variable.
+  expect_equal(.where_leaf_on(wc, "asev")$value, list("MILD"))
+})
+
+test_that(".where_leaf_on walks nested AND compounds", {
+  wc <- .leaf_and(.leaf_cond("ADSL", "SAFFL", "EQ", "Y"),
+                  .leaf_and(.leaf_cond("ADAE", "TRTEMFL", "EQ", "Y"),
+                            .leaf_cond("ADAE", "ASEV", "EQ", "SEVERE")))
+  expect_equal(.where_leaf_on(wc, "ASEV")$value, list("SEVERE"))
+})
+
+test_that(".where_leaf_on matches a plain single condition too", {
+  wc <- .leaf_cond("ADAE", "ASEV", "EQ", "MILD")
+  expect_equal(.where_leaf_on(wc, "ASEV")$value, list("MILD"))
+  expect_null(.where_leaf_on(wc, "AESER"))
+})
+
+test_that(".where_leaf_on refuses anything that is not a single-value EQ level", {
+  ## OR compound: one term of an OR is not the row's meaning.
+  or_wc <- list(compoundExpression = list(
+    logicalOperator = "OR",
+    whereClauses = list(.leaf_cond("ADAE", "ASEV", "EQ", "MILD"),
+                        .leaf_cond("ADAE", "ASEV", "EQ", "MODERATE"))))
+  expect_null(.where_leaf_on(or_wc, "ASEV"))
+
+  ## Non-EQ term on the variable.
+  ne_wc <- .leaf_and(.leaf_cond("ADAE", "TRTEMFL", "EQ", "Y"),
+                     .leaf_cond("ADAE", "ASEV", "NE", "MILD"))
+  expect_null(.where_leaf_on(ne_wc, "ASEV"))
+
+  ## Multi-value term.
+  in_wc <- .leaf_and(.leaf_cond("ADAE", "TRTEMFL", "EQ", "Y"),
+                     .leaf_cond("ADAE", "ASEV", "IN", "MILD", "MODERATE"))
+  expect_null(.where_leaf_on(in_wc, "ASEV"))
+
+  ## Two EQ terms on the same variable: ambiguous.
+  two_wc <- .leaf_and(.leaf_cond("ADAE", "ASEV", "EQ", "MILD"),
+                      .leaf_cond("ADAE", "ASEV", "EQ", "MODERATE"))
+  expect_null(.where_leaf_on(two_wc, "ASEV"))
+
+  ## No term on the variable at all; NULL clause; empty parent variable.
+  expect_null(.where_leaf_on(.leaf_and(.leaf_cond("ADAE", "TRTEMFL", "EQ", "Y")),
+                             "ASEV"))
+  expect_null(.where_leaf_on(NULL, "ASEV"))
+  expect_null(.where_leaf_on(.leaf_cond("ADAE", "ASEV", "EQ", "MILD"), ""))
+})
+
 ## --- .where_to_annotation round-trip ---------------------------------------
 
 test_that(".where_to_annotation round-trips through parse_where_clause", {
