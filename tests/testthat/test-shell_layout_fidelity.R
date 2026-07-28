@@ -261,6 +261,92 @@ test_that(".tfrmt_prep_ard_layout keeps authored rows in order and blanks missin
   expect_lt(first_of("Header row"), first_of("Age (years)"))
 })
 
+test_that("a multi-level supplement_added row expands instead of colliding", {
+  layout <- data.frame(
+    order = 1:4,
+    label = c("Any TEAE", "Any TEAE", "<System Organ Class>", ""),
+    indent = 0L,
+    analysis_id = c("AN_SHELL", "AN_SUP_SCALAR", "AN_SUP_DIST", NA),
+    kind = c("filtered_count", "supplement_added", "supplement_added",
+             "label"),
+    stringsAsFactors = FALSE)
+  ard <- data.frame(
+    output_id      = "OUT",
+    analysis_id    = c("AN_SHELL", "AN_SUP_SCALAR",
+                       rep("AN_SUP_DIST", 4)),
+    method_id      = c("MTH_SUBJECT_COUNT", rep("MTH_AE_FREQUENCY_COUNT", 5)),
+    variable       = c("TRTEMFL", "TRTEMFL", rep("AESOC", 4)),
+    variable_level = c("Y", "Y", "Cardiac disorders", "Cardiac disorders",
+                       "Vascular disorders", "Vascular disorders"),
+    group1_level   = c("Placebo", "Placebo", "Placebo", "Active",
+                       "Placebo", "Active"),
+    stat_name      = "n",
+    stat           = c(7, 5, 3, 4, 2, 6),
+    stringsAsFactors = FALSE)
+
+  prep <- .tfrmt_prep_ard_layout(
+    ard, "OUT", layout, col_var = "group1_level",
+    keep_params = "n",
+    col_levels = c("Placebo", "Active"), fixed_vars = "TRT01A",
+    params_map = list(MTH_SUBJECT_COUNT = .ARS_SUBJ_N_PARAM,
+                      MTH_AE_FREQUENCY_COUNT = "n"))
+
+  ## The distribution expanded to one line per level; the shell row and its
+  ## identically-labelled supplement twin keep separate group identities;
+  ## the trailing SPACER row was not fuzzy-consumed by an expanded level.
+  ## Net effect: no (grp, lbl, column, param) key is duplicated, so the
+  ## tfrmt pivot never degrades into list-cells.
+  lbls <- prep[[".arsbridge_shell_lbl"]]
+  expect_true(all(c("Cardiac disorders", "Vascular disorders") %in% lbls))
+  keys <- paste(prep[[".arsbridge_shell_grp"]], lbls,
+                prep[["group1_level"]], prep$stat_name)
+  expect_false(any(duplicated(keys)))
+
+  ## Both "Any TEAE" lines survive, each as one row per column.
+  expect_equal(sum(lbls == "Any TEAE" & prep[["group1_level"]] == "Placebo"),
+               2)
+
+  ## The authored spacer stays a spacer: nothing rendered a data value at
+  ## its position, and no expanded level lost its label to it.
+  spacer <- prep[prep[[".arsbridge_shell_ord"]] == 4000, , drop = FALSE]
+  expect_true(all(spacer$stat_name == .ARS_SPACER_PARAM))
+  expect_false(any(!nzchar(lbls) & prep$stat_name == "n"))
+})
+
+test_that("a broken analysis's p never blocks the others' percent rescale", {
+  layout <- data.frame(
+    order = 1:2,
+    label = c("Sex, n (%)", "Race, n (%)"),
+    indent = 0L,
+    analysis_id = c("AN_OK", "AN_BAD"),
+    kind = "categorical",
+    stringsAsFactors = FALSE)
+  ard <- data.frame(
+    output_id      = "OUT",
+    analysis_id    = c("AN_OK", "AN_BAD"),
+    method_id      = "MTH_COUNT_AND_PERCENTAGE",
+    variable       = c("SEX", "RACE"),
+    variable_level = c("F", "WHITE"),
+    group1_level   = "Placebo",
+    stat_name      = "p",
+    ## AN_BAD escaped [0, 1] -- a denominator defect upstream.
+    stat           = c(0.4, 1.6),
+    stringsAsFactors = FALSE)
+
+  prep <- .tfrmt_prep_ard_layout(
+    ard, "OUT", layout, col_var = "group1_level",
+    keep_params = "p",
+    col_levels = "Placebo", fixed_vars = "TRT01A",
+    params_map = list(MTH_COUNT_AND_PERCENTAGE = "p"))
+
+  p_of <- function(grp) {
+    prep$stat[prep[[".arsbridge_shell_grp"]] == grp & prep$stat_name == "p"]
+  }
+  ## The healthy analysis rescaled to percent; the broken one left as-is.
+  expect_equal(p_of("Sex, n (%)"), 40)
+  expect_equal(p_of("Race, n (%)"), 1.6)
+})
+
 ## --- Phase 4 end-to-end: golden regression for T_14_1_1 ---------------------
 
 test_that("T_14_1_1 renders the 6 authored rows in order with shell columns only", {

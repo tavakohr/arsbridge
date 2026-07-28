@@ -644,10 +644,18 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
   flat$stat_name[subj] <- .ARS_SUBJ_N_PARAM
 
   ## Rescale proportion stats (cards stores p in [0, 1]) to percentages.
+  ## Gated PER ANALYSIS: one analysis whose p escaped [0, 1] (e.g. a
+  ## denominator defect in a supplement variant) must not block the rescale
+  ## for every healthy analysis in the output.
   pct <- flat$stat_name %in% c("p", "pct", "percent")
   if (any(pct)) {
-    pv <- flat$stat[pct]
-    if (all(is.na(pv) | (pv >= 0 & pv <= 1.0000001))) flat$stat[pct] <- pv * 100
+    for (aid in unique(flat$analysis_id[pct])) {
+      sel <- pct & (flat$analysis_id %in% aid)
+      pv <- flat$stat[sel]
+      if (all(is.na(pv) | (pv >= 0 & pv <= 1.0000001))) {
+        flat$stat[sel] <- pv * 100
+      }
+    }
   }
 
   ## Column restriction: only shell columns (plus the ungrouped Total pass).
@@ -679,6 +687,13 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
       le$label_grp <- sprintf(".arsbridge_row_%03d", le$order)
     } else {
       le$label_grp <- le$label
+    }
+    ## A supplement conflict-variant usually repeats its shell twin's exact
+    ## label ("Subjects with any TEAE" twice); give it its own group
+    ## identity -- the group column is noprint, so nothing changes on
+    ## screen, but the two rows can never collide into one pivot cell.
+    if (identical(le$kind, "supplement_added")) {
+      le$label_grp <- sprintf(".arsbridge_supp_%03d", le$order)
     }
 
     ## Nested block interleave (HANDOFF_nested_soc_pt_hierarchy, Phase N3):
@@ -766,6 +781,18 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
       ## the shell columns: keep the authored line, blank (never dropped).
       rows[[length(rows) + 1L]] <- blank_row(le, ord)
       next
+    }
+
+    ## A supplement-added row whose analysis computed a MULTI-LEVEL
+    ## distribution (the conflict-variant of a categorical or nested block)
+    ## must never fall through the scalar branch -- every level would pile
+    ## onto one authored line and corrupt the pivot into list-cells. Expand
+    ## it like a categorical block under its authored label instead; the
+    ## duplication against the primary block stays visible for the reviewer
+    ## to resolve, but every cell holds one value.
+    if (identical(le$kind, "supplement_added")) {
+      dat_levels <- unique(dat$variable_level[!is.na(dat$variable_level)])
+      if (length(dat_levels) > 1) le$kind <- "categorical"
     }
 
     if (!le$kind %in% c("categorical", "continuous", "manual")) {
@@ -856,7 +883,10 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
       if (length(hit) == 0 && nzchar(un)) {
         ## Tolerant fallback: a data level may abbreviate the authored
         ## sub-row or vice versa ("F" vs "Female", "WHITE" vs "White").
-        hit <- which(!is.na(trail_norm) &
+        ## An EMPTY authored label (a spacer) must never fuzzy-match --
+        ## startsWith(x, "") is TRUE for everything, and a consumed spacer
+        ## renders the level with a blank label at the spacer's position.
+        hit <- which(!is.na(trail_norm) & nzchar(trail_norm) &
                        (startsWith(trail_norm, un) |
                           startsWith(un, trail_norm)))
       }
