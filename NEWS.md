@@ -1,5 +1,35 @@
 # arsbridge (development version)
 
+* **Shell-faithful review view** (shell-faithful editor handoff, Phases 1-2).
+  The Details tab of `view_ars()` / `edit_ars()` now opens an output as the
+  table the reviewer actually thinks in: a centered title band, the
+  population line, the shell's column header, and every authored row from
+  `_meta.shell_layout` -- including the section headers, stat lines and
+  category rows that own no analysis and were previously invisible -- in
+  shell order and indentation, with `xx.x (x.xx)`-style placeholders in the
+  body cells. Clicking a row highlights it and opens its owning analysis in
+  a panel directly beneath the full-width table (the full edit form in edit
+  mode, the read-only detail in view mode), so a correction never replaces
+  the table being reviewed; rows without an analysis explain themselves
+  instead. Every analysis panel now carries a "Back to the output table"
+  link, so selecting a line from the tree or the bottom list no longer
+  strands the reviewer without a way back. Clicking the column header opens
+  a read-only panel naming the grouping entities that produce the columns
+  (variable, groups, shared-by count) and where each piece is edited --
+  deliberately not an edit surface, since the column axis is shared state
+  with no single safe write target from one table's header. Both that panel
+  and the analysis form's shared-entity notice now carry an "Edit in
+  Entities" jump that switches to the Entities tab and selects the entity's
+  row, so shared definitions (groupings, populations, subsets, methods) are
+  one click from wherever they are encountered.
+  Built on a new pure builder (`.shell_table_data()` in `R/shell_table.R`)
+  that reuses the renderer's `.shell_layout()` parser and mirrors its
+  block-consumption rule for row ownership. Outputs without a layout
+  (listings, figures, older events) fall back to one row per referenced
+  analysis. The old metadata block moved into a collapsed "Output
+  properties" section; the analysis reorder list is unchanged. No new
+  dependencies, no renderer changes.
+
 * **Compound-clause awareness in the supplement merge** (render-fidelity
   handoff, Phase 1: RC-1 + RC-2). Two build paths inspected only simple
   (single-condition) where-clauses while the compound machinery already

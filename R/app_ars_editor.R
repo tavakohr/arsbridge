@@ -27,6 +27,16 @@
     ## Set to an .add_request() to open the add-analysis wizard; the request
     ## can come from an output panel or from a gap finding.
     add_request = shiny::reactiveVal(NULL),
+    ## The last clicked row of a shell table, as list(output, order). Kept
+    ## separate from `selected` because a row without an analysis of its own
+    ## (a section header, a stat line) is a real thing to click on.
+    shell_row   = shiny::reactiveVal(NULL),
+    ## Set to list(output) when the shell table's column header is clicked:
+    ## the panel below the table then explains what defines the columns.
+    shell_header = shiny::reactiveVal(NULL),
+    ## Set to list(pool, id) to jump to one shared entity's definition: the
+    ## app switches to the Entities tab and the library selects its row.
+    entity_request = shiny::reactiveVal(NULL),
     ## Snapshots either side of the current state, for undo and redo.
     history     = shiny::reactiveVal(.new_history()),
     ## Bumped when the model changes underneath the panels rather than because
@@ -148,6 +158,12 @@
     mod_tree_server("tree", state)
     mod_detail_server("detail", state)
     mod_entity_library_server("library", state)
+
+    ## An "Edit in Entities" jump from anywhere: the top-level tabs belong to
+    ## this session, the row selection to the library module.
+    shiny::observeEvent(state$entity_request(), {
+      bslib::nav_select("main_tabs", "Entities", session = session)
+    })
     mod_column_tree_server("columns", state)
     mod_validation_server("validation", state)
     mod_json_server("json", state)

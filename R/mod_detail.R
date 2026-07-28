@@ -172,11 +172,58 @@ mod_detail_server <- function(id, state) {
       if (!identical(selected$pool, "analyses")) {
         return(.output_detail_ui(row, model, state, ns))
       }
+
+      ## A shell-row click selects the owning analysis, but the reviewer is
+      ## still looking at the table: keep the output view on screen, with the
+      ## analysis form in its side panel rather than replacing the whole tab.
+      shell_output <- .shell_redirect_output(state$shell_row(), selected$id,
+                                             model)
+      if (!is.null(shell_output)) {
+        out_index <- match(shell_output, model$outputs$id)
+        if (!is.na(out_index)) {
+          return(.output_detail_ui(
+            model$outputs[out_index, , drop = FALSE], model, state, ns
+          ))
+        }
+      }
+
       if (identical(state$mode, "edit")) {
         .analysis_edit_ui(row, model, state, ns)
       } else {
-        .analysis_detail_ui(row, model, state)
+        .analysis_detail_ui(row, model, state, ns)
       }
+    })
+
+    ## A click on a shell-table row. Rows owned by an analysis also move the
+    ## real selection so the tree, findings and history stay coherent;
+    ## authored text rows (section headers, stat lines with no analysis)
+    ## leave the selection where it is.
+    shiny::observeEvent(input$shell_row, {
+      clicked <- list(output = input$shell_row$output,
+                      order  = as.integer(input$shell_row$order))
+      state$shell_header(NULL)
+      state$shell_row(clicked)
+
+      model <- state$model()
+      index <- match(clicked$output, model$outputs$id)
+      if (is.na(index)) return()
+      data <- .shell_table_data(model$outputs$raw[[index]], model)
+      row <- data$rows[data$rows$order == clicked$order, , drop = FALSE]
+      if (nrow(row) == 0 || is.na(row$owner_analysis_id)) return()
+      state$selected(list(pool = "analyses", id = row$owner_analysis_id))
+    })
+
+    ## A click on the shell table's column header: explain what defines the
+    ## columns, without moving the selection anywhere.
+    shiny::observeEvent(input$shell_header, {
+      state$shell_header(list(output = input$shell_header$output))
+    })
+
+    ## "Edit in Entities": hand the entity to the library and let the app
+    ## switch tabs.
+    shiny::observeEvent(input$open_entity, {
+      state$entity_request(list(pool = input$open_entity$pool,
+                                id   = input$open_entity$id))
     })
 
     ## Selecting from inside this panel (an output's line list) uses the same
@@ -267,13 +314,27 @@ mod_detail_server <- function(id, state) {
   })
 }
 
+## The way back from an analysis panel to the table it belongs to. Without
+## it, selecting a line from the tree or the bottom list strands the reviewer
+## on the full-width analysis form.
 #' @noRd
-.analysis_detail_ui <- function(row, model, state) {
+.analysis_back_link <- function(row, ns) {
+  if (is.na(row$output_id)) return(NULL)
+  shiny::tags$a(
+    href = "#", class = "small text-decoration-none d-inline-block mb-1",
+    onclick = .select_js(ns("selected"), "outputs", row$output_id),
+    shiny::HTML("&larr; Back to the output table")
+  )
+}
+
+#' @noRd
+.analysis_detail_ui <- function(row, model, state, ns) {
   fields <- .analysis_summary_fields(row, model)
   findings <- state$findings()
   own <- findings[findings$id == row$id, , drop = FALSE]
 
   shiny::tagList(
+    .analysis_back_link(row, ns),
     shiny::h5(if (is.na(row$label)) row$id else row$label),
     if (nrow(own) > 0) .findings_list(own),
     shiny::div(
@@ -312,25 +373,49 @@ mod_detail_server <- function(id, state) {
     }
   ))
 
+  ## The shell-faithful view: the authored table on the left, the clicked
+  ## row's panel on the right. Built from the raw node's _meta.shell_layout,
+  ## so it shows every authored row -- including the label and level lines no
+  ## analysis owns.
+  data <- .shell_table_data(node, model)
+  active <- .shell_active_row(state$shell_row(), state$selected(), data,
+                              row$id)
+  header_selected <- identical(state$shell_header()$output, row$id)
+
   shiny::tagList(
     shiny::h5(if (is.na(row$label)) row$name else row$label),
     if (nrow(own) > 0) .findings_list(own),
+    .shell_table_ui(data, ns, row$id, state$mode,
+                    selected_order = if (!is.null(active)) active$order,
+                    header_selected = header_selected),
     shiny::div(
       class = "mt-3",
-      .detail_row("Output id", row$id),
-      .detail_row("Type", row$outputType),
-      .detail_row("Display title", row$display_title),
-      .detail_row("File", row$file_name),
-      .detail_row("Source datasets", row$source_datasets),
-      .detail_row("Analyses", row$n_analyses)
+      if (header_selected) {
+        .shell_header_panel(row, model, ns)
+      } else {
+        .shell_side_panel(active, model, state, ns)
+      }
     ),
-    if (length(columns) > 0) shiny::tagList(
-      shiny::h6(class = "mt-3", "Columns"),
-      shiny::tags$ul(class = "small", lapply(columns, shiny::tags$li))
-    ),
-    if (length(footnotes) > 0) shiny::tagList(
-      shiny::h6(class = "mt-3", "Footnotes"),
-      shiny::tags$ul(class = "small", lapply(footnotes, shiny::tags$li))
+    shiny::tags$details(
+      class = "mt-3",
+      shiny::tags$summary(class = "small text-muted", "Output properties"),
+      shiny::div(
+        class = "mt-2",
+        .detail_row("Output id", row$id),
+        .detail_row("Type", row$outputType),
+        .detail_row("Display title", row$display_title),
+        .detail_row("File", row$file_name),
+        .detail_row("Source datasets", row$source_datasets),
+        .detail_row("Analyses", row$n_analyses)
+      ),
+      if (length(columns) > 0) shiny::tagList(
+        shiny::h6(class = "mt-3", "Columns"),
+        shiny::tags$ul(class = "small", lapply(columns, shiny::tags$li))
+      ),
+      if (length(footnotes) > 0) shiny::tagList(
+        shiny::h6(class = "mt-3", "Footnotes"),
+        shiny::tags$ul(class = "small", lapply(footnotes, shiny::tags$li))
+      )
     ),
     shiny::div(
       class = "d-flex justify-content-between align-items-center mt-3",
@@ -357,6 +442,142 @@ mod_detail_server <- function(id, state) {
         options = list(dom = "tp", pageLength = 10, scrollX = TRUE)
       )
     }
+  )
+}
+
+## The panel beside the shell table: the clicked row's analysis form (edit
+## mode), its read-only detail (view mode), or a note for authored text rows
+## that have no analysis behind them. All writes still flow through the
+## existing .analysis_edit_ui inputs and apply_edit() -- the panel adds no
+## mutation path of its own.
+#' @noRd
+.shell_side_panel <- function(active, model, state, ns) {
+  if (is.null(active)) {
+    return(shiny::div(
+      class = "text-muted small border rounded p-3",
+      "Click a row in the table to review it here."
+    ))
+  }
+
+  if (is.na(active$owner_analysis_id)) {
+    label <- if (nzchar(active$label)) active$label else "(blank row)"
+    return(shiny::div(
+      class = "border rounded p-3",
+      shiny::div(
+        class = "d-flex justify-content-between align-items-center",
+        shiny::span(class = "fw-semibold small", label),
+        shiny::span(class = "badge text-bg-secondary", active$kind)
+      ),
+      shiny::div(
+        class = "text-muted small mt-2",
+        "Authored shell text with no analysis behind it. Editing these rows ",
+        "arrives in a later phase."
+      )
+    ))
+  }
+
+  index <- match(active$owner_analysis_id, model$analyses$id)
+  if (is.na(index)) {
+    return(shiny::div(
+      class = "text-warning small border rounded p-3",
+      paste0(active$owner_analysis_id,
+             " is no longer in this reporting event.")
+    ))
+  }
+  analysis <- model$analyses[index, , drop = FALSE]
+
+  shiny::div(
+    class = "border rounded p-3",
+    if (identical(state$mode, "edit")) {
+      .analysis_edit_ui(analysis, model, state, ns)
+    } else {
+      .analysis_detail_ui(analysis, model, state, ns)
+    }
+  )
+}
+
+## What defines the columns of this output, shown when the reviewer clicks
+## the table header. Read-only by design: the column axis is produced by
+## grouping entities shared across analyses (and, for spanning shells, by
+## declared result paths), so a header click has no single safe write target
+## -- editing a shared grouping here would silently change every table that
+## uses it. The panel says where each piece IS edited instead.
+#' @noRd
+.shell_header_panel <- function(row, model, ns) {
+  analysis_ids <- .split_values(row$referenced_analysis_ids)
+  index <- match(analysis_ids, model$analyses$id)
+  grouping_ids <- unique(unlist(lapply(
+    model$analyses$grouping_ids[index[!is.na(index)]], .split_values
+  )))
+  usage <- .entity_usage(model)$groupings
+
+  grouping_rows <- lapply(grouping_ids, function(id) {
+    i <- match(id, model$groupings$id)
+    if (is.na(i)) {
+      return(shiny::div(
+        class = "text-warning small py-1",
+        paste0(id, " is not in this reporting event.")
+      ))
+    }
+    label <- model$groupings$label[i]
+    if (is.na(label) || !nzchar(label)) label <- model$groupings$name[i]
+    if (is.na(label) || !nzchar(label)) label <- id
+
+    variable <- model$groupings$groupingVariable[i]
+    dataset <- model$groupings$groupingDataset[i]
+    variable_text <- if (is.na(variable)) {
+      NULL
+    } else if (is.na(dataset)) {
+      variable
+    } else {
+      paste0(dataset, ".", variable)
+    }
+
+    levels <- .split_values(model$groupings$group_labels[i])
+    count <- .usage_count(usage, id)
+
+    shiny::div(
+      class = "d-flex justify-content-between align-items-start py-1",
+      shiny::div(
+        shiny::strong(class = "small", label),
+        shiny::span(class = "text-muted small",
+                    paste0(" (", id, ") -- shared by ", count, " analyses")),
+        if (!is.null(variable_text)) {
+          shiny::div(class = "small",
+                     "Variable: ", shiny::tags$code(variable_text))
+        },
+        if (length(levels) > 0) {
+          shiny::div(class = "small",
+                     "Groups: ", paste(levels, collapse = ", "))
+        }
+      ),
+      shiny::tags$button(
+        class = "btn btn-sm btn-outline-primary py-0",
+        onclick = .select_js(ns("open_entity"), "groupings", id),
+        "Edit in Entities"
+      )
+    )
+  })
+
+  shiny::div(
+    class = "border rounded p-3",
+    shiny::div(class = "fw-semibold small mb-1",
+               "What defines these columns"),
+    if (length(grouping_ids) == 0) {
+      shiny::div(class = "text-muted small",
+                 "No analysis in this output declares a column grouping.")
+    } else {
+      grouping_rows
+    },
+    shiny::div(
+      class = "text-muted small mt-2",
+      "The header text comes from the shell; the columns themselves are ",
+      "produced by the grouping above. Rename or restructure its groups in ",
+      "the Entities tab -- a shared grouping changes every table that uses ",
+      "it. Column roles (detail / subtotal / total scope) are reviewed in ",
+      "the Columns tab, and one line's groupings are edited on the line ",
+      "itself."
+    )
   )
 }
 
