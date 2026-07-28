@@ -288,6 +288,106 @@
   NULL
 }
 
+#' The variable a "once/subject VAR" annotation clause names, or NULL. Shell
+#' authors use it to say a row counts each subject once (AE first-occurrence
+#' flags like ADAE.AOCCIFL); its presence routes a count row to the
+#' distinct-subject method.
+#' @noRd
+.once_per_subject_var <- function(ann) {
+  ann <- as.character(ann %||% "")
+  if (!nzchar(trimws(ann))) return(NULL)
+  hit <- regmatches(
+    ann,
+    regexpr("(?i)once\\s*/\\s*subject\\s+([A-Za-z0-9_]+\\.)?[A-Za-z0-9_]+",
+            ann, perl = TRUE)
+  )
+  if (length(hit) == 0) return(NULL)
+  toupper(trimws(sub("(?i)^once\\s*/\\s*subject\\s+", "", hit, perl = TRUE)))
+}
+
+#' Nested two-level token blocks (AE by SOC/PT, MH by body system, ConMeds by
+#' ATC class): the shell authors a data-driven parent token row
+#' ("<System Organ Class>" annotated ADAE.AESOC) followed by child token rows
+#' on a different variable of the same dataset ("<Preferred Term>",
+#' ADAE.AEDECOD), the whole block repeating as further mock examples.
+#'
+#' Returns one role per row: "nested_parent" (first parent token row --
+#' becomes the parent-level analysis), "nested_child" (first child token row
+#' -- becomes the child analysis carrying the parent's variable as a
+#' data-driven row grouping), "nested_repeat" (every other row of the
+#' pattern; template examples, emitted nowhere), or NA.
+#'
+#' The cue is the token labels plus the variable sequence -- indentation is
+#' deliberately not consulted (shell tables indent these rows
+#' inconsistently). A run qualifies only when exactly two variables from one
+#' dataset alternate as (parent, child+)+, so ordinary token rows (a lone
+#' "<Visit>" row, mixed sequences) are never captured.
+#' @noRd
+.detect_nested_token_blocks <- function(rows, er_by_label) {
+  n <- length(rows)
+  roles <- rep(NA_character_, n)
+  if (n < 2) return(roles)
+
+  token_ref <- function(row) {
+    if (!isTRUE(row$has_annot)) return(NULL)
+    label <- trimws(as.character(row$label %||% ""))
+    if (!grepl("^<.+>$", label)) return(NULL)
+    er <- er_by_label[[row$label %||% ""]] %||% list()
+    ds  <- er$primary_dataset  %||% ""
+    var <- er$primary_variable %||% ""
+    if (!nzchar(var)) {
+      refs <- extract_annotation_vars(row$annotation)
+      if (length(refs) == 0) return(NULL)
+      pieces <- strsplit(refs[1], ".", fixed = TRUE)[[1]]
+      ds  <- pieces[1]
+      var <- if (length(pieces) >= 2) pieces[2] else ""
+    }
+    if (!nzchar(var)) return(NULL)
+    list(ds = toupper(ds), var = toupper(var))
+  }
+
+  refs <- lapply(rows, token_ref)
+
+  i <- 1L
+  while (i <= n) {
+    if (is.null(refs[[i]])) {
+      i <- i + 1L
+      next
+    }
+    ## The run of consecutive token rows starting here.
+    j <- i
+    while (j < n && !is.null(refs[[j + 1L]])) j <- j + 1L
+    run <- i:j
+    run_vars <- vapply(run, function(k) refs[[k]]$var, character(1))
+    run_ds   <- vapply(run, function(k) refs[[k]]$ds, character(1))
+    distinct <- unique(run_vars)
+
+    if (length(run) >= 2 && length(distinct) == 2 &&
+          length(unique(run_ds)) == 1 &&
+          identical(run_vars[1], distinct[1])) {
+      parent <- distinct[1]
+      child  <- distinct[2]
+      ## Every parent row must be directly followed by at least one child.
+      shape_ok <- TRUE
+      for (k in seq_along(run_vars)) {
+        if (identical(run_vars[k], parent) &&
+              (k == length(run_vars) ||
+                 !identical(run_vars[k + 1L], child))) {
+          shape_ok <- FALSE
+          break
+        }
+      }
+      if (shape_ok) {
+        roles[run] <- "nested_repeat"
+        roles[run[match(parent, run_vars)]] <- "nested_parent"
+        roles[run[match(child, run_vars)]]  <- "nested_child"
+      }
+    }
+    i <- j + 1L
+  }
+  roles
+}
+
 #' Subset filter from an annotation string, tolerating the
 #' "DATASET.VAR WHERE OTHERVAR='v'" form that flat_data_subset() cannot
 #' parse (the WHERE tail is parsed with the head reference's dataset as
@@ -579,6 +679,18 @@ build_ars_json <- function(sections,
     ## level rows that follow it (option A of the level-row model).
     cat_parent <- NULL
 
+    ## Nested two-level token blocks (AE by SOC/PT and kin): detected up
+    ## front over the whole row list, because the pattern is a property of
+    ## the row SEQUENCE, not of any single row.
+    nested_roles <- if (build_layout) {
+      .detect_nested_token_blocks(rows_iter, er_by_label)
+    } else {
+      rep(NA_character_, length(rows_iter))
+    }
+    ## Set when the nested parent analysis is emitted; the child's layout
+    ## row points back at it via parent_order.
+    nested_parent_ctx <- NULL
+
     ## Build a free-standing analysis for an annotation the ROW loop did not
     ## itself produce -- used for the two "nothing the supplement added is
     ## dropped" cases: a supplement proposal that conflicts with the shell's own
@@ -698,6 +810,23 @@ build_ars_json <- function(sections,
           order = length(shell_layout) + 1L,
           label = row$label %||% "", indent = indent,
           analysis_id = NA_character_, kind = "label")
+        next
+      }
+
+      nested_role <- nested_roles[[ridx]]
+      if (identical(nested_role, "nested_repeat")) {
+        ## A further mock example of an already-captured nested block
+        ## (another "<Preferred Term>" row, the repeated "<System Organ
+        ## Class>" block): the first parent/child pair carries the
+        ## analyses, so these rows are emitted nowhere.
+        diag_add(
+          stage = "build_ars", severity = "INFO",
+          problem = sprintf(
+            "Row '%s' repeats the nested block's template -- collapsed into the first parent/child pair",
+            row$label %||% "?"),
+          tlf_number = sec$tlf_number,
+          action = "Nested example blocks expand once; the renderer repeats them per data level"
+        )
         next
       }
 
@@ -884,6 +1013,68 @@ build_ars_json <- function(sections,
         }
       }
 
+      ## "once/subject VAR" annotation clause: the shell says this count row
+      ## counts each subject once (AE first-occurrence flags). A plain
+      ## count-and-percentage would count RECORDS, so route it to the
+      ## distinct-subject AE frequency method.
+      once_var <- if (build_layout) .once_per_subject_var(row$annotation)
+                  else NULL
+      if (!is.null(once_var) && identical(row_method_id, count_method_id)) {
+        row_method_id <- "MTH_AE_FREQUENCY_COUNT"
+        if (!row_method_id %in% seen_mth) {
+          methods[[length(methods) + 1L]] <-
+            .with_op_self_rels(.STANDARD_METHODS[["AE Frequency Count"]])
+          seen_mth <- c(seen_mth, row_method_id)
+        }
+        diag_add(
+          stage = "build_ars", severity = "INFO",
+          problem = sprintf(
+            "Row '%s' declares once/subject (%s) -- counted as distinct subjects, not records",
+            row$label %||% "?", once_var),
+          tlf_number = sec$tlf_number,
+          action = "Routed to AE Frequency Count (distinct subject per term)"
+        )
+      }
+
+      ## Nested two-level block: both levels count DISTINCT subjects per
+      ## term, and the child analysis carries the parent's variable as a
+      ## data-driven row grouping so the SOC->PT hierarchy survives into the
+      ## ARS (HANDOFF_nested_soc_pt_hierarchy, Phase N1). The engine already
+      ## turns every grouping into a {cards} `by` variable, so the child's
+      ## ARD comes back keyed by (arm, parent level, child level).
+      row_grouping_ids <- character(0)
+      if (identical(nested_role, "nested_parent") ||
+            identical(nested_role, "nested_child")) {
+        row_method_id <- "MTH_AE_FREQUENCY_COUNT"
+        if (!row_method_id %in% seen_mth) {
+          methods[[length(methods) + 1L]] <-
+            .with_op_self_rels(.STANDARD_METHODS[["AE Frequency Count"]])
+          seen_mth <- c(seen_mth, row_method_id)
+        }
+        row_kind <- nested_role
+        if (identical(nested_role, "nested_child") &&
+              !is.null(nested_parent_ctx)) {
+          rg <- .build_row_grouping(nested_parent_ctx$var,
+                                    nested_parent_ctx$ds)
+          if (!rg$id %in% seen_gf) {
+            grouping_factors[[length(grouping_factors) + 1L]] <- rg
+            seen_gf <- c(seen_gf, rg$id)
+          }
+          row_grouping_ids <- rg$id
+          diag_add(
+            stage = "build_ars", severity = "INFO",
+            problem = sprintf(
+              "Rows '%s' / '%s' form a nested block: %s levels expand under each %s level",
+              nested_parent_ctx$label, row$label %||% "?",
+              er$primary_variable %||% "?", nested_parent_ctx$var),
+            tlf_number = sec$tlf_number,
+            action = sprintf(
+              "The %s analysis carries %s as a data-driven row grouping (%s)",
+              er$primary_variable %||% "?", nested_parent_ctx$var, rg$id)
+          )
+        }
+      }
+
       ## Duplicate-template dedup (nested AE shells author example blocks:
       ## "<Preferred Term>" placeholder rows plus repeated "Preferred Term"
       ## mock rows all annotated AEDECOD). A Count-and-Percentage row expands
@@ -921,7 +1112,8 @@ build_ars_json <- function(sections,
         index = idx, as_id = as_obj$id,
         gf_ids = gf_ids,
         method_id = row_method_id,
-        ds_id = if (!is.null(ds_obj)) ds_obj$id else NULL
+        ds_id = if (!is.null(ds_obj)) ds_obj$id else NULL,
+        row_grouping_ids = row_grouping_ids
       )
       analyses[[length(analyses) + 1L]] <- an_obj
       analysis_ids <- c(analysis_ids, an_obj$id)
@@ -931,11 +1123,24 @@ build_ars_json <- function(sections,
                      else if (identical(row_method_id, "MTH_SUMMARY_STATISTICS_CONTINUOUS") &&
                                 identical(row_kind, "row")) "continuous"
                      else row_kind
-      shell_layout[[length(shell_layout) + 1L]] <- list(
+      layout_entry <- list(
         order = length(shell_layout) + 1L,
         label = row$label %||% "", indent = indent,
         analysis_id = an_obj$id,
         kind = layout_kind)
+      if (identical(nested_role, "nested_child") &&
+            !is.null(nested_parent_ctx)) {
+        layout_entry$parent_order <- nested_parent_ctx$order
+      }
+      shell_layout[[length(shell_layout) + 1L]] <- layout_entry
+      if (identical(nested_role, "nested_parent")) {
+        nested_parent_ctx <- list(
+          var   = toupper(er$primary_variable %||% ""),
+          ds    = toupper(er$primary_dataset %||% ""),
+          label = row$label %||% "",
+          order = layout_entry$order
+        )
+      }
       ## This analysis becomes (or clears) the candidate parent for authored
       ## level rows that follow.
       cat_parent <- if (identical(layout_kind, "categorical") &&
@@ -1190,6 +1395,24 @@ build_ars_json <- function(sections,
 #' Legacy single-grouping builder (kept for sections enriched before the
 #' multi-level model and for direct unit tests).
 #' @noRd
+## A data-driven ROW grouping: the parent level of a nested block (AESOC for
+## an AE table's PT analysis). Unlike a column grouping, its levels come
+## from the data at execution time, so no groups are enumerated and
+## dataDriven is TRUE -- exactly the ARS shape the engine turns into a
+## second {cards} `by` variable.
+#' @noRd
+.build_row_grouping <- function(variable, dataset) {
+  list(
+    id               = make_grouping_id(variable),
+    name             = variable,
+    label            = paste0("Grouping by ", variable),
+    groupingDataset  = dataset,
+    groupingVariable = variable,
+    dataDriven       = TRUE,
+    groups           = list()
+  )
+}
+
 .build_grouping <- function(sec, codelists = NULL, spec_lookup = NULL) {
   by_var <- sec$by_variable %||% ""
   if (!nzchar(by_var)) return(NULL)
@@ -1580,10 +1803,16 @@ build_ars_json <- function(sections,
 }
 
 .build_analysis <- function(section, row, enrichment, index,
-                            as_id, gf_ids, method_id, ds_id) {
+                            as_id, gf_ids, method_id, ds_id,
+                            row_grouping_ids = character(0)) {
   gf_ids <- gf_ids[nzchar(gf_ids %||% character())]
-  groupings <- lapply(seq_along(gf_ids), function(i) {
-    list(order = i, groupingId = gf_ids[[i]], resultsByGroup = TRUE)
+  ## Column groupings first (treatment axis), then any data-driven row
+  ## groupings (the parent level of a nested block) -- the order the engine
+  ## hands them to {cards} `by`.
+  all_gf_ids <- c(gf_ids,
+                  row_grouping_ids[nzchar(row_grouping_ids %||% character())])
+  groupings <- lapply(seq_along(all_gf_ids), function(i) {
+    list(order = i, groupingId = all_gf_ids[[i]], resultsByGroup = TRUE)
   })
 
   dataset_str  <- enrichment$primary_dataset  %||% ""
