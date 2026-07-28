@@ -287,6 +287,43 @@
     value      = cond[["value"]] %||% list())
 }
 
+#' The single flat condition on `variable` inside a compound AND clause, or
+#' NULL. This is what lets level-row detection see through the compound shape
+#' the supplement instructions actively encourage (the section's record filter
+#' restated as an AND term inside every leaf row, e.g.
+#' AND(TRTEMFL='Y', ASEV='MILD') under a categorical ASEV parent).
+#'
+#' Deliberately narrow -- it exists only to recognise a level row:
+#' - OR compounds return NULL (one term of an OR is not the row's meaning).
+#' - Only a single-value EQ term qualifies (a level IS one value).
+#' - Two terms on the same variable are ambiguous -> NULL.
+#' Nested AND compounds are walked; anything else inside is skipped.
+#' @noRd
+.where_leaf_on <- function(where, variable) {
+  matches <- .where_leaf_collect(where, toupper(variable %||% ""))
+  if (length(matches) == 1) matches[[1]] else NULL
+}
+
+#' @noRd
+.where_leaf_collect <- function(where, variable_uc) {
+  if (is.null(where) || !nzchar(variable_uc)) return(list())
+  flat <- .where_flat(where)
+  if (!is.null(flat)) {
+    if (identical(toupper(.as_scalar_char(flat$variable) %||% ""), variable_uc) &&
+        identical(toupper(.as_scalar_char(flat$comparator) %||% "EQ"), "EQ") &&
+        length(flat$value) == 1) {
+      return(list(flat))
+    }
+    return(list())
+  }
+  ce <- where[["compoundExpression"]]
+  if (is.null(ce)) return(list())
+  op <- toupper(.as_scalar_char(ce[["logicalOperator"]]) %||% "AND")
+  if (!identical(op, "AND")) return(list())
+  unlist(lapply(ce[["whereClauses"]], .where_leaf_collect, variable_uc),
+         recursive = FALSE) %||% list()
+}
+
 #' Canonical DISPLAY string for a where-clause (diagnostics, provenance, the
 #' row `annotation` field). NEVER re-parsed as a filter -- the typed clause is
 #' authoritative. The grammar it emits is a subset of what parse_where_clause()

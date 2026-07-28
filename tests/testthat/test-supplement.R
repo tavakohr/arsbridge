@@ -750,6 +750,73 @@ test_that("a compound whereClause reaches the ARS JSON as a compoundExpression s
   expect_true(has_compound)
 })
 
+test_that("compound AND leaf rows merge as level rows and every declared filter survives", {
+  ## Render-fidelity handoff, Phase 1 (RC-1 + RC-2). The fixture supplement
+  ## declares the incident's exact shape against TLF 14.3.1 of the minimal
+  ## shell: leaf rows (Headache, Nausea) under the shell's categorical
+  ## ADAE.AEDECOD block, each filtered with AND(TRTEMFL='Y', AEDECOD=<term>);
+  ## a conflicting proposal on the shell-annotated "Any TEAE" row; and a
+  ## free-standing row (Dizziness) matching no stub label -- both also
+  ## carrying compound clauses.
+  out_json <- tempfile(fileext = ".json")
+  res <- suppressMessages(no_llm_keys(spec_to_ars(
+    shell_path     = test_path("fixtures/annotated_shell_2tlf_minimal.docx"),
+    adam_spec_path = test_path("fixtures/adam_spec_minimal.xlsx"),
+    supplement     = test_path("fixtures/supplement_v4_compound_leaves.json"),
+    output_path    = out_json,
+    report_path    = tempfile(fileext = ".xlsx"),
+    verbose        = FALSE
+  )))
+  ars  <- jsonlite::fromJSON(out_json, simplifyVector = FALSE)
+  outs <- ars$outputs
+  ae   <- outs[[which(vapply(outs, function(o)
+    grepl("14_3_1", o$id, fixed = TRUE), logical(1)))]]
+  lay  <- ae$`_meta`$shell_layout
+
+  lab_of  <- function(e) e$label
+  kind_of <- function(e) e$kind
+
+  ## RC-1: the compound leaves are LEVEL slots of the parent AEDECOD
+  ## analysis -- authored label kept, no analysis of their own.
+  leaves <- Filter(function(e) lab_of(e) %in% c("Headache", "Nausea"), lay)
+  expect_length(leaves, 2)
+  expect_true(all(vapply(leaves, kind_of, character(1)) == "level"))
+  parent <- Filter(function(e) identical(kind_of(e), "categorical"), lay)[[1]]
+  for (e in leaves) expect_identical(e$analysis_id, parent$analysis_id)
+  expect_setequal(vapply(leaves, function(e) e$level, character(1)),
+                  c("HEADACHE", "NAUSEA"))
+
+  ## No duplicate analyses for the leaves.
+  ae_analyses <- Filter(function(a)
+    startsWith(a$id %||% "", "AN_T_14_3_1"), ars$analyses)
+  expect_false(any(vapply(ae_analyses, function(a) a$label, character(1))
+                   %in% c("Headache", "Nausea")))
+
+  ## RC-2: every supplement-declared analysis kept its filter. The ONLY
+  ## unfiltered analysis on this output is the shell's own authored
+  ## full-distribution AEDECOD block.
+  empty_ds <- Filter(function(a) !nzchar(a$dataSubsetId %||% ""), ae_analyses)
+  expect_length(empty_ds, 1)
+  expect_identical(empty_ds[[1]]$id, parent$analysis_id)
+
+  ## The conflict secondary and the free-standing row both ride compound
+  ## DataSubsets (this is the path that used to emit dataSubsetId = "").
+  extra <- Filter(function(e) identical(kind_of(e), "supplement_added"), lay)
+  expect_setequal(vapply(extra, lab_of, character(1)),
+                  c("Any TEAE", "Dizziness"))
+  ds_by_id <- setNames(ars$dataSubsets,
+                       vapply(ars$dataSubsets, function(d) d$id, character(1)))
+  for (e in extra) {
+    an <- Filter(function(a) identical(a$id, e$analysis_id), ae_analyses)[[1]]
+    expect_true(nzchar(an$dataSubsetId %||% ""))
+    expect_false(is.null(ds_by_id[[an$dataSubsetId]]$compoundExpression))
+  }
+
+  ## And no unparsed-filter WARN fired: the typed clauses covered everything.
+  d <- res$diagnostics
+  expect_false(any(grepl("could not be parsed into a DataSubset", d$problem)))
+})
+
 ## --- title: known field, fill, and the table-set cross-check ---------------
 
 test_that("a 'title' field is recognised (not flagged as unknown)", {

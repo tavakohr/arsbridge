@@ -1,0 +1,64 @@
+{
+  "supplement_version": 4,
+  "tlfs": {
+    "14.3.1": {
+      "title": "Summary of Treatment-Emergent Adverse Events",
+      "analysis_type": "AE_FREQUENCY",
+      "is_supported": true,
+      "analyses": [
+        {
+          "rowLabel": "Headache",
+          "variable": { "dataset": "ADAE", "variable": "AEDECOD" },
+          "whereClause": {
+            "compoundExpression": {
+              "logicalOperator": "AND",
+              "whereClauses": [
+                { "condition": { "dataset": "ADAE", "variable": "TRTEMFL", "comparator": "EQ", "value": ["Y"] } },
+                { "condition": { "dataset": "ADAE", "variable": "AEDECOD", "comparator": "EQ", "value": ["HEADACHE"] } }
+              ]
+            }
+          }
+        },
+        {
+          "rowLabel": "Nausea",
+          "variable": { "dataset": "ADAE", "variable": "AEDECOD" },
+          "whereClause": {
+            "compoundExpression": {
+              "logicalOperator": "AND",
+              "whereClauses": [
+                { "condition": { "dataset": "ADAE", "variable": "TRTEMFL", "comparator": "EQ", "value": ["Y"] } },
+                { "condition": { "dataset": "ADAE", "variable": "AEDECOD", "comparator": "EQ", "value": ["NAUSEA"] } }
+              ]
+            }
+          }
+        },
+        {
+          "rowLabel": "Any TEAE",
+          "variable": { "dataset": "ADAE", "variable": "AEBODSYS" },
+          "whereClause": {
+            "compoundExpression": {
+              "logicalOperator": "AND",
+              "whereClauses": [
+                { "condition": { "dataset": "ADAE", "variable": "TRTEMFL", "comparator": "EQ", "value": ["Y"] } },
+                { "condition": { "dataset": "ADAE", "variable": "AEBODSYS", "comparator": "EQ", "value": ["NERVOUS SYSTEM DISORDERS"] } }
+              ]
+            }
+          }
+        },
+        {
+          "rowLabel": "Dizziness",
+          "variable": { "dataset": "ADAE", "variable": "AEDECOD" },
+          "whereClause": {
+            "compoundExpression": {
+              "logicalOperator": "AND",
+              "whereClauses": [
+                { "condition": { "dataset": "ADAE", "variable": "TRTEMFL", "comparator": "EQ", "value": ["Y"] } },
+                { "condition": { "dataset": "ADAE", "variable": "AEDECOD", "comparator": "EQ", "value": ["DIZZINESS"] } }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

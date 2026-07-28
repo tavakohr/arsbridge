@@ -587,7 +587,8 @@ build_ars_json <- function(sections,
     ## the primary row path's method precedence and dedup, updates the section
     ## accumulators in place, and never touches `cat_parent` (a free-standing
     ## analysis is never a level of the block above it). Returns invisibly.
-    emit_extra_analysis <- function(label, annotation, indent = 0L) {
+    emit_extra_analysis <- function(label, annotation, indent = 0L,
+                                    where = NULL) {
       annotation <- trimws(as.character(annotation %||% ""))
       refs <- if (nzchar(annotation)) extract_annotation_vars(annotation) else character()
       if (length(refs) == 0) return(invisible(NULL))
@@ -596,12 +597,41 @@ build_ars_json <- function(sections,
         label            = label %||% "",
         primary_dataset  = pieces[1],
         primary_variable = if (length(pieces) >= 2) pieces[2] else "",
-        variable_role    = "ANALYSIS",
-        data_subset      = .subset_from_annotation(annotation)
+        variable_role    = "ANALYSIS"
       )
+      ## The typed clause (when the caller carries one) is authoritative and
+      ## never re-parsed from the annotation string -- the same precedence the
+      ## primary row path applies. A compound expression rides as
+      ## data_subset_compound, which .build_data_subset() already emits as a
+      ## compoundExpression DataSubset (RC-2 of the render-fidelity handoff).
+      if (!is.null(where)) {
+        flat <- .where_flat(where)
+        if (is.null(flat)) {
+          er2$data_subset_compound <- where
+        } else {
+          er2$data_subset <- flat
+        }
+      } else {
+        er2$data_subset <- .subset_from_annotation(annotation)
+      }
       if (!nzchar(er2$primary_variable %||% "")) return(invisible(NULL))
       idx2    <- length(analysis_ids) + 1L
       ds_obj2 <- .build_data_subset(er2, sec$tlf_number, idx2)
+      ## An annotation that declares a filter but yields no DataSubset would
+      ## compute UNFILTERED -- for a categorical method that is the full value
+      ## distribution deparsed into one cell. Surface it in the validation
+      ## report instead of in a rendered cell.
+      if (is.null(ds_obj2) &&
+          grepl("\\bwhere\\b", annotation, ignore.case = TRUE)) {
+        diag_add(
+          stage = "build_ars", severity = "WARN",
+          problem = sprintf(
+            "Extra analysis '%s' declares a filter (%s) that could not be parsed into a DataSubset",
+            label %||% "?", annotation),
+          tlf_number = sec$tlf_number,
+          action = "The analysis would compute unfiltered -- pass the typed whereClause through the supplement, or simplify the annotation"
+        )
+      }
       if (!is.null(ds_obj2) && !ds_obj2$id %in% seen_ds) {
         ds_obj2$order <- length(data_subsets) + 1L
         ds_obj2$level <- 1L
@@ -709,7 +739,19 @@ build_ars_json <- function(sections,
       ## it becomes a level slot the renderer fills from the parent's
       ## computed levels -- authored label and order win, values come from
       ## the single parent computation.
-      fs_child <- er$data_subset
+      ## NB: exact [[ ]] indexing -- with only data_subset_compound set,
+      ## er$data_subset would PARTIAL-MATCH the compound and defeat both
+      ## checks below silently.
+      fs_child <- er[["data_subset"]]
+      ## A compound leaf hides its level condition inside an AND (the
+      ## supplement restates the section's record filter on every row, e.g.
+      ## AND(TRTEMFL='Y', ASEV='MILD')). Pull out the single EQ term on the
+      ## parent's own variable so clause SHAPE never decides whether an
+      ## authored row is a level (RC-1 of the render-fidelity handoff).
+      if (is.null(fs_child) && !is.null(cat_parent) &&
+          !is.null(er$data_subset_compound)) {
+        fs_child <- .where_leaf_on(er$data_subset_compound, cat_parent$var)
+      }
       if (build_layout && !is.null(cat_parent) && !is.null(fs_child) &&
           identical(toupper(fs_child$variable %||% ""), cat_parent$var)) {
         lv <- fs_child$value %||% list()
@@ -914,7 +956,8 @@ build_ars_json <- function(sections,
       extra_ann <- trimws(as.character(
         row$secondary_annotation %||% row$supplement_proposed_annotation %||% ""))
       if (build_layout && nzchar(extra_ann)) {
-        extra_id <- emit_extra_analysis(row$label %||% "", extra_ann, indent)
+        extra_id <- emit_extra_analysis(row$label %||% "", extra_ann, indent,
+                                        where = row$secondary_where)
         if (!is.null(extra_id)) {
           diag_add(
             stage = "build_ars", severity = "INFO",
@@ -935,7 +978,8 @@ build_ars_json <- function(sections,
     ## not summarise per-row analyses.
     if (build_layout) {
       for (extra in sec$supplement_extra_rows %||% list()) {
-        extra_id <- emit_extra_analysis(extra$label %||% "", extra$annotation %||% "")
+        extra_id <- emit_extra_analysis(extra$label %||% "", extra$annotation %||% "",
+                                        where = extra$where)
         if (!is.null(extra_id)) {
           diag_add(
             stage = "build_ars", severity = "INFO",
