@@ -57,6 +57,7 @@ mod_entity_library_ui <- function(id) {
   panels <- lapply(pools, function(pool) {
     bslib::nav_panel(
       .library_title(pool),
+      value = pool,
       ## Groupings are the one pool a reviewer routinely has to CREATE (a
       ## missing column axis), so that pool gets lifecycle actions.
       if (identical(pool, "groupings")) {
@@ -67,13 +68,17 @@ mod_entity_library_ui <- function(id) {
     )
   })
 
-  do.call(bslib::navset_pill, panels)
+  do.call(bslib::navset_pill, c(panels, list(id = ns("pools"))))
 }
 
 #' @noRd
 mod_entity_library_server <- function(id, state) {
   shiny::moduleServer(id, function(input, output, session) {
     pools <- c("methods", "analysis_sets", "data_subsets", "groupings")
+
+    ## One table proxy per pool, so an entity_request can select a row from
+    ## outside the render loop.
+    proxies <- list()
 
     for (pool in pools) {
       local({
@@ -95,8 +100,12 @@ mod_entity_library_server <- function(id, state) {
           },
           server = TRUE
         )
+        ## Initialized even while the Entities tab is hidden, so an
+        ## "Edit in Entities" jump can select a row before the first visit.
+        shiny::outputOptions(output, table_id, suspendWhenHidden = FALSE)
 
         proxy <- DT::dataTableProxy(table_id)
+        proxies[[this_pool]] <<- proxy
         shiny::observe({
           DT::replaceData(
             proxy,
@@ -110,7 +119,20 @@ mod_entity_library_server <- function(id, state) {
         output[[detail_id]] <- shiny::renderUI({
           state$refresh()
 
+          ## The panel belongs to the selected row, not to the model, so an
+          ## edit does not re-render the field being typed into. A click in
+          ## the table always wins; failing that, an "Edit in Entities" jump
+          ## opens its entity directly (the table row cannot be pre-selected
+          ## from the server while the tab has never been shown).
+          model <- shiny::isolate(state$model())
           selected <- input[[paste0(table_id, "_rows_selected")]]
+          if (length(selected) == 0) {
+            request <- state$entity_request()
+            if (!is.null(request) && identical(request$pool, this_pool)) {
+              selected <- match(request$id, model[[this_pool]]$id)
+              if (is.na(selected)) selected <- integer(0)
+            }
+          }
           if (length(selected) == 0) {
             return(shiny::div(
               class = "text-muted small mt-2",
@@ -118,9 +140,6 @@ mod_entity_library_server <- function(id, state) {
             ))
           }
 
-          ## The panel belongs to the selected row, not to the model, so an
-          ## edit does not re-render the field being typed into.
-          model <- shiny::isolate(state$model())
           row <- model[[this_pool]][selected, , drop = FALSE]
 
           if (identical(state$mode, "edit")) {
@@ -143,6 +162,19 @@ mod_entity_library_server <- function(id, state) {
         shiny::actionButton(session$ns("grouping_delete"), "Delete selected",
                             class = "btn-sm btn-outline-danger")
       )
+    })
+
+    ## A jump from another panel ("Edit in Entities"): open the right pool
+    ## and select the entity's row, which opens its detail/edit panel.
+    shiny::observeEvent(state$entity_request(), {
+      request <- state$entity_request()
+      if (is.null(request) || !request$pool %in% pools) return()
+
+      bslib::nav_select("pools", request$pool, session = session)
+      index <- match(request$id, state$model()[[request$pool]]$id)
+      if (!is.na(index)) {
+        DT::selectRows(proxies[[request$pool]], index)
+      }
     })
 
     if (identical(state$mode, "edit")) {

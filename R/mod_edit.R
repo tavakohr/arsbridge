@@ -163,6 +163,7 @@ apply_edit <- function(state, pool, id, field, value) {
   }
 
   shiny::tagList(
+    .analysis_back_link(row, ns),
     shiny::div(
       class = "d-flex justify-content-between align-items-start",
       shiny::div(
@@ -322,16 +323,21 @@ apply_edit <- function(state, pool, id, field, value) {
         shiny::span(class = "text-muted",
                     paste0(" is shared by ", count, " analyses"))
       ),
-      if (entry$detachable) {
+      shiny::div(
+        class = "btn-group btn-group-sm",
         shiny::tags$button(
-          class = "btn btn-sm btn-outline-secondary py-0",
-          onclick = .detach_js(ns("detach"), entry$pool, entry$id, row$id),
-          "Detach for this line"
-        )
-      } else {
-        shiny::span(class = "text-muted",
-                    "change the method above to alter this line only")
-      }
+          class = "btn btn-outline-primary py-0",
+          onclick = .select_js(ns("open_entity"), entry$pool, entry$id),
+          "Edit in Entities"
+        ),
+        if (entry$detachable) {
+          shiny::tags$button(
+            class = "btn btn-outline-secondary py-0",
+            onclick = .detach_js(ns("detach"), entry$pool, entry$id, row$id),
+            "Detach for this line"
+          )
+        }
+      )
     )
   }
 
