@@ -1,5 +1,20 @@
 # arsbridge (development version)
 
+* **Nested two-level row hierarchies, engine verification** (nested SOC/PT
+  handoff, Phase N2). The distinct-subject counting behind
+  `MTH_AE_FREQUENCY_COUNT` now includes the analysis's grouping variables:
+  a subject is counted once per (arm, parent level, term) cell, so dirty
+  data that repeats one term string under two parent levels counts its
+  subjects in each cell instead of silently dropping them from all but the
+  first (previously the distinct ran on subject + term only). Applied
+  identically to the emitted {cards} block and the legacy executor, with an
+  engine-equivalence test. End-to-end tests on a generated nested event pin
+  the rest of the Phase N2 checklist against hand computations: the child
+  ARD is keyed by (arm, SOC, PT) through the standard {cards} `by` path,
+  duplicate records collapse to one subject, and percentage denominators
+  are subjects per arm from the ADSL population (a non-population subject
+  is excluded from N).
+
 * **Nested two-level row hierarchies, generation side** (nested SOC/PT
   handoff, Phase N1). The shell generator now recognises the nested
   token-block pattern AE/MH/ConMed shells author -- a data-driven parent

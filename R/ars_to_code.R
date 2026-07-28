@@ -384,11 +384,18 @@
                 distinct_e, qvar, by_line(b), denom)
       }
     } else if (identical(method, "MTH_AE_FREQUENCY_COUNT")) {
+      ## Distinct per subject within each by-cell (see the legacy executor's
+      ## note): the by variables join the distinct so a term repeated under
+      ## two parent levels counts its subjects in each cell.
+      distinct_cols <- paste(
+        c(sk, vapply(b, .bt, character(1)), .bt(var)),
+        collapse = ", "
+      )
       sprintf(paste0(
         "cards::ard_categorical(\n",
-        "  data = %s |>\n    dplyr::distinct(%s, %s, .keep_all = TRUE),\n",
+        "  data = %s |>\n    dplyr::distinct(%s, .keep_all = TRUE),\n",
         "  variables = all_of(%s)%s,\n  denominator = %s\n)"),
-        data_e, sk, .bt(var), qvar, by_line(b), denom)
+        data_e, distinct_cols, qvar, by_line(b), denom)
     } else if (identical(method, "MTH_COUNT_AND_PERCENTAGE")) {
       sprintf(paste0(
         "cards::ard_categorical(\n",
