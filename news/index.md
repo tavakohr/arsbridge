@@ -2,6 +2,19 @@
 
 ## arsbridge (development version)
 
+- **Conflict secondaries inherit the winning row’s counting
+  discipline.** A supplement proposal that conflicts with the shell’s
+  own annotation is built as its own analysis beside the winner – but
+  its method was re-inferred from the annotation alone, so the variant
+  of a distinct-subject AE row degraded to record-counting
+  count-and-percentage. Records over a subject denominator rendered
+  impossible percentages (p \> 1) in the variant block; the per-analysis
+  rescale guard contained the display, but the numbers were wrong. The
+  secondary now inherits `MTH_AE_FREQUENCY_COUNT` from the winning row
+  (and an explicit `once/subject` clause achieves the same without one).
+  On the incident study every computed proportion is now within \[0,
+  1\].
+
 - **Listing headers no longer leak annotations into production output.**
   Rendering the CDSC-ALZ-201 listings surfaced three related parser
   defects. (1) A listing’s DISPLAY column labels were captured raw at
