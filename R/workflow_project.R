@@ -10,9 +10,10 @@
 ##
 ## Layout under a project directory:
 ##   arsbridge_project.json    shell/spec paths, study id, timestamps
-##   copilot/                  the two-phase instruction files + JSON schema
-##   phase1/                   tlf_extraction_blueprints.json (from Copilot)
-##   phase2/                   supplement.json (+ extraction report)
+##   copilot/                  the two-phase instruction files + JSON schema,
+##                             plus everything the Copilot round-trips return:
+##                             tlf_extraction_blueprints.json, supplement.json,
+##                             extraction_validation_report.json
 ##   ars/                      reporting_event.json, validation xlsx, code/
 
 .WORKFLOW_STATE_FILE <- "arsbridge_project.json"
@@ -25,8 +26,6 @@
 .workflow_dirs <- function(project_dir) {
   list(
     copilot = file.path(project_dir, "copilot"),
-    phase1  = file.path(project_dir, "phase1"),
-    phase2  = file.path(project_dir, "phase2"),
     ars     = file.path(project_dir, "ars")
   )
 }
@@ -40,9 +39,9 @@
     phase1_md         = file.path(dirs$copilot, .COPILOT_PHASE1_FILE),
     phase2_md         = file.path(dirs$copilot, .COPILOT_PHASE2_FILE),
     schema            = file.path(dirs$copilot, .SUPPLEMENT_SCHEMA_FILE),
-    blueprint         = file.path(dirs$phase1, .WORKFLOW_BLUEPRINT_FILE),
-    supplement        = file.path(dirs$phase2, .WORKFLOW_SUPPLEMENT_FILE),
-    extraction_report = file.path(dirs$phase2, .WORKFLOW_EXTRACTION_REPORT_FILE),
+    blueprint         = file.path(dirs$copilot, .WORKFLOW_BLUEPRINT_FILE),
+    supplement        = file.path(dirs$copilot, .WORKFLOW_SUPPLEMENT_FILE),
+    extraction_report = file.path(dirs$copilot, .WORKFLOW_EXTRACTION_REPORT_FILE),
     ars               = file.path(dirs$ars, "reporting_event.json"),
     report            = file.path(dirs$ars, "spec_validation_report.xlsx"),
     code_dir          = file.path(dirs$ars, "code")

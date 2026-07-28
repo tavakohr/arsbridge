@@ -44,7 +44,7 @@ test_that("the app scaffolds a project and writes the instruction files", {
   })
 })
 
-test_that("blueprint paste and upload land in phase1/ with findings", {
+test_that("blueprint paste and upload land in copilot/ with findings", {
   td <- withr::local_tempdir()
   project <- file.path(td, "study")
   inputs <- .wfa_inputs()
