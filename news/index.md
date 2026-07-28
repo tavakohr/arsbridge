@@ -2,6 +2,18 @@
 
 ## arsbridge (development version)
 
+- **Nested AE/MH/ConMed blocks sort by descending frequency by
+  default.** A nested SOC/PT (or body-system/term, ATC/medication) block
+  now renders the most frequent parent level first, with the child terms
+  in descending frequency under each parent (ties alphabetical) – the
+  standard safety presentation – instead of A-Z at both levels. An
+  authored `sort:` clause on the parent token row overrides the default:
+  `sort: alphabetical` keeps A-Z, `sort: desc-freq('<column>')` counts a
+  single treatment column as the sort basis (falling back to all columns
+  where that column saw no events). The clause travels on the
+  `_meta.shell_layout` entry; an unreadable clause raises a WARN
+  diagnostic and keeps the default.
+
 - **Conflict secondaries inherit the winning row’s counting
   discipline.** A supplement proposal that conflicts with the shell’s
   own annotation is built as its own analysis beside the winner – but
