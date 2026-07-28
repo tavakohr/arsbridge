@@ -2,6 +2,24 @@
 
 ## arsbridge (development version)
 
+- **Layout renderer: three containment fixes for corrupt cells** (found
+  rendering the regenerated CDSC-ALZ-201 study end to end). (1) A
+  `supplement_added` row whose analysis computed a multi-level
+  distribution (the conflict-variant of a categorical or nested block)
+  now expands like a categorical block instead of piling every level
+  onto one authored line and corrupting the pivot into list-cells. (2)
+  An authored EMPTY label (a spacer) is excluded from the tolerant
+  sub-row matching – `startsWith(x, "")` matched every computed level,
+  so a spacer could swallow a level and render it blank at the spacer’s
+  position. Supplement rows also get their own (noprint) group identity,
+  so a conflict-variant repeating its shell twin’s exact label can never
+  collide with it. (3) The proportion-to-percent rescale is now gated
+  per analysis rather than per output: one analysis whose `p` escaped
+  \[0, 1\] (a denominator defect in a supplement variant, tracked
+  separately) no longer silently blocks the rescale for every healthy
+  analysis in the table, which had been printing `0.2%` where `20.0%`
+  was meant.
+
 - **Nested two-level row hierarchies, validation and polish** (nested
   SOC/PT handoff, Phase N4 – completes the handoff). Two
   [`validate_ars_model()`](https://tavakohr.github.io/arsbridge/reference/validate_ars_model.md)
