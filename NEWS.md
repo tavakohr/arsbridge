@@ -1,5 +1,19 @@
 # arsbridge (development version)
 
+* **Shell parsing is split into a format-agnostic core and an OOXML
+  reader.** The annotation grammar, the bracket tokenizer, the detection
+  layers, the heading grammar, and section assembly (`.new_section()`,
+  `bind_annotations()`, the column-group resolvers, `.finalize_section()`)
+  move verbatim from `R/parse_shell_docx.R` into a new
+  `R/parse_shell_core.R`; `parse_shell_docx.R` keeps only the OOXML body
+  walker, the grid readers, and the run/cell readers. Nothing about parsing
+  behaviour changes -- this is code motion that gives a second shell reader
+  (Excel, next) one shared implementation to plug into instead of a fork.
+  The two seams a reader must honour -- the per-run metadata list and the
+  header-grid record -- are documented at the top of the core file.
+  `.normalize_docx_text()` is renamed `.normalize_shell_text()`, as it
+  normalizes shell text of either format.
+
 * **New `parse_decision_digest()`: privacy-safe record of what the parser
   decided.** The counterpart of `tools/shell_structure_digest.R`: the same
   A/a/9 silhouette rules applied to the parser's conclusions -- header rows

@@ -294,17 +294,17 @@ test_that("a comment anchored to a data cell supplies the row annotation", {
 ## --- RWE-style one-line headings (number + title + population + inline
 ##     annotation + [PROGRAMMING DATASETS USED: ...] on one paragraph) -------
 
-test_that(".normalize_docx_text straightens quotes and spaces but keeps dashes", {
+test_that(".normalize_shell_text straightens quotes and spaces but keeps dashes", {
   ## Non-breaking space -> plain, smart quotes -> straight, zero-width gone.
   expect_equal(
-    .normalize_docx_text("Table 14.1.1 “Y”​"),
+    .normalize_shell_text("Table 14.1.1 “Y”​"),
     "Table 14.1.1 \"Y\"")
   ## En/em dashes are display characters and must survive normalization.
-  expect_equal(.normalize_docx_text("A – B — C"), "A – B — C")
+  expect_equal(.normalize_shell_text("A – B — C"), "A – B — C")
 })
 
 test_that(".match_tlf_heading accepts a colon-less one-line RWE heading", {
-  h <- .normalize_docx_text(paste0(
+  h <- .normalize_shell_text(paste0(
     "Table 14.1.1 Summary of Subject Status – Screened Subjects ",
     "ADSL.SCRNFL=“Y” [PROGRAMMING DATASETS USED: ADSL]"))
   res <- .match_tlf_heading(h)
@@ -340,7 +340,7 @@ test_that(".match_tlf_heading keeps the legacy bare/colon/uppercase forms", {
 })
 
 test_that(".decompose_heading_tail splits title, population, annotation, source", {
-  tail <- .normalize_docx_text(paste0(
+  tail <- .normalize_shell_text(paste0(
     "Summary of Subject Status – Screened Subjects ",
     "ADSL.SCRNFL=“Y” [PROGRAMMING DATASETS USED: ADSL]"))
   parts <- .decompose_heading_tail(tail)
