@@ -2,6 +2,29 @@
 
 ## arsbridge (development version)
 
+- **Numbered mock rows (`SOC#1` / `PT#n`) are a second token dialect.**
+  Shells author a nested block either with angle tokens
+  (`<System Organ Class>` / `<Preferred Term>`) or with numbered ones
+  (`SOC#1`, `PT#1`, `PT#2`, `PT#n`, then `SOC#2` …), annotating only the
+  first of each and leaving the repeats bare. Only the angle dialect was
+  recognised, so a numbered block produced no hierarchy and its bare
+  repeats were persisted as authored label rows – the placeholder text
+  rendered as if it were real data. Token rows now inherit their
+  variable from the first annotated row sharing their stem, and mock
+  rows are resolved before the label-only branch.
+
+- **Single-level mock rows collapse into the row they illustrate.** A
+  run of token rows on ONE variable directly under a categorical row of
+  that same variable
+  (`Primary reason for discontinuation [ADSL.DCSREASN]` followed by
+  `<Reason `[`#1`](https://github.com/tavakohr/arsbridge/issues/1)`>`,
+  `<Reason `[`#2`](https://github.com/tavakohr/arsbridge/issues/2)`>`,
+  `...`) illustrates that row’s levels rather than naming new analyses.
+  Those rows – and a trailing bare `...` continuation – are now emitted
+  nowhere, with an INFO diagnostic each; the categorical analysis above
+  already expands every observed level. A mock run on a DIFFERENT
+  variable than the row above it is left alone.
+
 - **Struck-through shell rows are no longer programmed.** A stub row
   whose every run carries `<w:strike/>` is a row the shell author
   removed from scope; arsbridge parsed it as live and re-added the
