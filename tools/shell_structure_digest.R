@@ -107,8 +107,18 @@ annotation_skeleton <- function(x, vars) {
       j <- i
       while (j < n && grepl("[A-Za-z0-9_]", chars[j + 1L])) j <- j + 1L
       word <- paste(chars[i:j], collapse = "")
-      out <- c(out, if (all(in_bracket[i:j]) && grepl(keep_re, word, perl = TRUE))
-        toupper(word) else "~")
+      ## V1/V2/... and VAL are placeholders THIS function already
+      ## substituted -- they hold no document text, so they survive
+      ## anywhere. Real operator words survive only inside brackets, where
+      ## an annotation lives; outside, a label word that happens to spell
+      ## one ("Not coded") must still be erased.
+      out <- c(out, if (grepl("^(?i)(?:V[0-9]+|VAL)$", word, perl = TRUE)) {
+        toupper(word)
+      } else if (all(in_bracket[i:j]) && grepl(keep_re, word, perl = TRUE)) {
+        toupper(word)
+      } else {
+        "~"
+      })
       i <- j + 1L
     } else {
       out <- c(out, chars[i])
@@ -277,6 +287,83 @@ digest_shell <- function(docx_path, out_json = "shell_digest.json",
           length(tables), " described).")
   message("Open it and read it before sharing.")
   invisible(digest)
+}
+
+## --- compact summary ---------------------------------------------------------
+
+#' Print a short, paste-ready overview of a digest.
+#'
+#' The full JSON is thorough but large. This condenses it to the handful of
+#' facts that actually decide a parsing question: how many header rows a table
+#' has, whether any header cell spans columns, how many stub cells hold more
+#' than one paragraph, how many rows are struck through, and which authoring
+#' conventions appear. Small enough to paste into a message.
+#'
+#'   digest_summary("digest.json")
+digest_summary <- function(digest, max_rows_shown = 6L) {
+  if (is.character(digest)) digest <- read_json(digest, simplifyVector = FALSE)
+
+  cat("Shell structure summary\n")
+  cat("  tables in document :", digest$n_tables_in_document, "\n")
+  cat("  tables described   :", digest$n_tables_described, "\n")
+  cat("  distinct var refs  :", digest$n_distinct_variable_refs, "\n\n")
+
+  all_conv <- character(0)
+
+  for (tb in digest$tables) {
+    rows <- tb$rows
+    hdr_flagged <- sum(vapply(rows, function(r) isTRUE(r$repeat_as_header),
+                              logical(1)))
+    spans <- sum(vapply(rows, function(r) {
+      sum(vapply(r$cells, function(cl) (cl$grid_span %||% 1L) > 1L, logical(1)))
+    }, integer(1)))
+    vmerges <- sum(vapply(rows, function(r) {
+      sum(vapply(r$cells, function(cl) !is.null(cl$vmerge) &&
+                   !is.na(cl$vmerge), logical(1)))
+    }, integer(1)))
+    multi_para <- sum(vapply(rows, function(r) {
+      if (length(r$cells) == 0) return(0L)
+      as.integer((r$cells[[1]]$n_paragraphs %||% 1L) > 1L)
+    }, integer(1)))
+    struck <- sum(vapply(rows, function(r) {
+      if (length(r$cells) == 0) return(0L)
+      runs <- unlist(lapply(r$cells[[1]]$paragraphs, function(p) p$runs),
+                     recursive = FALSE)
+      texted <- Filter(function(rr) (rr$n_chars %||% 0L) > 0L, runs)
+      as.integer(length(texted) > 0 &&
+                   all(vapply(texted, function(rr) isTRUE(rr$strike), logical(1))))
+    }, integer(1)))
+
+    conv <- unlist(lapply(rows, function(r)
+      unlist(lapply(r$cells, function(cl)
+        unlist(lapply(cl$paragraphs, function(p) names(p$conventions)))))))
+    all_conv <- c(all_conv, conv)
+
+    cat(sprintf("Table %d: %d rows | header rows flagged: %d | spanned cells: %d\n",
+                tb$table, tb$n_rows, hdr_flagged, spans))
+    cat(sprintf("  vertical merges: %d | multi-paragraph stubs: %d | struck rows: %d\n",
+                vmerges, multi_para, struck))
+
+    shown <- 0L
+    for (r in rows) {
+      if (shown >= max_rows_shown) break
+      if (length(r$cells) == 0) next
+      p1 <- r$cells[[1]]$paragraphs[[1]]
+      if (is.null(p1) || (p1$n_chars %||% 0L) == 0L) next
+      shown <- shown + 1L
+      cat(sprintf("    r%-2d %s\n", r$row, substr(p1$skeleton %||% "", 1, 70)))
+    }
+    cat("\n")
+  }
+
+  if (length(all_conv)) {
+    cat("Authoring conventions seen (count):\n")
+    tab <- sort(table(all_conv), decreasing = TRUE)
+    for (nm in names(tab)) cat(sprintf("  %-22s %d\n", nm, tab[[nm]]))
+  } else {
+    cat("Authoring conventions seen: none of the known patterns.\n")
+  }
+  invisible(NULL)
 }
 
 ## --- diagnostics redaction ---------------------------------------------------
