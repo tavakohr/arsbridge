@@ -269,8 +269,24 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "rowLabel",
-        "variable"
+        "rowLabel"
+      ],
+      "anyOf": [
+        {
+          "required": [
+            "variable"
+          ]
+        },
+        {
+          "required": [
+            "suppress"
+          ],
+          "properties": {
+            "suppress": {
+              "const": true
+            }
+          }
+        }
       ],
       "properties": {
         "rowLabel": {
@@ -278,6 +294,10 @@
         },
         "variable": {
           "$ref": "#/definitions/analysisVariable"
+        },
+        "suppress": {
+          "type": "boolean",
+          "description": "true removes the matching parsed stub row entirely (a row the parser should not have read as live). Honoured only with supplement_trust = \"prefer_supplement\"."
         },
         "whereClause": {
           "$ref": "#/definitions/whereClause"

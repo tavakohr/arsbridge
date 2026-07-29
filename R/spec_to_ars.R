@@ -384,7 +384,9 @@ spec_to_ars <- function(shell_path,
       cli::cli_alert_info("Applying supplement (spec-gated, {win})...")
     }
     sections <- lapply(sections, function(sec)
-      .apply_supplement_bindings(sec, .match_supplement_tlf(supp, sec$tlf_number),
+      .apply_supplement_bindings(sec,
+                                 .match_supplement_tlf(supp, sec$tlf_number,
+                                                       sec$tlf_type),
                                  spec$lookup, trust = supplement_trust))
     ## Cross-check the supplement's table inventory against what was parsed:
     ## supplement entries with no matching table, tables the supplement never
@@ -435,7 +437,8 @@ spec_to_ars <- function(shell_path,
                             provider = provider),
       supplement = enrich_with_llm(sec, spec_lookup = spec$lookup,
                                    courier_answers = .supplement_enrich_answer(
-                                     .match_supplement_tlf(supp, sec$tlf_number))),
+                                     .match_supplement_tlf(supp, sec$tlf_number,
+                                                           sec$tlf_type))),
       enrich_with_llm(sec, spec_lookup = spec$lookup, offline = TRUE))
   }
 

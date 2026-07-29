@@ -268,12 +268,33 @@ read_supplement <- function(path) {
 }
 
 #' Find the supplement entry for a section's TLF number (or NULL).
+#'
+#' Numbers alone can collide across output types -- a study can have BOTH
+#' Table 14.3.1 and Figure 14.3.1, and `.norm_tlf_key()` reduces both to
+#' "14.3.1". When several keys match the number, the designator breaks the
+#' tie: a key's own prefix ("T-14-3-1", "Figure 14.3.1") or the entry's
+#' `outputType` field must agree with the section's type. A single bare-number
+#' match ("14.3.1") keeps working as before.
 #' @noRd
-.match_supplement_tlf <- function(supp, tlf_number) {
+.match_supplement_tlf <- function(supp, tlf_number, tlf_type = NULL) {
   keys <- names(supp$tlfs %||% list())
   hit <- which(vapply(keys, function(k)
     identical(.norm_tlf_key(k), .norm_tlf_key(tlf_number)), logical(1)))
   if (length(hit) == 0) return(NULL)
+  if (length(hit) > 1 && !is.null(tlf_type)) {
+    type_of_key <- function(k) {
+      m <- regmatches(k, regexec("^\\s*(TABLE|LISTING|FIGURE|T|L|F)[-_. ]",
+                                 toupper(trimws(k))))[[1]]
+      if (length(m) == 0) return(NA_character_)
+      switch(substr(m[2], 1, 1), T = "TABLE", L = "LISTING", F = "FIGURE")
+    }
+    agrees <- vapply(hit, function(i) {
+      key_type   <- type_of_key(keys[[i]])
+      entry_type <- toupper(supp$tlfs[[i]]$outputType %||% "")
+      identical(key_type, tlf_type) || identical(entry_type, tlf_type)
+    }, logical(1))
+    if (any(agrees)) hit <- hit[agrees]
+  }
   supp$tlfs[[hit[1]]]
 }
 
@@ -342,7 +363,7 @@ read_supplement <- function(path) {
           "Confirm the supplement covers every table -- a missing entry means no supplement help for this one")
       next
     }
-    supp_tlf   <- .match_supplement_tlf(supp, sec$tlf_number)
+    supp_tlf   <- .match_supplement_tlf(supp, sec$tlf_number, sec$tlf_type)
     supp_title <- trimws(as.character(supp_tlf$title %||% ""))
     parsed_title <- trimws(sec$title %||% "")
     if (nzchar(supp_title) && nzchar(parsed_title) &&
@@ -440,8 +461,47 @@ read_supplement <- function(path) {
       rowLabel = lc$label, variable = lc$variable)
   }
 
+  suppress_idx <- integer(0)
+
   for (b in bind_items) {
     label <- trimws(as.character(b$rowLabel %||% ""))
+
+    ## A suppression entry removes a row the parser should not have read as
+    ## live (a caption swept into the stub, a wrongly-merged continuation
+    ## row). It is an explicit human correction, so it is honoured only in
+    ## prefer_supplement mode -- under fill_gaps the shell still wins and
+    ## the request is surfaced instead of silently dropped either way.
+    if (isTRUE(b$suppress)) {
+      if (!nzchar(label)) next
+      idx <- .match_stub_label(.norm_label(label), labels_norm)
+      if (is.na(idx)) {
+        diag_add(
+          stage = "supplement", severity = "WARN", input = INPUT_SUPPLEMENT,
+          problem = sprintf("Suppression for row '%s' matched no stub row", label),
+          tlf_number = sec$tlf_number, location = label,
+          action = "Nothing removed -- match the label to the stub text as it appears in the shell"
+        )
+        next
+      }
+      if (!prefer) {
+        diag_add(
+          stage = "supplement", severity = "WARN", input = INPUT_SUPPLEMENT,
+          problem = sprintf("Suppression of row '%s' ignored (trust = fill_gaps)", label),
+          tlf_number = sec$tlf_number, location = label,
+          action = "Run with supplement_trust = \"prefer_supplement\" to let the supplement remove rows"
+        )
+        next
+      }
+      suppress_idx <- c(suppress_idx, idx)
+      diag_add(
+        stage = "supplement", severity = "WARN", input = INPUT_SUPPLEMENT,
+        problem = sprintf("Row '%s' removed by supplement suppression", label),
+        tlf_number = sec$tlf_number, location = label,
+        action = "Row dropped from this display per the reviewed supplement -- verify against the shell"
+      )
+      next
+    }
+
     ref   <- .supp_var_ref(b$variable)
     if (!nzchar(label) || !nzchar(ref)) next
 
@@ -595,6 +655,14 @@ read_supplement <- function(path) {
       sec$stub_rows[[idx]]$supplement_denominator <- b$denominator
     }
     n_applied <- n_applied + 1L
+  }
+
+  ## Apply suppressions AFTER the binding loop so labels_norm indices stay
+  ## valid throughout it. A row both bound and suppressed ends up removed:
+  ## an explicit suppression always outranks a value binding.
+  if (length(suppress_idx) > 0) {
+    keep <- setdiff(seq_along(sec$stub_rows), unique(suppress_idx))
+    sec$stub_rows <- sec$stub_rows[keep]
   }
 
   ## Population: from the typed analysisSet, when the shell found none, or (in
