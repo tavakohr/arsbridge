@@ -1,5 +1,23 @@
 # arsbridge (development version)
 
+* **A spanning header that names its grouping VARIABLE now builds a column
+  hierarchy.** A two-level header whose parent carries the variable
+  (`Alpha Cohort [ADSL.COHORTN]`) and whose sub-columns carry the values
+  (`Low [ADSL.COHGR1N=1]`, ...) was classified FLAT, collapsing an
+  unambiguous hierarchy into a row of undifferentiated columns. A top-level
+  node now declares the column axis either by carrying its own condition or
+  by being a group over conditioned children. Genuinely flat headers are
+  unaffected.
+
+* **A header that cannot be resolved into a hierarchy says so.** When a
+  spanning header exists but no column tree could be built, a WARN
+  diagnostic names the spanning columns and the precondition that failed
+  (no readable sub-column conditions, or a parent declaring neither a
+  condition nor a variable) and states what to annotate. Previously the
+  fallback to flat columns was silent. A spanning header over STATISTIC
+  sub-columns ("Treatment A" over "n" / "(%)") is a display split, not a
+  hierarchy, and is never warned about.
+
 * **Numbered mock rows (`SOC#1` / `PT#n`) are a second token dialect.**
   Shells author a nested block either with angle tokens
   (`<System Organ Class>` / `<Preferred Term>`) or with numbered ones
