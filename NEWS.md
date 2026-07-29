@@ -1,5 +1,21 @@
 # arsbridge (development version)
 
+* **New SpreadsheetML cell reader (`R/xlsx_cells.R`), the first half of
+  reading an Excel shell.** `xlsx_read_shell_cells()` returns every sheet's
+  populated cells with their per-run formatting metadata -- the same run list
+  the docx reader produces -- so the shared detection layers in
+  `parse_shell_core.R` read an Excel cell with no format branch at all. It
+  reads the XML directly because every high-level Excel reader flattens a
+  cell's formatting runs into one string, and in these shells the red run
+  *is* the annotation. Both string conventions are handled (inline strings,
+  as openpyxl and openxlsx2 write them; interned `sharedStrings.xml`, as
+  Excel writes them back after a review), as are both spellings of a boolean
+  run property, both relationship Target forms, merged ranges, sparse rows,
+  and numeric cells. A cell coloured as a whole is presented as a single
+  styled run, so whole-cell and in-cell annotation reach detection through
+  one interface. Nothing yet consumes this -- no user-visible behaviour
+  changes, and `.docx` remains the only accepted shell input.
+
 * **Shell parsing is split into a format-agnostic core and an OOXML
   reader.** The annotation grammar, the bracket tokenizer, the detection
   layers, the heading grammar, and section assembly (`.new_section()`,

@@ -66,6 +66,13 @@ exactly one half:
   readers, and the run/cell readers that turn `<w:r>` nodes into the run list.
   Change it when the *file format* changes — a Word construct that was being
   read wrong.
+* [`R/xlsx_cells.R`](R/xlsx_cells.R) — **SpreadsheetML only.** The workbook
+  counterpart: sheet index, styles, shared and inline strings, merged ranges,
+  and the cell reader that turns `<c>` nodes into the same run list. Read its
+  file header before changing it — it documents which format variations real
+  workbooks differ on (where strings live, how boolean run properties are
+  spelled, how relationship targets are written) and why the reader has to
+  absorb all of them.
 
 The two halves meet at two seams, documented at the top of the core file: the
 **per-run metadata list** (`text`, `raw_text`, `color_hex`, `highlight`,
