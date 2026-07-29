@@ -84,3 +84,37 @@ from a paragraph break.
 
 `digest.json` plus `diagnostics_redacted.csv` is enough to work from. Both are
 small (tens of KB) and human-readable.
+
+## Judging arsbridge's PERFORMANCE, not just the input
+
+The shell digest says what the document contains. To see what arsbridge made
+of it, digest the reporting event the run produced:
+
+```r
+digest_reporting_event("ars/reporting_event.json", "ars_digest.json")
+digest_ars_summary("ars_digest.json")
+```
+
+Almost everything that matters here is arsbridge's own vocabulary and carries
+no study content: layout kinds (`categorical`, `nested_parent`, `level`,
+`supplement_added`), method ids, column-tree mode, grouping and subset counts,
+extraction mode and supplement trust. Labels are silhouetted like everywhere
+else.
+
+That summary answers the open questions directly:
+
+| Question | What to look for |
+|---|---|
+| Did the cohort columns stay flat? | `column_tree=` per output — `NESTED` / `ASYMMETRIC_NESTED` vs `none (flat)` |
+| Did the SOC/PT hierarchy form? | `nested_parent` / `nested_child` in the kind counts |
+| Are mock rows still rendering? | token-shaped `label_shape` values with their own analysis |
+| Are supplement rows duplicating? | `supplement_added` counts and "repeated label shapes" |
+| Did struck rows get dropped? | row count vs the shell digest's row count |
+
+## The complete package to send back
+
+1. `digest.json` (or just the `digest_summary()` output) — the shell's shape
+2. `ars_digest.json` (or `digest_ars_summary()` output) — what arsbridge built
+3. `diagnostics_redacted.csv` — which code paths fired, and what they said
+
+Read all three before they leave the machine.
