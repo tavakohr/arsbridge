@@ -1,5 +1,17 @@
 # arsbridge (development version)
 
+* **Grid-first table model.** New internal `.table_grid()` expands a Word
+  table into its physical R x C occupancy grid -- gridSpan cells repeated
+  across the columns they cover, vMerge continuations resolving to their
+  anchor, ragged rows padded -- so geometry questions are answered from the
+  grid instead of raw cell indices. First consumers: (1) a continuation
+  table under the same heading is appended only when its physical column
+  count matches the open display; a mismatched table is refused with a FAIL
+  diagnostic instead of silently welding misaligned rows on (two genuinely
+  distinct tables under one heading no longer merge); (2) the
+  "annotation found in data column N" diagnostic reports the physical grid
+  column, which a gridSpan cell earlier in the row previously shifted.
+
 * **New reviewed-manifest workflow: `write_supplement_draft()`.** The parse
   can now be exported as a v4 supplement JSON -- one entry per TLF with the
   title, typed analysis-set condition, and one analysis per annotated stub
