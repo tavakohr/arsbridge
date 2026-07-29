@@ -120,3 +120,102 @@ test_that("flat and stat-subcolumn shells stay FLAT with no column tree", {
   expect_null(secs[[1]]$column_tree)
   expect_identical(secs[[1]]$column_groups$variable, "COHORTN")
 })
+
+
+## --- Phase R4: a group header that names its VARIABLE ------------------------
+
+.hdr_cell <- function(row, from, to, text, annotation = "") {
+  list(row = as.integer(row), col_start = as.integer(from),
+       col_end = as.integer(to), text = text, annotation = annotation,
+       vmerge_continue = FALSE)
+}
+
+test_that("a spanning header naming the grouping VARIABLE is still nested", {
+  ## The common real-world style: the parent names the variable and the
+  ## children carry its values. This used to come back FLAT -- an
+  ## unambiguous two-level header collapsed into undifferentiated columns.
+  grid <- list(
+    .hdr_cell(1, 1, 1, ""),
+    .hdr_cell(1, 2, 4, "Alpha Cohort", "ADSL.COHORTN"),
+    .hdr_cell(2, 2, 2, "Low",    "ADSL.COHGR1N=1"),
+    .hdr_cell(2, 3, 3, "Medium", "ADSL.COHGR1N=2"),
+    .hdr_cell(2, 4, 4, "High",   "ADSL.COHGR1N=3")
+  )
+  tree <- arsbridge:::.header_grid_to_tree(grid)
+
+  expect_equal(tree$mode, "NESTED")
+  labels <- vapply(tree$nodes, function(n) n$label, character(1))
+  levels <- vapply(tree$nodes, function(n) n$level, integer(1))
+  expect_equal(labels[levels == 1L], "Alpha Cohort")
+  expect_equal(sort(labels[levels == 2L]), c("High", "Low", "Medium"))
+})
+
+test_that("a genuinely flat header is not promoted to nested", {
+  grid <- list(
+    .hdr_cell(1, 1, 1, ""),
+    .hdr_cell(1, 2, 2, "Drug A",  "ADSL.TRT01A='Drug A'"),
+    .hdr_cell(1, 3, 3, "Placebo", "ADSL.TRT01A='Placebo'")
+  )
+  expect_equal(arsbridge:::.header_grid_to_tree(grid)$mode, "FLAT")
+})
+
+test_that("sub-columns with no readable condition stay flat", {
+  ## A spanning parent alone is not a hierarchy -- without conditions on the
+  ## children there is nothing to compose a column path from.
+  grid <- list(
+    .hdr_cell(1, 1, 1, ""),
+    .hdr_cell(1, 2, 3, "Cohort", "ADSL.COHORTN"),
+    .hdr_cell(2, 2, 2, "n"),
+    .hdr_cell(2, 3, 3, "(%)")
+  )
+  expect_equal(arsbridge:::.header_grid_to_tree(grid)$mode, "FLAT")
+})
+
+test_that("a statistic split under a spanning header is not warned about", {
+  ## "Treatment A" over "n" / "(%)" is a display split, not a hierarchy --
+  ## flat is correct there and a warning would be noise.
+  diag_reset()
+  suppressMessages(
+    parse_shell_docx(test_path("fixtures/annotated_shell_merged_headers.docx")))
+  d <- diag_records()
+  expect_equal(sum(grepl("spanning column header", d$problem)), 0)
+})
+
+test_that(".looks_like_stat_label separates statistics from group labels", {
+  expect_true(all(arsbridge:::.looks_like_stat_label(
+    c("n", "(%)", "n (%)", "Mean (SD)", "Median", "SD", "95% CI", "Min"))))
+  expect_false(any(arsbridge:::.looks_like_stat_label(
+    c("Low", "Medium", "High", "Beta Cohort", "Drug A"))))
+})
+
+test_that("an unreadable hierarchy is reported, not silently flattened", {
+  ## A spanning cohort header whose sub-columns are real group labels but
+  ## carry no condition: the user gets undifferentiated columns, so the
+  ## fallback must say so and name what to annotate.
+  sec <- list(tlf_number = "T-14-9-9", tlf_type = "TABLE", title = "Demo")
+  grid <- list(
+    .hdr_cell(1, 1, 1, ""),
+    .hdr_cell(1, 2, 3, "Alpha Cohort"),
+    .hdr_cell(2, 2, 2, "Low"),
+    .hdr_cell(2, 3, 3, "High")
+  )
+  diag_reset()
+  arsbridge:::.warn_flattened_header(
+    sec, arsbridge:::.header_grid_to_tree(grid), grid)
+
+  d <- diag_records()
+  hit <- d[grepl("spanning column header", d$problem), , drop = FALSE]
+  expect_equal(nrow(hit), 1)
+  expect_equal(hit$severity, "WARN")
+  expect_match(hit$problem, "Alpha Cohort")
+  expect_match(hit$action, "COHGR1N|condition")
+})
+
+test_that("a single-row header never triggers the flattening warning", {
+  sec <- list(tlf_number = "T-1", tlf_type = "TABLE")
+  grid <- list(.hdr_cell(1, 1, 1, ""), .hdr_cell(1, 2, 2, "Drug A"))
+  diag_reset()
+  arsbridge:::.warn_flattened_header(
+    sec, arsbridge:::.header_grid_to_tree(grid), grid)
+  expect_equal(nrow(diag_records()), 0)
+})

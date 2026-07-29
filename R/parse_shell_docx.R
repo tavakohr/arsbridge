@@ -2103,6 +2103,74 @@ bind_annotations <- function(sec) {
   sec
 }
 
+#' TRUE for a sub-column label that names a STATISTIC rather than a group:
+#' "n", "(%)", "n (%)", "Mean (SD)", "Median", "95% CI", ... A spanning
+#' header over these splits one column into statistic columns; it is not a
+#' column hierarchy.
+#' @noRd
+.looks_like_stat_label <- function(x) {
+  x <- trimws(as.character(x %||% ""))
+  grepl(paste0("^(?i)(?:n|m|x+|\\(?%\\)?|n\\s*\\(\\s*%\\s*\\)|",
+               "mean(?:\\s*\\(\\s*sd\\s*\\))?|sd|median|min|max|q1|q3|",
+               "\\d+%\\s*ci|ci|se|range|total\\s*n)\\s*$"),
+        x, perl = TRUE)
+}
+
+#' Report a header that LOOKS hierarchical (a spanning cell over sub-columns)
+#' but produced no column tree, naming the precondition that failed. Without
+#' this the fallback is silent: the shell shows a cohort spanning four
+#' sub-columns and the output shows a row of undifferentiated columns, with
+#' nothing to say why. A single-row / unspanned header is genuinely flat and
+#' says nothing.
+#' @noRd
+.warn_flattened_header <- function(sec, tree, grid) {
+  spanning <- Filter(function(cell) {
+    !isTRUE(cell$vmerge_continue) && cell$col_start > 1L &&
+      cell$col_end > cell$col_start
+  }, grid)
+  if (length(spanning) == 0) return(invisible(NULL))
+  if (max(vapply(grid, function(cell) cell$row, integer(1))) < 2L) {
+    return(invisible(NULL))
+  }
+
+  ## A spanning header over STATISTIC sub-columns ("Treatment A" over
+  ## "n" / "(%)") is a display split, not a grouping hierarchy -- flat is
+  ## the right answer there and warning about it would be noise.
+  sub_labels <- vapply(
+    Filter(function(cell) cell$row >= 2L && cell$col_start > 1L, grid),
+    function(cell) trimws(cell$text %||% ""), character(1))
+  sub_labels <- sub_labels[nzchar(sub_labels)]
+  if (length(sub_labels) > 0 && all(.looks_like_stat_label(sub_labels))) {
+    return(invisible(NULL))
+  }
+
+  nodes  <- tree$nodes %||% list()
+  levels <- vapply(nodes, function(n) n$level, integer(1))
+  has_c  <- vapply(nodes, function(n) !is.null(n$condition), logical(1))
+  reason <- if (length(nodes) == 0) {
+    "no header cell carried a usable label or annotation"
+  } else if (!any(has_c & levels >= 2L)) {
+    "none of the sub-columns carries a condition the parser could read"
+  } else {
+    "the spanning column above them declares neither a condition nor a grouping variable"
+  }
+
+  spans <- paste(vapply(spanning, function(cell) {
+    trimws(cell$text %||% "")
+  }, character(1)), collapse = ", ")
+
+  .diag_gap(
+    stage = "parse_shell", severity = "WARN", input = INPUT_SHELL,
+    problem = sprintf(
+      "Table %s has a spanning column header (%s) but arsbridge could not build the column hierarchy: %s.",
+      sec$tlf_number %||% "?", spans, reason),
+    why = "The spanned sub-columns are reported as one flat row of columns instead of a hierarchy, so their parent grouping is lost.",
+    fix = "Annotate each sub-column with its own condition (e.g. [ADSL.COHGR1N=1]) and the spanning header with its grouping variable (e.g. [ADSL.COHORTN]).",
+    tlf_number = sec$tlf_number, location = spans
+  )
+  invisible(NULL)
+}
+
 #' @noRd
 .finalize_section <- function(sec, spec_lookup = NULL) {
   ## Build the column tree from the retained header geometry FIRST. When the
@@ -2117,6 +2185,8 @@ bind_annotations <- function(sec) {
       sec$column_tree <- tree
       sec$.pending_column_annotations <- NULL
       sec <- .resolve_column_groups_from_tree(sec, spec_lookup)
+    } else {
+      .warn_flattened_header(sec, tree, grid)
     }
   }
   ## Resolve per-column header filters into column groups BEFORE

@@ -142,9 +142,16 @@
   levels     <- vapply(nodes, function(n) n$level, integer(1))
   types      <- vapply(nodes, function(n) n$node_type, character(1))
 
+  ## A hierarchy needs conditioned child columns AND a top level that
+  ## declares the axis. A top-level node declares it either by carrying a
+  ## condition of its own ("Cohort A [ADSL.COHGRPN=1]") or by being a GROUP
+  ## over conditioned children ("Alpha Cohort [ADSL.COHORTN]" spanning
+  ## Low / Medium / High) -- naming the variable and letting the children
+  ## carry the values is just as common, and treating it as flat collapses
+  ## an unambiguous two-level header into a row of undifferentiated columns.
   deep_conditions <- any(has_cond & levels >= 2L)
-  top_conditions  <- any(has_cond & levels == 1L)
-  if (!deep_conditions || !top_conditions) return("FLAT")
+  top_declares    <- any((has_cond | types == "group") & levels == 1L)
+  if (!deep_conditions || !top_declares) return("FLAT")
 
   has_subtotal  <- any(types == "subtotal")
   top_is_group  <- types[levels == 1L] == "group"
