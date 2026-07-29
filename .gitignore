@@ -23,8 +23,25 @@ docs/
 /*.Rcheck/
 
 # Study-specific working dirs (NEVER commit client data)
-# inputs/ is shared for user practice; only the extracted loose XPT
-# folder is ignored (ADaM.zip itself IS tracked).
+#
+# inputs/ is DEFAULT-DENY. It holds the shared APX-DRM-301 practice files,
+# which are synthetic and tracked; anything else dropped there is presumed
+# to be real study material and must never reach a commit. Listing the
+# permitted files (rather than banning risky extensions) means a sponsor
+# document copied in under ANY name is ignored by default -- `git add -A`
+# cannot sweep it in. To add a genuinely shareable input, allowlist it
+# below; to commit one deliberately, `git add -f` it.
+inputs/*
+!inputs/README.md
+!inputs/ADaM.zip
+!inputs/APX-DRM-301_*
+!inputs/adam_spec_APX-DRM-301.xlsx
+
+# Local planning / handoff notes. These describe work against real studies
+# and are written for one machine, not for the repo. Kept out of commits by
+# default; `git add -f` if one is ever genuinely worth publishing.
+HANDOFF_*.md
+
 RWE_error/
 # suprev/ holds local Copilot working files (blueprints, instruction
 # drafts, conformance notes) tied to a specific study -- never committed.

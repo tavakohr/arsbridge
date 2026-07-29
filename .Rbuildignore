@@ -10,6 +10,7 @@
 ^CLAUDE_CODE_PROMPT.*\.md$
 ^CLAUDE_.*\.md$
 ^HANDOFF_.*\.md$
+^tools$
 ^IMPROVEMENTS_.*\.md$
 ^REVIEW_.*\.md$
 ^REEVALUATION_.*\.md$
