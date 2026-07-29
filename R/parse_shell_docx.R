@@ -893,16 +893,13 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
     } else if (tag == "tbl") {
       if (is.null(current)) next
       if (seen_table) {
-        ## arsbridge models one table per TLF section; a second table here is
-        ## dropped -- say so rather than lose it silently.
-        .diag_gap(
-          stage = "parse_shell", severity = "WARN", input = INPUT_SHELL,
-          problem = sprintf("A second table was found under %s and was ignored.",
-                            current$tlf_number),
-          why = "arsbridge builds one table per TLF heading, so any extra table is dropped.",
-          fix = "Give the extra table its own Table/Listing heading in the shell, or merge it into the first.",
-          tlf_number = current$tlf_number, location = current$title %||% ""
-        )
+        ## A further table under the SAME heading is a continuation: shells
+        ## split one logical display across several Word tables when it runs
+        ## over a page. Its stub rows belong to the display that is already
+        ## open, so they are appended rather than dropped. The column header
+        ## is re-stated on a continuation and must NOT overwrite the one
+        ## already captured.
+        current <- .append_continuation_table(current, child, comments)
         next
       }
       current    <- .populate_table(current, child, comments)
@@ -1062,6 +1059,142 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
 ## Body walker -- table handler. Returns the updated `current` section.
 ## ---------------------------------------------------------------------------
 
+#' Append a CONTINUATION table's rows to the display already open.
+#'
+#' A shell splits one logical display across several Word tables when it runs
+#' over a page break. Those extra tables were dropped, losing every row they
+#' held. Their stub rows belong to the open display, so they are appended.
+#'
+#' The column header is re-stated at the top of a continuation and must not
+#' overwrite the geometry already captured (that is what carries the column
+#' tree), so a leading header row is skipped -- but only when it really is
+#' one: flagged with `<w:tblHeader/>`, or repeating the header text already
+#' captured. A continuation that starts straight into data keeps every row.
+#' @noRd
+.append_continuation_table <- function(current, tbl_node, comments = list()) {
+  rows <- xml2::xml_find_all(tbl_node, "./*[local-name()='tr']")
+  if (length(rows) == 0) return(current)
+
+  header_norm <- .norm_label(paste(current$col_headers %||% character(0),
+                                   collapse = " "))
+  first_cells <- xml2::xml_find_all(rows[[1]], "./*[local-name()='tc']")
+  first_norm  <- .norm_label(paste(vapply(first_cells, .cell_text, character(1)),
+                                   collapse = " "))
+  repeats_header <- nzchar(header_norm) && nzchar(first_norm) &&
+    identical(header_norm, first_norm)
+
+  data_rows <- if (.is_flagged_header_row(rows[[1]]) || repeats_header) {
+    if (length(rows) == 1L) list() else rows[seq.int(2L, length(rows))]
+  } else {
+    rows
+  }
+
+  added <- .collect_stub_rows(data_rows, current, comments)
+  if (length(added) == 0) return(current)
+
+  current$stub_rows <- c(current$stub_rows %||% list(), added)
+  diag_add(
+    stage = "parse_shell", severity = "INFO", input = INPUT_SHELL,
+    problem = sprintf(
+      "A continuation table under %s contributed %d more row(s).",
+      current$tlf_number %||% "?", length(added)),
+    tlf_number = current$tlf_number,
+    location = current$title %||% "",
+    action = "Its rows were appended to this display, in document order"
+  )
+  current
+}
+
+#' Build stub-row records from a table's data rows. Extracted from
+#' `.populate_table()` so a continuation table under the same heading
+#' produces rows by exactly the same rules (annotation detection,
+#' strikethrough scope, vMerge ghosts, comment and data-cell fallbacks).
+#' @noRd
+.collect_stub_rows <- function(data_rows, current, comments = list()) {
+  stub_rows <- list()
+  for (row in data_rows) {
+    cells <- xml2::xml_find_all(row, "./*[local-name()='tc']")
+    if (length(cells) == 0) next
+
+    stub_cell <- cells[[1]]
+    ## A vMerge-continuation stub cell is not a real row -- it is the
+    ## bottom half of a vertically merged cell above it. Skip it so it
+    ## doesn't show up as a blank ghost row.
+    if (.is_vmerge_continuation(stub_cell)) next
+
+    raw_text  <- .cell_text(stub_cell)
+    runs_meta <- .runs_metadata(stub_cell)
+
+    ## A fully struck-through stub is a row the shell author DELETED and
+    ## left visible for review. Parsing it as live re-adds a dropped
+    ## analysis to the deliverable, so it is skipped -- loudly, because
+    ## the reviewer must be able to see that arsbridge dropped it.
+    if (.all_text_struck(runs_meta)) {
+      .diag_gap(
+        stage = "parse_shell", severity = "INFO", input = INPUT_SHELL,
+        problem = sprintf(
+          "Row '%s' in %s is struck through in the shell.",
+          trimws(raw_text), current$tlf_number),
+        why = "Strikethrough marks a row the author removed from scope.",
+        fix = "Delete the row outright if it should not be programmed, or clear the strikethrough if it should.",
+        tlf_number = current$tlf_number, location = trimws(raw_text)
+      )
+      next
+    }
+
+    detection <- .detect_annotation(raw_text, runs_meta)
+
+    row_entry <- list(
+      label                = detection$label,
+      annotation           = detection$annotation,
+      has_annot            = nzchar(detection$annotation),
+      detection_method     = detection$method,
+      detection_confidence = detection$confidence,
+      raw_text             = raw_text   ## unsplit cell, for the LLM extractor
+    )
+
+    ## A Word comment anchored to the stub cell is a deliberate,
+    ## explicit annotation -- the label stays plain text and the
+    ## annotation lives in the comment instead. Checked before the
+    ## data-cell fallback below.
+    if (!row_entry$has_annot) {
+      comment_annot <- .cell_comment_annotation(stub_cell, comments)
+      if (nzchar(comment_annot)) {
+        row_entry$annotation           <- comment_annot
+        row_entry$has_annot            <- TRUE
+        row_entry$detection_method     <- "comment"
+        row_entry$detection_confidence <- "high"
+      }
+    }
+
+    ## A shell sometimes puts the annotation in a data cell (a red
+    ## DATASET.VAR under the first treatment column) instead of the stub.
+    ## Only look there when the stub cell itself carried nothing, so an
+    ## in-cell stub annotation always wins.
+    if (!row_entry$has_annot && length(cells) > 1) {
+      data_hit <- .detect_annotation_in_data_cells(cells[-1], comments)
+      if (!is.null(data_hit)) {
+        row_entry$annotation           <- data_hit$annotation
+        row_entry$has_annot            <- TRUE
+        row_entry$detection_method     <- data_hit$method
+        row_entry$detection_confidence <- data_hit$confidence
+        diag_add(
+          stage = "parse_shell", severity = "INFO", input = INPUT_SHELL,
+          problem = sprintf(
+            "Row '%s': annotation found in data column %d instead of the stub column",
+            row_entry$label %||% "", data_hit$column_index),
+          tlf_number = current$tlf_number,
+          location   = row_entry$label %||% "",
+          action     = "Bound to this row -- verify the shell's annotation placement"
+        )
+      }
+    }
+
+    stub_rows[[length(stub_rows) + 1L]] <- row_entry
+  }
+  stub_rows
+}
+
 .populate_table <- function(current, tbl_node, comments = list()) {
   rows <- xml2::xml_find_all(tbl_node, "./*[local-name()='tr']")
   if (length(rows) == 0) return(current)
@@ -1129,91 +1262,12 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
   }
 
   ## Stub rows: everything after the header rows.
-  stub_rows <- list()
-  if (length(rows) > n_header_rows) {
-    data_rows <- rows[seq.int(n_header_rows + 1L, length(rows))]
-    for (row in data_rows) {
-      cells <- xml2::xml_find_all(row, "./*[local-name()='tc']")
-      if (length(cells) == 0) next
-
-      stub_cell <- cells[[1]]
-      ## A vMerge-continuation stub cell is not a real row -- it is the
-      ## bottom half of a vertically merged cell above it. Skip it so it
-      ## doesn't show up as a blank ghost row.
-      if (.is_vmerge_continuation(stub_cell)) next
-
-      raw_text  <- .cell_text(stub_cell)
-      runs_meta <- .runs_metadata(stub_cell)
-
-      ## A fully struck-through stub is a row the shell author DELETED and
-      ## left visible for review. Parsing it as live re-adds a dropped
-      ## analysis to the deliverable, so it is skipped -- loudly, because
-      ## the reviewer must be able to see that arsbridge dropped it.
-      if (.all_text_struck(runs_meta)) {
-        .diag_gap(
-          stage = "parse_shell", severity = "INFO", input = INPUT_SHELL,
-          problem = sprintf(
-            "Row '%s' in %s is struck through in the shell.",
-            trimws(raw_text), current$tlf_number),
-          why = "Strikethrough marks a row the author removed from scope.",
-          fix = "Delete the row outright if it should not be programmed, or clear the strikethrough if it should.",
-          tlf_number = current$tlf_number, location = trimws(raw_text)
-        )
-        next
-      }
-
-      detection <- .detect_annotation(raw_text, runs_meta)
-
-      row_entry <- list(
-        label                = detection$label,
-        annotation           = detection$annotation,
-        has_annot            = nzchar(detection$annotation),
-        detection_method     = detection$method,
-        detection_confidence = detection$confidence,
-        raw_text             = raw_text   ## unsplit cell, for the LLM extractor
-      )
-
-      ## A Word comment anchored to the stub cell is a deliberate,
-      ## explicit annotation -- the label stays plain text and the
-      ## annotation lives in the comment instead. Checked before the
-      ## data-cell fallback below.
-      if (!row_entry$has_annot) {
-        comment_annot <- .cell_comment_annotation(stub_cell, comments)
-        if (nzchar(comment_annot)) {
-          row_entry$annotation           <- comment_annot
-          row_entry$has_annot            <- TRUE
-          row_entry$detection_method     <- "comment"
-          row_entry$detection_confidence <- "high"
-        }
-      }
-
-      ## A shell sometimes puts the annotation in a data cell (a red
-      ## DATASET.VAR under the first treatment column) instead of the stub.
-      ## Only look there when the stub cell itself carried nothing, so an
-      ## in-cell stub annotation always wins.
-      if (!row_entry$has_annot && length(cells) > 1) {
-        data_hit <- .detect_annotation_in_data_cells(cells[-1], comments)
-        if (!is.null(data_hit)) {
-          row_entry$annotation           <- data_hit$annotation
-          row_entry$has_annot            <- TRUE
-          row_entry$detection_method     <- data_hit$method
-          row_entry$detection_confidence <- data_hit$confidence
-          diag_add(
-            stage = "parse_shell", severity = "INFO", input = INPUT_SHELL,
-            problem = sprintf(
-              "Row '%s': annotation found in data column %d instead of the stub column",
-              row_entry$label %||% "", data_hit$column_index),
-            tlf_number = current$tlf_number,
-            location   = row_entry$label %||% "",
-            action     = "Bound to this row -- verify the shell's annotation placement"
-          )
-        }
-      }
-
-      stub_rows[[length(stub_rows) + 1L]] <- row_entry
-    }
-  }
-  current$stub_rows <- stub_rows
+  ## Stub rows: everything after the header rows. Shared with the
+  ## continuation-table path so both build rows identically.
+  current$stub_rows <- .collect_stub_rows(
+    if (length(rows) > n_header_rows)
+      rows[seq.int(n_header_rows + 1L, length(rows))] else list(),
+    current, comments)
 
   current
 }
@@ -2329,9 +2383,37 @@ bind_annotations <- function(sec) {
 .cell_text <- function(cell_node) {
   paras <- xml2::xml_find_all(cell_node, "./*[local-name()='p']")
   if (length(paras) == 0) return(.paragraph_text(cell_node))
-  parts <- vapply(paras, .paragraph_text, character(1))
-  parts <- trimws(parts)
-  .normalize_docx_text(trimws(paste(parts[nzchar(parts)], collapse = " ")))
+  parts <- trimws(vapply(paras, .paragraph_text, character(1)))
+  parts <- parts[nzchar(parts)]
+  if (length(parts) == 0) return("")
+
+  ## Join with a space -- EXCEPT where the break falls inside an annotation,
+  ## which Word wraps mid-token in a narrow header cell:
+  ##
+  ##   "[ADSL.C" / "GHGR1N=1]"   ->  "[ADSL.CGHGR1N=1]"   (one reference)
+  ##   "...of the data" / "extraction, n (%)"
+  ##                             ->  "...of the data extraction, n (%)"
+  ##
+  ## A space in the first case truncates the variable to ADSL.C and loses the
+  ## condition; no space in the second fuses two words. The break is inside an
+  ## annotation when a bracket is still open, or when the text so far ends
+  ## mid-reference (a dataset dot with an incomplete variable after it).
+  out <- parts[1]
+  for (i in seq_along(parts)[-1]) {
+    open_bracket <- .unclosed_bracket(out)
+    mid_ref <- grepl(paste0("\\b", .ADAM_DS, "\\.[A-Z0-9]*$"), out, perl = TRUE) &&
+      grepl("^[A-Z0-9]", parts[i], perl = TRUE)
+    out <- paste0(out, if (open_bracket || mid_ref) "" else " ", parts[i])
+  }
+  .normalize_docx_text(trimws(out))
+}
+
+#' TRUE when `x` leaves a "[" unclosed -- the text is in the middle of a
+#' bracketed annotation, so whatever follows continues it.
+#' @noRd
+.unclosed_bracket <- function(x) {
+  chars <- strsplit(x, "", fixed = TRUE)[[1]]
+  sum(chars == "[") > sum(chars == "]")
 }
 
 #' Returns a list of per-run metadata for every run inside the node.
