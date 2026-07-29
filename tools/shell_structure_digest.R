@@ -366,6 +366,146 @@ digest_summary <- function(digest, max_rows_shown = 6L) {
   invisible(NULL)
 }
 
+## --- outcome digest: what arsbridge PRODUCED ---------------------------------
+
+## The input digest says what the shell contains; this says what arsbridge
+## made of it. Almost everything that matters here is arsbridge's OWN
+## vocabulary -- layout kinds, method ids, column-tree mode, grouping counts --
+## which carries no study content. Only labels and comparison values are
+## sensitive, and those are silhouetted / tokenised exactly as in the input
+## digest.
+
+#' Structural digest of a reporting_event.json, for judging how arsbridge
+#' parsed a shell it is not allowed to see.
+#'
+#'   digest_reporting_event("ars/reporting_event.json", "ars_digest.json")
+digest_reporting_event <- function(ars_path, out_json = "ars_digest.json",
+                                   keep_output_ids = TRUE) {
+  stopifnot(file.exists(ars_path))
+  spec <- read_json(ars_path, simplifyVector = FALSE)
+  vars <- new.env(parent = emptyenv())
+
+  sc <- function(x) {
+    v <- unlist(x)
+    if (length(v) == 0) NA_character_ else as.character(v[1])
+  }
+
+  ## Analyses keyed by id, so each layout row can report the METHOD it got.
+  by_id <- list()
+  for (a in spec[["analyses"]] %||% list()) {
+    id <- sc(a[["id"]])
+    if (is.na(id)) next
+    by_id[[id]] <- list(
+      method    = sc(a[["methodId"]]),
+      subset    = sc(a[["dataSubsetId"]]),
+      n_groupings = length(a[["orderedGroupings"]] %||% list())
+    )
+  }
+
+  outputs <- lapply(spec[["outputs"]] %||% list(), function(o) {
+    oid  <- sc(o[["id"]])
+    meta <- o[["_meta"]] %||% list()
+
+    layout <- lapply(meta[["shell_layout"]] %||% list(), function(e) {
+      aid <- sc(e[["analysis_id"]])
+      an  <- if (!is.na(aid)) by_id[[aid]] else NULL
+      list(
+        order        = sc(e[["order"]]),
+        kind         = sc(e[["kind"]]),
+        indent       = sc(e[["indent"]]),
+        label_shape  = silhouette(sc(e[["label"]]) %||% "", 40),
+        has_analysis = !is.na(aid),
+        method       = if (is.null(an)) NA_character_ else an$method,
+        has_subset   = if (is.null(an)) NA else nzchar(an$subset %||% ""),
+        n_groupings  = if (is.null(an)) NA_integer_ else an$n_groupings,
+        parent_order = sc(e[["parent_order"]]),
+        sort         = sc(e[["sort"]])
+      )
+    })
+
+    tree <- meta[["column_tree"]] %||% NULL
+    tree_summary <- if (is.null(tree)) NULL else list(
+      mode  = sc(tree[["mode"]]),
+      nodes = lapply(tree[["nodes"]] %||% list(), function(n) list(
+        level      = sc(n[["level"]]),
+        node_type  = sc(n[["node_type"]]),
+        has_condition = !is.null(n[["condition"]]),
+        label_shape = silhouette(sc(n[["label"]]) %||% "", 30)
+      ))
+    )
+
+    list(
+      output      = if (isTRUE(keep_output_ids)) oid else "<masked>",
+      type        = sc(o[["outputType"]]),
+      n_analyses  = length(o[["referencedAnalysisIds"]] %||% list()),
+      n_layout_rows = length(layout),
+      layout_kind_counts = as.list(table(vapply(
+        layout, function(r) r$kind %||% "NA", character(1)))),
+      column_tree = tree_summary,
+      layout      = layout
+    )
+  })
+
+  digest <- list(
+    generated_by  = "tools/shell_structure_digest.R :: digest_reporting_event",
+    generated_utc = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+    note = paste("Structure only. Labels are character-class silhouettes;",
+                 "no study text or comparison values are included."),
+    generator        = sc(spec[["_meta"]][["generator"]]),
+    extraction_mode  = sc(spec[["_meta"]][["extraction_mode"]]),
+    supplement_trust = sc(spec[["_meta"]][["supplement_trust"]]),
+    n_unsupported    = length(spec[["_meta"]][["unsupported_outputs"]] %||% list()),
+    n_sections_needing_review =
+      length(spec[["_meta"]][["sections_needing_review"]] %||% list()),
+    n_outputs   = length(spec[["outputs"]] %||% list()),
+    n_analyses  = length(spec[["analyses"]] %||% list()),
+    n_methods   = length(spec[["methods"]] %||% list()),
+    method_ids  = sort(unique(vapply(spec[["methods"]] %||% list(),
+                                     function(m) sc(m[["id"]]), character(1)))),
+    n_data_subsets = length(spec[["dataSubsets"]] %||% list()),
+    n_analysis_sets = length(spec[["analysisSets"]] %||% list()),
+    outputs = outputs
+  )
+
+  write_json(digest, out_json, auto_unbox = TRUE, pretty = TRUE, null = "null")
+  message("Wrote ", out_json, " (", digest$n_outputs, " outputs, ",
+          digest$n_analyses, " analyses).")
+  message("Open it and read it before sharing.")
+  invisible(digest)
+}
+
+#' Paste-ready overview of an outcome digest.
+digest_ars_summary <- function(digest) {
+  if (is.character(digest)) digest <- read_json(digest, simplifyVector = FALSE)
+  cat("arsbridge output summary\n")
+  cat("  generator :", digest$generator %||% "?", "\n")
+  cat("  mode      :", digest$extraction_mode %||% "?",
+      "| supplement trust:", digest$supplement_trust %||% "-", "\n")
+  cat("  unsupported outputs:", digest$n_unsupported %||% 0,
+      "| sections needing review:", digest$n_sections_needing_review %||% 0, "\n")
+  cat("  outputs   :", digest$n_outputs, "| analyses:", digest$n_analyses,
+      "| methods:", digest$n_methods, "\n")
+  cat("  subsets   :", digest$n_data_subsets,
+      "| analysis sets:", digest$n_analysis_sets, "\n\n")
+  for (o in digest$outputs) {
+    tm <- if (is.null(o$column_tree)) "none (flat)" else o$column_tree$mode
+    cat(sprintf("%-12s %-8s rows=%-4s analyses=%-4s column_tree=%s\n",
+                o$output, o$type, o$n_layout_rows, o$n_analyses, tm))
+    kinds <- o$layout_kind_counts
+    if (length(kinds)) {
+      cat("   kinds:", paste(sprintf("%s=%s", names(kinds), unlist(kinds)),
+                             collapse = ", "), "\n")
+    }
+    dup <- table(vapply(o$layout, function(r) r$label_shape %||% "", character(1)))
+    dup <- dup[names(dup) != "" & dup > 1]
+    if (length(dup)) {
+      cat("   repeated label shapes (possible duplicate rows):",
+          length(dup), "\n")
+    }
+  }
+  invisible(NULL)
+}
+
 ## --- diagnostics redaction ---------------------------------------------------
 
 #' Redact an arsbridge diagnostics / blockers data frame for sharing.
