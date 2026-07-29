@@ -386,13 +386,15 @@
   toupper(inner)
 }
 
-#' TRUE for a bare continuation row ("...", "…", "etc.") -- the shell's way
-#' of saying "and so on for every level"; it names no analysis of its own.
+#' TRUE for a bare continuation row ("...", a single ellipsis character,
+#' "etc.") -- the shell's way of saying "and so on for every level"; it
+#' names no analysis of its own. The ellipsis is written as an escape so
+#' the source file stays ASCII.
 #' @noRd
 .is_continuation_row <- function(row) {
   if (isTRUE(row$has_annot)) return(FALSE)
   label <- trimws(as.character(row$label %||% ""))
-  grepl("^(?:\\.{2,}|…|etc\\.?)$", label, perl = TRUE)
+  grepl("^(?:\\.{2,}|\u2026|etc\\.?)$", label, perl = TRUE)
 }
 
 .detect_nested_token_blocks <- function(rows, er_by_label) {
