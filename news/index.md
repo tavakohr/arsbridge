@@ -2,6 +2,35 @@
 
 ## arsbridge (development version)
 
+- **New reviewed-manifest workflow:
+  [`write_supplement_draft()`](https://tavakohr.github.io/arsbridge/reference/write_supplement_draft.md).**
+  The parse can now be exported as a v4 supplement JSON – one entry per
+  TLF with the title, typed analysis-set condition, and one analysis per
+  annotated stub row; everything the parser was unsure about
+  (unannotated rows, out-of-spec references, annotated statistic
+  sub-rows) is listed in that entry’s `provenance$reviewItems`. Review
+  the draft once, correct it, keep it under version control, and feed it
+  back with
+  `spec_to_ars(supplement = ..., supplement_trust = "prefer_supplement")`:
+  the reviewed file then overrides a wrong parse instead of only filling
+  gaps, turning a parser miss into a file edit instead of a code change.
+
+- **A supplement can now REMOVE a wrongly-parsed row.** A per-analysis
+  `"suppress": true` entry (rowLabel only, no variable) drops the
+  matching stub row – for captions swept into the stub column or
+  wrongly-merged continuation rows. Honoured only under
+  `supplement_trust = "prefer_supplement"`; under `fill_gaps` the
+  request is surfaced as a WARN instead of applied, and either way
+  nothing disappears silently.
+
+- **Table/figure number collisions no longer cross-bind.** A study can
+  have both Table 14.3.1 and Figure 14.3.1; supplement matching
+  previously reduced both to “14.3.1” and bound whichever entry came
+  first. `.match_supplement_tlf()` now breaks number ties with the key’s
+  designator prefix (“T-14-3-1”, “Figure 14.3.1”) or the entry’s
+  `outputType`, and drafts are keyed by the full designator-bearing
+  number.
+
 - **Row and table accounting is now an enforced invariant.** Every
   `<w:tr>` in a parsed table must end up classified – header row, data
   row, or skipped with a known reason (no cells, vMerge ghost, struck

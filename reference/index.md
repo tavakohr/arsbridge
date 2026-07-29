@@ -107,6 +107,8 @@ access” article.
 - [`ars_validate_supplement()`](https://tavakohr.github.io/arsbridge/reference/ars_validate_supplement.md)
   : Validate a Copilot supplement file (format v4) before running
   spec_to_ars()
+- [`write_supplement_draft()`](https://tavakohr.github.io/arsbridge/reference/write_supplement_draft.md)
+  : Write a draft supplement from a parsed shell
 
 ## Examples
 
