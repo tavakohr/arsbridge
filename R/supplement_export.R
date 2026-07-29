@@ -35,8 +35,8 @@
 #' @param adam_spec_path Optional path to the ADaM specification workbook.
 #'   When given, a draft analysis whose variable is not in the spec is
 #'   flagged in `reviewItems` (the same gate `spec_to_ars()` enforces later).
-#' @param heading_patterns Optional custom heading patterns, as in
-#'   [parse_shell_docx()].
+#' @param heading_patterns Optional custom heading patterns, as understood
+#'   by the shell parser.
 #'
 #' @return Invisibly, the normalized output path. The draft is also
 #'   validated with [ars_validate_supplement()] and any findings are shown.
