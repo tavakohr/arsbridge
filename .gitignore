@@ -42,6 +42,15 @@ inputs/*
 # default; `git add -f` if one is ever genuinely worth publishing.
 HANDOFF_*.md
 
+# Redacted transfer artifacts from a restricted machine (tools/README_privacy_transfer.md).
+# Structure-only by construction, but they describe a real study and belong to
+# the debugging session, not to the package.
+digest.json
+ars_digest.json
+diagnostics_redacted.csv
+*_digest.json
+*_redacted.csv
+
 RWE_error/
 # suprev/ holds local Copilot working files (blueprints, instruction
 # drafts, conformance notes) tied to a specific study -- never committed.
