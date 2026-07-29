@@ -2,6 +2,27 @@
 
 ## arsbridge (development version)
 
+- **Real-world “standardized bracket” shell conventions are
+  understood.** Shells that nest a `[PROGRAMMING DATASETS USED: ...]`
+  directive inside a filter annotation used to corrupt the population
+  string (the directive text leaked into the filter VALUE, poisoning
+  every downstream subset). A new bracket normalizer scans top-level
+  `[...]` spans with a nesting counter and rewrites each one: nested
+  directives are lifted out; instruction wrappers are UNWRAPPED to the
+  condition they carry
+  (`[Use the stated source variable ... apply the stated condition: USUBJID WHERE ADSL.COMPLFL="Y". Keep the display label separate ...]`
+  becomes `ADSL.COMPLFL='Y'; count of unique USUBJID`, and the
+  `[Use DS.VAR for this displayed row; apply FILTER ...]` variant
+  becomes `DS.VAR WHERE FILTER`); prose count instructions
+  (`UNIQUE SUBJECTS WITH ...`) gain the distinct-subject marker;
+  footnote markers (`[a]`, `Total[c]`) are stripped from labels;
+  `Repeat ...` template directives and pure guidance prose are dropped
+  with a record of what was removed. A space after the dataset dot
+  (`ADSL. COMPLFL`, a Word line break) is closed up. Numeric `IN` lists
+  (`ADSL.COHORTN IN (1,2)`) are now a recognised annotation form.
+  Applied at stub cells, column headers, population paragraphs, and
+  heading tails.
+
 - **Workflow projects use a single `copilot/` exchange folder.** The
   `phase1/` and `phase2/` subfolders are gone; the blueprint,
   `supplement.json`, and the extraction validation report now land in
