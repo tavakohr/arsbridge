@@ -157,3 +157,44 @@ test_that("the RWB fixture builds into an ARS with subject-count semantics", {
                   function(e) e$kind, character(1))
   expect_true(any(kinds %in% c("subject_count", "filtered_count")))
 })
+
+
+## --- Phase R2: row scope and stub-cell structure ----------------------------
+
+test_that("a fully struck-through stub row is skipped with a diagnostic", {
+  diag_reset()
+  secs <- suppressMessages(.rwb_secs())
+  lbl <- vapply(secs[[1]]$stub_rows, function(r) r$label, character(1))
+
+  expect_false(any(grepl("rescreened", lbl, ignore.case = TRUE)))
+
+  d <- diag_records()
+  hit <- d[grepl("struck through", d$problem), , drop = FALSE]
+  expect_equal(nrow(hit), 1)
+  expect_equal(hit$severity, "INFO")
+  expect_match(hit$problem, "Subjects rescreened")
+})
+
+test_that("a stub label split across paragraphs joins with a space", {
+  secs <- suppressMessages(.rwb_secs())
+  lbl <- vapply(secs[[1]]$stub_rows, function(r) r$label, character(1))
+  wrapped <- lbl[grepl("^Ongoing", lbl)]
+
+  expect_length(wrapped, 1)
+  ## The Word wrap fell between "data" and "extraction"; joining the
+  ## paragraphs bare would fuse them into "dataextraction".
+  expect_equal(wrapped, "Ongoing subjects at the time of the data extraction, n (%)")
+  expect_false(grepl("dataextraction", wrapped))
+})
+
+test_that(".all_text_struck needs EVERY texted run struck, not just one", {
+  run <- function(text, strike) list(text = text, strike = strike)
+  expect_true(.all_text_struck(list(run("Removed row", TRUE))))
+  expect_true(.all_text_struck(list(run("Removed", TRUE), run(" row", TRUE))))
+  ## A crossed-out value retyped beside it is a LIVE row.
+  expect_false(.all_text_struck(list(run("Old", TRUE), run("New", FALSE))))
+  ## Whitespace-only runs never decide the verdict either way.
+  expect_true(.all_text_struck(list(run("Gone", TRUE), run("   ", FALSE))))
+  expect_false(.all_text_struck(list(run("   ", FALSE))))
+  expect_false(.all_text_struck(list()))
+})

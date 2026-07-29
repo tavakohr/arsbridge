@@ -1144,6 +1144,24 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
 
       raw_text  <- .cell_text(stub_cell)
       runs_meta <- .runs_metadata(stub_cell)
+
+      ## A fully struck-through stub is a row the shell author DELETED and
+      ## left visible for review. Parsing it as live re-adds a dropped
+      ## analysis to the deliverable, so it is skipped -- loudly, because
+      ## the reviewer must be able to see that arsbridge dropped it.
+      if (.all_text_struck(runs_meta)) {
+        .diag_gap(
+          stage = "parse_shell", severity = "INFO", input = INPUT_SHELL,
+          problem = sprintf(
+            "Row '%s' in %s is struck through in the shell.",
+            trimws(raw_text), current$tlf_number),
+          why = "Strikethrough marks a row the author removed from scope.",
+          fix = "Delete the row outright if it should not be programmed, or clear the strikethrough if it should.",
+          tlf_number = current$tlf_number, location = trimws(raw_text)
+        )
+        next
+      }
+
       detection <- .detect_annotation(raw_text, runs_meta)
 
       row_entry <- list(
@@ -2230,7 +2248,21 @@ bind_annotations <- function(sec) {
   .normalize_docx_text(paste(xml2::xml_text(t_nodes), collapse = ""))
 }
 
-.cell_text <- function(cell_node) .paragraph_text(cell_node)
+#' Text of one table cell. A stub label that wraps in Word is authored as
+#' SEVERAL paragraphs in one cell ("Ongoing subjects at the time of the data"
+#' / "extraction, n (%)"), and two categorical levels are sometimes authored
+#' as two paragraphs of the same cell. Runs inside a paragraph join with
+#' nothing (they are one word broken by formatting), but paragraphs join
+#' with a SPACE -- concatenating them bare fuses words ("dataextraction") and
+#' welds separate levels into one label.
+#' @noRd
+.cell_text <- function(cell_node) {
+  paras <- xml2::xml_find_all(cell_node, "./*[local-name()='p']")
+  if (length(paras) == 0) return(.paragraph_text(cell_node))
+  parts <- vapply(paras, .paragraph_text, character(1))
+  parts <- trimws(parts)
+  .normalize_docx_text(trimws(paste(parts[nzchar(parts)], collapse = " ")))
+}
 
 #' Returns a list of per-run metadata for every run inside the node.
 #' Each entry: list(text, raw_text, color_hex, highlight, bold, italic,
@@ -2238,6 +2270,32 @@ bind_annotations <- function(sec) {
 #' other authoring artifacts intact) -- kept alongside the normalized `text`
 #' so a run-integrity lint can see what the shell author actually typed.
 #' @noRd
+#' TRUE when a run is struck through (`<w:strike/>` or `<w:dstrike/>`).
+#' Word writes the property with no attribute when ON; `w:val="false"`/`"0"`
+#' explicitly turns it OFF, which a style-inheriting run uses to opt out of
+#' a struck paragraph style.
+#' @noRd
+.run_is_struck <- function(run_node) {
+  for (tag in c("strike", "dstrike")) {
+    node <- xml2::xml_find_first(
+      run_node, sprintf("./*[local-name()='rPr']/*[local-name()='%s']", tag))
+    if (inherits(node, "xml_missing")) next
+    val <- xml2::xml_attr(node, "val")
+    if (is.na(val) || !tolower(val) %in% c("false", "0", "off")) return(TRUE)
+  }
+  FALSE
+}
+
+#' TRUE when EVERY run carrying text in this node is struck through -- the
+#' shell author deleted the row but left it visible for review. A partially
+#' struck cell (one value crossed out and retyped beside it) is a live row.
+#' @noRd
+.all_text_struck <- function(runs_meta) {
+  texted <- Filter(function(m) nzchar(trimws(m$text %||% "")), runs_meta)
+  if (length(texted) == 0) return(FALSE)
+  all(vapply(texted, function(m) isTRUE(m$strike), logical(1)))
+}
+
 .runs_metadata <- function(node) {
   runs <- xml2::xml_find_all(
     node, paste0(".//*[local-name()='r'][", .EXCLUDED_TEXT_ANCESTORS_XPATH, "]"))
@@ -2259,10 +2317,11 @@ bind_annotations <- function(sec) {
     bold      <- !inherits(xml2::xml_find_first(r, "./*[local-name()='rPr']/*[local-name()='b']"),  "xml_missing")
     italic    <- !inherits(xml2::xml_find_first(r, "./*[local-name()='rPr']/*[local-name()='i']"),  "xml_missing")
     underline <- !inherits(xml2::xml_find_first(r, "./*[local-name()='rPr']/*[local-name()='u']"),  "xml_missing")
+    strike    <- .run_is_struck(r)
 
     out[[i]] <- list(text = txt, raw_text = raw, color_hex = color,
                      highlight = highlight, bold = bold, italic = italic,
-                     underline = underline)
+                     underline = underline, strike = strike)
   }
   out
 }
