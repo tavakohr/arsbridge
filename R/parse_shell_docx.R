@@ -1119,6 +1119,26 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
   rows <- xml2::xml_find_all(tbl_node, "./*[local-name()='tr']")
   if (length(rows) == 0) return(current)
 
+  ## A continuation is the SAME display resuming after a page break, so it
+  ## must have the same physical column count. A different count means this
+  ## is a different table that happens to share the heading -- welding its
+  ## rows on would misalign every one of them against the captured header,
+  ## so it is refused loudly instead of merged silently.
+  n_cols_here <- .grid_n_cols(tbl_node)
+  n_cols_open <- current$.table_n_cols %||% n_cols_here
+  if (n_cols_here != n_cols_open) {
+    diag_add(
+      stage = "parse_shell", severity = "FAIL", input = INPUT_SHELL,
+      problem = sprintf(
+        "A further table under %s has %d column(s) but the open display has %d -- its %d row(s) were NOT appended.",
+        current$tlf_number %||% "?", n_cols_here, n_cols_open, length(rows)),
+      tlf_number = current$tlf_number,
+      location   = current$title %||% "",
+      action = "If this is a separate display, give it its own TLF heading; if it is a true continuation, make its column layout match the first table"
+    )
+    return(current)
+  }
+
   header_norm <- .norm_label(paste(current$col_headers %||% character(0),
                                    collapse = " "))
   first_cells <- xml2::xml_find_all(rows[[1]], "./*[local-name()='tc']")
@@ -1246,9 +1266,13 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
     ## A shell sometimes puts the annotation in a data cell (a red
     ## DATASET.VAR under the first treatment column) instead of the stub.
     ## Only look there when the stub cell itself carried nothing, so an
-    ## in-cell stub annotation always wins.
+    ## in-cell stub annotation always wins. Column indices are physical
+    ## grid columns (gridSpan expanded), not raw cell positions -- a
+    ## spanned cell earlier in the row must not shift the reported column.
     if (!row_entry$has_annot && length(cells) > 1) {
-      data_hit <- .detect_annotation_in_data_cells(cells[-1], comments)
+      anchor_cols <- .cell_anchor_cols(cells)
+      data_hit <- .detect_annotation_in_data_cells(cells[-1], comments,
+                                                   anchor_cols[-1])
       if (!is.null(data_hit)) {
         row_entry$annotation           <- data_hit$annotation
         row_entry$has_annot            <- TRUE
@@ -1301,6 +1325,11 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
 .populate_table <- function(current, tbl_node, comments = list()) {
   rows <- xml2::xml_find_all(tbl_node, "./*[local-name()='tr']")
   if (length(rows) == 0) return(current)
+
+  ## Physical column count of this table, kept so a later table under the
+  ## same heading is only accepted as a continuation when its geometry
+  ## matches (see .append_continuation_table()).
+  current$.table_n_cols <- .grid_n_cols(tbl_node)
 
   ## Header rows: normally just row 1, but a nested header (treatment arms
   ## spanning "n (%)" subcolumns) can use several leading rows. Word marks
@@ -1595,13 +1624,17 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
 #' Scan the non-stub cells of a row for an annotation the stub cell itself
 #' didn't carry -- either in the cell's own text/formatting, or in a Word
 #' comment anchored to the cell. Returns the first hit as `list(annotation,
-#' confidence, column_index, method)` (column_index is 1-based over the whole
-#' row including the stub column), or `NULL` when nothing matches.
+#' confidence, column_index, method)`, or `NULL` when nothing matches.
+#' `anchor_cols`, when given, holds each cell's physical grid column (from
+#' `.cell_anchor_cols()`), so a gridSpan cell earlier in the row does not
+#' shift the reported column; without it the index falls back to the raw
+#' cell position (1-based over the whole row including the stub column).
 #' @noRd
-.detect_annotation_in_data_cells <- function(data_cells, comments = list()) {
+.detect_annotation_in_data_cells <- function(data_cells, comments = list(),
+                                             anchor_cols = NULL) {
   for (i in seq_along(data_cells)) {
     cell         <- data_cells[[i]]
-    column_index <- i + 1L   ## +1: data_cells excludes the stub column
+    column_index <- if (!is.null(anchor_cols)) anchor_cols[[i]] else i + 1L
 
     text <- .cell_text(cell)
     hit  <- .detect_annotation(text, .runs_metadata(cell))
@@ -2335,6 +2368,10 @@ bind_annotations <- function(sec) {
 
 #' @noRd
 .finalize_section <- function(sec, spec_lookup = NULL) {
+  ## Working geometry only the continuation guard needed; not part of the
+  ## finished section.
+  sec$.table_n_cols <- NULL
+
   ## Build the column tree from the retained header geometry FIRST. When the
   ## tree shows a real conditioned hierarchy (parent cohort columns with
   ## conditioned child columns), the per-level resolution takes over;
