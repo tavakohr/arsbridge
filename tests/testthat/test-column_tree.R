@@ -17,7 +17,7 @@ test_that("asymmetric two-level header parses into an ASYMMETRIC_NESTED tree", {
 
   types <- vapply(sec$column_tree$nodes, function(n) n$node_type, character(1))
   expect_identical(sum(types == "group"), 1L)         # Cohort A
-  expect_identical(sum(types == "subtotal"), 1L)      # Cohort A > Total[a]
+  expect_identical(sum(types == "subtotal"), 1L)      # Cohort A > Total
   expect_identical(sum(types == "grand_total"), 1L)   # overall Total
   expect_identical(sum(types == "leaf"), 4L)          # Mild/Moderate/Severe + Cohort B
 })
@@ -33,7 +33,7 @@ test_that("six declared paths come out in display order with correct roles", {
     "Cohort A > Mild",
     "Cohort A > Moderate",
     "Cohort A > Severe",
-    "Cohort A > Total[a]",
+    "Cohort A > Total",
     "Cohort B",
     "Total"
   ))
@@ -77,8 +77,10 @@ test_that("N hints and provenance are captured per node", {
   labels <- vapply(nodes, function(n) n$label, character(1))
   hints  <- vapply(nodes, function(n) n$n_hint, integer(1))
   expect_identical(hints[labels == "Mild"], 40L)
-  expect_identical(hints[labels == "Total[a]"], 88L)
-  expect_identical(hints[labels == "Total"], 150L)
+  ## Two "Total" nodes since the footnote marker ("Total[a]") is stripped:
+  ## the grand total (150) sits in header row 1, Cohort A's subtotal (88)
+  ## in row 2 -- node order follows the rows.
+  expect_identical(hints[labels == "Total"], c(150L, 88L))
 
   # Provenance points back to real header cells.
   for (n in nodes) {

@@ -27,7 +27,7 @@ test_that("declared paths execute into a six-column ARD with correct Ns", {
   expect_false(any(grepl("^Cohort B > ", paths_seen)))
   expect_setequal(paths_seen, c(
     "Cohort A > Mild", "Cohort A > Moderate", "Cohort A > Severe",
-    "Cohort A > Total[a]", "Cohort B", "Total"
+    "Cohort A > Total", "Cohort B", "Total"
   ))
 
   # Per-column subject counts from the AGE (continuous) analysis: the N stat
@@ -42,7 +42,7 @@ test_that("declared paths execute into a six-column ARD with correct Ns", {
   expect_identical(unname(ns["Cohort A > Moderate"]), 25)
   expect_identical(unname(ns["Cohort A > Severe"]), 15)
   # The subtotal is the PARENT population (88), not the child sum (80).
-  expect_identical(unname(ns["Cohort A > Total[a]"]), 88)
+  expect_identical(unname(ns["Cohort A > Total"]), 88)
   expect_identical(unname(ns["Cohort B"]), 62)
   expect_identical(unname(ns["Total"]), 150)
 
@@ -62,7 +62,7 @@ test_that("categorical percentages use the path population as denominator", {
   # SEX in the subtotal column: n sums to 88 (all Cohort A, unknown severity
   # included) and percentages are out of 88.
   sub_rows <- !is.na(ard$result_group_path) &
-    ard$result_group_path == "Cohort A > Total[a]" &
+    ard$result_group_path == "Cohort A > Total" &
     !is.na(ard$variable) & ard$variable == "SEX"
   n_vals <- vapply(ard$stat[sub_rows & ard$stat_name == "n"],
                    function(x) as.numeric(x[[1]]), numeric(1))
@@ -87,7 +87,7 @@ test_that("the emitted deliverable script computes the same declared paths", {
   # One block per declared path, no include_total pass, no case_when factor
   # derivation of the grouping variables.
   expect_true(grepl("result_group_id", script))
-  expect_true(grepl("Cohort A > Total\\[a\\]", script))
+  expect_true(grepl("Cohort A > Total", script))
   expect_false(grepl("_total <-", script))
 
   env <- new.env(parent = globalenv())
@@ -143,7 +143,7 @@ test_that("the path-mode ARD renders with one ordered column per path", {
   expect_identical(attr(tf, "arsbridge_col_var"), "result_group_path")
   expect_identical(attr(tf, "arsbridge_col_levels"), c(
     "Cohort A > Mild", "Cohort A > Moderate", "Cohort A > Severe",
-    "Cohort A > Total[a]", "Cohort B", "Total"
+    "Cohort A > Total", "Cohort B", "Total"
   ))
 
   # And the table actually builds, columns in shell order.
