@@ -2,6 +2,23 @@
 
 ## arsbridge (development version)
 
+- **Client-content guards hardened.** `inputs/` is now default-deny in
+  `.gitignore` with the synthetic APX-DRM-301 practice files
+  allowlisted, so a sponsor document copied in under any name cannot be
+  swept into a commit by `git add -A` (it previously could – only
+  `inputs/ADaM/` and `inputs/.shell_backup/` were ignored). Local
+  `HANDOFF_*.md` planning notes are ignored by the same principle. Both
+  are reversible with `git add -f`.
+
+- **New: privacy-safe shell structure extractor** (`tools/`). For shells
+  that may not leave the machine they live on, `digest_shell()` writes a
+  JSON digest of a `.docx` describing only its SHAPE – table geometry,
+  merged cells, paragraph and run counts, strikethrough and colour flags
+  – with all text reduced to character-class silhouettes and tokenised
+  annotation skeletons. Needs only xml2 and jsonlite, so it runs where
+  arsbridge is not installed. `redact_diagnostics()` does the same for a
+  diagnostics frame.
+
 - **The `(Q1, Q3)` row is no longer empty.** A continuous summary maps
   `p25`/`p75` (and `q1`/`q3`) onto a “(Q1, Q3)” stat line, but no
   formatter emitted that structure – the row rendered with its label and
