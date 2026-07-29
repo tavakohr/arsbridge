@@ -119,6 +119,7 @@ reference:
   - ars_copilot_instructions
   - ars_validate_supplement
   - write_supplement_draft
+  - parse_decision_digest
 
 - title: Examples
   desc: Access the bundled APX-DRM-301 study files for offline testing.

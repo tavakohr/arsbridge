@@ -1337,6 +1337,9 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
   ## same heading is only accepted as a continuation when its geometry
   ## matches (see .append_continuation_table()).
   current$.table_n_cols <- .grid_n_cols(tbl_node)
+  ## Also kept on the finished section (parse_decision_digest() reports it
+  ## when diagnosing a header/column mismatch against the raw geometry).
+  current$n_physical_cols <- current$.table_n_cols
 
   ## Header rows: normally just row 1, but a nested header (treatment arms
   ## spanning "n (%)" subcolumns) can use several leading rows. Word marks
@@ -1363,6 +1366,12 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
     }
   }
   header_rows <- rows[seq_len(n_header_rows)]
+  ## The header decision, kept on the section so parse_decision_digest()
+  ## can report what was DECIDED alongside what the raw geometry SHOWS.
+  current$header_rows_flagged  <- flagged_header_rows
+  current$header_rows_inferred <- if (flagged_header_rows > 0L) 0L else
+    n_header_rows
+  current$n_header_rows        <- n_header_rows
 
   if (identical(current$tlf_type %||% "TABLE", "TABLE")) {
     ## For tables, run the annotation detector on each header cell so a
