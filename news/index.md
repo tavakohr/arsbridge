@@ -2,6 +2,21 @@
 
 ## arsbridge (development version)
 
+- **Struck-through shell rows are no longer programmed.** A stub row
+  whose every run carries `<w:strike/>` is a row the shell author
+  removed from scope; arsbridge parsed it as live and re-added the
+  dropped analysis to the deliverable. Such rows are now skipped with an
+  INFO diagnostic naming the row, so the reviewer can see what was
+  dropped and why. A PARTIALLY struck cell (a value crossed out and
+  retyped beside it) stays live.
+
+- **Stub labels that wrap in Word keep their spaces.** A cell holding
+  several paragraphs was flattened by concatenating every text run with
+  nothing between them, so a label wrapped after “…the data” came back
+  as “dataextraction”, and two categorical levels authored as separate
+  paragraphs fused into one line. Paragraphs inside a cell now join with
+  a space; runs within a paragraph still join bare.
+
 - **Real-world “standardized bracket” shell conventions are
   understood.** Shells that nest a `[PROGRAMMING DATASETS USED: ...]`
   directive inside a filter annotation used to corrupt the population
