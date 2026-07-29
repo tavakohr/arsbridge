@@ -1239,6 +1239,13 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
     }
 
     detection <- .detect_annotation(raw_text, runs_meta)
+    ## Nothing found in the joined text: retry with the bare-join view for
+    ## an annotation that wrapped across paragraphs without leaving the
+    ## heuristic a signal (see .detect_annotation_wrapped()).
+    if (!nzchar(detection$annotation)) {
+      wrapped <- .detect_annotation_wrapped(.cell_paragraphs(stub_cell))
+      if (!is.null(wrapped)) detection <- wrapped
+    }
 
     row_entry <- list(
       label                = detection$label,
@@ -1531,10 +1538,11 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
   labels      <- character(0)
   annotations <- character(0)
   for (cell in cells) {
-    raw  <- .cell_text(cell)
-    det  <- .detect_annotation(raw, .runs_metadata(cell))
+    ## Cell-level detection includes the bare-join retry: a narrow header
+    ## cell is exactly where an annotation wraps mid-token.
+    det  <- .detect_annotation_cell(cell)
     span <- .grid_span(cell)
-    labels      <- c(labels, rep(trimws(det$label %||% raw), span))
+    labels      <- c(labels, rep(trimws(det$label %||% .cell_text(cell)), span))
     annotations <- c(annotations, rep(det$annotation %||% "", span))
   }
   list(labels = labels, annotations = annotations)
@@ -1593,7 +1601,7 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
     for (cell in cells) {
       span <- .grid_span(cell)
       raw  <- .cell_text(cell)
-      det  <- .detect_annotation(raw, .runs_metadata(cell))
+      det  <- .detect_annotation_cell(cell)
       grid[[length(grid) + 1L]] <- list(
         row             = r,
         col_start       = col,
@@ -2517,6 +2525,23 @@ bind_annotations <- function(sec) {
   .normalize_docx_text(paste(xml2::xml_text(t_nodes), collapse = ""))
 }
 
+#' The paragraph list of one table cell: trimmed, normalized, empties
+#' dropped, order preserved. This is the cell's lossless view -- how the
+#' paragraphs JOIN depends on who is asking (a label joins with a space, an
+#' annotation joins bare), so the list itself is what both consumers build
+#' from. A cell with no `<w:p>` children falls back to its own direct text.
+#' @noRd
+.cell_paragraphs <- function(cell_node) {
+  paras <- xml2::xml_find_all(cell_node, "./*[local-name()='p']")
+  if (length(paras) == 0) {
+    txt <- .paragraph_text(cell_node)
+    return(if (nzchar(txt)) txt else character(0))
+  }
+  parts <- trimws(vapply(paras, .paragraph_text, character(1)))
+  parts <- parts[nzchar(parts)]
+  vapply(parts, .normalize_docx_text, character(1), USE.NAMES = FALSE)
+}
+
 #' Text of one table cell. A stub label that wraps in Word is authored as
 #' SEVERAL paragraphs in one cell ("Ongoing subjects at the time of the data"
 #' / "extraction, n (%)"), and two categorical levels are sometimes authored
@@ -2526,11 +2551,9 @@ bind_annotations <- function(sec) {
 #' welds separate levels into one label.
 #' @noRd
 .cell_text <- function(cell_node) {
-  paras <- xml2::xml_find_all(cell_node, "./*[local-name()='p']")
-  if (length(paras) == 0) return(.paragraph_text(cell_node))
-  parts <- trimws(vapply(paras, .paragraph_text, character(1)))
-  parts <- parts[nzchar(parts)]
+  parts <- .cell_paragraphs(cell_node)
   if (length(parts) == 0) return("")
+  if (length(parts) == 1) return(parts[[1]])
 
   ## Join with a space -- EXCEPT where the break falls inside an annotation,
   ## which Word wraps mid-token in a narrow header cell:
@@ -2880,6 +2903,63 @@ bind_annotations <- function(sec) {
   ## Layer 4 fallback would happen later (LLM); here, no annotation.
   list(label = trimws(cell_text), annotation = "",
        method = NA_character_, confidence = NA_character_)
+}
+
+#' Retry annotation detection on a multi-paragraph cell with the BARE join.
+#'
+#' `.cell_text()` has to pick ONE way to join a cell's paragraphs, and its
+#' heuristic (space, unless a bracket is open or the text ends mid-
+#' reference) can guess wrong when a wrapped annotation gives no such
+#' signal -- the space it inserts then splits the reference and the plain-
+#' text layer misses it. This retry gives the annotation consumer its own
+#' view: the paragraphs joined with NOTHING. If the pattern matches there,
+#' the annotation is read from the bare join, and the label is rebuilt from
+#' the paragraph list joined with SPACES (a bare-joined label would fuse
+#' words: "dataextraction"). Each consumer gets the join it needs.
+#'
+#' Returns a detection list like `.detect_annotation()`, or NULL when the
+#' bare join does not match either.
+#' @noRd
+.detect_annotation_wrapped <- function(paragraphs) {
+  if (length(paragraphs) < 2L) return(NULL)
+  bare <- paste0(paragraphs, collapse = "")
+  m <- regexpr(.ANNOTATION_PATTERN, bare, perl = TRUE)
+  if (m == -1) return(NULL)
+  pieces <- split_label_annotation(bare)
+  if (!nzchar(pieces$annotation)) return(NULL)
+
+  ## The label is everything BEFORE the match, taken from the paragraph
+  ## list so paragraph breaks come back as spaces. `paragraphs` are already
+  ## normalized (see .cell_paragraphs()), so offsets into `bare` line up.
+  start <- as.integer(m)
+  offsets <- cumsum(c(0L, nchar(paragraphs)))
+  label_parts <- character(0)
+  for (i in seq_along(paragraphs)) {
+    para_start <- offsets[[i]] + 1L
+    if (para_start >= start) break
+    take <- min(nchar(paragraphs[[i]]), start - para_start)
+    piece <- trimws(substr(paragraphs[[i]], 1L, take))
+    if (nzchar(piece)) label_parts <- c(label_parts, piece)
+  }
+  label <- trimws(sub("\\s*[\\[\\(]?\\s*$", "",
+                      paste(label_parts, collapse = " "), perl = TRUE))
+
+  list(label = label, annotation = pieces$annotation,
+       method = "pattern_wrapped", confidence = "medium")
+}
+
+#' Full annotation detection for one CELL: the normal path over the joined
+#' cell text first, then -- only when that finds nothing and the cell has
+#' several paragraphs -- the bare-join retry above.
+#' @noRd
+.detect_annotation_cell <- function(cell_node, runs_meta = NULL) {
+  runs_meta <- runs_meta %||% .runs_metadata(cell_node)
+  det <- .detect_annotation(.cell_text(cell_node), runs_meta)
+  if (!nzchar(det$annotation)) {
+    wrapped <- .detect_annotation_wrapped(.cell_paragraphs(cell_node))
+    if (!is.null(wrapped)) det <- wrapped
+  }
+  det
 }
 
 #' Remove an annotation substring from a cell text and return the remaining

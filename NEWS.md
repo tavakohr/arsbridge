@@ -1,5 +1,20 @@
 # arsbridge (development version)
 
+* **A cell's paragraph list is now the lossless source both consumers build
+  from.** New `.cell_paragraphs()` keeps a multi-paragraph cell's paragraphs
+  intact (normalized, trimmed, order preserved), and annotation detection
+  gains a second view: when the joined cell text yields nothing, the
+  plain-text layer retries on the paragraphs joined BARE
+  (`.detect_annotation_wrapped()`), because a wrapped annotation belongs
+  joined with nothing while a wrapped label belongs joined with a space --
+  one string cannot serve both. The recovered row carries
+  `detection_method = "pattern_wrapped"` (medium confidence); the label is
+  rebuilt from the paragraph list with spaces, so words never fuse. This
+  removes the failure mode behind the `45e0481`/`1985e15`
+  regression-of-a-regression: a wrap the join heuristic cannot classify no
+  longer silently drops the annotation. Applied to stub cells, header
+  cells, and the column-tree header grid.
+
 * **Grid-first table model.** New internal `.table_grid()` expands a Word
   table into its physical R x C occupancy grid -- gridSpan cells repeated
   across the columns they cover, vMerge continuations resolving to their
