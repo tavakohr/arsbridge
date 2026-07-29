@@ -362,7 +362,19 @@ ars_render_all <- function(ars_path, ard, adam_dir = NULL, file = NULL,
         if (is.null(adam_dir)) stop("adam_dir required for figures")
         p <- ars_render_figure(ars_path, adam_dir, oid)
         if (!first) doc <- officer::body_add_break(doc)
+        ## Figures get the same heading / title / footnote band tables and
+        ## listings get (.gt_to_flextable applies it there). Without it a
+        ## figure landed in the deliverable as a bare image -- no number,
+        ## no title, nothing to tie it to the shell.
+        doc <- officer::body_add_par(doc, .xml_safe(.tlf_heading(oid, kind)))
+        fig_title <- extract_title(o) %||% .sc(o[["name"]]) %||% ""
+        if (nzchar(fig_title)) {
+          doc <- officer::body_add_par(doc, .xml_safe(fig_title))
+        }
         doc <- officer::body_add_gg(doc, p, width = 9, height = 5.5); first <- FALSE
+        for (fn in extract_footnotes(o)) {
+          doc <- officer::body_add_par(doc, .xml_safe(fn))
+        }
         "ok"
       }
     }, error = function(e) conditionMessage(e))
