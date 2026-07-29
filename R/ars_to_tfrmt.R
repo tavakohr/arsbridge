@@ -339,6 +339,20 @@ detect_row_roles <- function(ard, col_var) {
       structs <- c(structs, list(fs1("Median", "median", tfrmt::frmt("xx.x"))))
       params <- c(params, "median")
     }
+    ## Quartiles. {cards} names them p25/p75; some methods emit q1/q3.
+    ## .statline_for() already maps BOTH onto the "(Q1, Q3)" line, so
+    ## without this block the row got a label and no formatter -- it
+    ## rendered empty, with the statistics silently missing.
+    quart <- if (has("p25", "p75")) c("p25", "p75") else
+      if (has("q1", "q3")) c("q1", "q3") else NULL
+    if (!is.null(quart)) {
+      combine <- stats::setNames(
+        list(tfrmt::frmt("xx.x"), tfrmt::frmt("xx.x")), quart)
+      structs <- c(structs, list(fs("(Q1, Q3)", do.call(
+        tfrmt::frmt_combine,
+        c(list(sprintf("({%s}, {%s})", quart[1], quart[2])), combine)))))
+      params <- c(params, quart)
+    }
     if (has("min", "max")) {
       structs <- c(structs, list(fs("(Min, Max)", tfrmt::frmt_combine(
         "({min}, {max})", min = tfrmt::frmt("xx.x"), max = tfrmt::frmt("xx.x")))))

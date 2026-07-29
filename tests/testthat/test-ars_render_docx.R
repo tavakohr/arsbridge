@@ -175,3 +175,23 @@ test_that("ars_render_combined writes one big ARD and one combined RTF", {
   expect_equal(unname(st["T_14_1_1"]), "rendered")
   expect_equal(unname(st["F_14_2_1"]), "skipped")
 })
+
+
+test_that("a rendered figure carries its number and title", {
+  skip_if_not_installed("ggplot2")
+  skip_if_not_installed("officer")
+  fx   <- .render_all_fixture()
+  ard  <- ars_to_ard(fx$ars_path, fx$adam_dir)
+  file <- tempfile(fileext = ".docx")
+
+  man <- ars_render_all(fx$ars_path, ard, adam_dir = fx$adam_dir, file = file)
+  expect_equal(man$status[man$output_id == "F_14_2_1"], "rendered")
+
+  ## A figure used to land in the deliverable as a bare image -- no number,
+  ## no title band, nothing tying it back to the shell. It now gets the same
+  ## heading + title treatment tables and listings get.
+  txt <- paste(officer::docx_summary(officer::read_docx(file))$text,
+               collapse = "\n")
+  expect_match(txt, "Figure 14.2.1", fixed = TRUE)
+  expect_match(txt, "F-14.2.1", fixed = TRUE)
+})

@@ -309,3 +309,21 @@ test_that("numeric cohort headers map to their ARD levels; an empty one adds no 
   expect_lt(match("1", columns), match("2", columns))
   expect_false(any(grepl("99", columns)))
 })
+
+
+test_that("quartiles get a formatter so the (Q1, Q3) row is not empty", {
+  ## .statline_for() maps p25/p75 (and q1/q3) onto a "(Q1, Q3)" line, but
+  ## no formatter emitted that structure -- the row rendered with a label
+  ## and no numbers, silently losing the statistics.
+  skip_if_not_installed("tfrmt")
+  body <- arsbridge:::.method_body_entries(
+    "MTH_SUMMARY_STATISTICS_CONTINUOUS",
+    c("N", "mean", "sd", "median", "p25", "p75", "min", "max"))
+
+  expect_true(all(c("p25", "p75") %in% body$params))
+  labels <- unlist(lapply(body$structures, function(s) {
+    as.character(unlist(s[["label_val"]]))
+  }))
+  expect_true("(Q1, Q3)" %in% labels)
+  expect_true("(Min, Max)" %in% labels)
+})
