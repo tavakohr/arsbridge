@@ -1,5 +1,18 @@
 # arsbridge (development version)
 
+* **Row and table accounting is now an enforced invariant.** Every `<w:tr>`
+  in a parsed table must end up classified -- header row, data row, or
+  skipped with a known reason (no cells, vMerge ghost, struck through) --
+  and every top-level `<w:tbl>` in the body must be handled: attached to a
+  section, recognised as the TOC, or flagged as unparsed. Any miss raises a
+  FAIL diagnostic naming the TLF, so the silently-dropped-rows bug class
+  (the one that once cost 23 tables without a message) now fails loudly at
+  parse time. A table appearing before any recognised TLF heading is
+  reported with a WARN instead of vanishing. A new combinatorial fixture
+  generator sweeps all 64 combinations of continuation table, unflagged
+  multi-row header, vMerge stub, multi-paragraph cell, strikethrough, and
+  gridSpan data row, asserting the invariant on each.
+
 * **Continuation tables are no longer dropped.** A shell that splits one
   display across several Word tables (a page break mid-table) lost every row
   after the first table: arsbridge modelled one table per TLF heading and

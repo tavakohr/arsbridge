@@ -746,6 +746,15 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
   toc_skip   <- FALSE
   toc_table  <- .detect_toc_table(children)
 
+  ## Table accounting: every top-level <w:tbl> in the body must be handled
+  ## somewhere below -- attached to a section, recognised as the TOC, or
+  ## skipped with a diagnostic. Counted here, checked after the walk, so a
+  ## future code path that quietly `next`s past a table fails loudly.
+  n_tbl_total   <- sum(vapply(children,
+                              function(ch) identical(.local_name(ch), "tbl"),
+                              logical(1)))
+  n_tbl_handled <- 0L
+
   sections   <- list()
   current    <- NULL
   state      <- "BEFORE_HEADING"   ## BEFORE_HEADING / NEED_TITLE / NEED_POP / IN_BODY
@@ -800,7 +809,10 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
     tag <- .local_name(child)
 
     ## Skip the cover/TOC table entirely.
-    if (identical(child, toc_table)) next
+    if (identical(child, toc_table)) {
+      if (identical(tag, "tbl")) n_tbl_handled <- n_tbl_handled + 1L
+      next
+    }
 
     if (tag == "p") {
       text <- .paragraph_text(child)
@@ -891,7 +903,25 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
       current <- .triage_body_paragraph(current, child, stripped)
 
     } else if (tag == "tbl") {
-      if (is.null(current)) next
+      if (is.null(current)) {
+        ## A table with no open section: its heading did not match (or it is
+        ## cover-page furniture). Either way it is not parsed -- say so
+        ## rather than dropping it silently, because "heading regex missed"
+        ## looks identical to "nothing there" in the output.
+        n_tbl_handled <- n_tbl_handled + 1L
+        n_tbl_rows <- length(xml2::xml_find_all(child,
+                                                "./*[local-name()='tr']"))
+        diag_add(
+          stage = "parse_shell", severity = "WARN", input = INPUT_SHELL,
+          problem = sprintf(
+            "A table with %d row(s) appears before any recognised TLF heading and was not parsed.",
+            n_tbl_rows),
+          location = basename(docx_path),
+          action = "If this is a real display, its heading was not recognised -- check the heading text or pass heading_patterns; a cover/layout table can be ignored"
+        )
+        next
+      }
+      n_tbl_handled <- n_tbl_handled + 1L
       if (seen_table) {
         ## A further table under the SAME heading is a continuation: shells
         ## split one logical display across several Word tables when it runs
@@ -911,6 +941,20 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
     }
   }
   if (show_progress) cli::cli_progress_done()
+
+  ## Close the table accounting opened before the walk. A mismatch means a
+  ## code path above skipped a table without counting it -- a parser bug of
+  ## the silently-dropped-tables kind, so it FAILs rather than warns.
+  if (n_tbl_handled != n_tbl_total) {
+    diag_add(
+      stage = "parse_shell", severity = "FAIL", input = INPUT_SHELL,
+      problem = sprintf(
+        "Table accounting failed: the document body has %d table(s) but only %d were handled.",
+        n_tbl_total, n_tbl_handled),
+      location = basename(docx_path),
+      action = "This is an arsbridge parsing bug: a table was skipped without a diagnostic. Do not trust this output; report the shell (or its structure digest)."
+    )
+  }
 
   if (!is.null(current)) {
     sections[[length(sections) + 1]] <- .finalize_section(current, spec_lookup)
@@ -1083,13 +1127,20 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
   repeats_header <- nzchar(header_norm) && nzchar(first_norm) &&
     identical(header_norm, first_norm)
 
-  data_rows <- if (.is_flagged_header_row(rows[[1]]) || repeats_header) {
+  drop_first <- .is_flagged_header_row(rows[[1]]) || repeats_header
+  data_rows <- if (drop_first) {
     if (length(rows) == 1L) list() else rows[seq.int(2L, length(rows))]
   } else {
     rows
   }
 
-  added <- .collect_stub_rows(data_rows, current, comments)
+  collected <- .collect_stub_rows(data_rows, current, comments)
+  .check_table_row_accounting(tbl_node,
+                              n_header_rows = if (drop_first) 1L else 0L,
+                              collected     = collected,
+                              tlf_number    = current$tlf_number,
+                              location      = current$title %||% "")
+  added <- collected$rows
   if (length(added) == 0) return(current)
 
   current$stub_rows <- c(current$stub_rows %||% list(), added)
@@ -1109,18 +1160,42 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
 #' `.populate_table()` so a continuation table under the same heading
 #' produces rows by exactly the same rules (annotation detection,
 #' strikethrough scope, vMerge ghosts, comment and data-cell fallbacks).
+#'
+#' Returns `list(rows, n_empty, n_vmerge, n_struck)`: the stub-row records
+#' plus a count for every row that was deliberately skipped. The counts feed
+#' `.check_table_row_accounting()`, which requires every `<w:tr>` handed in
+#' here to end up either as a row or in one of the skip counters -- a row
+#' must never just vanish.
 #' @noRd
 .collect_stub_rows <- function(data_rows, current, comments = list()) {
   stub_rows <- list()
+  n_empty  <- 0L
+  n_vmerge <- 0L
+  n_struck <- 0L
   for (row in data_rows) {
     cells <- xml2::xml_find_all(row, "./*[local-name()='tc']")
-    if (length(cells) == 0) next
+    if (length(cells) == 0) {
+      ## A <w:tr> with no <w:tc> at all -- malformed or purely decorative.
+      ## Rare enough to be worth a note; counted so it stays accounted for.
+      n_empty <- n_empty + 1L
+      diag_add(
+        stage = "parse_shell", severity = "INFO", input = INPUT_SHELL,
+        problem = sprintf("A table row in %s has no cells and was skipped.",
+                          current$tlf_number %||% "?"),
+        tlf_number = current$tlf_number,
+        action = "Check the shell for an empty or malformed table row"
+      )
+      next
+    }
 
     stub_cell <- cells[[1]]
     ## A vMerge-continuation stub cell is not a real row -- it is the
     ## bottom half of a vertically merged cell above it. Skip it so it
     ## doesn't show up as a blank ghost row.
-    if (.is_vmerge_continuation(stub_cell)) next
+    if (.is_vmerge_continuation(stub_cell)) {
+      n_vmerge <- n_vmerge + 1L
+      next
+    }
 
     raw_text  <- .cell_text(stub_cell)
     runs_meta <- .runs_metadata(stub_cell)
@@ -1130,6 +1205,7 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
     ## analysis to the deliverable, so it is skipped -- loudly, because
     ## the reviewer must be able to see that arsbridge dropped it.
     if (.all_text_struck(runs_meta)) {
+      n_struck <- n_struck + 1L
       .diag_gap(
         stage = "parse_shell", severity = "INFO", input = INPUT_SHELL,
         problem = sprintf(
@@ -1192,7 +1268,34 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
 
     stub_rows[[length(stub_rows) + 1L]] <- row_entry
   }
-  stub_rows
+  list(rows = stub_rows, n_empty = n_empty, n_vmerge = n_vmerge,
+       n_struck = n_struck)
+}
+
+#' Row-accounting invariant for one table: every `<w:tr>` must be classified
+#' as a header row, a data row, or a skip with a known reason. Anything else
+#' means the parser dropped a row with no trace -- exactly the failure mode
+#' that once dropped whole tables from a deliverable without a message -- so
+#' a mismatch is a FAIL, not a warning.
+#' @noRd
+.check_table_row_accounting <- function(tbl_node, n_header_rows, collected,
+                                        tlf_number, location = "") {
+  n_total <- length(xml2::xml_find_all(tbl_node, "./*[local-name()='tr']"))
+  n_accounted <- n_header_rows + length(collected$rows) +
+    collected$n_empty + collected$n_vmerge + collected$n_struck
+  if (n_accounted == n_total) return(invisible(TRUE))
+  diag_add(
+    stage = "parse_shell", severity = "FAIL", input = INPUT_SHELL,
+    problem = sprintf(
+      "Row accounting failed for a table under %s: %d row(s) in the table but %d accounted for (%d header, %d data, %d cell-less, %d vMerge ghost, %d struck through).",
+      tlf_number %||% "?", n_total, n_accounted, n_header_rows,
+      length(collected$rows), collected$n_empty, collected$n_vmerge,
+      collected$n_struck),
+    tlf_number = tlf_number,
+    location   = location,
+    action = "This is an arsbridge parsing bug: a table row was dropped without a diagnostic. Do not trust this output; report the shell (or its structure digest)."
+  )
+  invisible(FALSE)
 }
 
 .populate_table <- function(current, tbl_node, comments = list()) {
@@ -1261,13 +1364,18 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
     })
   }
 
-  ## Stub rows: everything after the header rows.
   ## Stub rows: everything after the header rows. Shared with the
   ## continuation-table path so both build rows identically.
-  current$stub_rows <- .collect_stub_rows(
+  collected <- .collect_stub_rows(
     if (length(rows) > n_header_rows)
       rows[seq.int(n_header_rows + 1L, length(rows))] else list(),
     current, comments)
+  .check_table_row_accounting(tbl_node,
+                              n_header_rows = n_header_rows,
+                              collected     = collected,
+                              tlf_number    = current$tlf_number,
+                              location      = current$title %||% "")
+  current$stub_rows <- collected$rows
 
   current
 }
