@@ -436,3 +436,151 @@ test_that("an unreadable sort clause warns and keeps the default", {
   expect_equal(nrow(hit), 1)
   expect_true(grepl("descending frequency", hit$action))
 })
+
+
+## --- token dialects (Phase R3) ----------------------------------------------
+
+.tok_row <- function(label, annotation = "") {
+  list(label = label, annotation = annotation,
+       has_annot = nzchar(annotation))
+}
+
+test_that(".token_stem reads both dialects and rejects ordinary labels", {
+  expect_equal(.token_stem("<System Organ Class>"), "SYSTEM ORGAN CLASS")
+  expect_equal(.token_stem("<Preferred Term>"), "PREFERRED TERM")
+  ## A numbered token: the number is what varies, the stem is what repeats.
+  expect_equal(.token_stem("SOC#1"), "SOC")
+  expect_equal(.token_stem("PT#2"), "PT")
+  expect_equal(.token_stem("PT#n"), "PT")
+  expect_equal(.token_stem("Body System #1"), "BODY SYSTEM")
+  ## The angle dialect de-numbers too, so <Reason #1>/<Reason #2> pair up.
+  expect_equal(.token_stem("<Reason #2>"), "REASON")
+
+  expect_null(.token_stem("Age (years)"))
+  expect_null(.token_stem("Subjects with any TEAE"))
+  expect_null(.token_stem(""))
+  expect_null(.token_stem(NULL))
+  ## A stray "#" in real prose is not a token.
+  expect_null(.token_stem("Cohort #1 versus placebo"))
+})
+
+test_that("the numbered SOC#n / PT#n dialect is a nested block", {
+  rows <- list(
+    .tok_row("Subjects with at least one medical history",
+             "ADMH.MHCAT='GENERAL MEDICAL HISTORY'"),
+    .tok_row("SOC#1", "ADMH.MHBODSYS"),
+    .tok_row("PT#1", "ADMH.MHDECOD"),
+    ## The repeats carry NO annotation -- they inherit through the stem.
+    .tok_row("PT#2"),
+    .tok_row("PT#n"),
+    .tok_row("SOC#2"),
+    .tok_row("PT#1"),
+    .tok_row("PT#n")
+  )
+  roles <- .detect_nested_token_blocks(rows, list())
+  expect_equal(roles[1], NA_character_)
+  expect_equal(roles[2], "nested_parent")
+  expect_equal(roles[3], "nested_child")
+  expect_true(all(roles[4:8] == "nested_repeat"))
+})
+
+test_that("single-level mocks under a categorical parent collapse", {
+  rows <- list(
+    .tok_row("Primary reason for discontinuation, n (%)", "ADSL.DCSREASN"),
+    .tok_row("<Reason #1>", "ADSL.DCSREASN"),
+    .tok_row("<Reason #2>", "ADSL.DCSREASN"),
+    .tok_row("...")
+  )
+  roles <- .detect_nested_token_blocks(rows, list())
+  ## The categorical row itself stays; its illustrations do not.
+  expect_equal(roles[1], NA_character_)
+  expect_true(all(roles[2:4] == "level_repeat"))
+})
+
+test_that("mocks on a different variable than the row above are left alone", {
+  rows <- list(
+    .tok_row("Age group, n (%)", "ADSL.AGEGR1"),
+    .tok_row("<Preferred Term>", "ADAE.AEDECOD"),
+    .tok_row("<Preferred Term>", "ADAE.AEDECOD")
+  )
+  ## No parent/child pair (one variable) and no matching categorical row
+  ## above -- nothing is collapsed, the rows keep their own analyses.
+  expect_equal(.detect_nested_token_blocks(rows, list()),
+               rep(NA_character_, 3))
+})
+
+test_that("a continuation row is only swallowed after a mock block", {
+  ## After a mock block: part of it.
+  rows <- list(
+    .tok_row("Reason, n (%)", "ADSL.DCSREASN"),
+    .tok_row("<Reason #1>", "ADSL.DCSREASN"),
+    .tok_row("...")
+  )
+  expect_equal(.detect_nested_token_blocks(rows, list())[3], "level_repeat")
+
+  ## After an ordinary row: left alone (it is the reviewer's problem, not
+  ## something to silently drop).
+  rows2 <- list(
+    .tok_row("Age (years)", "ADSL.AGE"),
+    .tok_row("...")
+  )
+  expect_equal(.detect_nested_token_blocks(rows2, list()),
+               rep(NA_character_, 2))
+})
+
+test_that("level_repeat rows are emitted nowhere but are reported", {
+  diag_reset()
+  sec <- .nested_section()
+  sec$stub_rows <- list(
+    .tok_row("Primary reason for discontinuation, n (%)", "ADSL.DCSREASN"),
+    .tok_row("<Reason #1>", "ADSL.DCSREASN"),
+    .tok_row("<Reason #2>", "ADSL.DCSREASN"),
+    .tok_row("...")
+  )
+  re <- build_ars_json(list(sec), study_id = "S-LVL")
+
+  ## One analysis: the categorical row. The mocks contributed none.
+  expect_length(re$analyses, 1)
+  layout <- re$outputs[[1]][["_meta"]][["shell_layout"]]
+  labels <- vapply(layout, function(e) e$label, character(1))
+  expect_equal(labels, "Primary reason for discontinuation, n (%)")
+
+  d <- diag_records()
+  hits <- d[grepl("illustrates the levels", d$problem), , drop = FALSE]
+  expect_equal(nrow(hits), 3)
+  expect_true(all(hits$severity == "INFO"))
+})
+
+test_that("bare numbered repeats never become literal label rows", {
+  ## The regression this guards: the un-annotated-row branch used to run
+  ## BEFORE the mock-role check, so "PT#2" / "SOC#2" / "..." were persisted
+  ## as authored label rows and the placeholder text rendered as if it were
+  ## a real table row.
+  sec <- .nested_section()
+  sec$source_datasets <- "ADMH"
+  sec$stub_rows <- list(
+    .tok_row("Subjects with at least one medical history",
+             "ADMH.MHCAT='GENERAL MEDICAL HISTORY'"),
+    .tok_row("SOC#1", "ADMH.MHBODSYS"),
+    .tok_row("PT#1", "ADMH.MHDECOD"),
+    .tok_row("PT#2"),
+    .tok_row("PT#n"),
+    .tok_row("SOC#2"),
+    .tok_row("PT#1"),
+    .tok_row("PT#n")
+  )
+  re <- build_ars_json(list(sec), study_id = "S-MHNUM")
+
+  layout <- re$outputs[[1]][["_meta"]][["shell_layout"]]
+  kinds  <- vapply(layout, function(e) e$kind, character(1))
+  labels <- vapply(layout, function(e) e$label, character(1))
+
+  ## Three rows only: the any-history count (a filter on its own variable,
+  ## so a subject count within that subset) and the nested pair. The five
+  ## bare repeats contributed nothing.
+  expect_equal(kinds, c("filtered_count", "nested_parent", "nested_child"))
+  expect_false(any(grepl("#", labels[kinds == "label"])))
+  ## The rows that carry the analyses are the annotated ones.
+  expect_equal(labels[2], "SOC#1")
+  expect_equal(labels[3], "PT#1")
+})

@@ -358,15 +358,53 @@
 #' dataset alternate as (parent, child+)+, so ordinary token rows (a lone
 #' "<Visit>" row, mixed sequences) are never captured.
 #' @noRd
+#' The "stem" of a mock/token row label, or NULL when the label is not a
+#' token. Shells author data-driven placeholder rows in two dialects:
+#'
+#'   angle    "<System Organ Class>", "<Preferred Term>", "<Reason #2>"
+#'   numbered "SOC#1", "PT#1", "PT#2", "PT#n"
+#'
+#' Rows of the SAME stem are repeats of one template ("PT#1", "PT#2",
+#' "PT#n" all stand for a Preferred Term), so the stem is what links a bare
+#' repeat back to the annotated row that defines its variable. A trailing
+#' number / "#n" / "n" is dropped from the stem; the angle dialect's stem is
+#' its inner text, likewise de-numbered.
+#' @noRd
+.token_stem <- function(label) {
+  label <- trimws(as.character(label %||% ""))
+  if (!nzchar(label)) return(NULL)
+  inner <- if (grepl("^<.+>$", label)) {
+    sub("^<(.*)>$", "\\1", label)
+  } else if (grepl("^[A-Za-z][A-Za-z ]{0,30}#\\s*(?:\\d+|[nNxX])$", label,
+                   perl = TRUE)) {
+    sub("#.*$", "", label)
+  } else {
+    return(NULL)
+  }
+  inner <- trimws(sub("#?\\s*(?:\\d+|[nNxX])\\s*$", "", trimws(inner)))
+  if (!nzchar(inner)) return(NULL)
+  toupper(inner)
+}
+
+#' TRUE for a bare continuation row ("...", a single ellipsis character,
+#' "etc.") -- the shell's way of saying "and so on for every level"; it
+#' names no analysis of its own. The ellipsis is written as an escape so
+#' the source file stays ASCII.
+#' @noRd
+.is_continuation_row <- function(row) {
+  if (isTRUE(row$has_annot)) return(FALSE)
+  label <- trimws(as.character(row$label %||% ""))
+  grepl("^(?:\\.{2,}|\u2026|etc\\.?)$", label, perl = TRUE)
+}
+
 .detect_nested_token_blocks <- function(rows, er_by_label) {
   n <- length(rows)
   roles <- rep(NA_character_, n)
   if (n < 2) return(roles)
 
-  token_ref <- function(row) {
+  ## The dataset/variable a row's own annotation names, or NULL.
+  row_ref <- function(row) {
     if (!isTRUE(row$has_annot)) return(NULL)
-    label <- trimws(as.character(row$label %||% ""))
-    if (!grepl("^<.+>$", label)) return(NULL)
     er <- er_by_label[[row$label %||% ""]] %||% list()
     ds  <- er$primary_dataset  %||% ""
     var <- er$primary_variable %||% ""
@@ -381,7 +419,24 @@
     list(ds = toupper(ds), var = toupper(var))
   }
 
-  refs <- lapply(rows, token_ref)
+  stems <- vapply(rows, function(r) .token_stem(r$label) %||% NA_character_,
+                  character(1))
+  own   <- lapply(rows, row_ref)
+
+  ## Un-annotated repeats inherit from the first ANNOTATED row sharing their
+  ## token stem: the numbered dialect annotates "SOC#1"/"PT#1" once and
+  ## leaves "PT#2", "PT#n", "SOC#2" bare.
+  stem_ref <- list()
+  for (k in seq_len(n)) {
+    st <- stems[k]
+    if (is.na(st) || is.null(own[[k]]) || !is.null(stem_ref[[st]])) next
+    stem_ref[[st]] <- own[[k]]
+  }
+
+  refs <- lapply(seq_len(n), function(k) {
+    if (is.na(stems[k])) return(NULL)
+    own[[k]] %||% stem_ref[[stems[k]]]
+  })
 
   i <- 1L
   while (i <= n) {
@@ -413,12 +468,46 @@
         }
       }
       if (shape_ok) {
+        ## The rows that CARRY the two analyses must be ones with their own
+        ## annotation -- a bare repeat has only an inherited variable, and
+        ## the analysis builder needs the real annotation text.
+        pick <- function(v) {
+          cand <- run[run_vars == v]
+          annotated <- cand[!vapply(cand, function(k) is.null(own[[k]]),
+                                    logical(1))]
+          if (length(annotated) > 0) annotated[1] else cand[1]
+        }
         roles[run] <- "nested_repeat"
-        roles[run[match(parent, run_vars)]] <- "nested_parent"
-        roles[run[match(child, run_vars)]]  <- "nested_child"
+        roles[pick(parent)] <- "nested_parent"
+        roles[pick(child)]  <- "nested_child"
+      }
+    }
+
+    ## ONE-level mock block: a run of token rows on a single variable that
+    ## merely illustrates the levels of the categorical row ABOVE them
+    ## ("Primary reason for discontinuation [ADSL.DCSREASN]" followed by
+    ## "<Reason #1>", "<Reason #2>", "..."). That parent's categorical
+    ## analysis already expands every level, so the mocks are emitted
+    ## nowhere -- rendering them literally is the defect.
+    if (all(is.na(roles[run])) && length(distinct) == 1 && i > 1L) {
+      above <- own[[i - 1L]]
+      if (!is.null(above) && is.na(stems[i - 1L]) &&
+            identical(above$var, distinct[1]) &&
+            identical(above$ds, run_ds[1])) {
+        roles[run] <- "level_repeat"
       }
     }
     i <- j + 1L
+  }
+
+  ## A bare "..." continuation directly under a mock block belongs to it.
+  for (k in seq_len(n)) {
+    if (!is.na(roles[k]) || !.is_continuation_row(rows[[k]])) next
+    if (k > 1L && !is.na(roles[k - 1L]) &&
+          roles[k - 1L] %in% c("level_repeat", "nested_repeat",
+                               "nested_child")) {
+      roles[k] <- "level_repeat"
+    }
   }
   roles
 }
@@ -851,7 +940,15 @@ build_ars_json <- function(sections,
       raw <- as.character(row$raw_text %||% "")
       indent <- nchar(regmatches(raw, regexpr("^ *", raw))[[1]] %||% "")
 
-      if (!isTRUE(row$has_annot)) {
+      ## Mock/template rows are resolved BEFORE the label-only branch: the
+      ## numbered dialect leaves its repeats un-annotated ("PT#2", "PT#n",
+      ## "SOC#2"), and a bare "..." continuation carries no annotation
+      ## either. Treating those as authored label rows would print the
+      ## placeholder text as if it were a real row.
+      nested_role <- nested_roles[[ridx]]
+
+      if (!isTRUE(row$has_annot) &&
+            !nested_role %in% c("level_repeat", "nested_repeat")) {
         ## Authored label-only row (section header / spacer): persisted in
         ## the layout so the renderer keeps it, but it has no analysis.
         ## A spacer also ends any categorical block above it.
@@ -863,7 +960,20 @@ build_ars_json <- function(sections,
         next
       }
 
-      nested_role <- nested_roles[[ridx]]
+      if (identical(nested_role, "level_repeat")) {
+        ## A mock of the levels the row ABOVE already expands ("<Reason
+        ## #2>", "PT#n", a trailing "..."): emitted nowhere, or the shell's
+        ## placeholder text would render as if it were a real level.
+        diag_add(
+          stage = "build_ars", severity = "INFO",
+          problem = sprintf(
+            "Row '%s' illustrates the levels of the row above it -- collapsed into that analysis",
+            row$label %||% "?"),
+          tlf_number = sec$tlf_number,
+          action = "The categorical analysis above expands every observed level"
+        )
+        next
+      }
       if (identical(nested_role, "nested_repeat")) {
         ## A further mock example of an already-captured nested block
         ## (another "<Preferred Term>" row, the repeated "<System Organ
