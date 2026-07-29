@@ -20,8 +20,8 @@ write_supplement_draft(
 When given, a draft analysis whose variable is not in the spec is
 flagged in \code{reviewItems} (the same gate \code{spec_to_ars()} enforces later).}
 
-\item{heading_patterns}{Optional custom heading patterns, as in
-\code{\link[=parse_shell_docx]{parse_shell_docx()}}.}
+\item{heading_patterns}{Optional custom heading patterns, as understood
+by the shell parser.}
 }
 \value{
 Invisibly, the normalized output path. The draft is also
