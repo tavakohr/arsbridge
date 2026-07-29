@@ -198,3 +198,59 @@ test_that(".all_text_struck needs EVERY texted run struck, not just one", {
   expect_false(.all_text_struck(list(run("   ", FALSE))))
   expect_false(.all_text_struck(list()))
 })
+
+
+## --- wrapped annotations and continuation tables ----------------------------
+
+test_that(".cell_text joins mid-annotation breaks without a space", {
+  ## Word wraps a narrow header cell mid-token. A space there truncates the
+  ## variable (ADSL.C) and loses the condition entirely; joining bare keeps
+  ## the reference whole.
+  expect_true(.unclosed_bracket("[ADSL.C"))
+  expect_false(.unclosed_bracket("[ADSL.AGE]"))
+  expect_false(.unclosed_bracket("Ongoing at the time of the data"))
+
+  ## The two joins the rule has to tell apart.
+  expect_equal(extract_annotation_vars("ADSL.CGHGR1N=1"), "ADSL.CGHGR1N")
+  expect_equal(extract_annotation_vars("ADSL.C GHGR1N =1"), "ADSL.C")
+})
+
+test_that("a header annotation split mid-token still resolves", {
+  secs <- suppressMessages(.rwb_secs())
+  groups <- secs[[1]]$column_groups$groups
+  conds  <- vapply(groups, function(g) g$annotation %||% "", character(1))
+  ## The fixture authors this cohort's annotation across two paragraphs,
+  ## broken between "ADSL.C" and "OHORTN=1".
+  expect_equal(conds[1], "ADSL.COHORTN=1")
+  expect_false(any(grepl("ADSL\\.C\\s", conds)))
+})
+
+test_that("a continuation table's rows join the display above it", {
+  diag_reset()
+  secs <- suppressMessages(.rwb_secs())
+  sec  <- secs[[1]]
+
+  ## One heading, one output -- the second table is not a new section.
+  expect_length(secs, 1)
+
+  lbl <- vapply(sec$stub_rows, function(r) r$label, character(1))
+  expect_true("Subjects re-screened after washout" %in% lbl)
+  expect_true("Subjects re-consented" %in% lbl)
+  ## Appended in document order, after the first table's rows.
+  expect_equal(tail(lbl, 2),
+               c("Subjects re-screened after washout", "Subjects re-consented"))
+  ## Their annotations survive the append.
+  ann <- vapply(sec$stub_rows, function(r) r$annotation %||% "", character(1))
+  expect_equal(ann[lbl == "Subjects re-consented"], "ADSL.RECONFL='Y'")
+
+  ## The continuation's repeated header row is not mistaken for data, and
+  ## does not overwrite the captured column headers.
+  expect_false(any(grepl("Cohort \\(N=XX\\)", lbl)))
+  expect_equal(sec$col_headers[1], "Alpha Cohort (N=XX)")
+
+  d <- diag_records()
+  hit <- d[grepl("continuation table", d$problem), , drop = FALSE]
+  expect_equal(nrow(hit), 1)
+  expect_equal(hit$severity, "INFO")
+  expect_match(hit$problem, "2 more row")
+})

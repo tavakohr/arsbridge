@@ -1,5 +1,24 @@
 # arsbridge (development version)
 
+* **Continuation tables are no longer dropped.** A shell that splits one
+  display across several Word tables (a page break mid-table) lost every row
+  after the first table: arsbridge modelled one table per TLF heading and
+  discarded the rest with a warning. On the study that surfaced this, 23
+  tables were being dropped, which is why several outputs came out with no
+  rows at all. Extra tables under the same heading now append their rows to
+  the open display, in document order, with an INFO diagnostic. A repeated
+  header row at the top of a continuation is recognised and skipped, and
+  never overwrites the captured column geometry.
+
+* **An annotation that wraps mid-token is read whole again.** Word breaks a
+  narrow header cell in the middle of a reference (`[ADSL.C` / `OHORTN=1]`).
+  Joining a cell's paragraphs with a space -- introduced to stop wrapped
+  LABELS fusing ("dataextraction") -- truncated such an annotation to
+  `ADSL.C` and dropped its condition silently, which left conditioned
+  sub-columns unreadable and their column hierarchy flat. Paragraphs now
+  join bare when the break falls inside an unclosed bracket or mid-reference,
+  and with a space otherwise, so both cases are correct.
+
 * **Client-content guards hardened.** `inputs/` is now default-deny in
   `.gitignore` with the synthetic APX-DRM-301 practice files allowlisted, so
   a sponsor document copied in under any name cannot be swept into a commit

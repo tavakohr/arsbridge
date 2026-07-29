@@ -64,7 +64,9 @@ stub <- c(
 
 tbl <- data.frame(
   ` ` = stub,
-  `Alpha Cohort (N=XX) [ADSL.COHORTN=1]` = rep("xx (xx.x)", length(stub)),
+  ## Post-processed below: this header annotation is split mid-token across
+  ## two paragraphs, exactly as Word wraps a narrow header cell.
+  `Alpha Cohort (N=XX) [ADSL.C@@OHORTN=1]` = rep("xx (xx.x)", length(stub)),
   `Beta Cohort (N=XX) [ADSL.COHORTN=2]`  = rep("xx (xx.x)", length(stub)),
   `Unknown (N=XX) [is.na(ADSL.COHORTN) OR ADSL.COHORTN==99]` =
     rep("xx (xx.x)", length(stub)),
@@ -79,6 +81,16 @@ doc <- read_docx() |>
            "[ADSL. SCRNFL=\"Y\" [PROGRAMMING DATASETS USED: ADSL]]"),
     style = "heading 2") |>
   body_add_table(value = tbl, style = "table_template") |>
+  body_add_table(
+    value = data.frame(
+      ` ` = c("Subjects re-screened after washout [ADSL.RESCRN=1]",
+              "Subjects re-consented [ADSL.RECONFL=\'Y\']"),
+      `Alpha Cohort (N=XX)` = rep("xx (xx.x)", 2),
+      `Beta Cohort (N=XX)`  = rep("xx (xx.x)", 2),
+      `Unknown (N=XX)`      = rep("xx (xx.x)", 2),
+      `Total (N=XX)`        = rep("xx (xx.x)", 2),
+      check.names = FALSE, stringsAsFactors = FALSE),
+    style = "table_template") |>
   body_add_par("[a] Each subject will be counted only once.") |>
   body_add_par("Source: ADSL, ADMH, ADCM")
 
