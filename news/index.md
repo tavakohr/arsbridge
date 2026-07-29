@@ -2,6 +2,18 @@
 
 ## arsbridge (development version)
 
+- **The `(Q1, Q3)` row is no longer empty.** A continuous summary maps
+  `p25`/`p75` (and `q1`/`q3`) onto a “(Q1, Q3)” stat line, but no
+  formatter emitted that structure – the row rendered with its label and
+  no numbers, silently dropping the quartiles. Both stat-name spellings
+  now format as `(xx.x, xx.x)`, matching the `(Min, Max)` line beside
+  it.
+
+- **Figures carry their number and title.** A figure was written into
+  the combined deliverable as a bare image: no heading, no title, no
+  footnotes – nothing tying it to its shell. Figures now get the same
+  heading / title / footnote band that tables and listings get.
+
 - **A spanning header that names its grouping VARIABLE now builds a
   column hierarchy.** A two-level header whose parent carries the
   variable (`Alpha Cohort [ADSL.COHORTN]`) and whose sub-columns carry
