@@ -372,9 +372,12 @@ ars_validate_supplement <- function(path, adam_spec_path = NULL) {
     if (!nzchar(trimws(as.character(a$rowLabel %||% "")))) {
       note("FAIL", tlf, where, "regenerate: each analysis needs a non-empty 'rowLabel' (the stub text verbatim)")
     }
+    ## A suppression entry removes a wrongly-parsed row; it names the row
+    ## and nothing else, so the variable requirement does not apply to it.
+    if (isTRUE(a$suppress)) next
     ref <- .supp_var_ref(a$variable)
     if (!nzchar(ref)) {
-      note("FAIL", tlf, where, "regenerate: each analysis needs a 'variable' with 'dataset' and 'variable'")
+      note("FAIL", tlf, where, "regenerate: each analysis needs a 'variable' with 'dataset' and 'variable' (or 'suppress': true to remove the row)")
     } else {
       check_ref(ref, tlf, where)
     }

@@ -169,7 +169,13 @@ Required: `title`, `analysis_type`, `is_supported`.
 Per-`analyses` entry:
 
 - **`rowLabel`** (required) — the stub text verbatim.
-- **`variable`** (required) — `{"dataset": "ADSL", "variable": "AGE"}`.
+- **`variable`** (required unless `suppress` is set) —
+  `{"dataset": "ADSL", "variable": "AGE"}`.
+- **`suppress`** — `true` removes the matching parsed stub row entirely: use
+  it for a row arsbridge should not have read as live (a caption swept into
+  the stub column, a wrongly-merged continuation row). A suppression entry
+  carries only `rowLabel` and `suppress`; it is honoured only when arsbridge
+  runs with `supplement_trust = "prefer_supplement"`.
 - **`whereClause`** — the typed row filter, when the row displays a specific
   value (for example the "Completed" row of a disposition table).
 - **`methodId`** — a per-row method (for a `MIXED_SUMMARY` row).
