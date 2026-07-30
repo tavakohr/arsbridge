@@ -581,7 +581,9 @@
 .parse_arrow_directive <- function(text) {
   text <- trimws(as.character(text %||% ""))
   if (!nzchar(text)) return(NULL)
-  pos <- regexpr("->|→", text)
+  ## The arrow is written as an escape, not the character: R CMD check
+  ## rejects non-ASCII in code, and a shell author may type either form.
+  pos <- regexpr("->|\u2192", text)
   if (pos < 1) return(NULL)
 
   lhs <- substr(text, 1L, pos - 1L)
