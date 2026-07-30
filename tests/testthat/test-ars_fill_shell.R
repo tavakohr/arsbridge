@@ -687,3 +687,58 @@ test_that("listings and figures fill end to end, and nothing else regresses", {
   t2 <- run$book$sheets[["Table 14.1.2"]]
   expect_equal(t2$cells$text[t2$cells$ref == "B6"], "66.0 (5.16)")
 })
+
+test_that("a sheet carrying something unshiftable is refused, not half-moved", {
+  ## A shift moves cells, row records, merges and the extent. A worksheet can
+  ## carry other row-bounded constructs, and leaving one addressing the row a
+  ## footnote used to occupy is a wrong deliverable that opens cleanly. The
+  ## listing is left exactly as authored instead.
+  path <- mini_listing()
+  wb <- openxlsx2::wb_load(path)
+  wb$add_conditional_formatting(sheet = "L", dims = "A3:B4", type = "duplicatedValues")
+
+  before <- xlsx_read_shell_cells(path)$sheets[[1]]
+  rows <- data.frame(a = c("S1", "S2", "S3"), b = c("x", "y", "z"),
+                     stringsAsFactors = FALSE)
+  res <- .fill_listing_sheet(wb, 1L, list(template_row = 3L), rows, TRUE, "L")
+
+  expect_equal(res$records[[1]]$status, "skipped")
+  expect_match(res$records[[1]]$reason, "conditional formatting")
+
+  ## Nothing was written: the template row still reads as authored.
+  out <- tempfile(fileext = ".xlsx")
+  openxlsx2::wb_save(wb, out, overwrite = TRUE)
+  after <- xlsx_read_shell_cells(out)$sheets[[1]]
+  expect_equal(after$cells$text[after$cells$ref == "A3"], "xxx-xxx")
+  expect_equal(after$merges$ref, before$merges$ref)
+})
+
+test_that("a formula anywhere on the sheet blocks the shift", {
+  path <- mini_listing()
+  wb <- openxlsx2::wb_load(path)
+  wb$add_formula(sheet = "L", x = "SUM(1,2)", dims = "D1")
+  res <- .fill_listing_sheet(
+    wb, 1L, list(template_row = 3L),
+    data.frame(a = c("S1", "S2"), b = c("x", "y"), stringsAsFactors = FALSE),
+    TRUE, "L")
+  expect_equal(res$records[[1]]$status, "skipped")
+  expect_match(res$records[[1]]$reason, "formulas")
+})
+
+test_that("an ordinary listing sheet is not blocked by the guard", {
+  ## The guard must not refuse the sheets it was built for.
+  path <- mini_listing()
+  ws <- openxlsx2::wb_load(path)$worksheets[[1]]
+  expect_length(.unshiftable_features(ws, 4L), 0)
+})
+
+test_that("a single-row listing is filled even on a sheet that cannot shift", {
+  ## No shift is needed, so nothing can be left pointing at the wrong row.
+  path <- mini_listing()
+  wb <- openxlsx2::wb_load(path)
+  wb$add_conditional_formatting(sheet = "L", dims = "A3:B4", type = "duplicatedValues")
+  res <- .fill_listing_sheet(
+    wb, 1L, list(template_row = 3L),
+    data.frame(a = "S1", b = "x", stringsAsFactors = FALSE), TRUE, "L")
+  expect_equal(res$records[[1]]$status, "filled")
+})

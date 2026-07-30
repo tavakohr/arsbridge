@@ -489,6 +489,52 @@
 ## Making room: shifting rows down
 ## ---------------------------------------------------------------------------
 
+## Worksheet constructs that carry a row reference `.shift_rows_down()` does
+## not move. Each maps to the field openxlsx2 keeps it in.
+.UNSHIFTABLE <- c(
+  conditionalFormatting = "conditional formatting",
+  dataValidations       = "data validation",
+  hyperlinks            = "hyperlinks",
+  autoFilter            = "an autofilter",
+  rowBreaks             = "manual row breaks",
+  protectedRanges       = "protected ranges",
+  tableParts            = "a worksheet table",
+  cellWatches           = "cell watches"
+)
+
+#' What on this sheet would be left pointing at the wrong row by a shift.
+#'
+#' A shift moves cell references, per-row records, merged ranges and the
+#' declared extent -- the four things every shell in scope actually uses.
+#' A worksheet can carry several more row-bounded constructs, and a formula
+#' spanning the insertion point would need rewriting rather than moving.
+#' None of them appear in the shells this was built against, and rather than
+#' half-support them the writer declines the sheet: a listing left exactly as
+#' authored is a visible gap, whereas a conditional format still pointing at
+#' the row a footnote used to occupy is a wrong deliverable that opens
+#' cleanly.
+#'
+#' @return Character vector of human-readable names; empty when safe.
+#' @noRd
+.unshiftable_features <- function(ws, from_row) {
+  found <- character()
+  for (field in names(.UNSHIFTABLE)) {
+    value <- tryCatch(ws[[field]], error = function(e) NULL)
+    if (!is.null(value) && length(value) > 0) {
+      found <- c(found, unname(.UNSHIFTABLE[[field]]))
+    }
+  }
+
+  ## A formula at or below the insertion point moves with its cell, but one
+  ## ABOVE it may address a range that the shift resizes -- and neither is
+  ## rewritten here.
+  cc <- ws$sheet_data$cc
+  if (!is.null(cc) && nrow(cc) > 0 && "f" %in% names(cc)) {
+    if (any(!is.na(cc$f) & nzchar(cc$f))) found <- c(found, "formulas")
+  }
+  unique(found)
+}
+
 #' Move every row at or below `from_row` down by `by` rows.
 #'
 #' A listing's shell has ONE template row standing for however many rows the
@@ -845,7 +891,8 @@
 #'
 #' @return list(records) -- one record for the listing as a whole.
 #' @noRd
-.fill_listing_sheet <- function(wb, sheet_index, plan, rows, keep_pending) {
+.fill_listing_sheet <- function(wb, sheet_index, plan, rows, keep_pending,
+                                sheet_name = NA_character_) {
   template_row <- plan$template_row %||% NA_integer_
   record <- list(ref = NA_character_, row = template_row, col = NA_integer_,
                  analysis_id = NA_character_)
@@ -871,6 +918,30 @@
 
   n <- nrow(rows)
   ws <- wb$worksheets[[sheet_index]]
+
+  ## Refuse rather than half-move. Expanding a listing shifts rows, and a
+  ## construct this cannot shift would be left addressing the row something
+  ## else now occupies -- a file that opens cleanly and is wrong. The sheet is
+  ## left exactly as authored and reported instead.
+  if (n > 1) {
+    blockers <- .unshiftable_features(ws, template_row + 1L)
+    if (length(blockers) > 0) {
+      .diag_gap(
+        stage = "fill_shell", severity = "FAIL", input = INPUT_SHELL,
+        problem = sprintf(
+          "Listing sheet %s carries %s, which arsbridge cannot move.",
+          sheet_name %||% "?", paste(blockers, collapse = ", ")),
+        why = paste("Expanding the listing shifts rows, and those would be",
+                    "left pointing at the wrong ones."),
+        fix = paste("Remove them from the shell, or fill this listing by",
+                    "hand. Every other sheet is still filled."),
+        location = sheet_name %||% "")
+      record$status <- "skipped"
+      record$reason <- sprintf("the sheet carries %s, which cannot be shifted",
+                               paste(blockers, collapse = ", "))
+      return(list(records = list(record)))
+    }
+  }
 
   ## Make room BEFORE writing, so the template row's own cells are still where
   ## the plan says they are.
@@ -1381,7 +1452,8 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
     } else if (!is.null(fill$listing)) {
       result <- .fill_listing_sheet(
         wb, sheet_index, fill$listing,
-        .listing_rows(spec, output, adam_dir, sheet), keep_pending_placeholders)
+        .listing_rows(spec, output, adam_dir, sheet), keep_pending_placeholders,
+        sheet)
     } else if (!is.null(fill$figure)) {
       result <- .fill_figure_sheet(wb, sheet_index, fill$figure, adam_dir, sheet)
     }

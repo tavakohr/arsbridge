@@ -135,6 +135,12 @@ with only some of them updated still opens, so the failure is silent — a
 stale merge swallows a data row, a stale dimension makes Excel ignore rows
 past the old extent. Change it with a test that reads the saved file back.
 
+It moves four things and knows it: `.unshiftable_features()` lists what it
+cannot move — conditional formatting, data validation, hyperlinks, an
+autofilter, worksheet tables, row breaks, formulas — and a sheet carrying any
+of them is declined with a FAIL rather than shifted wrongly. If you teach the
+shifter one of those, take it off that list in the same change.
+
 Annotations are stripped BEFORE cells are filled, not after: a figure's series
 is written into the cells its annotation block occupied, so the other order
 erases it.

@@ -34,7 +34,13 @@
   `.shift_rows_down()`, which moves cell references, per-row records, merged
   ranges and the sheet's declared extent together. Missing any one of those
   still produces a file that opens, which is what makes it dangerous — a
-  stale merge silently swallows a data row.
+  stale merge silently swallows a data row. A sheet carrying anything else
+  row-bounded that arsbridge cannot move — conditional formatting, data
+  validation, hyperlinks, an autofilter, a worksheet table, or any formula —
+  is **refused rather than half-moved**: it is left exactly as authored and
+  reported as a FAIL, and every other sheet is still filled. A listing that
+  is visibly unfilled is a better outcome than one whose conditional format
+  now highlights the wrong row.
 
 * Emptying a cell that was entirely an annotation now clears its formatting
   as well as its text. Previously the cell kept its red font, which showed up
