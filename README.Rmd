@@ -43,6 +43,7 @@ No manual transcription. No orphan numbers. Every value auditable back to its so
 | **Native ARD execution** | Run ARS JSON directly against `.xpt` or `.csv` datasets using `{cards}`, with no dataset-loading boilerplate. |
 | **Codelist-decoded categories** | A coded categorical variable (e.g. a numeric `DCSREASN`) is decoded through the ADaM spec's codelist: the ARD and rendered table show `DEATH`, not `1`, in codelist order, with unobserved terms reported as n = 0. Unannotated coded column axes get their column labels from the codelist too. |
 | **Publication-ready tables** | `ars_render_tlf()` builds a formatted GT table: treatment columns detected, percentages rescaled, row groups labelled, ARS footnotes carried through. |
+| **The filled shell, back in Excel** | For an Excel shell, `ars_fill_shell()` returns the author's own workbook with the results in it and the red annotations gone. The layout, labels, merges, fonts and footnotes are never rebuilt — only left alone — and each placeholder's own `xx.x` decides how its number is formatted. A cell whose result does not exist keeps its placeholder and is reported, because a blank cell in a clinical table reads as a zero. |
 | **Partial tables, full traceability** | Statistics arsbridge cannot yet compute are reserved as keyed `manual_pending` rows. Each shows a `[‡ manual]` marker in the table until a programmer fills it with a validated script. Nothing is ever an orphan number. |
 
 ---
@@ -80,8 +81,9 @@ flowchart TD
         MP["manual_pending rows\nfor statistics not yet computable"]
     end
 
-    subgraph STEP5 ["Step 5 · Render"]
+    subgraph STEP5 ["Step 5 · Deliver"]
         T["ars_render_tlf()\nformatted GT table"]
+        FS["ars_fill_shell()\nthe Excel shell, filled\n(.xlsx shells only)"]
     end
 
     SHELL --> STEP1
@@ -97,7 +99,9 @@ flowchart TD
     E --> MP
     E --> STEP5
     MP -->|"fill + validate"| STEP5
-    STEP5 --> TLF["Clinical table\n(GT · Word-ready)"]
+    T --> TLF["Clinical table\n(GT · Word-ready)"]
+    SHELL -.->|"the same workbook"| FS
+    FS --> XL["Filled shell\n(.xlsx · annotations removed)"]
 ```
 
 ---
@@ -388,6 +392,37 @@ ars_validate_manual_fills(ard)
 ```
 
 `ars_render_all()` runs this check automatically and blocks any untraceable value before it reaches the final document.
+
+---
+
+### Step 7: Write the results back into the Excel shell
+
+If the study was authored as an Excel shell, the finished table already exists — the layout, the row labels, the column headers, the merges, the footnotes, and in each placeholder the number of decimal places that cell takes. All that is missing is the numbers. `ars_fill_shell()` puts them in and takes the red annotations out.
+
+```r
+res <- ars_fill_shell(
+  shell_path  = "inputs/shells.xlsx",
+  ars         = "outputs/reporting_event.json",
+  ard         = ard,
+  output_path = "outputs/filled_shells.xlsx"
+)
+
+res$filled     # cells written
+res$pending    # cells left showing their placeholder
+res$diagnostics  # one row per unfilled cell: which output, which cell, why
+```
+
+Nothing is laid out or re-created. The workbook is opened, the mapped cells are changed, and it is saved — so a run that is kept keeps its own font, and the author's column widths, row heights and merges come through untouched.
+
+Which result belongs in which cell is not decided at this point. It was recorded when the ARS was built, in each output's `_meta$shell_fill` cell map, while the shell's geometry and the analyses were both in hand. That is why filling a shell needs the ARS that came from *that* shell.
+
+Three things are deliberate:
+
+- **The placeholder is the format.** `xx.x (xx.xx)` writes one decimal then two, and keeps the parentheses. Nothing else in the pipeline carries that decision, because the shell's author already made it.
+- **An unfillable cell keeps its placeholder** and appears in `res$diagnostics` with the reason — no result in the ARD, reserved for manual derivation, or a row that stands for a repeated block. An empty cell in a clinical table reads as a zero. Pass `keep_pending_placeholders = FALSE` to blank them instead, for a workbook going to someone who will complete it by hand.
+- **`strip_annotations = FALSE`** keeps the red annotations next to the numbers, which is useful while reviewing and wrong for a deliverable.
+
+Listings and figures are not filled yet; their sheets are stripped of annotations and otherwise left as they are.
 
 ---
 

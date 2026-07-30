@@ -1,6 +1,7 @@
 # ADR 0005 — Writing results back into the shell workbook
 
-Status: Accepted (cell map implemented 2026-07-29; the writer follows)
+Status: Accepted (cell map and the table writer implemented 2026-07-29;
+listings and figures follow)
 Date: 2026-07-29
 Builds on: ADR 0004 (Excel shells as input), ADR 0003 (shell layout fidelity),
 ADR 0002 (partial results stay traceable)

@@ -1,0 +1,37 @@
+"USUBJID","AVISITN","AVISIT","PARAMCD","PARAM","TRT01A","AVAL"
+"APX-301-001",0,"Baseline","DIABP","Diastolic Blood Pressure (mmHg)","Placebo",84
+"APX-301-001",12,"Week 12","DIABP","Diastolic Blood Pressure (mmHg)","Placebo",84
+"APX-301-001",24,"Week 24","DIABP","Diastolic Blood Pressure (mmHg)","Placebo",85
+"APX-301-002",0,"Baseline","DIABP","Diastolic Blood Pressure (mmHg)","Placebo",80
+"APX-301-002",12,"Week 12","DIABP","Diastolic Blood Pressure (mmHg)","Placebo",80
+"APX-301-002",24,"Week 24","DIABP","Diastolic Blood Pressure (mmHg)","Placebo",81
+"APX-301-003",0,"Baseline","DIABP","Diastolic Blood Pressure (mmHg)","Placebo",86
+"APX-301-003",12,"Week 12","DIABP","Diastolic Blood Pressure (mmHg)","Placebo",86
+"APX-301-003",24,"Week 24","DIABP","Diastolic Blood Pressure (mmHg)","Placebo",87
+"APX-301-004",0,"Baseline","DIABP","Diastolic Blood Pressure (mmHg)","Placebo",82
+"APX-301-004",12,"Week 12","DIABP","Diastolic Blood Pressure (mmHg)","Placebo",82
+"APX-301-004",24,"Week 24","DIABP","Diastolic Blood Pressure (mmHg)","Placebo",83
+"APX-301-005",0,"Baseline","DIABP","Diastolic Blood Pressure (mmHg)","Drug 10 mg",84
+"APX-301-005",12,"Week 12","DIABP","Diastolic Blood Pressure (mmHg)","Drug 10 mg",81
+"APX-301-005",24,"Week 24","DIABP","Diastolic Blood Pressure (mmHg)","Drug 10 mg",79
+"APX-301-006",0,"Baseline","DIABP","Diastolic Blood Pressure (mmHg)","Drug 10 mg",80
+"APX-301-006",12,"Week 12","DIABP","Diastolic Blood Pressure (mmHg)","Drug 10 mg",77
+"APX-301-006",24,"Week 24","DIABP","Diastolic Blood Pressure (mmHg)","Drug 10 mg",75
+"APX-301-007",0,"Baseline","DIABP","Diastolic Blood Pressure (mmHg)","Drug 10 mg",86
+"APX-301-007",12,"Week 12","DIABP","Diastolic Blood Pressure (mmHg)","Drug 10 mg",83
+"APX-301-007",24,"Week 24","DIABP","Diastolic Blood Pressure (mmHg)","Drug 10 mg",81
+"APX-301-008",0,"Baseline","DIABP","Diastolic Blood Pressure (mmHg)","Drug 10 mg",82
+"APX-301-008",12,"Week 12","DIABP","Diastolic Blood Pressure (mmHg)","Drug 10 mg",79
+"APX-301-008",24,"Week 24","DIABP","Diastolic Blood Pressure (mmHg)","Drug 10 mg",77
+"APX-301-009",0,"Baseline","DIABP","Diastolic Blood Pressure (mmHg)","Drug 20 mg",84
+"APX-301-009",12,"Week 12","DIABP","Diastolic Blood Pressure (mmHg)","Drug 20 mg",78
+"APX-301-009",24,"Week 24","DIABP","Diastolic Blood Pressure (mmHg)","Drug 20 mg",75
+"APX-301-010",0,"Baseline","DIABP","Diastolic Blood Pressure (mmHg)","Drug 20 mg",80
+"APX-301-010",12,"Week 12","DIABP","Diastolic Blood Pressure (mmHg)","Drug 20 mg",74
+"APX-301-010",24,"Week 24","DIABP","Diastolic Blood Pressure (mmHg)","Drug 20 mg",71
+"APX-301-011",0,"Baseline","DIABP","Diastolic Blood Pressure (mmHg)","Drug 20 mg",86
+"APX-301-011",12,"Week 12","DIABP","Diastolic Blood Pressure (mmHg)","Drug 20 mg",80
+"APX-301-011",24,"Week 24","DIABP","Diastolic Blood Pressure (mmHg)","Drug 20 mg",77
+"APX-301-012",0,"Baseline","DIABP","Diastolic Blood Pressure (mmHg)","Drug 20 mg",82
+"APX-301-012",12,"Week 12","DIABP","Diastolic Blood Pressure (mmHg)","Drug 20 mg",76
+"APX-301-012",24,"Week 24","DIABP","Diastolic Blood Pressure (mmHg)","Drug 20 mg",73

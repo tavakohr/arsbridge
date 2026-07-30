@@ -1,5 +1,50 @@
 # arsbridge (development version)
 
+* **New `ars_fill_shell()`: the Excel shell you started from, with the numbers
+  in it.** Takes the shell, the ARS built from it and the ARD, and returns the
+  author's own workbook with the results written into their placeholders and
+  the red annotations removed. The layout, row labels, column headers, merges,
+  fonts, column widths and footnotes are never rebuilt — only left alone —
+  because none of them were ever lost. Each placeholder's own `xx.x (xx.xx)`
+  decides how its number is formatted, punctuation and all.
+
+  Cells are edited as run XML rather than through openxlsx2's data model. That
+  is not incidental: a run in a real shell carries `rFont` and `sz`, which
+  arsbridge's run model does not represent because it exists to *detect*
+  annotations, not reproduce formatting. Rebuilding a stripped cell would have
+  quietly reset Arial 10 to the workbook default on exactly the cells being
+  edited. A run that is kept is now never deserialized, so it cannot be
+  degraded. `tools/xlsx_roundtrip_check.R` is the standing proof, and should
+  be re-run after any openxlsx2 upgrade.
+
+  Nothing uncertain is written. A cell keeps its placeholder and is reported
+  when the ARD has no result for it, when the result is reserved for a manual
+  derivation (ADR 0002), or when the row is a template standing for a repeated
+  block such as `<System Organ Class>` — writing one system organ class's
+  count there would hide every other one behind a real-looking number. The
+  return value carries a per-cell diagnostic table saying which and why.
+  `keep_pending_placeholders = FALSE` blanks them instead, and
+  `strip_annotations = FALSE` keeps the annotations beside the numbers for
+  review. Listings and figures are not filled yet.
+
+* **A shell's decoded row labels are matched to the data's codes**, so a
+  demographics table whose rows read "Female" and "Male" fills from an
+  `ADSL.SEX` holding `F` and `M`. The pairing is refused rather than guessed
+  unless each label names exactly one data value and the result is one-to-one
+  across the whole block; every pairing that is used is reported as an INFO
+  diagnostic.
+
+* **Fixed: `ars_to_ard()` failed outright on a study mixing a declared
+  multi-grouping column axis with ordinary by-treatment analyses.** The two
+  executor paths disagreed on whether the `*_level` columns are list columns,
+  and binding them aborted with "Can't combine `<list>` and `<character>`",
+  losing the whole ARD for a perfectly well-formed study. Columns are now
+  aligned to the `{cards}` convention before binding.
+
+* Percentage rescaling is now one function shared by the fill writer and the
+  rendering path, so a filled shell and a rendered table cannot disagree about
+  whether a cell reads `25.0` or `0.3`.
+
 * **The ARS now records which worksheet cell each result belongs in.** For an
   Excel shell, every output carries `_meta$shell_fill`: a cell map binding
   each placeholder to an analysis, a column-axis position, and the statistics

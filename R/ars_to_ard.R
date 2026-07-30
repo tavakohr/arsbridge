@@ -126,6 +126,39 @@
     variables = ".v", by = ".g")[1, , drop = FALSE]
 }
 
+## Make one column type consistent across the per-analysis ARDs before they
+## are bound.
+##
+## Two executor paths build cards in different ways. The {cards} path returns
+## the package's own shape, in which the `*_level` columns are LIST columns --
+## a level can be any type, so cards boxes it. The declared-path executor
+## builds its frame directly and leaves those columns atomic. Neither is
+## wrong on its own, but a study using both -- a plain by-treatment table and
+## one whose column axis is a declared cross of two groupings -- produces a
+## list column in one card and a character column in the other, and binding
+## them fails outright with "Can't combine <list> and <character>". The whole
+## ARD is lost, for a study that is perfectly well formed.
+##
+## So any column that is a list ANYWHERE becomes a list EVERYWHERE, which is
+## the cards convention and the wider of the two shapes. Columns already
+## agreeing are untouched.
+#' @noRd
+.align_ard_columns <- function(ard_list) {
+  if (length(ard_list) < 2) return(ard_list)
+
+  listed <- unique(unlist(lapply(ard_list, function(ard) {
+    names(ard)[vapply(ard, is.list, logical(1))]
+  })))
+  if (length(listed) == 0) return(ard_list)
+
+  lapply(ard_list, function(ard) {
+    for (col in intersect(listed, names(ard))) {
+      if (!is.list(ard[[col]])) ard[[col]] <- as.list(ard[[col]])
+    }
+    ard
+  })
+}
+
 ## Build one keyed, value-less stub ARD row from a prototype row.
 #' @noRd
 .stub_ard_row <- function(proto, variable, stat_name, by_var, by_level) {
@@ -908,6 +941,8 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
   # analysis but one, and .distinct = FALSE errors on the duplicates instead.
   # So: bind_ard when identities are unique (keeps cards' checks), plain
   # row-bind preserving every analysis when they are not.
+  ard_list <- .align_ard_columns(ard_list)
+
   final_ard <- tryCatch(
     cards::bind_ard(!!!ard_list, .distinct = FALSE),
     error = function(e) {

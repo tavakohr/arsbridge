@@ -91,6 +91,34 @@ Nothing calls a reader directly: [`R/parse_shell.R`](R/parse_shell.R)
 dispatches on the file extension, and adding a format is a change there plus a
 new reader.
 
+Writing back into a workbook is the mirror of reading one, and splits the same
+way:
+
+* [`R/shell_fill_meta.R`](R/shell_fill_meta.R) — **which result goes in which
+  cell**, decided at build time and recorded as `_meta$shell_fill`. Change it
+  when the *binding* is wrong: a row shape that selects the wrong statistics,
+  a column that resolves to the wrong group.
+* [`R/ars_fill_shell.R`](R/ars_fill_shell.R) — **putting it there.** Reads that
+  map, looks each value up in the ARD, and edits the cell. It decides nothing
+  about bindings; if a number lands in the wrong cell, the bug is almost always
+  in the map, not here.
+
+Two rules hold in the writer, and both are load-bearing:
+
+* **Edit the run XML, never rebuild the cell.** Cells are changed through
+  `wb$worksheets[[i]]$sheet_data$cc$is`, so a run that is kept is never
+  deserialized. Going through `wb_add_data()` or `fmt_txt()` instead would
+  drop every run property arsbridge does not model — `rFont` and `sz` are on
+  every run of a real shell, and a superscript footnote marker would add
+  `vertAlign`. See the Mechanism section of
+  [`adr/0005-filled-shell-output.md`](adr/0005-filled-shell-output.md), and
+  re-run `tools/xlsx_roundtrip_check.R` after any openxlsx2 upgrade — the
+  writer depends on that internal representation.
+* **Never write a value you are not sure of.** A cell whose result is missing,
+  ambiguous, or reserved keeps its placeholder and is reported. An empty cell
+  in a clinical table reads as a zero, and a plausible wrong number is the one
+  that survives review.
+
 Two gates apply to any change in shared code:
 
 * **The Word path must stay byte-identical.** Re-run `parse_decision_digest()`

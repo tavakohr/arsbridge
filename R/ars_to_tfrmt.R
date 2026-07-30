@@ -559,6 +559,12 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
   out[[col_var]] <- cv
 
   ## Rescale proportion stats (cards stores p in [0, 1]) to percentages.
+  ##
+  ## Gated over the whole output here, not per analysis as everywhere else
+  ## (`.rescale_proportions()`): on this path one analysis whose p escaped
+  ## [0, 1] suppresses the rescale for all of them. Left as it is rather than
+  ## unified, because changing it would change rendered output for a defect
+  ## nobody has reported -- but the two rules should become one.
   pct_rows <- out[["stat_name"]] %in% c("p", "pct", "percent")
   if (any(pct_rows)) {
     pv <- out[["stat"]][pct_rows]
@@ -665,20 +671,12 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
     flat$stat_name == "n"
   flat$stat_name[subj] <- .ARS_SUBJ_N_PARAM
 
-  ## Rescale proportion stats (cards stores p in [0, 1]) to percentages.
-  ## Gated PER ANALYSIS: one analysis whose p escaped [0, 1] (e.g. a
-  ## denominator defect in a supplement variant) must not block the rescale
-  ## for every healthy analysis in the output.
-  pct <- flat$stat_name %in% c("p", "pct", "percent")
-  if (any(pct)) {
-    for (aid in unique(flat$analysis_id[pct])) {
-      sel <- pct & (flat$analysis_id %in% aid)
-      pv <- flat$stat[sel]
-      if (all(is.na(pv) | (pv >= 0 & pv <= 1.0000001))) {
-        flat$stat[sel] <- pv * 100
-      }
-    }
-  }
+  ## Rescale proportion stats (cards stores p in [0, 1]) to percentages,
+  ## per analysis. Shared with the fill writer -- a rendered table and a
+  ## filled shell disagreeing about whether a cell says 25.0 or 0.3 is the
+  ## kind of difference nobody notices until a reviewer does.
+  flat$stat <- .rescale_proportions(flat$stat, flat$stat_name,
+                                    flat$analysis_id)
 
   ## Column restriction: only shell columns (plus the ungrouped Total pass).
   ## Param restriction: each analysis keeps its own method's formatted params.
