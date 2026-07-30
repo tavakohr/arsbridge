@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9048</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9049</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -65,12 +65,23 @@
 </ul></div>
 </div>
 <div class="section level2">
+<h2 id="where-shell-parsing-lives">Where shell parsing lives<a class="anchor" aria-label="anchor" href="#where-shell-parsing-lives"></a></h2>
+<p>Reading an annotated shell is split in two, and a change usually belongs in exactly one half:</p>
+<ul><li>
+<a href="R/parse_shell_core.R"><code>R/parse_shell_core.R</code></a> — <strong>format-agnostic.</strong> The annotation grammar (<code>.ANNOTATION_PATTERN</code>, the bracket tokenizer), the detection layers, the TLF-heading grammar, and section assembly (<code>.new_section()</code>, <code>bind_annotations()</code>, the column-group resolvers, <code>.finalize_section()</code>). This code reads text and per-run formatting metadata; it never sees a document. Change it when the <em>convention</em> changes — a new annotation form, a new heading shape.</li>
+<li>
+<a href="R/parse_shell_docx.R"><code>R/parse_shell_docx.R</code></a> — <strong>OOXML only.</strong> The body walker, the table and header grid readers, the Word-comment and page-header readers, and the run/cell readers that turn <code>&lt;w:r&gt;</code> nodes into the run list. Change it when the <em>file format</em> changes — a Word construct that was being read wrong.</li>
+</ul><p>The two halves meet at two seams, documented at the top of the core file: the <strong>per-run metadata list</strong> (<code>text</code>, <code>raw_text</code>, <code>color_hex</code>, <code>highlight</code>, <code>bold</code>, <code>italic</code>, <code>underline</code>, <code>strike</code>) and the <strong>header-grid record</strong> (<code>row</code>, <code>col_start</code>, <code>col_end</code>, <code>text</code>, <code>annotation</code>, <code>vmerge_continue</code>), which feeds the format-agnostic <a href="R/column_tree.R"><code>R/column_tree.R</code></a>. Their product is the <strong>section object</strong> — the contract every downstream stage consumes. Anything that produces a conformant section object is a valid shell reader, which is how a second input format plugs in without forking the grammar.</p>
+</div>
+<div class="section level2">
 <h2 id="architecture-decisions">Architecture decisions<a class="anchor" aria-label="anchor" href="#architecture-decisions"></a></h2>
 <p>Design-level decisions live as numbered Architecture Decision Records in <a href="adr/"><code>adr/</code></a>. Read them before proposing a change to the engine’s scope or the ARD contract — they explain <em>why</em> the current boundaries exist:</p>
 <ul><li>
 <code>0001-statistical-method-extensibility.md</code> — arsbridge bounds the <em>boundary</em>, not the <em>contents</em>, of the statistics space. New statistics are added as descriptors on the shared ARD shape, not as new <code>switch</code> branches. Inferential and model-based methods are tiered (descriptive → standard test → model-based scaffold → placeholder), and code emission stays deterministic while the LLM only classifies the shell.</li>
 <li>
 <code>0002-partial-results-traceability.md</code> — how a partially-computable table stays traceable: arsbridge fills the cells it can and reserves a keyed <code>manual_pending</code> stub ARD row, with provenance columns, for the rest. All values — computed or manual — enter at the ARD layer; nothing is typed straight into the rendered output. Status: proposed (phased plan, not yet implemented).</li>
+<li>
+<code>0003-shell-layout-fidelity.md</code> — how much of the shell’s own layout the ARS carries (<code>_meta.shell_layout</code>, <code>_meta.column_tree</code>) so a rendered output can be compared against the shell it came from, and the three annotation layers (in-cell, below-table arrow lines, supplement) that can bind a row.</li>
 </ul><p>When you make a design-level change, add or update an ADR in the same PR. Keep the standard <code>ARS → ARD → tfrmt</code> pipeline — the shell is never the source of truth for layout.</p>
 </div>
 <div class="section level2">

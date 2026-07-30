@@ -53,6 +53,36 @@ help you write a unit test, if needed).
   (edition 3) for unit tests. Contributions with test cases included are
   easier to accept.
 
+## Where shell parsing lives
+
+Reading an annotated shell is split in two, and a change usually belongs
+in exactly one half:
+
+- [`R/parse_shell_core.R`](https://tavakohr.github.io/arsbridge/R/parse_shell_core.R)
+  — **format-agnostic.** The annotation grammar (`.ANNOTATION_PATTERN`,
+  the bracket tokenizer), the detection layers, the TLF-heading grammar,
+  and section assembly (`.new_section()`, `bind_annotations()`, the
+  column-group resolvers, `.finalize_section()`). This code reads text
+  and per-run formatting metadata; it never sees a document. Change it
+  when the *convention* changes — a new annotation form, a new heading
+  shape.
+- [`R/parse_shell_docx.R`](https://tavakohr.github.io/arsbridge/R/parse_shell_docx.R)
+  — **OOXML only.** The body walker, the table and header grid readers,
+  the Word-comment and page-header readers, and the run/cell readers
+  that turn `<w:r>` nodes into the run list. Change it when the *file
+  format* changes — a Word construct that was being read wrong.
+
+The two halves meet at two seams, documented at the top of the core
+file: the **per-run metadata list** (`text`, `raw_text`, `color_hex`,
+`highlight`, `bold`, `italic`, `underline`, `strike`) and the
+**header-grid record** (`row`, `col_start`, `col_end`, `text`,
+`annotation`, `vmerge_continue`), which feeds the format-agnostic
+[`R/column_tree.R`](https://tavakohr.github.io/arsbridge/R/column_tree.R).
+Their product is the **section object** — the contract every downstream
+stage consumes. Anything that produces a conformant section object is a
+valid shell reader, which is how a second input format plugs in without
+forking the grammar.
+
 ## Architecture decisions
 
 Design-level decisions live as numbered Architecture Decision Records in
@@ -73,6 +103,11 @@ explain *why* the current boundaries exist:
   rest. All values — computed or manual — enter at the ARD layer;
   nothing is typed straight into the rendered output. Status: proposed
   (phased plan, not yet implemented).
+- `0003-shell-layout-fidelity.md` — how much of the shell’s own layout
+  the ARS carries (`_meta.shell_layout`, `_meta.column_tree`) so a
+  rendered output can be compared against the shell it came from, and
+  the three annotation layers (in-cell, below-table arrow lines,
+  supplement) that can bind a row.
 
 When you make a design-level change, add or update an ADR in the same
 PR. Keep the standard `ARS → ARD → tfrmt` pipeline — the shell is never
