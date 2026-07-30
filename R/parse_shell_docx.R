@@ -234,22 +234,15 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
         if (!is.null(current)) {
           sections[[length(sections) + 1]] <- .finalize_section(current, spec_lookup)
         }
-        word     <- tools::toTitleCase(tolower(hit$type_word))
-        number   <- hit$number
-        prefix   <- substr(toupper(word), 1, 1)
-        tlf_type <- switch(tolower(word),
-                           table   = "TABLE",
-                           figure  = "FIGURE",
-                           listing = "LISTING",
-                           "TABLE")
+        id <- .tlf_identity(hit)
         ## Whatever follows the number on the heading line -- an inline
         ## title, and possibly a dash-separated population, an annotation,
         ## and a [PROGRAMMING DATASETS USED: ...] suffix -- is split into
         ## its parts here.
         parts <- .decompose_heading_tail(hit$tail)
         current <- .new_section(
-          tlf_number = paste0(prefix, "-", gsub("\\.", "-", number)),
-          tlf_type   = tlf_type,
+          tlf_number = id$tlf_number,
+          tlf_type   = id$tlf_type,
           title      = parts$title
         )
         current$raw_heading <- stripped
@@ -1217,11 +1210,8 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
     }
     if (is.null(heading_at)) next
 
-    word     <- tools::toTitleCase(tolower(hit$type_word))
-    prefix   <- substr(toupper(word), 1, 1)
-    tlf_type <- switch(tolower(word), table = "TABLE", figure = "FIGURE",
-                       listing = "LISTING", "TABLE")
-    parts    <- .decompose_heading_tail(hit$tail)
+    id    <- .tlf_identity(hit)
+    parts <- .decompose_heading_tail(hit$tail)
 
     ## Title: inline on the heading line itself, else the next paragraph.
     next_at <- heading_at + 1L
@@ -1247,8 +1237,8 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
     }
 
     headings[[length(headings) + 1L]] <- list(
-      tlf_number       = paste0(prefix, "-", gsub("\\.", "-", hit$number)),
-      tlf_type         = tlf_type,
+      tlf_number       = id$tlf_number,
+      tlf_type         = id$tlf_type,
       title            = title,
       population_text  = population_text,
       population_annot = population_annot

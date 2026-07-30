@@ -608,6 +608,25 @@
 ## Section object constructor
 ## ---------------------------------------------------------------------------
 
+#' The identity a heading match gives an output: its canonical `tlf_number`
+#' ("Table 14.1.1" -> "T-14-1-1") and `tlf_type` ("TABLE"). Shared so a reader
+#' that finds its heading somewhere new -- a Word paragraph, a page header, an
+#' Excel sheet name -- names the output exactly as every other one does.
+#' `hit` is the `$hit` element of a `.match_tlf_heading()` result.
+#' @noRd
+.tlf_identity <- function(hit) {
+  word   <- tools::toTitleCase(tolower(hit$type_word))
+  prefix <- substr(toupper(word), 1, 1)
+  list(
+    tlf_number = paste0(prefix, "-", gsub("\\.", "-", hit$number)),
+    tlf_type   = switch(tolower(word),
+                        table   = "TABLE",
+                        figure  = "FIGURE",
+                        listing = "LISTING",
+                        "TABLE")
+  )
+}
+
 #' Build an empty TLF section object with all fields present. Used by both
 #' the body walker (when a heading paragraph starts a section) and the F2
 #' page-header seeding block, so the two can never drift apart on the field

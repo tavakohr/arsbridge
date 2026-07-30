@@ -73,6 +73,12 @@ exactly one half:
   workbooks differ on (where strings live, how boolean run properties are
   spelled, how relationship targets are written) and why the reader has to
   absorb all of them.
+* [`R/xlsx_grid.R`](R/xlsx_grid.R) — **Excel sheet-layout semantics.** What
+  the cells *mean*: sheet classification, banner rows, body-row kinds, the
+  placeholder lexicon, and figure arrow-directives. It reads only the cell
+  tables from `xlsx_cells.R`, never a file, so it is tested against synthetic
+  sheets built by `tests/testthat/helper-gridgen.R` — build a sheet with the
+  geometry you need rather than authoring a workbook.
 
 The two halves meet at two seams, documented at the top of the core file: the
 **per-run metadata list** (`text`, `raw_text`, `color_hex`, `highlight`,

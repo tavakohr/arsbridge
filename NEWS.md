@@ -1,5 +1,28 @@
 # arsbridge (development version)
 
+* **New sheet-layout layer (`R/xlsx_grid.R`), the second half of reading an
+  Excel shell.** Decides what the cells of a worksheet mean: which sheet is
+  an output (from its name, falling back to row 1) and which is the workbook's
+  own legend, which rows are the banner (number / title / population /
+  column headers), what each body row is (data, group parent, footnote,
+  programmer instruction, spacer), which cells are placeholders, and what a
+  figure sheet's `X axis -> ADVS.AVISITN` prose declares. The header row is
+  emitted as the same header-grid records the Word reader produces, so
+  `column_tree.R` builds an Excel column hierarchy with no change at all.
+  Two decisions worth knowing: a placeholder's own x's *are* its decimal
+  specification (`xx.x` means one decimal), so a filled shell needs no
+  separate format declaration; and a cell whose text is not cleanly a
+  placeholder is reported as literal, which means the fill writer will leave
+  it exactly as authored. The rows 1-4 convention is the first guess, never
+  the only one -- each part is otherwise located by what it is, and a
+  deviation becomes a diagnostic rather than a failure.
+
+* `.tlf_identity()` in `parse_shell_core.R` now derives an output's
+  `tlf_number` and `tlf_type` from a heading match, replacing the same
+  derivation written out twice in the Word reader. A reader that finds its
+  heading somewhere new -- a paragraph, a page header, an Excel sheet name --
+  names the output identically.
+
 * **New SpreadsheetML cell reader (`R/xlsx_cells.R`), the first half of
   reading an Excel shell.** `xlsx_read_shell_cells()` returns every sheet's
   populated cells with their per-run formatting metadata -- the same run list
