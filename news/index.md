@@ -2,20 +2,85 @@
 
 ## arsbridge (development version)
 
-- **Shell parsing is split into a format-agnostic core and an OOXML
-  reader.** The annotation grammar, the bracket tokenizer, the detection
-  layers, the heading grammar, and section assembly (`.new_section()`,
-  `bind_annotations()`, the column-group resolvers,
-  `.finalize_section()`) move verbatim from `R/parse_shell_docx.R` into
-  a new `R/parse_shell_core.R`; `parse_shell_docx.R` keeps only the
-  OOXML body walker, the grid readers, and the run/cell readers. Nothing
-  about parsing behaviour changes – this is code motion that gives a
-  second shell reader (Excel, next) one shared implementation to plug
-  into instead of a fork. The two seams a reader must honour – the
-  per-run metadata list and the header-grid record – are documented at
-  the top of the core file. `.normalize_docx_text()` is renamed
-  `.normalize_shell_text()`, as it normalizes shell text of either
-  format.
+- **Excel shells, end to end:
+  [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
+  reads them, and
+  [`ars_fill_shell()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_shell.md)
+  writes the results back into them.** A study can now be authored as a
+  `.xlsx` with one worksheet per output, annotated in-cell in red, and
+  the rest of the pipeline behaves exactly as it does for the `.docx`
+  you have always passed —
+  [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md),
+  [`parse_decision_digest()`](https://tavakohr.github.io/arsbridge/reference/parse_decision_digest.md),
+  [`write_supplement_draft()`](https://tavakohr.github.io/arsbridge/reference/write_supplement_draft.md)
+  and
+  [`ars_workflow()`](https://tavakohr.github.io/arsbridge/reference/ars_workflow.md)
+  all dispatch on the file extension. Word support is unchanged and
+  permanent: every Word fixture was checked byte-for-byte at each step
+  of this work.
+
+  The reason to author in Excel is the new deliverable.
+  [`ars_fill_shell()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_shell.md)
+  takes the shell, the ARS built from it and the ARD, and returns the
+  author’s own workbook with the numbers in their placeholders and the
+  annotations gone. Nothing is laid out or re-created: the layout, row
+  labels, column headers, merges, fonts, column widths and footnotes
+  come through untouched because none of them were ever lost, and each
+  placeholder’s own `xx.x (xx.xx)` decides how its number is formatted,
+  punctuation and all.
+
+  Which result belongs in which cell is decided when the ARS is built,
+  not when the workbook is written — each output carries a
+  `_meta$shell_fill` cell map, recorded at the one moment the shell’s
+  geometry and the analyses are both in hand. `_meta` is arsbridge’s own
+  namespace, so conformance is unaffected and a consumer that ignores it
+  sees what it always saw.
+
+  Nothing uncertain is written. A cell keeps its placeholder and is
+  reported when the ARD has no result for it, when the result is
+  reserved for a manual derivation (ADR 0002), or when the row is a
+  template standing for a repeated block such as `<System Organ Class>`
+  — writing one system organ class’s count there would hide every other
+  one behind a real-looking number. An empty cell in a clinical table
+  reads as a zero, which is why the placeholder stays;
+  `keep_pending_placeholders = FALSE` blanks them instead, and
+  `strip_annotations = FALSE` keeps the annotations beside the numbers
+  while reviewing. Listings and figures are not filled yet.
+
+  Two disagreements this surfaced that nothing compared before. A
+  placeholder asking for more statistics than its analysis produces — a
+  row showing `xx (xx.x)` typed as a plain subject count — is now a WARN
+  naming the row. And a shell’s decoded row labels are matched to the
+  data’s codes, so rows reading “Female” and “Male” fill from an
+  `ADSL.SEX` holding `F` and `M`; that pairing is refused rather than
+  guessed unless each label names exactly one value and the whole block
+  is one-to-one, and every pairing used is reported as an INFO
+  diagnostic.
+
+  The two readers are held together by a test rather than by intention:
+  `test-parity_docx_xlsx.R` parses the same study authored both ways and
+  requires the identical-semantics fields to match and the same ARS to
+  come out. Design records: `adr/0004-xlsx-shell-input.md` (why both
+  formats are permanent, and the three classes every section field falls
+  in) and `adr/0005-filled-shell-output.md` (the cell map, and why the
+  writer edits run XML instead of going through openxlsx2’s data model —
+  a run in a real shell carries `rFont` and `sz`, which rebuilding would
+  silently reset). New tooling: `tools/parity_check_shell.R` compares
+  your own Word/Excel pair outside CI,
+  `tools/shell_structure_digest_xlsx.R` is the privacy-safe geometry
+  digest for a locked machine, and `tools/xlsx_roundtrip_check.R`
+  re-verifies the writer’s assumptions after an openxlsx2 upgrade.
+
+- **Fixed:
+  [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)
+  failed outright on a study mixing a declared multi-grouping column
+  axis with ordinary by-treatment analyses.** The two executor paths
+  disagreed on whether the `*_level` columns are list columns, and
+  binding them aborted with “Can’t combine `<list>` and `<character>`”,
+  losing the entire ARD for a perfectly well-formed study. Columns are
+  now aligned to the
+  [cards](https://github.com/insightsengineering/cards) convention
+  before binding.
 
 - **New
   [`parse_decision_digest()`](https://tavakohr.github.io/arsbridge/reference/parse_decision_digest.md):

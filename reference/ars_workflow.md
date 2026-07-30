@@ -23,9 +23,9 @@ Invisibly, the project directory.
 ## Details
 
 1.  **Project setup** – pick a project folder and name the annotated
-    shell (`.docx`), the ADaM spec (`.xlsx`/`.xml`), and a study id. The
-    folder gets a fixed layout (`copilot/`, `ars/`) and a small
-    `arsbridge_project.json` state file.
+    shell (`.docx` or `.xlsx`), the ADaM spec (`.xlsx`/`.xml`), and a
+    study id. The folder gets a fixed layout (`copilot/`, `ars/`) and a
+    small `arsbridge_project.json` state file.
 
 2.  **Instruction files** – writes the two-phase Copilot instructions
     and the supplement JSON schema into `copilot/` (see

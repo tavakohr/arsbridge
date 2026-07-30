@@ -24,7 +24,7 @@
 
     <a class="navbar-brand me-2" href="index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9049</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9056</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -63,9 +63,9 @@
 <!-- badges: start -->
 
 <blockquote>
-<p><strong>From annotated Word shell to publication-ready clinical table, in one reproducible pipeline.</strong></p>
+<p><strong>From annotated TLF shell to publication-ready clinical table, in one reproducible pipeline.</strong></p>
 </blockquote>
-<p>Clinical programmers spend hours translating a lead programmer’s annotated TLF shell into R code, then reformatting output to match the shell layout. <a href="https://github.com/tavakohr/arsbridge" class="external-link">arsbridge</a> automates both halves. It reads the annotations directly from the Word document, checks every variable against your ADaM spec, generates a CDISC Analysis Results Standard (ARS) JSON, executes it against real ADaM datasets with <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a>, and renders a formatted GT table ready to ship.</p>
+<p>Clinical programmers spend hours translating a lead programmer’s annotated TLF shell into R code, then reformatting output to match the shell layout. <a href="https://github.com/tavakohr/arsbridge" class="external-link">arsbridge</a> automates both halves. It reads the annotations directly from the shell – a Word <code>.docx</code>, or an Excel <code>.xlsx</code> with one worksheet per output – checks every variable against your ADaM spec, generates a CDISC Analysis Results Standard (ARS) JSON, executes it against real ADaM datasets with <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a>, and renders a formatted GT table ready to ship.</p>
 <p>No manual transcription. No orphan numbers. Every value auditable back to its source.</p>
 <hr>
 <div class="section level2">
@@ -81,6 +81,10 @@
 <th>What it means for you</th>
 </tr></thead>
 <tbody>
+<tr>
+<td><strong>Word or Excel shells</strong></td>
+<td>Point <code><a href="reference/spec_to_ars.html">spec_to_ars()</a></code> at a <code>.docx</code> or an <code>.xlsx</code> and the rest of the pipeline is identical. An Excel shell is one worksheet per output, annotated in-cell in red; a Word shell is annotated the way it always was. Both readers share one annotation grammar, and a parity check enforces that the same study read either way produces the same ARS.</td>
+</tr>
 <tr>
 <td><strong>Three ways to read the shell</strong></td>
 <td>A deterministic regex baseline always runs; you choose how the gaps it cannot resolve get filled — <strong>regex only</strong> (no key), a <strong>Copilot supplement</strong> (no API call), or a <strong>live LLM</strong> (opt-in with a key). Same spec-gated output from all three.</td>
@@ -115,6 +119,10 @@
 <td><strong>Publication-ready tables</strong></td>
 <td>
 <code><a href="reference/ars_render_tlf.html">ars_render_tlf()</a></code> builds a formatted GT table: treatment columns detected, percentages rescaled, row groups labelled, ARS footnotes carried through.</td>
+</tr>
+<tr>
+<td><strong>The filled shell, back in Excel</strong></td>
+<td>For an Excel shell, <code><a href="reference/ars_fill_shell.html">ars_fill_shell()</a></code> returns the author’s own workbook with the results in it and the red annotations gone. The layout, labels, merges, fonts and footnotes are never rebuilt — only left alone — and each placeholder’s own <code>xx.x</code> decides how its number is formatted. A cell whose result does not exist keeps its placeholder and is reported, because a blank cell in a clinical table reads as a zero.</td>
 </tr>
 <tr>
 <td><strong>Partial tables, full traceability</strong></td>
@@ -157,8 +165,9 @@
         MP["manual_pending rows\nfor statistics not yet computable"]
     end
 
-    subgraph STEP5 ["Step 5 · Render"]
+    subgraph STEP5 ["Step 5 · Deliver"]
         T["ars_render_tlf()\nformatted GT table"]
+        FS["ars_fill_shell()\nthe Excel shell, filled\n(.xlsx shells only)"]
     end
 
     SHELL --&gt; STEP1
@@ -174,7 +183,9 @@
     E --&gt; MP
     E --&gt; STEP5
     MP --&gt;|"fill + validate"| STEP5
-    STEP5 --&gt; TLF["Clinical table\n(GT · Word-ready)"]</code></pre>
+    T --&gt; TLF["Clinical table\n(GT · Word-ready)"]
+    SHELL -.-&gt;|"the same workbook"| FS
+    FS --&gt; XL["Filled shell\n(.xlsx · annotations removed)"]</code></pre>
 <hr>
 </div>
 <div class="section level2">
@@ -284,7 +295,33 @@
 <div class="section level3">
 <h3 id="step-2-extract-ars-json-from-the-annotated-shell">Step 2: Extract ARS JSON from the annotated shell<a class="anchor" aria-label="anchor" href="#step-2-extract-ars-json-from-the-annotated-shell"></a>
 </h3>
-<p><code><a href="reference/spec_to_ars.html">spec_to_ars()</a></code> is the main entry point. Point it at your annotated Word shell and ADaM spec; it writes a CDISC ARS JSON and an Excel validation report.</p>
+<p><code><a href="reference/spec_to_ars.html">spec_to_ars()</a></code> is the main entry point. Point it at your annotated shell and ADaM spec; it writes a CDISC ARS JSON and an Excel validation report.</p>
+<p>The shell can be <strong>Word or Excel</strong> – everything downstream is the same either way:</p>
+<table class="table">
+<colgroup>
+<col width="33%">
+<col width="33%">
+<col width="33%">
+</colgroup>
+<thead><tr>
+<th>Shell format</th>
+<th>How each output is found</th>
+<th>How a row is annotated</th>
+</tr></thead>
+<tbody>
+<tr>
+<td><code>.docx</code></td>
+<td>a heading paragraph (<code>Table 14.1.1</code>) followed by its table</td>
+<td>a red run in the stub cell, or a <code>Label -&gt; DATASET.VAR</code> line below the table</td>
+</tr>
+<tr>
+<td><code>.xlsx</code></td>
+<td>one worksheet per output, named for it</td>
+<td>a red run in the stub cell; the column axis and source dataset in the header cell (<code>[columns -&gt; ADSL.TRT01A; source ADSL]</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>An Excel shell needs no <code>heading_patterns</code>: the worksheet name is the output number.</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/spec_to_ars.html">spec_to_ars</a></span><span class="op">(</span></span>
 <span>  shell_path     <span class="op">=</span> <span class="st">"inputs/APX-DRM-301_TLF_Shells_v1.0_sample_annotated.docx"</span>,</span>
@@ -307,7 +344,8 @@
 <tbody>
 <tr>
 <td><code>shell_path</code></td>
-<td>The annotated <code>.docx</code> file from the lead programmer</td>
+<td>The annotated shell from the lead programmer: <code>.docx</code> or <code>.xlsx</code>
+</td>
 </tr>
 <tr>
 <td><code>adam_spec_path</code></td>
@@ -451,6 +489,35 @@
 <p><code><a href="reference/ars_render_all.html">ars_render_all()</a></code> runs this check automatically and blocks any untraceable value before it reaches the final document.</p>
 <hr>
 </div>
+<div class="section level3">
+<h3 id="step-7-write-the-results-back-into-the-excel-shell">Step 7: Write the results back into the Excel shell<a class="anchor" aria-label="anchor" href="#step-7-write-the-results-back-into-the-excel-shell"></a>
+</h3>
+<p>If the study was authored as an Excel shell, the finished table already exists — the layout, the row labels, the column headers, the merges, the footnotes, and in each placeholder the number of decimal places that cell takes. All that is missing is the numbers. <code><a href="reference/ars_fill_shell.html">ars_fill_shell()</a></code> puts them in and takes the red annotations out.</p>
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ars_fill_shell.html">ars_fill_shell</a></span><span class="op">(</span></span>
+<span>  shell_path  <span class="op">=</span> <span class="st">"inputs/shells.xlsx"</span>,</span>
+<span>  ars         <span class="op">=</span> <span class="st">"outputs/reporting_event.json"</span>,</span>
+<span>  ard         <span class="op">=</span> <span class="va">ard</span>,</span>
+<span>  output_path <span class="op">=</span> <span class="st">"outputs/filled_shells.xlsx"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">res</span><span class="op">$</span><span class="va">filled</span>     <span class="co"># cells written</span></span>
+<span><span class="va">res</span><span class="op">$</span><span class="va">pending</span>    <span class="co"># cells left showing their placeholder</span></span>
+<span><span class="va">res</span><span class="op">$</span><span class="va">diagnostics</span>  <span class="co"># one row per unfilled cell: which output, which cell, why</span></span></code></pre></div>
+<p>Nothing is laid out or re-created. The workbook is opened, the mapped cells are changed, and it is saved — so a run that is kept keeps its own font, and the author’s column widths, row heights and merges come through untouched.</p>
+<p>Which result belongs in which cell is not decided at this point. It was recorded when the ARS was built, in each output’s <code>_meta$shell_fill</code> cell map, while the shell’s geometry and the analyses were both in hand. That is why filling a shell needs the ARS that came from <em>that</em> shell.</p>
+<p>Three things are deliberate:</p>
+<ul>
+<li>
+<strong>The placeholder is the format.</strong> <code>xx.x (xx.xx)</code> writes one decimal then two, and keeps the parentheses. Nothing else in the pipeline carries that decision, because the shell’s author already made it.</li>
+<li>
+<strong>An unfillable cell keeps its placeholder</strong> and appears in <code>res$diagnostics</code> with the reason — no result in the ARD, reserved for manual derivation, or a row that stands for a repeated block. An empty cell in a clinical table reads as a zero. Pass <code>keep_pending_placeholders = FALSE</code> to blank them instead, for a workbook going to someone who will complete it by hand.</li>
+<li>
+<strong><code>strip_annotations = FALSE</code></strong> keeps the red annotations next to the numbers, which is useful while reviewing and wrong for a deliverable.</li>
+</ul>
+<p>Listings and figures are not filled yet; their sheets are stripped of annotations and otherwise left as they are.</p>
+<hr>
+</div>
 </div>
 <div class="section level2">
 <h2 id="how-arsbridge-reads-the-shell">How arsbridge reads the shell<a class="anchor" aria-label="anchor" href="#how-arsbridge-reads-the-shell"></a>
@@ -459,12 +526,12 @@
 <p>Two things are the same no matter how you run arsbridge:</p>
 <ul>
 <li>
-<strong>A deterministic regex baseline</strong> (<code>parse_shell_docx()</code>) always runs — a four-layer detector over every stub cell and listing header (colour <code>#C00000</code> runs, bold/italic/underline, plain-text <code>DATASET.VARIABLE</code>, bracketed <code>[DATASET.VAR WHERE ...]</code>), plus flexible TLF-heading recognition: a bare <code>Table 14.1.1</code>, a colon title <code>Table 14.1.1: Title</code>, and one-line headings that also carry the population, an inline annotation, and a <code>[PROGRAMMING DATASETS USED: ...]</code> suffix (values single-, double-, or unquoted-numeric). No API call, no key. A sponsor style the built-ins miss is handled by <code>spec_to_ars(heading_patterns = ...)</code>.</li>
+<strong>A deterministic regex baseline</strong> (<code>parse_shell_docx()</code> for Word, <code>parse_shell_xlsx()</code> for Excel — one shared annotation grammar behind both) always runs — a four-layer detector over every stub cell and listing header (colour <code>#C00000</code> runs, bold/italic/underline, plain-text <code>DATASET.VARIABLE</code>, bracketed <code>[DATASET.VAR WHERE ...]</code>), plus flexible TLF-heading recognition: a bare <code>Table 14.1.1</code>, a colon title <code>Table 14.1.1: Title</code>, and one-line headings that also carry the population, an inline annotation, and a <code>[PROGRAMMING DATASETS USED: ...]</code> suffix (values single-, double-, or unquoted-numeric). No API call, no key. A sponsor style the built-ins miss is handled by <code>spec_to_ars(heading_patterns = ...)</code>.</li>
 <li>
 <strong>A hard spec gate.</strong> Every <code>DATASET.VARIABLE</code> — whoever proposed it — must exist in your ADaM spec, or it is dropped, never shipped, and logged as a named blocker. The spec is the ground-truth oracle.</li>
 </ul>
 <p>What differs is <strong>how the rows the regex could not resolve get filled</strong> — and that is the three approaches:</p>
-<pre><code>                 annotated shell (.docx)
+<pre><code>           annotated shell (.docx or .xlsx)
                           |
               regex baseline  (always runs)
                           |

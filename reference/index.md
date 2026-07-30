@@ -29,6 +29,8 @@ clinical table out.
   : Render an ARS listing output to a GT table
 - [`ars_render_figure()`](https://tavakohr.github.io/arsbridge/reference/ars_render_figure.md)
   : Render an ARS figure output to a ggplot
+- [`ars_fill_shell()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_shell.md)
+  : Write results into the shell workbook they came from
 
 ## Review and correct
 

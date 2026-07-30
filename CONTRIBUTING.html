@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9049</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9056</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -71,6 +71,28 @@
 <a href="R/parse_shell_core.R"><code>R/parse_shell_core.R</code></a> — <strong>format-agnostic.</strong> The annotation grammar (<code>.ANNOTATION_PATTERN</code>, the bracket tokenizer), the detection layers, the TLF-heading grammar, and section assembly (<code>.new_section()</code>, <code>bind_annotations()</code>, the column-group resolvers, <code>.finalize_section()</code>). This code reads text and per-run formatting metadata; it never sees a document. Change it when the <em>convention</em> changes — a new annotation form, a new heading shape.</li>
 <li>
 <a href="R/parse_shell_docx.R"><code>R/parse_shell_docx.R</code></a> — <strong>OOXML only.</strong> The body walker, the table and header grid readers, the Word-comment and page-header readers, and the run/cell readers that turn <code>&lt;w:r&gt;</code> nodes into the run list. Change it when the <em>file format</em> changes — a Word construct that was being read wrong.</li>
+<li>
+<a href="R/xlsx_cells.R"><code>R/xlsx_cells.R</code></a> — <strong>SpreadsheetML only.</strong> The workbook counterpart: sheet index, styles, shared and inline strings, merged ranges, and the cell reader that turns <code>&lt;c&gt;</code> nodes into the same run list. Read its file header before changing it — it documents which format variations real workbooks differ on (where strings live, how boolean run properties are spelled, how relationship targets are written) and why the reader has to absorb all of them.</li>
+<li>
+<a href="R/xlsx_grid.R"><code>R/xlsx_grid.R</code></a> — <strong>Excel sheet-layout semantics.</strong> What the cells <em>mean</em>: sheet classification, banner rows, body-row kinds, the placeholder lexicon, and figure arrow-directives. It reads only the cell tables from <code>xlsx_cells.R</code>, never a file, so it is tested against synthetic sheets built by <code>tests/testthat/helper-gridgen.R</code> — build a sheet with the geometry you need rather than authoring a workbook.</li>
+<li>
+<a href="R/parse_shell_xlsx.R"><code>R/parse_shell_xlsx.R</code></a> — <strong>assembly only.</strong> Walks the sheets and fills in section objects from the two layers above. Before changing it, read the section-object compatibility contract in its header and in <a href="adr/0004-xlsx-shell-input.html"><code>adr/0004-xlsx-shell-input.md</code></a>: every field is either identical-semantics (a difference from the Word reader is a bug), format-specific and whitelisted, or additive Excel-only — and nothing outside the fill writer may require the additive ones.</li>
+</ul><p>Nothing calls a reader directly: <a href="R/parse_shell.R"><code>R/parse_shell.R</code></a> dispatches on the file extension, and adding a format is a change there plus a new reader.</p>
+<p>Writing back into a workbook is the mirror of reading one, and splits the same way:</p>
+<ul><li>
+<a href="R/shell_fill_meta.R"><code>R/shell_fill_meta.R</code></a> — <strong>which result goes in which cell</strong>, decided at build time and recorded as <code>_meta$shell_fill</code>. Change it when the <em>binding</em> is wrong: a row shape that selects the wrong statistics, a column that resolves to the wrong group.</li>
+<li>
+<a href="R/ars_fill_shell.R"><code>R/ars_fill_shell.R</code></a> — <strong>putting it there.</strong> Reads that map, looks each value up in the ARD, and edits the cell. It decides nothing about bindings; if a number lands in the wrong cell, the bug is almost always in the map, not here.</li>
+</ul><p>Two rules hold in the writer, and both are load-bearing:</p>
+<ul><li>
+<strong>Edit the run XML, never rebuild the cell.</strong> Cells are changed through <code>wb$worksheets[[i]]$sheet_data$cc$is</code>, so a run that is kept is never deserialized. Going through <code>wb_add_data()</code> or <code>fmt_txt()</code> instead would drop every run property arsbridge does not model — <code>rFont</code> and <code>sz</code> are on every run of a real shell, and a superscript footnote marker would add <code>vertAlign</code>. See the Mechanism section of <a href="adr/0005-filled-shell-output.html"><code>adr/0005-filled-shell-output.md</code></a>, and re-run <code>tools/xlsx_roundtrip_check.R</code> after any openxlsx2 upgrade — the writer depends on that internal representation.</li>
+<li>
+<strong>Never write a value you are not sure of.</strong> A cell whose result is missing, ambiguous, or reserved keeps its placeholder and is reported. An empty cell in a clinical table reads as a zero, and a plausible wrong number is the one that survives review.</li>
+</ul><p>Two gates apply to any change in shared code:</p>
+<ul><li>
+<strong>The Word path must stay byte-identical.</strong> Re-run <code><a href="reference/parse_decision_digest.html">parse_decision_digest()</a></code> over the <code>.docx</code> fixtures and <code><a href="reference/spec_to_ars.html">spec_to_ars()</a></code> over the shell/spec pairs and require identical output (bar the version stamp and timestamp).</li>
+<li>
+<strong>The two readers must stay in lockstep.</strong> <code>test-parity_docx_xlsx.R</code> is the net; run <code>tools/parity_check_shell.R</code> against a real pair as well if you have one. When parity fails, the answer is almost never to relax the test — it is either a bug in the reader you changed, or a difference that belongs in the class-2 whitelist <em>with a written reason</em>.</li>
 </ul><p>The two halves meet at two seams, documented at the top of the core file: the <strong>per-run metadata list</strong> (<code>text</code>, <code>raw_text</code>, <code>color_hex</code>, <code>highlight</code>, <code>bold</code>, <code>italic</code>, <code>underline</code>, <code>strike</code>) and the <strong>header-grid record</strong> (<code>row</code>, <code>col_start</code>, <code>col_end</code>, <code>text</code>, <code>annotation</code>, <code>vmerge_continue</code>), which feeds the format-agnostic <a href="R/column_tree.R"><code>R/column_tree.R</code></a>. Their product is the <strong>section object</strong> — the contract every downstream stage consumes. Anything that produces a conformant section object is a valid shell reader, which is how a second input format plugs in without forking the grammar.</p>
 </div>
 <div class="section level2">
@@ -82,6 +104,10 @@
 <code>0002-partial-results-traceability.md</code> — how a partially-computable table stays traceable: arsbridge fills the cells it can and reserves a keyed <code>manual_pending</code> stub ARD row, with provenance columns, for the rest. All values — computed or manual — enter at the ARD layer; nothing is typed straight into the rendered output. Status: proposed (phased plan, not yet implemented).</li>
 <li>
 <code>0003-shell-layout-fidelity.md</code> — how much of the shell’s own layout the ARS carries (<code>_meta.shell_layout</code>, <code>_meta.column_tree</code>) so a rendered output can be compared against the shell it came from, and the three annotation layers (in-cell, below-table arrow lines, supplement) that can bind a row.</li>
+<li>
+<code>0004-xlsx-shell-input.md</code> — why Word and Excel shells are both supported permanently, the two seams a reader plugs into, and the three classes every section-object field falls in. Read it before changing either reader.</li>
+<li>
+<code>0005-filled-shell-output.md</code> — the cell map (<code>_meta.shell_fill</code>) that binds each placeholder to the result belonging in it: why it is built at build time, the three row shapes that select from the ARD differently, and why the ARD join keys on the operation id rather than its display name.</li>
 </ul><p>When you make a design-level change, add or update an ADR in the same PR. Keep the standard <code>ARS → ARD → tfrmt</code> pipeline — the shell is never the source of truth for layout.</p>
 </div>
 <div class="section level2">

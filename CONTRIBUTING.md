@@ -71,6 +71,80 @@ in exactly one half:
   the Word-comment and page-header readers, and the run/cell readers
   that turn `<w:r>` nodes into the run list. Change it when the *file
   format* changes — a Word construct that was being read wrong.
+- [`R/xlsx_cells.R`](https://tavakohr.github.io/arsbridge/R/xlsx_cells.R)
+  — **SpreadsheetML only.** The workbook counterpart: sheet index,
+  styles, shared and inline strings, merged ranges, and the cell reader
+  that turns `<c>` nodes into the same run list. Read its file header
+  before changing it — it documents which format variations real
+  workbooks differ on (where strings live, how boolean run properties
+  are spelled, how relationship targets are written) and why the reader
+  has to absorb all of them.
+- [`R/xlsx_grid.R`](https://tavakohr.github.io/arsbridge/R/xlsx_grid.R)
+  — **Excel sheet-layout semantics.** What the cells *mean*: sheet
+  classification, banner rows, body-row kinds, the placeholder lexicon,
+  and figure arrow-directives. It reads only the cell tables from
+  `xlsx_cells.R`, never a file, so it is tested against synthetic sheets
+  built by `tests/testthat/helper-gridgen.R` — build a sheet with the
+  geometry you need rather than authoring a workbook.
+- [`R/parse_shell_xlsx.R`](https://tavakohr.github.io/arsbridge/R/parse_shell_xlsx.R)
+  — **assembly only.** Walks the sheets and fills in section objects
+  from the two layers above. Before changing it, read the section-object
+  compatibility contract in its header and in
+  [`adr/0004-xlsx-shell-input.md`](https://tavakohr.github.io/arsbridge/adr/0004-xlsx-shell-input.md):
+  every field is either identical-semantics (a difference from the Word
+  reader is a bug), format-specific and whitelisted, or additive
+  Excel-only — and nothing outside the fill writer may require the
+  additive ones.
+
+Nothing calls a reader directly:
+[`R/parse_shell.R`](https://tavakohr.github.io/arsbridge/R/parse_shell.R)
+dispatches on the file extension, and adding a format is a change there
+plus a new reader.
+
+Writing back into a workbook is the mirror of reading one, and splits
+the same way:
+
+- [`R/shell_fill_meta.R`](https://tavakohr.github.io/arsbridge/R/shell_fill_meta.R)
+  — **which result goes in which cell**, decided at build time and
+  recorded as `_meta$shell_fill`. Change it when the *binding* is wrong:
+  a row shape that selects the wrong statistics, a column that resolves
+  to the wrong group.
+- [`R/ars_fill_shell.R`](https://tavakohr.github.io/arsbridge/R/ars_fill_shell.R)
+  — **putting it there.** Reads that map, looks each value up in the
+  ARD, and edits the cell. It decides nothing about bindings; if a
+  number lands in the wrong cell, the bug is almost always in the map,
+  not here.
+
+Two rules hold in the writer, and both are load-bearing:
+
+- **Edit the run XML, never rebuild the cell.** Cells are changed
+  through `wb$worksheets[[i]]$sheet_data$cc$is`, so a run that is kept
+  is never deserialized. Going through `wb_add_data()` or `fmt_txt()`
+  instead would drop every run property arsbridge does not model —
+  `rFont` and `sz` are on every run of a real shell, and a superscript
+  footnote marker would add `vertAlign`. See the Mechanism section of
+  [`adr/0005-filled-shell-output.md`](https://tavakohr.github.io/arsbridge/adr/0005-filled-shell-output.md),
+  and re-run `tools/xlsx_roundtrip_check.R` after any openxlsx2 upgrade
+  — the writer depends on that internal representation.
+- **Never write a value you are not sure of.** A cell whose result is
+  missing, ambiguous, or reserved keeps its placeholder and is reported.
+  An empty cell in a clinical table reads as a zero, and a plausible
+  wrong number is the one that survives review.
+
+Two gates apply to any change in shared code:
+
+- **The Word path must stay byte-identical.** Re-run
+  [`parse_decision_digest()`](https://tavakohr.github.io/arsbridge/reference/parse_decision_digest.md)
+  over the `.docx` fixtures and
+  [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
+  over the shell/spec pairs and require identical output (bar the
+  version stamp and timestamp).
+- **The two readers must stay in lockstep.** `test-parity_docx_xlsx.R`
+  is the net; run `tools/parity_check_shell.R` against a real pair as
+  well if you have one. When parity fails, the answer is almost never to
+  relax the test — it is either a bug in the reader you changed, or a
+  difference that belongs in the class-2 whitelist *with a written
+  reason*.
 
 The two halves meet at two seams, documented at the top of the core
 file: the **per-run metadata list** (`text`, `raw_text`, `color_hex`,
@@ -108,6 +182,15 @@ explain *why* the current boundaries exist:
   rendered output can be compared against the shell it came from, and
   the three annotation layers (in-cell, below-table arrow lines,
   supplement) that can bind a row.
+- `0004-xlsx-shell-input.md` — why Word and Excel shells are both
+  supported permanently, the two seams a reader plugs into, and the
+  three classes every section-object field falls in. Read it before
+  changing either reader.
+- `0005-filled-shell-output.md` — the cell map (`_meta.shell_fill`) that
+  binds each placeholder to the result belonging in it: why it is built
+  at build time, the three row shapes that select from the ARD
+  differently, and why the ARD join keys on the operation id rather than
+  its display name.
 
 When you make a design-level change, add or update an ADR in the same
 PR. Keep the standard `ARS → ARD → tfrmt` pipeline — the shell is never

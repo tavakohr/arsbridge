@@ -23,7 +23,7 @@ parse_decision_digest(
 
 - shell_path:
 
-  Path to the annotated TLF shell `.docx`.
+  Path to the annotated TLF shell (`.docx` or `.xlsx`).
 
 - out_json:
 

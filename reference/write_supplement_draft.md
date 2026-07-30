@@ -25,7 +25,7 @@ write_supplement_draft(
 
 - shell_path:
 
-  Path to the annotated TLF shell `.docx`.
+  Path to the annotated TLF shell (`.docx` or `.xlsx`).
 
 - output_path:
 

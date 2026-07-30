@@ -1,15 +1,15 @@
 # arsbridge
 
-> **From annotated Word shell to publication-ready clinical table, in
-> one reproducible pipeline.**
+> **From annotated TLF shell to publication-ready clinical table, in one
+> reproducible pipeline.**
 
 Clinical programmers spend hours translating a lead programmer’s
 annotated TLF shell into R code, then reformatting output to match the
 shell layout. [arsbridge](https://github.com/tavakohr/arsbridge)
-automates both halves. It reads the annotations directly from the Word
-document, checks every variable against your ADaM spec, generates a
-CDISC Analysis Results Standard (ARS) JSON, executes it against real
-ADaM datasets with
+automates both halves. It reads the annotations directly from the shell
+– a Word `.docx`, or an Excel `.xlsx` with one worksheet per output –
+checks every variable against your ADaM spec, generates a CDISC Analysis
+Results Standard (ARS) JSON, executes it against real ADaM datasets with
 [cards](https://github.com/insightsengineering/cards), and renders a
 formatted GT table ready to ship.
 
@@ -22,6 +22,7 @@ to its source.
 
 | Capability | What it means for you |
 |----|----|
+| **Word or Excel shells** | Point [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md) at a `.docx` or an `.xlsx` and the rest of the pipeline is identical. An Excel shell is one worksheet per output, annotated in-cell in red; a Word shell is annotated the way it always was. Both readers share one annotation grammar, and a parity check enforces that the same study read either way produces the same ARS. |
 | **Three ways to read the shell** | A deterministic regex baseline always runs; you choose how the gaps it cannot resolve get filled — **regex only** (no key), a **Copilot supplement** (no API call), or a **live LLM** (opt-in with a key). Same spec-gated output from all three. |
 | **Spec-gated validation** | Every variable proposed — by the regex, a supplement, or the LLM — is checked against your ADaM spec. A variable missing from the spec is rejected and logged, never silently invented. |
 | **Human-in-the-loop review** | [`edit_ars()`](https://tavakohr.github.io/arsbridge/reference/edit_ars.md) opens the generated ARS in a structured Shiny editor: the shell’s outputs and lines with validation findings badged on, spec-constrained dropdowns, add/remove/reorder for missed lines, undo and crash recovery. Every save is backed up, logged to a QC sidecar, and checked against the official ARS v1.0 schema. |
@@ -30,6 +31,7 @@ to its source.
 | **Native ARD execution** | Run ARS JSON directly against `.xpt` or `.csv` datasets using [cards](https://github.com/insightsengineering/cards), with no dataset-loading boilerplate. |
 | **Codelist-decoded categories** | A coded categorical variable (e.g. a numeric `DCSREASN`) is decoded through the ADaM spec’s codelist: the ARD and rendered table show `DEATH`, not `1`, in codelist order, with unobserved terms reported as n = 0. Unannotated coded column axes get their column labels from the codelist too. |
 | **Publication-ready tables** | [`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md) builds a formatted GT table: treatment columns detected, percentages rescaled, row groups labelled, ARS footnotes carried through. |
+| **The filled shell, back in Excel** | For an Excel shell, [`ars_fill_shell()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_shell.md) returns the author’s own workbook with the results in it and the red annotations gone. The layout, labels, merges, fonts and footnotes are never rebuilt — only left alone — and each placeholder’s own `xx.x` decides how its number is formatted. A cell whose result does not exist keeps its placeholder and is reported, because a blank cell in a clinical table reads as a zero. |
 | **Partial tables, full traceability** | Statistics arsbridge cannot yet compute are reserved as keyed `manual_pending` rows. Each shows a `[‡ manual]` marker in the table until a programmer fills it with a validated script. Nothing is ever an orphan number. |
 
 ------------------------------------------------------------------------
@@ -67,8 +69,9 @@ flowchart TD
         MP["manual_pending rows\nfor statistics not yet computable"]
     end
 
-    subgraph STEP5 ["Step 5 · Render"]
+    subgraph STEP5 ["Step 5 · Deliver"]
         T["ars_render_tlf()\nformatted GT table"]
+        FS["ars_fill_shell()\nthe Excel shell, filled\n(.xlsx shells only)"]
     end
 
     SHELL --> STEP1
@@ -84,7 +87,9 @@ flowchart TD
     E --> MP
     E --> STEP5
     MP -->|"fill + validate"| STEP5
-    STEP5 --> TLF["Clinical table\n(GT · Word-ready)"]
+    T --> TLF["Clinical table\n(GT · Word-ready)"]
+    SHELL -.->|"the same workbook"| FS
+    FS --> XL["Filled shell\n(.xlsx · annotations removed)"]
 ```
 
 ------------------------------------------------------------------------
@@ -278,8 +283,19 @@ spec_to_ars(..., model = "glm-4.6")
 ### Step 2: Extract ARS JSON from the annotated shell
 
 [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
-is the main entry point. Point it at your annotated Word shell and ADaM
-spec; it writes a CDISC ARS JSON and an Excel validation report.
+is the main entry point. Point it at your annotated shell and ADaM spec;
+it writes a CDISC ARS JSON and an Excel validation report.
+
+The shell can be **Word or Excel** – everything downstream is the same
+either way:
+
+| Shell format | How each output is found | How a row is annotated |
+|----|----|----|
+| `.docx` | a heading paragraph (`Table 14.1.1`) followed by its table | a red run in the stub cell, or a `Label -> DATASET.VAR` line below the table |
+| `.xlsx` | one worksheet per output, named for it | a red run in the stub cell; the column axis and source dataset in the header cell (`[columns -> ADSL.TRT01A; source ADSL]`) |
+
+An Excel shell needs no `heading_patterns`: the worksheet name is the
+output number.
 
 ``` r
 
@@ -296,7 +312,7 @@ res <- spec_to_ars(
 
 | Argument | What to pass |
 |----|----|
-| `shell_path` | The annotated `.docx` file from the lead programmer |
+| `shell_path` | The annotated shell from the lead programmer: `.docx` or `.xlsx` |
 | `adam_spec_path` | `define.xml` (preferred) or an ADaM spec `.xlsx` / `.xls` |
 | `output_path` | Where to save the CDISC ARS JSON |
 | `report_path` | Where to save the Excel validation workbook |
@@ -444,6 +460,58 @@ reaches the final document.
 
 ------------------------------------------------------------------------
 
+### Step 7: Write the results back into the Excel shell
+
+If the study was authored as an Excel shell, the finished table already
+exists — the layout, the row labels, the column headers, the merges, the
+footnotes, and in each placeholder the number of decimal places that
+cell takes. All that is missing is the numbers.
+[`ars_fill_shell()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_shell.md)
+puts them in and takes the red annotations out.
+
+``` r
+
+res <- ars_fill_shell(
+  shell_path  = "inputs/shells.xlsx",
+  ars         = "outputs/reporting_event.json",
+  ard         = ard,
+  output_path = "outputs/filled_shells.xlsx"
+)
+
+res$filled     # cells written
+res$pending    # cells left showing their placeholder
+res$diagnostics  # one row per unfilled cell: which output, which cell, why
+```
+
+Nothing is laid out or re-created. The workbook is opened, the mapped
+cells are changed, and it is saved — so a run that is kept keeps its own
+font, and the author’s column widths, row heights and merges come
+through untouched.
+
+Which result belongs in which cell is not decided at this point. It was
+recorded when the ARS was built, in each output’s `_meta$shell_fill`
+cell map, while the shell’s geometry and the analyses were both in hand.
+That is why filling a shell needs the ARS that came from *that* shell.
+
+Three things are deliberate:
+
+- **The placeholder is the format.** `xx.x (xx.xx)` writes one decimal
+  then two, and keeps the parentheses. Nothing else in the pipeline
+  carries that decision, because the shell’s author already made it.
+- **An unfillable cell keeps its placeholder** and appears in
+  `res$diagnostics` with the reason — no result in the ARD, reserved for
+  manual derivation, or a row that stands for a repeated block. An empty
+  cell in a clinical table reads as a zero. Pass
+  `keep_pending_placeholders = FALSE` to blank them instead, for a
+  workbook going to someone who will complete it by hand.
+- **`strip_annotations = FALSE`** keeps the red annotations next to the
+  numbers, which is useful while reviewing and wrong for a deliverable.
+
+Listings and figures are not filled yet; their sheets are stripped of
+annotations and otherwise left as they are.
+
+------------------------------------------------------------------------
+
 ## How arsbridge reads the shell
 
 Every clinical study annotates its TLF shells differently. The ADaM
@@ -454,12 +522,13 @@ single detection strategy cannot cover all of these reliably.
 
 Two things are the same no matter how you run arsbridge:
 
-- **A deterministic regex baseline** (`parse_shell_docx()`) always runs
-  — a four-layer detector over every stub cell and listing header
-  (colour `#C00000` runs, bold/italic/underline, plain-text
-  `DATASET.VARIABLE`, bracketed `[DATASET.VAR WHERE ...]`), plus
-  flexible TLF-heading recognition: a bare `Table 14.1.1`, a colon title
-  `Table 14.1.1: Title`, and one-line headings that also carry the
+- **A deterministic regex baseline** (`parse_shell_docx()` for Word,
+  `parse_shell_xlsx()` for Excel — one shared annotation grammar behind
+  both) always runs — a four-layer detector over every stub cell and
+  listing header (colour `#C00000` runs, bold/italic/underline,
+  plain-text `DATASET.VARIABLE`, bracketed `[DATASET.VAR WHERE ...]`),
+  plus flexible TLF-heading recognition: a bare `Table 14.1.1`, a colon
+  title `Table 14.1.1: Title`, and one-line headings that also carry the
   population, an inline annotation, and a
   `[PROGRAMMING DATASETS USED: ...]` suffix (values single-, double-, or
   unquoted-numeric). No API call, no key. A sponsor style the built-ins
@@ -471,7 +540,7 @@ Two things are the same no matter how you run arsbridge:
 What differs is **how the rows the regex could not resolve get filled**
 — and that is the three approaches:
 
-                     annotated shell (.docx)
+               annotated shell (.docx or .xlsx)
                               |
                   regex baseline  (always runs)
                               |
@@ -704,6 +773,8 @@ clinical table out.
   : Render an ARS listing output to a GT table
 - [`ars_render_figure()`](https://tavakohr.github.io/arsbridge/reference/ars_render_figure.md)
   : Render an ARS figure output to a ggplot
+- [`ars_fill_shell()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_shell.md)
+  : Write results into the shell workbook they came from
 
 ## Review and correct
 

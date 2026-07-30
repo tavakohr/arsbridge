@@ -39,7 +39,8 @@ spec_to_ars(
 
 - shell_path:
 
-  Path to annotated TLF shells `.docx`.
+  Path to the annotated TLF shells document: a Word `.docx`, or an Excel
+  `.xlsx` with one worksheet per output.
 
 - adam_spec_path:
 
