@@ -891,3 +891,91 @@ test_that(".supplement_crosscheck is silent when titles are absent and coverage 
   supp <- .supp_minimal(list(`14.1.1` = list(), `14.1.2` = list()))
   expect_length(.supplement_crosscheck(supp, sections), 0)
 })
+
+## ---------------------------------------------------------------------------
+## Column axis in a draft: stated for a workbook, left alone for a document
+## ---------------------------------------------------------------------------
+
+.draft_of <- function(shell) {
+  out <- withr::local_tempfile(fileext = ".json", .local_envir = parent.frame())
+  suppressMessages(suppressWarnings(write_supplement_draft(
+    shell_path = shell,
+    adam_spec_path = test_path("fixtures", "adam_spec_apx_drm_301.xlsx"),
+    output_path = out)))
+  jsonlite::fromJSON(out, simplifyVector = FALSE)
+}
+
+test_that("an Excel draft states the column axis it can see", {
+  ## An Excel sheet's header row is located and its merges are explicit, so
+  ## the parser is not guessing -- which is why the draft is allowed to state
+  ## the axis rather than leaving it for the reviewer to write out.
+  draft <- .draft_of(test_path("fixtures", "shells_apx_drm_301.xlsx"))
+  flat <- draft$tlfs[["T-14-1-1"]]
+  expect_length(flat$groupings, 1L)
+  expect_equal(flat$groupings[[1]]$groupingDataset, "ADSL")
+  expect_equal(flat$groupings[[1]]$groupingVariable, "TRT01A")
+})
+
+test_that("a nested header becomes a hierarchy, not a flat grouping", {
+  ## The two are alternatives, not companions: a nested tree states its own
+  ## total columns, and the schema forbids includeTotal alongside one.
+  draft <- .draft_of(test_path("fixtures", "shells_apx_drm_301.xlsx"))
+  crossed <- draft$tlfs[["T-14-2-1"]]
+  expect_equal(crossed$columnHierarchy$mode, "NESTED")
+  expect_gte(length(crossed$columnHierarchy$nodes), 2L)
+  expect_null(crossed$groupings)
+  expect_null(crossed$includeTotal)
+})
+
+test_that("a translated column node carries only what the schema names", {
+  ## The parser's node and the schema's node are different vocabularies. The
+  ## parser's carries geometry (source, n_hint, the raw annotation) that the
+  ## schema forbids -- passing it straight through produces a draft that looks
+  ## right and fails validation, which the reviewer only discovers at build.
+  draft <- .draft_of(test_path("fixtures", "shells_apx_drm_301.xlsx"))
+  nodes <- draft$tlfs[["T-14-2-1"]]$columnHierarchy$nodes
+  allowed <- c("id", "label", "parentId", "level", "order", "nodeType",
+               "groupingDataset", "groupingVariable", "condition",
+               "compoundExpression", "totalStrategy")
+  for (node in nodes) {
+    expect_true(all(names(node) %in% allowed),
+                info = paste(setdiff(names(node), allowed), collapse = ", "))
+    expect_true(node$nodeType %in%
+                  c("GROUP", "LEAF", "SUBTOTAL", "GRAND_TOTAL"))
+  }
+})
+
+test_that("an Excel listing draft states its columns", {
+  draft <- .draft_of(test_path("fixtures", "shells_apx_drm_301.xlsx"))
+  listing <- draft$tlfs[["L-16-2-1"]]
+  expect_gt(length(listing$listingColumns), 0)
+  first <- listing$listingColumns[[1]]
+  expect_true(nzchar(first$label))
+  expect_true(nzchar(first$variable$dataset))
+  expect_true(nzchar(first$variable$variable))
+})
+
+test_that("a Word draft still states no column axis", {
+  ## Left blank deliberately: a Word header grid has to be inferred, and a
+  ## draft that asserts an axis and gets it wrong is worse than one that stays
+  ## quiet -- a reviewer checks what is flagged and trusts what is stated.
+  draft <- .draft_of(test_path("fixtures", "shells_parity_apx.docx"))
+  for (entry in draft$tlfs) {
+    expect_null(entry$groupings)
+    expect_null(entry$columnHierarchy)
+    expect_null(entry$listingColumns)
+  }
+})
+
+test_that("an enriched draft still validates against the shipped schema", {
+  skip_if_not_installed("jsonvalidate")
+  out <- withr::local_tempfile(fileext = ".json")
+  suppressMessages(suppressWarnings(write_supplement_draft(
+    shell_path = test_path("fixtures", "shells_apx_drm_301.xlsx"),
+    adam_spec_path = test_path("fixtures", "adam_spec_apx_drm_301.xlsx"),
+    output_path = out)))
+  schema <- system.file("schema", "arsbridge_supplement_v4.schema.json",
+                        package = "arsbridge")
+  skip_if_not(nzchar(schema))
+  expect_true(jsonvalidate::json_validate(out, schema, engine = "ajv"))
+})

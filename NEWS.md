@@ -1,5 +1,18 @@
 # arsbridge (development version)
 
+* **A draft supplement now states the column axis for an Excel shell.**
+  `write_supplement_draft()` fills `groupings`, `columnHierarchy`,
+  `includeTotal` and `listingColumns` from the parse — a nested header becomes
+  a column hierarchy, a flat one a grouping, and a listing gets its columns.
+  These stay blank for a Word shell, deliberately: a Word header grid has to
+  be inferred, and a draft that asserts an axis and gets it wrong is worse
+  than one that stays quiet, because a reviewer checks what is flagged and
+  trusts what is stated. An Excel sheet has no such doubt.
+
+* Fixed: `vignette("no-api-access")` told you to have the assistant reply in
+  supplement format **v3**. The shipped schema is v4, and v3 is rejected — so
+  anyone following the vignette produced a supplement the validator refused.
+
 * **`ars_workflow()` is one phase, not two.** The app used to make you carry a
   blueprint out to a chat assistant and a supplement back before anything could
   be built — two manual round-trips in front of the first result. A
