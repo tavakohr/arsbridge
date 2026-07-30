@@ -248,3 +248,257 @@ on.exit(setwd(old), add = TRUE)
 utils::zip(shared_path, files = ".", flags = "-q -r -X")
 setwd(old)
 cat("wrote", shared_path, "\n")
+
+## ---------------------------------------------------------------------------
+## Fixture 3 -- the full study shell, shells_apx_drm_301.xlsx
+## ---------------------------------------------------------------------------
+##
+## Nine sheets in the shape a real annotated shell workbook has: five tables,
+## two listings, one figure, and the workbook's own legend. Invented
+## APX-DRM-301 content throughout -- an atopic dermatitis study with three
+## arms. What is reproduced from the exemplar is the CONVENTION, never the
+## text: banner rows 1-4, red italic bracket annotations in-cell, red
+## parentheses on the population line, unbracketed red arrow prose on the
+## figure sheet, spacer rows between groups, merged titles and footnotes.
+##
+## Deliberate deviations, each exercising a tolerance the parser claims:
+##   Table 14.1.3  no population line, and its number row says 14.1.3 while
+##                 the tab is named Table 14.1.4 -- the mismatch report.
+##   Table 14.2.1  a two-row merged column header (cohort over sub-columns),
+##                 which the flat exemplar never exercises.
+##   Figure 14.3.1 one arrow line naming an aspect arsbridge does not know.
+
+arm <- c("Placebo", "Drug 10 mg", "Drug 20 mg")
+
+wb3 <- wb_workbook()
+
+sheet_banner <- function(wb, sheet, number, title, population = NULL,
+                         n_cols = 4L) {
+  wb$add_data(sheet = sheet, x = number, start_row = 1, start_col = 1,
+              col_names = FALSE)
+  wb$add_data(sheet = sheet, x = title, start_row = 2, start_col = 1,
+              col_names = FALSE)
+  wb$merge_cells(sheet = sheet, dims = paste0("A1:", int2col(n_cols), "1"))
+  wb$merge_cells(sheet = sheet, dims = paste0("A2:", int2col(n_cols), "2"))
+  if (!is.null(population)) {
+    wb$add_data(
+      sheet = sheet,
+      x = fmt_txt(paste0(population, " "), color = wb_color(hex = BLACK),
+                  size = 10) +
+        fmt_txt("(ADSL.SAFFL='Y')", color = wb_color(hex = RED), size = 8,
+                italic = TRUE),
+      start_row = 3, start_col = 1, col_names = FALSE)
+    wb$merge_cells(sheet = sheet, dims = paste0("A3:", int2col(n_cols), "3"))
+  }
+  invisible(wb)
+}
+
+sheet_footnote <- function(wb, sheet, row, text, n_cols = 4L) {
+  wb$add_data(sheet = sheet, x = text, start_row = row, start_col = 1,
+              col_names = FALSE)
+  wb$merge_cells(sheet = sheet,
+                 dims = sprintf("A%d:%s%d", row, int2col(n_cols), row))
+  invisible(wb)
+}
+
+## Header row: stub header carrying the output-level directives, then one
+## plain cell per treatment column.
+sheet_header <- function(wb, sheet, row, stub, directives, arms = arm) {
+  wb$add_data(sheet = sheet, x = annotated_cell(stub, directives),
+              start_row = row, start_col = 1, col_names = FALSE)
+  for (j in seq_along(arms)) {
+    wb$add_data(sheet = sheet, x = arms[[j]], start_row = row,
+                start_col = j + 1L, col_names = FALSE)
+  }
+  invisible(wb)
+}
+
+data_row <- function(wb, sheet, row, label, annot = NULL,
+                     value = "xx (xx.x)", arms = arm) {
+  x <- if (is.null(annot)) label else annotated_cell(label, annot)
+  wb$add_data(sheet = sheet, x = x, start_row = row, start_col = 1,
+              col_names = FALSE)
+  if (!is.null(value)) {
+    for (j in seq_along(arms)) {
+      wb$add_data(sheet = sheet, x = value, start_row = row,
+                  start_col = j + 1L, col_names = FALSE)
+    }
+  }
+  invisible(wb)
+}
+
+## --- Table 14.1.1: disposition, the plain case -----------------------------
+wb3$add_worksheet("Table 14.1.1")
+sheet_banner(wb3, "Table 14.1.1", "Table 14.1.1",
+             "Summary of Subject Disposition", "Safety Population")
+sheet_header(wb3, "Table 14.1.1", 4, "Category",
+             "[columns -> ADSL.TRT01A; source ADSL]")
+data_row(wb3, "Table 14.1.1", 5, "Subjects treated", "[ADSL.SAFFL = 'Y']",
+         value = "xx")
+data_row(wb3, "Table 14.1.1", 6, "Completed study",
+         "[ADSL.EOSSTT = 'COMPLETED']")
+data_row(wb3, "Table 14.1.1", 7, "Discontinued study",
+         "[ADSL.EOSSTT = 'DISCONTINUED']")
+sheet_footnote(wb3, "Table 14.1.1", 8,
+               "Percentages are based on the number of treated subjects.")
+
+## --- Table 14.1.2: demographics, group parents and spacer rows -------------
+wb3$add_worksheet("Table 14.1.2")
+sheet_banner(wb3, "Table 14.1.2", "Table 14.1.2",
+             "Demographics and Baseline Characteristics", "Safety Population")
+sheet_header(wb3, "Table 14.1.2", 4, "Characteristic",
+             "[columns -> ADSL.TRT01A; source ADSL]")
+data_row(wb3, "Table 14.1.2", 5, "Age (years)", "[ADSL.AGE]", value = NULL)
+data_row(wb3, "Table 14.1.2", 6, "Mean (SD)", value = "xx.x (xx.xx)")
+data_row(wb3, "Table 14.1.2", 7, "Median", value = "xx.x")
+data_row(wb3, "Table 14.1.2", 8, "Q1, Q3", value = "xx, xx")
+## row 9 blank -- spacer
+data_row(wb3, "Table 14.1.2", 10, "Sex, n (%)", "[ADSL.SEX]", value = NULL)
+data_row(wb3, "Table 14.1.2", 11, "Female")
+data_row(wb3, "Table 14.1.2", 12, "Male")
+
+## --- Table 14.1.3: no population line, and a number/tab mismatch -----------
+## The TAB is named 14.1.4 while row 1 says 14.1.3: the sheet name wins and
+## the disagreement is reported.
+wb3$add_worksheet("Table 14.1.4")
+sheet_banner(wb3, "Table 14.1.4", "Table 14.1.3",
+             "Protocol Deviations", population = NULL)
+sheet_header(wb3, "Table 14.1.4", 3, "Deviation category",
+             "[columns -> ADSL.TRT01A; source ADDV]")
+data_row(wb3, "Table 14.1.4", 4, "Any major deviation",
+         "[ADDV.DVCAT = 'MAJOR']")
+data_row(wb3, "Table 14.1.4", 5, "Inclusion criteria",
+         "[ADDV.DVDECOD = 'INCLUSION']")
+
+## --- Table 14.2.1: a two-row merged column header --------------------------
+## Cohort spanning two statistic sub-columns each -- the nested header shape
+## the exemplar never exercises, so the column tree has a fixture.
+wb3$add_worksheet("Table 14.2.1")
+sheet_banner(wb3, "Table 14.2.1", "Table 14.2.1", "Study Drug Exposure",
+             "Safety Population", n_cols = 5L)
+wb3$add_data(sheet = "Table 14.2.1",
+             x = annotated_cell("Statistic",
+                                "[columns -> ADEX.TRT01A; source ADEX]"),
+             start_row = 4, start_col = 1, col_names = FALSE)
+wb3$add_data(sheet = "Table 14.2.1",
+             x = annotated_cell("Drug 10 mg", "[ADEX.TRT01AN = 1]"),
+             start_row = 4, start_col = 2, col_names = FALSE)
+wb3$add_data(sheet = "Table 14.2.1",
+             x = annotated_cell("Drug 20 mg", "[ADEX.TRT01AN = 2]"),
+             start_row = 4, start_col = 4, col_names = FALSE)
+wb3$merge_cells(sheet = "Table 14.2.1", dims = "B4:C4")
+wb3$merge_cells(sheet = "Table 14.2.1", dims = "D4:E4")
+## The sub-columns carry their OWN conditions -- without them the header is a
+## display split, not a grouping hierarchy, and no column tree can be built.
+sub_visits <- c("[ADEX.AVISITN = 12]", "[ADEX.AVISITN = 24]")
+for (j in 2:5) {
+  k <- ((j - 2L) %% 2L) + 1L
+  wb3$add_data(sheet = "Table 14.2.1",
+               x = annotated_cell(c("Week 12", "Week 24")[[k]], sub_visits[[k]]),
+               start_row = 5, start_col = j, col_names = FALSE)
+}
+## Row 5 column 1 is left empty: the stub header spans both header rows.
+data_row(wb3, "Table 14.2.1", 6, "Duration (days)", "[ADEX.TRTDURD]",
+         value = NULL)
+data_row(wb3, "Table 14.2.1", 7, "Mean (SD)", value = "xx.x (xx.xx)",
+         arms = 1:4)
+data_row(wb3, "Table 14.2.1", 8, "Median", value = "xx.x", arms = 1:4)
+
+## --- Table 14.3.1: adverse events, template rows ---------------------------
+wb3$add_worksheet("Table 14.3.1")
+sheet_banner(wb3, "Table 14.3.1", "Table 14.3.1",
+             "Treatment-Emergent Adverse Events by System Organ Class",
+             "Safety Population")
+sheet_header(wb3, "Table 14.3.1", 4, "System Organ Class / Preferred Term",
+             "[columns -> ADAE.TRT01A; source ADAE]")
+data_row(wb3, "Table 14.3.1", 5, "Subjects with any TEAE",
+         "[row incl. ADAE.TRTEMFL='Y'; once/subject]")
+## row 6 blank -- spacer
+data_row(wb3, "Table 14.3.1", 7, "<System Organ Class>", "[ADAE.AESOC]")
+data_row(wb3, "Table 14.3.1", 8, "<Preferred Term>", "[ADAE.AEDECOD]")
+sheet_footnote(wb3, "Table 14.3.1", 10,
+               "A subject is counted once per system organ class.")
+
+## --- Listing 16.2.1: the row filter lives in a second bracket group --------
+wb3$add_worksheet("Listing 16.2.1")
+sheet_banner(wb3, "Listing 16.2.1", "Listing 16.2.1",
+             "Listing of Adverse Events", "Safety Population", n_cols = 5L)
+listing_header <- function(wb, sheet, cols) {
+  for (j in seq_along(cols)) {
+    wb$add_data(sheet = sheet,
+                x = annotated_cell(names(cols)[[j]], cols[[j]]),
+                start_row = 4, start_col = j, col_names = FALSE)
+  }
+}
+listing_header(wb3, "Listing 16.2.1", c(
+  "Subject"   = "[ADAE.USUBJID]  [row: ADAE.TRTEMFL='Y'; source ADAE]",
+  "Treatment" = "[ADAE.TRT01A]",
+  "AE term"   = "[ADAE.AEDECOD]",
+  "Severity"  = "[ADAE.ASEV]",
+  "Outcome"   = "[ADAE.AEOUT]"))
+for (j in 1:5) {
+  wb3$add_data(sheet = "Listing 16.2.1",
+               x = c("xxx-xxx", "xxxx", "xxxx", "x", "xxxx")[[j]],
+               start_row = 5, start_col = j, col_names = FALSE)
+}
+
+## --- Listing 16.2.2: no output-level directives at all ---------------------
+wb3$add_worksheet("Listing 16.2.2")
+sheet_banner(wb3, "Listing 16.2.2", "Listing 16.2.2",
+             "Listing of Concomitant Medications", "Safety Population",
+             n_cols = 3L)
+for (j in 1:3) {
+  wb3$add_data(sheet = "Listing 16.2.2",
+               x = annotated_cell(c("Subject", "Reported term", "Start/Stop")[[j]],
+                                  c("[ADCM.USUBJID]", "[ADCM.CMTRT]",
+                                    "[ADCM.ASTDT / AENDT]")[[j]]),
+               start_row = 4, start_col = j, col_names = FALSE)
+  wb3$add_data(sheet = "Listing 16.2.2",
+               x = c("xxx-xxx", "xxxx", "dd-mmm / dd-mmm")[[j]],
+               start_row = 5, start_col = j, col_names = FALSE)
+}
+
+## --- Figure 14.3.1: whole-cell red arrow prose, one unknown aspect ---------
+wb3$add_worksheet("Figure 14.3.1")
+sheet_banner(wb3, "Figure 14.3.1", "Figure 14.3.1",
+             "Mean (+/- SE) Pulse Rate Over Time by Treatment",
+             "Safety Population", n_cols = 2L)
+wb3$add_data(sheet = "Figure 14.3.1", x = "Chart type", start_row = 5,
+             start_col = 1, col_names = FALSE)
+wb3$add_data(sheet = "Figure 14.3.1", x = "Line plot with error bars",
+             start_row = 5, start_col = 2, col_names = FALSE)
+fig_lines <- c("Programming annotations",
+               "Source: ADVS.",
+               "X axis -> ADVS.AVISITN (label ADVS.AVISIT)",
+               "Y axis -> mean of ADVS.AVAL",
+               "Series (colour) -> ADVS.TRTA",
+               "Filter -> ADVS.PARAMCD='PULSE'",
+               "Error bars -> SE = sd(ADVS.AVAL) / sqrt(n)",
+               "Reference line -> 0")
+for (i in seq_along(fig_lines)) {
+  row <- 6L + i
+  wb3$add_data(sheet = "Figure 14.3.1", x = fig_lines[[i]], start_row = row,
+               start_col = 1, col_names = FALSE)
+  wb3$merge_cells(sheet = "Figure 14.3.1", dims = sprintf("A%d:B%d", row, row))
+}
+wb3$add_font(sheet = "Figure 14.3.1", dims = "A7:A14",
+             color = wb_color(hex = RED), size = 9, italic = TRUE)
+
+## --- Formatting Notes: the workbook's own legend ---------------------------
+wb3$add_worksheet("Formatting Notes")
+wb3$add_data(sheet = "Formatting Notes", x = "Formatting Notes",
+             start_row = 1, start_col = 1, col_names = FALSE)
+notes <- c(
+  "Workbook structure" = "One worksheet per output, named for the output.",
+  "Annotations"        = "Red italic text in square brackets is a programming annotation.",
+  "Placeholders"       = "xx marks a count; xx.x a one-decimal value.")
+for (i in seq_along(notes)) {
+  wb3$add_data(sheet = "Formatting Notes", x = names(notes)[[i]],
+               start_row = 2L + i, start_col = 1, col_names = FALSE)
+  wb3$add_data(sheet = "Formatting Notes", x = notes[[i]],
+               start_row = 2L + i, start_col = 2, col_names = FALSE)
+}
+
+full_path <- file.path(here, "shells_apx_drm_301.xlsx")
+wb3$save(full_path)
+cat("wrote", full_path, "\n")

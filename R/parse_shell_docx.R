@@ -441,62 +441,9 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
 
   ## Per-section parse-quality diagnostics: a section with stub rows but
   ## zero detected annotations is the classic symptom of an annotation
-  ## convention the 4-layer detector does not recognise.
-  for (sec in sections) {
-    n_rows  <- length(sec$stub_rows)
-    n_annot <- sum(vapply(sec$stub_rows, function(r) isTRUE(r$has_annot), logical(1)))
-    ## A heading number was found but no title text -- the section will be
-    ## labelled only by its number downstream. Say how to make the title
-    ## identifiable (same guidance as the no-heading error and ?spec_to_ars).
-    if (!nzchar(trimws(sec$title %||% ""))) {
-      diag_add(
-        stage = "parse_shell", severity = "WARN", input = INPUT_SHELL,
-        problem = sprintf(
-          "TLF %s: heading number found but no title text was identified",
-          sec$tlf_number),
-        tlf_number = sec$tlf_number,
-        location = sec$tlf_number,
-        action = .RECOMMENDED_HEADING_HINT
-      )
-    }
-    if (n_rows > 0 && n_annot == 0) {
-      diag_add(
-        stage = "parse_shell", severity = "WARN", input = INPUT_SHELL,
-        problem = sprintf("Section has %d stub row(s) but no annotations were detected", n_rows),
-        tlf_number = sec$tlf_number,
-        location = sec$title %||% "",
-        action = "Section will rely entirely on LLM/fallback inference -- review annotation convention"
-      )
-    }
-    if (n_rows == 0 && !identical(sec$tlf_type, "FIGURE")) {
-      diag_add(
-        stage = "parse_shell", severity = "WARN", input = INPUT_SHELL,
-        problem = "No table rows captured for this section",
-        tlf_number = sec$tlf_number,
-        location = sec$title %||% "",
-        action = "Check that the shell table directly follows the TLF heading"
-      )
-    }
-    if (length(sec$source_datasets) == 0) {
-      diag_add(
-        stage = "parse_shell", severity = "INFO", input = INPUT_SHELL,
-        problem = "No 'Source: ...' line found for this section",
-        tlf_number = sec$tlf_number,
-        location = sec$title %||% "",
-        action = "Source datasets unknown; listing header dataset resolution falls back to ADSL"
-      )
-    }
-    if (length(sec$programmer_annotations) > 0) {
-      diag_add(
-        stage = "parse_shell", severity = "INFO", input = INPUT_SHELL,
-        problem = sprintf("%d programmer annotation line(s) captured outside the table stub",
-                          length(sec$programmer_annotations)),
-        tlf_number = sec$tlf_number,
-        location = sec$title %||% "",
-        action = "Kept for row binding and the validation report -- never shipped as footnotes"
-      )
-    }
-  }
+  ## convention the 4-layer detector does not recognise. Shared with the
+  ## Excel reader so both report the same problems in the same words.
+  .diagnose_sections(sections)
 
   sections
 }
@@ -1501,25 +1448,7 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
 #' to Layer 3 plain-text detection on the full paragraph text.
 #' @noRd
 .extract_population_annot <- function(p_node, full_text) {
-  full_text <- .unwrap_bracket_instructions(full_text)$text
-  meta <- .runs_metadata(p_node)
-  coloured <- Filter(.is_annotation_styled_run, meta)
-  if (length(coloured) > 0) {
-    out <- paste(vapply(coloured, function(m) m$text, character(1)), collapse = "")
-    out <- .unwrap_bracket_instructions(trimws(out))$text
-    out <- sub("^\\[(.*)\\]$", "\\1", out, perl = TRUE)
-    if (grepl(.ANNOTATION_PATTERN, out, perl = TRUE)) {
-      return(.canon_annotation(out))
-    }
-  }
-  ## Layer 3 on the population paragraph text.
-  if (grepl(.ANNOTATION_PATTERN, full_text, perl = TRUE)) {
-    ## Extract just the matching ADaM segment(s).
-    m <- regmatches(full_text,
-                    gregexpr(.ANNOTATION_PATTERN, full_text, perl = TRUE))[[1]]
-    if (length(m) > 0) return(.canon_annotation(paste(m, collapse = " and ")))
-  }
-  ""
+  .population_annot_from_runs(.runs_metadata(p_node), full_text)
 }
 
 ## ---------------------------------------------------------------------------

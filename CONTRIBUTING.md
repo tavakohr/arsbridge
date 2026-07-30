@@ -79,6 +79,18 @@ exactly one half:
   tables from `xlsx_cells.R`, never a file, so it is tested against synthetic
   sheets built by `tests/testthat/helper-gridgen.R` — build a sheet with the
   geometry you need rather than authoring a workbook.
+* [`R/parse_shell_xlsx.R`](R/parse_shell_xlsx.R) — **assembly only.** Walks the
+  sheets and fills in section objects from the two layers above. Before
+  changing it, read the section-object compatibility contract in its header
+  and in [`adr/0004-xlsx-shell-input.md`](adr/0004-xlsx-shell-input.md): every
+  field is either identical-semantics (a difference from the Word reader is a
+  bug), format-specific and whitelisted, or additive Excel-only — and nothing
+  outside the fill writer may require the additive ones.
+
+Both readers must stay behaviour-identical on Word input. Every change to
+shared code is checked by re-running `parse_decision_digest()` over the `.docx`
+fixtures and `spec_to_ars()` over the shell/spec pairs and requiring
+byte-identical output; if you touch `parse_shell_core.R`, do the same.
 
 The two halves meet at two seams, documented at the top of the core file: the
 **per-run metadata list** (`text`, `raw_text`, `color_hex`, `highlight`,

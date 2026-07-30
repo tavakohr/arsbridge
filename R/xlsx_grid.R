@@ -187,7 +187,7 @@
   rows <- .sheet_rows(sheet)
   out <- list(number_row = NA_integer_, title_row = NA_integer_,
               population_row = NA_integer_, header_row = NA_integer_,
-              first_body_row = NA_integer_,
+              header_rows = integer(0), first_body_row = NA_integer_,
               last_row = if (length(rows)) max(rows) else NA_integer_)
   if (length(rows) == 0) return(out)
 
@@ -250,8 +250,9 @@
   if (!identical(tlf_type, "FIGURE")) {
     for (r in after(cursor)) {
       if (length(.sheet_row_filled_cols(sheet, r)) >= 2L) {
-        out$header_row <- r
-        cursor <- r
+        out$header_row  <- r
+        out$header_rows <- .xlsx_header_row_block(sheet, r, rows)
+        cursor <- max(out$header_rows)
         break
       }
     }
@@ -268,6 +269,40 @@
   body <- after(cursor)
   if (length(body) > 0) out$first_body_row <- body[[1]]
   out
+}
+
+#' The rows forming the column-header block, starting at `first`.
+#'
+#' Usually just `first`. A header cell merged across several columns is a
+#' GROUP header, though, and the row beneath it carries that group's
+#' sub-columns -- the shape `column_tree.R` turns into a hierarchy. That
+#' second row is only taken when it looks like labels rather than results: a
+#' placeholder anywhere in it means the header ended and the body began.
+#'
+#' This is the Excel counterpart of the Word reader inferring a multi-row
+#' header from a spanned first row, and it is likewise a guess: only evidence
+#' in the sheet (a real merge, and no placeholders below it) can extend the
+#' block.
+#' @noRd
+.xlsx_header_row_block <- function(sheet, first, rows) {
+  spans_group <- any(
+    sheet$merges$row_start == first & sheet$merges$row_end == first &
+      sheet$merges$col_start > 1L &
+      sheet$merges$col_end > sheet$merges$col_start)
+  if (!spans_group) return(first)
+
+  below <- rows[rows > first]
+  if (length(below) == 0) return(first)
+  candidate <- below[[1]]
+
+  cells <- .sheet_row_cells(sheet, candidate)
+  if (nrow(cells) == 0) return(first)
+  has_placeholder <- any(vapply(cells$text, function(t) {
+    identical(.parse_placeholder(t)$kind, "placeholder")
+  }, logical(1)))
+  if (has_placeholder) return(first)
+
+  c(first, candidate)
 }
 
 #' TRUE when any cell of the row carries an annotation-styled run (the red
@@ -320,6 +355,47 @@
     }
   }
   grid
+}
+
+#' Flatten header-grid records to one label and one annotation per physical
+#' column -- what a consumer that only understands a flat column axis needs.
+#'
+#' A column's label is the distinct non-empty texts down the header block
+#' joined with a space ("Drug 10 mg" over "Week 12" reads "Drug 10 mg
+#' Week 12"); its annotation is the first non-empty one going down, because
+#' the outermost header states the axis and the inner ones refine it. The full
+#' hierarchy is not lost -- it travels on the grid to `column_tree.R`.
+#'
+#' This mirrors `.combine_header_rows_detected()` in parse_shell_docx.R
+#' exactly. The two are separate only because the Word version reads XML nodes
+#' rather than records; unify them when the Word header path is next touched.
+#' @noRd
+.xlsx_combine_header_grid <- function(grid) {
+  empty <- list(labels = character(0), annotations = character(0))
+  if (length(grid) == 0) return(empty)
+
+  width  <- max(vapply(grid, function(g) g$col_end, integer(1)))
+  n_rows <- max(vapply(grid, function(g) g$row, integer(1)))
+  if (width < 1L || n_rows < 1L) return(empty)
+
+  lab <- matrix("", nrow = n_rows, ncol = width)
+  ann <- matrix("", nrow = n_rows, ncol = width)
+  for (g in grid) {
+    cols <- seq.int(g$col_start, min(g$col_end, width))
+    lab[g$row, cols] <- g$text %||% ""
+    ann[g$row, cols] <- g$annotation %||% ""
+  }
+
+  labels <- vapply(seq_len(width), function(col) {
+    parts <- unique(lab[, col][nzchar(lab[, col])])
+    trimws(paste(parts, collapse = " "))
+  }, character(1))
+  annotations <- vapply(seq_len(width), function(col) {
+    down <- ann[, col][nzchar(ann[, col])]
+    if (length(down) > 0) down[[1]] else ""
+  }, character(1))
+
+  list(labels = labels, annotations = annotations)
 }
 
 ## ---------------------------------------------------------------------------

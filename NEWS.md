@@ -1,5 +1,19 @@
 # arsbridge (development version)
 
+* **`parse_shell_xlsx()`: an annotated Excel workbook now parses to the same
+  section objects a Word shell does.** One worksheet per output, the
+  workbook's own legend skipped; tables, listings and figures all supported.
+  Everything about annotations -- the grammar, the detection layers, the
+  column-group resolution, the row binding, the section finalization -- is the
+  shared code in `parse_shell_core.R`, so the two readers cannot disagree
+  about what a shell says. The section object's fields are now formally
+  classed in `adr/0004-xlsx-shell-input.md`: identical-semantics fields (which
+  a parity check compares between the two readers), format-specific
+  whitelisted fields, and additive Excel-only fields that no existing consumer
+  may require. A merged column header over conditioned sub-columns builds a
+  nested column tree through `column_tree.R` unchanged. Still not reachable
+  from `spec_to_ars()` -- the input gate lifts next.
+
 * **New sheet-layout layer (`R/xlsx_grid.R`), the second half of reading an
   Excel shell.** Decides what the cells of a worksheet mean: which sheet is
   an output (from its name, falling back to row 1) and which is the workbook's
