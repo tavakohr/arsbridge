@@ -113,6 +113,122 @@ write_supplement_draft <- function(shell_path,
 #' One section -> one v4 tlfEntry. Everything the parser is unsure about
 #' lands in provenance$reviewItems rather than being dropped.
 #' @noRd
+#' One column-tree node, translated from the parser's shape into the
+#' supplement schema's.
+#'
+#' They are deliberately different vocabularies: the parser's node carries
+#' what it needs to reason about geometry (`source`, `n_hint`, the raw
+#' `annotation`), and the schema forbids anything it does not name. Passing
+#' the parser's node straight through produces a draft that looks right and
+#' fails validation -- which is the worst of both, because the reviewer only
+#' finds out when the build rejects it.
+#' @noRd
+.supplement_column_node <- function(node) {
+  id    <- trimws(node$id %||% "")
+  label <- trimws(node$label %||% "")
+  level <- suppressWarnings(as.integer(node$level %||% NA))
+  order <- suppressWarnings(as.integer(node$order %||% NA))
+  if (!nzchar(id) || !nzchar(label) || is.na(level) || is.na(order)) return(NULL)
+
+  type <- toupper(trimws(node$node_type %||% ""))
+  if (!type %in% c("GROUP", "LEAF", "SUBTOTAL", "GRAND_TOTAL")) return(NULL)
+
+  out <- list(id = id, label = label, level = level, order = order,
+              nodeType = type)
+
+  parent <- trimws(node$parent_id %||% "")
+  if (nzchar(parent)) out$parentId <- parent
+
+  ## "ADEX.TRT01AN" -> the two fields the schema keeps apart.
+  ref <- trimws(node$grouping_ref %||% "")
+  if (nzchar(ref)) {
+    parts <- strsplit(ref, ".", fixed = TRUE)[[1]]
+    if (length(parts) == 2) {
+      out$groupingDataset  <- toupper(parts[[1]])
+      out$groupingVariable <- toupper(parts[[2]])
+    }
+  }
+
+  ## The parser wraps a condition as list(condition = ...); the schema names
+  ## the two forms separately.
+  where <- node$condition
+  if (!is.null(where$condition)) out$condition <- where$condition
+  if (!is.null(where$compoundExpression)) {
+    out$compoundExpression <- where$compoundExpression
+  }
+  out
+}
+
+#' Fill a draft entry's column axis and listing columns from an Excel parse.
+#'
+#' Kept apart from `.section_to_supplement_tlf()` so the Word path reads with
+#' no branch in it at all: this is called only for a workbook.
+#'
+#' `groupings` and `columnHierarchy` are alternatives, not companions -- the
+#' schema forbids `includeTotal = TRUE` alongside a hierarchy, because a
+#' nested tree states its own total columns. A flat axis gets groupings; a
+#' nested one gets the tree the parser already built.
+#' @noRd
+.supplement_column_axis <- function(entry, sec) {
+  ## Listings have columns, not a column axis: one entry per header cell that
+  ## resolved to a variable.
+  if (identical(sec$tlf_type %||% "", "LISTING")) {
+    columns <- list()
+    for (header in sec$header_rows %||% list()) {
+      annotation <- trimws(header$annotation %||% "")
+      if (!nzchar(annotation)) next
+      refs <- extract_annotation_vars(annotation)
+      if (length(refs) == 0) next
+      parts <- strsplit(refs[[1]], ".", fixed = TRUE)[[1]]
+      if (length(parts) != 2) next
+      columns[[length(columns) + 1L]] <- list(
+        label    = trimws(header$label %||% ""),
+        variable = list(dataset = parts[[1]], variable = parts[[2]]),
+        order    = length(columns) + 1L)
+    }
+    if (length(columns) > 0) entry$listingColumns <- columns
+    return(entry)
+  }
+
+  ## A nested header states its own column tree; a flat one states a grouping.
+  tree <- sec$column_tree
+  if (!is.null(tree) && identical(tree$mode %||% "", "NESTED") &&
+      length(tree$nodes %||% list()) >= 2) {
+    nodes <- Filter(Negate(is.null), lapply(tree$nodes, .supplement_column_node))
+    if (length(nodes) >= 2) {
+      entry$columnHierarchy <- list(mode = "NESTED", nodes = nodes)
+      return(entry)
+    }
+  }
+
+  annotation <- trimws(sec$column_annotation %||% "")
+  if (!nzchar(annotation)) return(entry)
+  parts <- strsplit(annotation, ".", fixed = TRUE)[[1]]
+  if (length(parts) != 2) return(entry)
+
+  grouping <- list(
+    groupingDataset  = toupper(parts[[1]]),
+    groupingVariable = toupper(parts[[2]]),
+    ## Data-driven unless the shell spelled the levels out in its headers,
+    ## which is exactly what column_groups records.
+    dataDriven       = length(sec$column_groups$groups %||% list()) == 0)
+  groups <- list()
+  for (definition in sec$column_groups$groups %||% list()) {
+    label <- trimws(definition$label %||% "")
+    if (!nzchar(label)) next
+    group <- list(label = label, order = length(groups) + 1L)
+    condition <- definition$condition %||%
+      parse_where_clause(definition$annotation %||% "")
+    if (!is.null(condition)) group$condition <- condition
+    groups[[length(groups) + 1L]] <- group
+  }
+  if (length(groups) > 0) grouping$groups <- groups
+  entry$groupings <- list(grouping)
+
+  if (isTRUE(sec$include_total_hint)) entry$includeTotal <- TRUE
+  entry
+}
+
 .section_to_supplement_tlf <- function(sec, spec_lookup = NULL) {
   spec_keys <- toupper(names(spec_lookup %||% list()))
   in_spec <- function(ref) length(spec_keys) == 0 || ref %in% spec_keys
@@ -210,6 +326,22 @@ write_supplement_draft <- function(shell_path,
     analyses[[length(analyses) + 1L]] <- analysis
   }
   if (length(analyses) > 0) entry$analyses <- analyses
+
+  ## Column axis and listing columns -- EXCEL SECTIONS ONLY.
+  ##
+  ## These were left blank for a Word shell because the geometry was doubtful:
+  ## a Word table's header grid has to be inferred (which row is the header,
+  ## what a gridSpan covers), and a draft that states a column axis
+  ## confidently and gets it wrong is worse than one that stays quiet, because
+  ## a reviewer trusts what the draft asserts and only checks what it flags.
+  ##
+  ## An Excel sheet does not have that doubt: the header row is located, the
+  ## merges are explicit, and the column tree is built from the same records
+  ## the parser already trusts (ADR 0004). So for a workbook the draft states
+  ## them, and the reviewer has that much less to write by hand.
+  if (identical(sec$source_format %||% "", "xlsx")) {
+    entry <- .supplement_column_axis(entry, sec)
+  }
 
   ## Anchors let .supplement_anchor_check() confirm a reviewed manifest
   ## still matches the shell it was drafted from.

@@ -59,9 +59,9 @@ ars_copilot_instructions()
 
 This writes two files into your working directory — the instruction file
 `arsbridge_copilot_instructions.md` and the JSON Schema
-`arsbridge_supplement_v3.schema.json` — and prints the workflow. The
+`arsbridge_supplement_v4.schema.json` — and prints the workflow. The
 instruction file is static and versioned: it tells the assistant exactly what
-to read and the exact JSON shape (format version 3) to reply with, so the
+to read and the exact JSON shape (format version 4) to reply with, so the
 package can validate the answer. For a large or complex shell where a single
 pass misses items, use the two-session workflow instead:
 
@@ -74,7 +74,7 @@ construction + repair) instruction file. Phase 1 returns
 `tlf_extraction_blueprints.json`; you feed that back in session 2 to produce
 the supplement.
 
-### Typed conditions (format v3)
+### Typed conditions (format v4)
 
 The single most important thing to know about the format: **every filter,
 population, and column condition is a typed object, not a string.** A row that
@@ -97,7 +97,7 @@ in full, with a worked example.
 Upload **four files together** to your chat assistant:
 
 * `arsbridge_copilot_instructions.md` (from step 1),
-* `arsbridge_supplement_v3.schema.json` (so the assistant can self-check),
+* `arsbridge_supplement_v4.schema.json` (so the assistant can self-check),
 * your annotated TLF shell `.docx`,
 * your ADaM specification `.xlsx`.
 
@@ -184,7 +184,7 @@ wording and a study's variable inventory can be sponsor-confidential —
 | Symptom | Cause | Fix |
 |---|---|---|
 | `Supplement file is not valid JSON` | assistant wrapped the reply in prose, or used smart quotes | the reader strips a ```` ```json ```` fence and smart double-quotes automatically; if it still fails, ask the assistant to "reply with only one fenced strict-JSON block" |
-| `Supplement version mismatch` | a v2 file, or one made with a different package version | v3 conditions are typed objects, not strings — regenerate with `ars_copilot_instructions()` from the installed version |
+| `Supplement version mismatch` | a v3 file, or one made with a different package version | v4 conditions are typed objects, not strings — regenerate with `ars_copilot_instructions()` from the installed version |
 | `invalid whereClause` / `not a where-clause` (`FAIL`) | a condition was written as a string, or with a bad comparator | use the typed shape `{"condition": {"dataset", "variable", "comparator", "value": [...]}}`; paste the `repair_prompt` back to the assistant |
 | `analysis label 'X' matched no stub row` (`WARN`) | the `rowLabel` is not the stub text verbatim | copy `rowLabel` exactly from the shell, footnote markers and all |
 | `is not in the ADaM spec` (`FAIL`) | assistant proposed a variable your spec does not have | fix the analysis or add the variable to the spec |
