@@ -30,11 +30,18 @@ Invisibly, a character vector of the absolute paths written.
 Environments with no LLM API access can still boost \code{spec_to_ars()}
 accuracy with a chat assistant (GitHub Copilot, ChatGPT, an enterprise
 portal): upload the instruction file(s) this function writes TOGETHER WITH
-your annotated shell \code{.docx}, ADaM spec \code{.xlsx}, and the shipped JSON
-Schema, and the assistant replies with one strict \code{supplement.json}
-(format v4). Pass that file to \code{spec_to_ars(supplement = "supplement.json")}.
+your annotated shell (\code{.docx} or \code{.xlsx}), ADaM spec \code{.xlsx}, and the
+shipped JSON Schema, and the assistant replies with one strict
+\code{supplement.json} (format v4). Pass that file to
+\code{spec_to_ars(supplement = "supplement.json")}.
 }
 \details{
+For an \code{.xlsx} shell, consider writing a draft first with
+\code{\link[=write_supplement_draft]{write_supplement_draft()}} and uploading that too: the Excel parser can
+already state the column axis and the row bindings, so the assistant
+corrects a structured draft instead of authoring one from scratch. Feed
+the reviewed file back with \code{supplement_trust = "prefer_supplement"}.
+
 Two workflows are offered:
 \itemize{
 \item \code{"single"} (default): one instruction file. The assistant reads the shell

@@ -346,6 +346,33 @@ test_that("a per-row methodId is stored (catalogue only) and consumed for the ro
   expect_equal(sec$stub_rows[[1]]$supplement_method_id, "MTH_COUNT_AND_PERCENTAGE")
 })
 
+test_that("a methodId is honoured when the supplement AGREES about the variable", {
+  ## The reviewed-draft case, and the one that used to be lost. A draft is
+  ## generated FROM the shell, so its variable always matches -- the row took
+  ## the "already annotated, no conflict" path and returned before the
+  ## methodId was ever read. The correction a reviewer most often makes is
+  ## exactly this one, so it must survive agreement.
+  supp_tlf <- list(analyses = list(
+    list(rowLabel = "Sex", variable = .av("ADSL", "SEX"),
+         methodId = "MTH_SUMMARY_STATISTICS_CONTINUOUS")))
+  sec <- .apply_supplement_bindings(.mk_supp_section(), supp_tlf, .supp_spec)
+
+  expect_equal(sec$stub_rows[[2]]$supplement_method_id,
+               "MTH_SUMMARY_STATISTICS_CONTINUOUS")
+  ## Agreement is not a conflict: the shell annotation stands untouched and
+  ## the row is not flagged for review.
+  expect_equal(sec$stub_rows[[2]]$annotation, "ADSL.SEX")
+  expect_null(sec$stub_rows[[2]]$supplement_conflict)
+})
+
+test_that("an off-catalogue methodId on an agreeing row is ignored, not stored", {
+  supp_tlf <- list(analyses = list(
+    list(rowLabel = "Sex", variable = .av("ADSL", "SEX"),
+         methodId = "MTH_NONSENSE")))
+  sec <- .apply_supplement_bindings(.mk_supp_section(), supp_tlf, .supp_spec)
+  expect_null(sec$stub_rows[[2]]$supplement_method_id)
+})
+
 test_that("listingColumns bind like analyses through the same channel", {
   sec <- .mk_supp_section()
   supp_tlf <- list(listingColumns = list(

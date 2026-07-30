@@ -4,7 +4,7 @@
 
 In your chat assistant (Copilot / ChatGPT / enterprise portal), start a NEW
 session and attach three files: **this file**, your annotated TLF shell
-(`.docx`), and your ADaM specification (`.xlsx`). Select the highest reasoning
+(`.docx` or `.xlsx`), and your ADaM specification (`.xlsx`). Select the highest reasoning
 mode. Paste the prompt below. Save the reply as
 `tlf_extraction_blueprints.json` and carry it into the Phase 2 session.
 
@@ -27,7 +27,7 @@ Return exactly one strict-JSON file: tlf_extraction_blueprints.json
 - Instruction version: 8.1 (packaged with arsbridge)
 - Phase: 1 only
 - Primary output: `tlf_extraction_blueprints.json` (blueprint version 2)
-- Inputs: complete annotated TLF shell (`.docx`) + complete ADaM specification (`.xlsx`) + this file
+- Inputs: complete annotated TLF shell (`.docx` or `.xlsx`) + complete ADaM specification (`.xlsx`) + this file
 - Next step: Phase 2 turns the blueprint into `supplement.json` (format version 4)
 
 Use the highest available reasoning mode. Do not use a quick-response mode.

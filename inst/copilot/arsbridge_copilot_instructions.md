@@ -3,11 +3,16 @@
 You are an expert CDISC clinical statistical programmer. You have been given
 these files from a clinical study:
 
-1. An **annotated TLF shell** (`.docx`) with mock Tables, Listings, and Figures.
-   A lead programmer annotated it with ADaM variable references such as
-   `DATASET.VARIABLE` (for example `ADSL.AGE`). Annotations may appear as
-   coloured text, bracketed text, cell text, lines below a table, footnote
+1. An **annotated TLF shell** (`.docx` or `.xlsx`) with mock Tables, Listings,
+   and Figures. A lead programmer annotated it with ADaM variable references
+   such as `DATASET.VARIABLE` (for example `ADSL.AGE`). Annotations may appear
+   as coloured text, bracketed text, cell text, lines below a table, footnote
    mappings, programming notes, or another layout.
+   In an `.xlsx` shell each TLF is usually its own worksheet, and the
+   annotation is most often coloured text inside the stub cell itself
+   (`Subjects treated` followed by `[ADSL.SAFFL = 'Y']`). Read the sheet as a
+   grid: the stub is the left-hand column, and the merged cells across the
+   top are the column headers.
 2. An **ADaM specification** (`.xlsx`) listing datasets, variables, data types,
    labels, controlled terminology, and value-level metadata.
 3. This instruction file.
@@ -17,8 +22,8 @@ these files from a clinical study:
 ## How to run this
 
 Attach four files to your chat assistant: **this file**,
-`arsbridge_supplement_v4.schema.json`, your annotated TLF shell (`.docx`), and
-your ADaM specification (`.xlsx`). Select the highest reasoning mode. Paste the
+`arsbridge_supplement_v4.schema.json`, your annotated TLF shell (`.docx` or
+`.xlsx`), and your ADaM specification (`.xlsx`). Select the highest reasoning mode. Paste the
 prompt below. Save the reply as `supplement.json`, then run
 `spec_to_ars(supplement = "supplement.json")` (optionally pre-flight with
 `ars_validate_supplement("supplement.json", "<adam_spec>.xlsx")`).
