@@ -397,7 +397,7 @@ parse_shell_xlsx <- function(xlsx_path, spec_lookup = NULL,
     for (clause in clauses[nzchar(clauses)]) {
       m <- regmatches(clause, regexec(.XLSX_SOURCE_CLAUSE_RE, clause,
                                       perl = TRUE))[[1]]
-      if (length(m) == 2 && !grepl("->|→", clause)) {
+      if (length(m) == 2 && !grepl("->|\u2192", clause)) {
         out$source_datasets <- c(out$source_datasets, .split_source_list(m[2]))
         next
       }
