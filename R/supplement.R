@@ -55,9 +55,16 @@
 #' Environments with no LLM API access can still boost `spec_to_ars()`
 #' accuracy with a chat assistant (GitHub Copilot, ChatGPT, an enterprise
 #' portal): upload the instruction file(s) this function writes TOGETHER WITH
-#' your annotated shell `.docx`, ADaM spec `.xlsx`, and the shipped JSON
-#' Schema, and the assistant replies with one strict `supplement.json`
-#' (format v4). Pass that file to `spec_to_ars(supplement = "supplement.json")`.
+#' your annotated shell (`.docx` or `.xlsx`), ADaM spec `.xlsx`, and the
+#' shipped JSON Schema, and the assistant replies with one strict
+#' `supplement.json` (format v4). Pass that file to
+#' `spec_to_ars(supplement = "supplement.json")`.
+#'
+#' For an `.xlsx` shell, consider writing a draft first with
+#' [write_supplement_draft()] and uploading that too: the Excel parser can
+#' already state the column axis and the row bindings, so the assistant
+#' corrects a structured draft instead of authoring one from scratch. Feed
+#' the reviewed file back with `supplement_trust = "prefer_supplement"`.
 #'
 #' Two workflows are offered:
 #' * `"single"` (default): one instruction file. The assistant reads the shell
@@ -151,7 +158,7 @@ ars_copilot_instructions <- function(dir = ".",
   if (identical(workflow, "single")) {
     cli::cli_h2("Supplement workflow (no API key needed)")
     cli::cli_ol(c(
-      "Upload to your chat assistant: the instruction file + the JSON Schema + your annotated shell {.file .docx} + your ADaM spec {.file .xlsx}.",
+      "Upload to your chat assistant: the instruction file + the JSON Schema + your annotated shell ({.file .docx} or {.file .xlsx}) + your ADaM spec {.file .xlsx}.",
       "Save the assistant's JSON reply as {.file supplement.json}.",
       "Optional pre-flight: {.code ars_validate_supplement(\"supplement.json\", \"<adam_spec>.xlsx\")}.",
       "Run {.code spec_to_ars(shell, spec, supplement = \"supplement.json\")}."
@@ -636,6 +643,19 @@ read_supplement <- function(path) {
             tlf_number = sec$tlf_number,
             action = "Shell annotation kept (regex wins); supplement proposal retained for provenance -- review this row if the shell is wrong"
           )
+        }
+      } else {
+        ## The supplement AGREES with the shell about the variable. That is
+        ## the normal case for a reviewed draft -- write_supplement_draft()
+        ## generates it from the shell, so the variable always matches and
+        ## the correction the reviewer actually made is the METHOD. Record it
+        ## here as well, or a reviewed methodId is dropped on precisely the
+        ## rows a draft exists to correct, with no diagnostic to show for it.
+        ## The trust gate stays in build_ars_json(): it honours this only for
+        ## a supplement-bound row or under prefer_supplement.
+        supp_mid <- .supp_method_id(b$methodId)
+        if (!is.null(supp_mid)) {
+          sec$stub_rows[[idx]]$supplement_method_id <- supp_mid
         }
       }
       next   ## the row is resolved either way; the gap-fill path is below

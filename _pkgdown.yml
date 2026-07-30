@@ -7,10 +7,12 @@ template:
 home:
   title: "arsbridge: Annotated Shell to Clinical Table"
   description: >
-    arsbridge reads an annotated Word TLF shell, validates every ADaM variable
-    against your study spec, generates a CDISC ARS JSON, executes it against
-    real ADaM datasets with {cards}, and renders a publication-ready GT clinical
-    table. One pipeline, no manual formatting step.
+    arsbridge reads an annotated TLF shell -- Word or Excel -- validates every
+    ADaM variable against your study spec, generates a CDISC ARS JSON, executes
+    it against real ADaM datasets with {cards}, and renders the result. An
+    Excel shell can be written back filled with its own numbers, so the
+    deliverable is the shell your team already reviewed. One pipeline, no
+    manual formatting step.
   links:
   - text: CDISC Analysis Results Standard
     href: https://www.cdisc.org/standards/foundational/analysis-results-standard

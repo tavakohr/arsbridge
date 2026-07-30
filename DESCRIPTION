@@ -1,15 +1,18 @@
 Package: arsbridge
 Title: Convert Annotated TLF Shells and ADaM Spec to CDISC ARS JSON
-Version: 0.1.0.9058
+Version: 0.1.0.9059
 Authors@R:
     person("Hamid", "Tavakoli",
            email = "htavakoli@gmail.com",
            role  = c("aut", "cre"),
            comment = c(ORCID = "0000-0003-0574-7739"))
-Description: Reads a lead programmer's already-annotated TLF shell Word
-    document and the study's ADaM specification Excel, and produces a
-    valid CDISC Analysis Results Standard (ARS) v1.0 ARM-TS JSON file
-    suitable for consumption by 'siera::readARS()'. Annotation extraction
+Description: Reads a lead programmer's already-annotated TLF shell, as
+    either a Word document or an Excel workbook, together with the study's
+    ADaM specification Excel, and produces a valid CDISC Analysis Results
+    Standard (ARS) v1.0 ARM-TS JSON file suitable for consumption by
+    'siera::readARS()'. An Excel shell can additionally be written back
+    filled with the computed results, preserving the original layout, so
+    the deliverable is the reviewed shell itself. Annotation extraction
     is style-agnostic: detects ADaM variable references whether marked by
     font colour, character formatting, brackets, or plain-text appended
     after the stub label. An LLM ('ellmer'; Anthropic, OpenAI, Gemini, or
@@ -59,7 +62,7 @@ Suggests:
     survival,
     testthat (>= 3.0.0),
     withr
-URL: https://github.com/tavakohr/arsbridge
+URL: https://github.com/tavakohr/arsbridge, https://tavakohr.github.io/arsbridge/
 BugReports: https://github.com/tavakohr/arsbridge/issues
 Config/testthat/edition: 3
 VignetteBuilder: knitr

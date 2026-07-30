@@ -43,6 +43,7 @@ supplement path with \code{\link[=ars_copilot_instructions]{ars_copilot_instruct
 Useful links:
 \itemize{
   \item \url{https://github.com/tavakohr/arsbridge}
+  \item \url{https://tavakohr.github.io/arsbridge/}
   \item Report bugs at \url{https://github.com/tavakohr/arsbridge/issues}
 }
 

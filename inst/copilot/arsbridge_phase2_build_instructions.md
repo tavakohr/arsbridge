@@ -3,8 +3,8 @@
 ## How to run this
 
 Start a NEW chat session and attach four files: **this file**,
-`arsbridge_supplement_v4.schema.json`, your annotated TLF shell (`.docx`), and
-the `tlf_extraction_blueprints.json` from Phase 1. Select the highest reasoning
+`arsbridge_supplement_v4.schema.json`, your annotated TLF shell (`.docx` or
+`.xlsx`), and the `tlf_extraction_blueprints.json` from Phase 1. Select the highest reasoning
 mode. Paste the prompt below. Save the two replies as `supplement.json` and
 `extraction_validation_report.json`, then run
 `spec_to_ars(supplement = "supplement.json")` (optionally pre-flight with

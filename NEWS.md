@@ -1,5 +1,58 @@
 # arsbridge (development version)
 
+* **Fixed: a reviewed `methodId` was silently dropped whenever the supplement
+  agreed with the shell about the variable.** Found by the end-to-end
+  acceptance run, and it broke the exact loop the draft workflow is for.
+  `.apply_supplement_bindings()` treated an already-annotated row as settled
+  the moment the supplement's variable matched the shell's, and returned
+  before it ever read the row's `methodId`. But a draft from
+  `write_supplement_draft()` is generated *from* the shell, so its variable
+  always matches — meaning the one correction a reviewer most often makes,
+  the statistical method, was the one correction that could never land. It
+  only worked if you also changed the variable to something else, which is
+  not a thing anyone would do on purpose.
+
+  The method is now recorded on an agreeing row too. Nothing else about
+  agreement changes: the shell's annotation still stands, the row is not
+  flagged as a conflict, and the decision to honour the value still belongs
+  to `build_ars_json()`, which applies it for a supplement-bound row or under
+  `supplement_trust = "prefer_supplement"`. An off-catalogue id is still
+  ignored.
+
+* **Fixed: the supplement instructions still told you the shell had to be a
+  `.docx`.** Excel shells have been readable since the parser landed, but the
+  three Copilot instruction files, the console hint from
+  `ars_copilot_instructions()`, and its help page all named `.docx` as the
+  input — so anyone with an Excel shell was being told, by the package
+  itself, that their shell was the wrong kind of file. All of them now say
+  `.docx` or `.xlsx`, and the single-file instructions describe what an
+  Excel shell looks like to the assistant: one worksheet per output, the
+  annotation coloured in the stub cell, the header band merged across the
+  top.
+
+* **Fixed: the README said supplement format v3.** Same fault as the vignette
+  fixed above, in the "three ways to read the shell" section. The shipped
+  schema is v4 and a v3 file is rejected.
+
+* Both the README and `ars_copilot_instructions()` now point Excel users at
+  `write_supplement_draft()` first. It is a materially better loop: the Excel
+  parser already settles the column axis and the row bindings on its own, so
+  the assistant corrects a structured draft instead of authoring one from
+  nothing — and what is left for it to decide is the statistical judgement
+  (which `methodId`, which denominator), which is where an assistant is
+  actually worth consulting.
+
+* Fixed: `inputs/README.md` documented `shell_to_ars()` and `shell_annotate()`,
+  neither of which exists — the file predated `spec_to_ars()` and had never
+  been updated. It also promised the folder was excluded from git, which
+  stopped being true when the APX-DRM-301 practice files were allowlisted.
+  Rewritten against the actual API, the actual default-deny policy, and the
+  files that are really in there.
+
+* `DESCRIPTION` and the pkgdown home page described a Word-only reader.
+  `DESCRIPTION` also now carries the pkgdown site URL alongside the GitHub
+  one.
+
 * **A draft supplement now states the column axis for an Excel shell.**
   `write_supplement_draft()` fills `groupings`, `columnHierarchy`,
   `includeTotal` and `listingColumns` from the parse — a nested header becomes
