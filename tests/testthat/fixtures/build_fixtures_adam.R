@@ -171,32 +171,63 @@ adcm$TRT01A <- adsl$TRT01A[match(adcm$USUBJID, adsl$USUBJID)]
 ## ADVS -- vital signs by visit, the series behind the figure (PR8).
 ## ---------------------------------------------------------------------------
 
-vs_visits <- c(0L, 12L, 24L)
-advs <- data.frame(
-  USUBJID = rep(adsl$USUBJID, each = length(vs_visits)),
-  AVISITN = rep(vs_visits, times = nrow(adsl)),
-  AVISIT  = rep(c("Baseline", "Week 12", "Week 24"), times = nrow(adsl)),
-  PARAMCD = "DIABP",
-  PARAM   = "Diastolic Blood Pressure (mmHg)",
-  stringsAsFactors = FALSE
-)
-advs$TRT01A <- adsl$TRT01A[match(advs$USUBJID, adsl$USUBJID)]
+## The figure sheet of shells_apx_drm_301.xlsx states its plot in prose:
+##
+##   X axis        -> ADVS.AVISITN (label ADVS.AVISIT)
+##   Y axis        -> mean of ADVS.AVAL
+##   Series        -> ADVS.TRTA
+##   Filter        -> ADVS.PARAMCD='PULSE'
+##   Error bars    -> SE = sd(ADVS.AVAL) / sqrt(n)
+##
+## That shell is frozen -- parity tests and goldens read it -- so the DATA is
+## what has to agree with it: PULSE has to exist, and the series variable is
+## TRTA, not TRT01A. A second parameter (DIABP) is carried alongside precisely
+## so the filter has something to exclude; a fixture where the filter is a
+## no-op cannot tell a working filter from a missing one.
 
-## Each subject starts near 82 mmHg and moves by an amount that depends on the
-## arm: placebo stays flat, and the two active arms fall, the higher dose
-## further. Built term by term rather than as one nested expression, because
-## a fixture whose expected values cannot be read off the code is not much of
-## a fixture.
+vs_visits <- c(0L, 12L, 24L)
+vs_labels <- c("Baseline", "Week 12", "Week 24")
+
+## Each subject starts at the parameter's baseline and moves by an amount that
+## depends on the arm: placebo stays flat, the two active arms fall, the higher
+## dose further. Built term by term rather than as one nested expression,
+## because a fixture whose expected values cannot be read off the code is not
+## much of a fixture.
 subject_offset <- c(0, 2, -2, 4)                       # within each arm
 visit_change <- list(
   "Placebo"    = c(0,  0,  1),                         # baseline, wk12, wk24
   "Drug 10 mg" = c(0, -3, -5),
   "Drug 20 mg" = c(0, -6, -9)
 )
-advs$AVAL <- 82 +
-  subject_offset[match(advs$USUBJID, adsl$USUBJID) %% 4 + 1] +
-  mapply(function(arm, visit) visit_change[[arm]][match(visit, vs_visits)],
-         advs$TRT01A, advs$AVISITN)
+## Each arm gets a different spread, so the standard errors differ too. With
+## one shared spread every arm's SE is the same number, and a series written
+## into the wrong row still looks right.
+arm_spread <- c("Placebo" = 1, "Drug 10 mg" = 2, "Drug 20 mg" = 0.5)
+
+vs_param <- function(code, label, baseline) {
+  df <- data.frame(
+    USUBJID = rep(adsl$USUBJID, each = length(vs_visits)),
+    AVISITN = rep(vs_visits, times = nrow(adsl)),
+    AVISIT  = rep(vs_labels, times = nrow(adsl)),
+    PARAMCD = code,
+    PARAM   = label,
+    stringsAsFactors = FALSE
+  )
+  df$TRT01A <- adsl$TRT01A[match(df$USUBJID, adsl$USUBJID)]
+  df$TRTA   <- df$TRT01A          # the shell's series variable
+  df$AVAL <- baseline +
+    subject_offset[match(df$USUBJID, adsl$USUBJID) %% 4 + 1] *
+      arm_spread[df$TRTA] +
+    mapply(function(arm, visit) visit_change[[arm]][match(visit, vs_visits)],
+           df$TRTA, df$AVISITN)
+  df$AVAL <- unname(df$AVAL)
+  df
+}
+
+## PULSE is what the figure plots; DIABP exists so the filter has work to do,
+## and is offset far enough that mixing the two would be obvious in a result.
+advs <- rbind(vs_param("PULSE", "Pulse Rate (beats/min)", 72),
+              vs_param("DIABP", "Diastolic Blood Pressure (mmHg)", 108))
 
 ## ---------------------------------------------------------------------------
 
@@ -215,6 +246,15 @@ cat("  subjects treated  :",
 completed <- table(adsl$TRT01A[adsl$EOSSTT == "COMPLETED"])
 cat("  completed         :",
     paste(sprintf("%s=%d", names(completed), completed), collapse = "  "), "\n")
+cat("  figure series (PULSE, mean by arm and visit):\n")
+pulse <- advs[advs$PARAMCD == "PULSE", ]
+agg <- stats::aggregate(AVAL ~ TRTA + AVISITN, pulse, function(x)
+  c(n = length(x), mean = mean(x), se = stats::sd(x) / sqrt(length(x))))
+agg <- cbind(agg[1:2], as.data.frame(agg$AVAL))
+for (k in seq_len(nrow(agg))) {
+  cat(sprintf("    %-11s visit %-2d  n=%d  mean=%.1f  se=%.2f\n",
+              agg$TRTA[k], agg$AVISITN[k], agg$n[k], agg$mean[k], agg$se[k]))
+}
 for (a in unique(adsl$TRT01A)) {
   ages <- adsl$AGE[adsl$TRT01A == a]
   cat(sprintf("  age %-11s mean %.1f  sd %.2f  median %.1f  Q1 %.1f Q3 %.1f\n",

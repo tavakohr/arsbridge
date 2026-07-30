@@ -271,7 +271,7 @@ filled_run <- local({
     out <- tempfile(fileext = ".xlsx")
     res <- suppressMessages(suppressWarnings(ars_fill_shell(
       shell_path = SHELL, ars = ars, ard = ard, output_path = out,
-      overwrite = TRUE)))
+      adam_dir = ADAM, overwrite = TRUE)))
     cache <<- list(ars = ars, ard = ard, path = out, res = res,
                    book = xlsx_read_shell_cells(out))
     cache
@@ -407,7 +407,13 @@ test_that("the author's layout comes through untouched", {
       doc, paste0("//*[local-name()='", tag, "']")), attr)
   }
 
-  for (name in names(before$sheets)) {
+  ## A listing legitimately changes shape -- its template row becomes N rows,
+  ## and everything below moves down -- so the strict "nothing moved" check
+  ## applies to the sheets that keep their shape. The listing's own invariant
+  ## is checked below.
+  unchanged <- setdiff(names(before$sheets),
+                       grep("^Listing", names(before$sheets), value = TRUE))
+  for (name in unchanged) {
     b <- before$sheets[[name]]
     a <- run$book$sheets[[name]]
     expect_identical(sort(b$merges$ref), sort(a$merges$ref), info = name)
@@ -415,6 +421,16 @@ test_that("the author's layout comes through untouched", {
                      attrs(da, a$part, "col", "width"), info = name)
     expect_identical(attrs(db, b$part, "row", "ht"),
                      attrs(da, a$part, "row", "ht"), info = name)
+  }
+
+  ## Column widths are a property of the sheet, not of its rows, so they must
+  ## survive an expansion too.
+  for (name in grep("^Listing", names(before$sheets), value = TRUE)) {
+    b <- before$sheets[[name]]
+    a <- run$book$sheets[[name]]
+    expect_identical(attrs(db, b$part, "col", "width"),
+                     attrs(da, a$part, "col", "width"), info = name)
+    expect_gte(nrow(a$cells), nrow(b$cells))
   }
 })
 
@@ -472,3 +488,202 @@ test_that("annotations can be kept for review", {
 ## back: tests run from the installed package under R CMD check, where there
 ## is no R/ directory, so it errored on every platform that got that far --
 ## and it asserted nothing about behaviour even when it passed.
+
+## ---------------------------------------------------------------------------
+## Listings: one template row becomes N
+## ---------------------------------------------------------------------------
+
+## A minimal listing sheet: header, one template row, and a merged footnote
+## under it. Built in-test rather than committed, because what is being tested
+## is the mechanism -- what happens to the rows BELOW the template when the
+## template expands -- and that needs a footnote the committed fixture's
+## listings do not have.
+mini_listing <- function(footnote = TRUE) {
+  wb <- openxlsx2::wb_workbook()$add_worksheet("L")
+  wb$add_data(sheet = "L", x = "Listing 1.1", dims = "A1", col_names = FALSE)
+  wb$add_data(sheet = "L", x = data.frame(a = "Subject", b = "Term",
+                                          stringsAsFactors = FALSE),
+              dims = "A2", col_names = FALSE)
+  wb$add_data(sheet = "L", x = data.frame(a = "xxx-xxx", b = "xxxx",
+                                          stringsAsFactors = FALSE),
+              dims = "A3", col_names = FALSE)
+  if (footnote) {
+    wb$add_data(sheet = "L", x = "Source: ADAE.", dims = "A4", col_names = FALSE)
+    wb$merge_cells(sheet = "L", dims = "A4:B4")
+  }
+  path <- tempfile(fileext = ".xlsx")
+  openxlsx2::wb_save(wb, path, overwrite = TRUE)
+  path
+}
+
+test_that("a template row expands into one row per record", {
+  path <- mini_listing()
+  wb <- openxlsx2::wb_load(path)
+  rows <- data.frame(a = c("S1", "S2", "S3"), b = c("Headache", "Rash", "Nausea"),
+                     stringsAsFactors = FALSE)
+
+  res <- .fill_listing_sheet(wb, 1L, list(template_row = 3L), rows, TRUE)
+  expect_equal(res$records[[1]]$status, "filled")
+  expect_equal(res$records[[1]]$rows, 3L)
+
+  out <- tempfile(fileext = ".xlsx")
+  openxlsx2::wb_save(wb, out, overwrite = TRUE)
+  sheet <- xlsx_read_shell_cells(out)$sheets[[1]]
+  txt <- function(ref) {
+    hit <- sheet$cells$text[sheet$cells$ref == ref]
+    if (length(hit) == 0) NA_character_ else hit[[1]]
+  }
+  expect_equal(txt("A3"), "S1"); expect_equal(txt("B3"), "Headache")
+  expect_equal(txt("A4"), "S2"); expect_equal(txt("B4"), "Rash")
+  expect_equal(txt("A5"), "S3"); expect_equal(txt("B5"), "Nausea")
+})
+
+test_that("the footnote below a template row moves down with it, merge and all", {
+  ## The reason .shift_rows_down() exists. A footnote left where it was would
+  ## be overwritten by the third data row, and its merge would swallow two of
+  ## them.
+  path <- mini_listing()
+  before <- xlsx_read_shell_cells(path)$sheets[[1]]
+  expect_equal(before$merges$ref, "A4:B4")
+
+  wb <- openxlsx2::wb_load(path)
+  rows <- data.frame(a = c("S1", "S2", "S3"), b = c("x", "y", "z"),
+                     stringsAsFactors = FALSE)
+  .fill_listing_sheet(wb, 1L, list(template_row = 3L), rows, TRUE)
+  out <- tempfile(fileext = ".xlsx")
+  openxlsx2::wb_save(wb, out, overwrite = TRUE)
+
+  after <- xlsx_read_shell_cells(out)$sheets[[1]]
+  ftxt <- after$cells$text[after$cells$ref == "A6"]
+  expect_equal(ftxt, "Source: ADAE.")
+  expect_equal(after$merges$ref, "A6:B6")
+  ## And the data rows are intact underneath it.
+  expect_equal(after$cells$text[after$cells$ref == "A5"], "S3")
+})
+
+test_that("a single-row listing needs no shift and moves nothing", {
+  path <- mini_listing()
+  wb <- openxlsx2::wb_load(path)
+  .fill_listing_sheet(wb, 1L, list(template_row = 3L),
+                      data.frame(a = "S1", b = "x", stringsAsFactors = FALSE), TRUE)
+  out <- tempfile(fileext = ".xlsx")
+  openxlsx2::wb_save(wb, out, overwrite = TRUE)
+  after <- xlsx_read_shell_cells(out)$sheets[[1]]
+  expect_equal(after$cells$text[after$cells$ref == "A3"], "S1")
+  expect_equal(after$merges$ref, "A4:B4")   # unmoved
+})
+
+test_that("an empty listing keeps its template and says so", {
+  path <- mini_listing()
+  wb <- openxlsx2::wb_load(path)
+  res <- .fill_listing_sheet(wb, 1L, list(template_row = 3L),
+                             data.frame(a = character(), b = character()), TRUE)
+  expect_equal(res$records[[1]]$status, "pending")
+  expect_match(res$records[[1]]$reason, "selected no rows")
+
+  ## Distinguished from not having the data at all.
+  res2 <- .fill_listing_sheet(wb, 1L, list(template_row = 3L), NULL, TRUE)
+  expect_match(res2$records[[1]]$reason, "could not be read")
+})
+
+test_that("shifting rows moves cells, merges, and the declared extent together", {
+  ## Missing any one of these still produces a file that opens, which is what
+  ## makes it dangerous: a stale merge silently swallows a data row.
+  path <- mini_listing()
+  wb <- openxlsx2::wb_load(path)
+  wb$worksheets[[1]] <- .shift_rows_down(wb$worksheets[[1]], from_row = 3L,
+                                         by = 2L, template_row = 3L)
+  out <- tempfile(fileext = ".xlsx")
+  openxlsx2::wb_save(wb, out, overwrite = TRUE)
+  after <- xlsx_read_shell_cells(out)$sheets[[1]]
+
+  expect_equal(after$cells$text[after$cells$ref == "A1"], "Listing 1.1")  # above
+  expect_equal(after$cells$text[after$cells$ref == "A2"], "Subject")      # above
+  expect_equal(after$cells$text[after$cells$ref == "A5"], "xxx-xxx")      # moved
+  expect_equal(after$cells$text[after$cells$ref == "A6"], "Source: ADAE.")
+  expect_equal(after$merges$ref, "A6:B6")
+  expect_match(wb$worksheets[[1]]$dimension, "B6")
+})
+
+## ---------------------------------------------------------------------------
+## Figures: a series computed from the shell's prose
+## ---------------------------------------------------------------------------
+
+test_that("a figure directive's variable references are read correctly", {
+  expect_equal(.figure_ref("ADVS.AVISITN (label ADVS.AVISIT)"),
+               list(dataset = "ADVS", variable = "AVISITN"))
+  expect_equal(.figure_label_ref("ADVS.AVISITN (label ADVS.AVISIT)"),
+               list(dataset = "ADVS", variable = "AVISIT"))
+  expect_equal(.figure_ref("mean of ADVS.AVAL"),
+               list(dataset = "ADVS", variable = "AVAL"))
+  expect_null(.figure_ref("no reference here"))
+  expect_null(.figure_label_ref("ADVS.AVAL"))
+})
+
+test_that("the figure series matches means computed straight from the data", {
+  run <- filled_run()
+  sheet <- run$book$sheets[["Figure 14.3.1"]]
+  advs <- utils::read.csv(file.path(ADAM, "ADVS.csv"), stringsAsFactors = FALSE)
+  pulse <- advs[advs$PARAMCD == "PULSE", ]
+
+  cell <- function(ref) {
+    hit <- sheet$cells$text[sheet$cells$ref == ref]
+    if (length(hit) == 0) NA_character_ else hit[[1]]
+  }
+  ## Header of the written block.
+  expect_equal(cell("A7"), "AVISITN")
+  expect_equal(cell("F7"), "se")
+
+  ## Every written row, against the same statistic computed here.
+  for (r in 8:16) {
+    visit <- suppressWarnings(as.numeric(cell(paste0("A", r))))
+    arm   <- cell(paste0("C", r))
+    if (is.na(visit) || is.na(arm)) next
+    v <- pulse$AVAL[pulse$AVISITN == visit & pulse$TRTA == arm]
+    expect_equal(as.numeric(cell(paste0("D", r))), length(v), info = paste(arm, visit))
+    expect_equal(as.numeric(cell(paste0("E", r))), mean(v), tolerance = 1e-6,
+                 info = paste(arm, visit))
+    expect_equal(as.numeric(cell(paste0("F", r))),
+                 stats::sd(v) / sqrt(length(v)), tolerance = 1e-6,
+                 info = paste(arm, visit))
+  }
+})
+
+test_that("the figure's filter actually filters", {
+  ## The fixture carries a second parameter (DIABP) precisely so this can
+  ## fail: an unapplied filter averages both together, which looks like a
+  ## plausible number rather than an error.
+  run <- filled_run()
+  sheet <- run$book$sheets[["Figure 14.3.1"]]
+  n <- suppressWarnings(as.numeric(
+    sheet$cells$text[sheet$cells$ref == "D8"]))
+  advs <- utils::read.csv(file.path(ADAM, "ADVS.csv"), stringsAsFactors = FALSE)
+  expect_equal(n, 4)                       # one parameter, one arm, one visit
+  expect_equal(nrow(advs) / 2, sum(advs$PARAMCD == "PULSE"))
+})
+
+test_that("a figure with no ADaM directory is reported, not silently skipped", {
+  res <- .fill_figure_sheet(openxlsx2::wb_workbook()$add_worksheet("F"), 1L,
+                            list(series_anchor = 5L, directives = list()),
+                            NULL, "F")
+  expect_equal(res$records[[1]]$status, "pending")
+  expect_match(res$records[[1]]$reason, "no ADaM directory")
+})
+
+test_that("listings and figures fill end to end, and nothing else regresses", {
+  run <- filled_run()
+  ## One row per AE record. The shell declares no TRTEMFL filter on this
+  ## listing -- only the safety population, which every subject is in -- so
+  ## every event is listed, including the one that is not treatment-emergent.
+  ## Asserting the filtered count here would be testing a filter the shell
+  ## never asked for.
+  adae <- utils::read.csv(file.path(ADAM, "ADAE.csv"), stringsAsFactors = FALSE)
+  expected <- nrow(adae)
+  sheet <- run$book$sheets[["Listing 16.2.1"]]
+  body <- sheet$cells[sheet$cells$col == 1 & sheet$cells$row >= 5, , drop = FALSE]
+  expect_equal(nrow(body), expected)
+
+  ## Tables are still filled as before.
+  t2 <- run$book$sheets[["Table 14.1.2"]]
+  expect_equal(t2$cells$text[t2$cells$ref == "B6"], "66.0 (5.16)")
+})

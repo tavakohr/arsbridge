@@ -1,5 +1,46 @@
 # arsbridge (development version)
 
+* **`ars_fill_shell()` now fills listings and figures too, not just tables.**
+
+  A listing's shell states ONE template row standing for however many rows the
+  data has, so filling it changes the shape of the sheet: the row expands into
+  a row per record, and everything below — a footnote and its merge — moves
+  down to make room. The written rows are built from the template row's own
+  cells, so the author's fonts and alignment carry down the block. Its rows
+  come from `.listing_data()`, factored out of `ars_render_listing()` and now
+  shared, so a filled listing and a rendered one cannot contain different
+  subjects.
+
+  A figure sheet has no analyses at all — the shell states the plot as prose
+  (`Y axis -> mean of ADVS.AVAL`, `Series (colour) -> ADVS.TRTA`,
+  `Filter -> ADVS.PARAMCD='PULSE'`) — so its series is computed here, from the
+  datasets, and written as a data block where the annotation block was: one
+  row per series and x-value with `n`, the mean and its standard error. Those
+  go in as **numbers**, not rounded text, because a programmer picks them up
+  to draw the chart and a rounded series would no longer equal what they
+  compute from the same data. The chart object itself is left as the author
+  made it.
+
+  Both need the new `adam_dir` argument: a listing's rows *are* the
+  subject-level data, and a figure's series is computed from it. Tables still
+  need only the ARD. (`adam_dir` replaces the unused `datasets` placeholder.)
+
+  Empty and unreadable cases are reported rather than guessed at, and told
+  apart: a listing that selected no rows is a real answer, one whose data
+  could not be read is not, and neither is filled silently.
+
+  Implementation note for anyone extending this: openxlsx2 has no
+  row-insertion API, so the expansion goes through a new internal
+  `.shift_rows_down()`, which moves cell references, per-row records, merged
+  ranges and the sheet's declared extent together. Missing any one of those
+  still produces a file that opens, which is what makes it dangerous — a
+  stale merge silently swallows a data row.
+
+* Emptying a cell that was entirely an annotation now clears its formatting
+  as well as its text. Previously the cell kept its red font, which showed up
+  the moment anything was written there — as a figure's series is, into the
+  block the annotation occupied.
+
 * **Excel shells, end to end: `spec_to_ars()` reads them, and
   `ars_fill_shell()` writes the results back into them.** A study can now be
   authored as a `.xlsx` with one worksheet per output, annotated in-cell in

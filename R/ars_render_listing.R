@@ -45,26 +45,21 @@
     rep(TRUE, nrow(df)))
 }
 
-#' Render an ARS listing output to a GT table
-#'
-#' Assembles the columns of a listing output (one per `MTH_LISTING` analysis),
-#' merging variables from auxiliary datasets onto the primary dataset by
-#' subject, applies the listing's population filter, and returns a `gt_tbl`.
-#'
-#' @param ars_path Path to the CDISC ARS JSON.
-#' @param adam_dir Directory containing the ADaM datasets (.xpt/.sas7bdat/.csv).
-#' @param output_id Listing output id or name (case-insensitive).
-#' @param subject_key Subject identifier for cross-dataset merges. Default
-#'   `"USUBJID"`.
-#' @param max_rows Cap on listed rows (default 500). Set `Inf` for all rows; a
-#'   note is added when rows are truncated.
-#' @return A `gt_tbl`.
-#' @seealso [ars_render_tlf()], [ars_to_ard()]
-#' @export
-ars_render_listing <- function(ars_path, adam_dir, output_id,
-                               subject_key = "USUBJID", max_rows = 500) {
-  spec    <- jsonlite::fromJSON(ars_path, simplifyVector = FALSE)
-  out_obj <- find_output(spec, output_id)
+## The rows of a listing, assembled from the ADaM data.
+##
+## Factored out of ars_render_listing() so the fill writer can expand the same
+## rows into the shell's own template row (ADR 0005). It has no opinion about
+## presentation: the renderer turns what comes back into a GT table, the fill
+## writer writes it into worksheet cells, and neither can disagree with the
+## other about which subjects a listing contains or in what order.
+##
+## @param spec The parsed ARS. @param out_obj The listing's output object.
+## @return list(data, labels, n_total, truncated). `data` has one column per
+##   listing column, named c1..cN in referenced order; `labels` maps those
+##   names to the column headings the shell asked for.
+#' @noRd
+.listing_data <- function(spec, out_obj, adam_dir, subject_key = "USUBJID",
+                          max_rows = 500) {
   output_id <- .sc(out_obj[["id"]])
 
   aids <- vapply(out_obj[["referencedAnalysisIds"]], .sc, character(1))
@@ -134,12 +129,40 @@ ars_render_listing <- function(ars_path, adam_dir, output_id,
   truncated <- is.finite(max_rows) && n_total > max_rows
   if (truncated) out <- out[seq_len(max_rows), , drop = FALSE]
 
+  list(data = out, labels = labels, n_total = n_total, truncated = truncated)
+}
+
+#' Render an ARS listing output to a GT table
+#'
+#' Assembles the columns of a listing output (one per `MTH_LISTING` analysis),
+#' merging variables from auxiliary datasets onto the primary dataset by
+#' subject, applies the listing's population filter, and returns a `gt_tbl`.
+#'
+#' @param ars_path Path to the CDISC ARS JSON.
+#' @param adam_dir Directory containing the ADaM datasets (.xpt/.sas7bdat/.csv).
+#' @param output_id Listing output id or name (case-insensitive).
+#' @param subject_key Subject identifier for cross-dataset merges. Default
+#'   `"USUBJID"`.
+#' @param max_rows Cap on listed rows (default 500). Set `Inf` for all rows; a
+#'   note is added when rows are truncated.
+#' @return A `gt_tbl`.
+#' @seealso [ars_render_tlf()], [ars_to_ard()]
+#' @export
+ars_render_listing <- function(ars_path, adam_dir, output_id,
+                               subject_key = "USUBJID", max_rows = 500) {
+  spec    <- jsonlite::fromJSON(ars_path, simplifyVector = FALSE)
+  out_obj <- find_output(spec, output_id)
+
+  built  <- .listing_data(spec, out_obj, adam_dir, subject_key, max_rows)
+  out    <- built$data
+  labels <- built$labels
+
   title     <- extract_title(out_obj)
   footnotes <- extract_footnotes(out_obj)
-  if (truncated) {
+  if (built$truncated) {
     footnotes <- c(footnotes, sprintf(
       "Listing truncated to %d of %d rows; pass max_rows = Inf for all.",
-      max_rows, n_total))
+      max_rows, built$n_total))
   }
 
   gt_tbl <- gt::gt(out)

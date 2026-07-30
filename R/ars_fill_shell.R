@@ -353,11 +353,17 @@
 
 #' Write a cell's runs back, always as an inline string. See `.cell_is_xml()`
 #' for why a shared cell is converted rather than updated in place.
+#'
+#' `drop_style` also clears the cell's style index. Used when a cell was
+#' ENTIRELY an annotation: emptying its text but keeping its formatting leaves
+#' a cell that is still red, which shows up the moment anything is written
+#' there -- as the figure series is, into the block the annotation occupied.
 #' @noRd
-.cell_set_is <- function(cc, slot, xml) {
+.cell_set_is <- function(cc, slot, xml, drop_style = FALSE) {
   cc$is[[slot]]  <- xml
   cc$c_t[[slot]] <- "inlineStr"
   cc$v[[slot]]   <- ""
+  if (isTRUE(drop_style)) cc$c_s[[slot]] <- ""
   cc
 }
 
@@ -478,6 +484,103 @@
 #' Serialize an `<is>` container back to the form openxlsx2 stores.
 #' @noRd
 .is_xml <- function(doc) as.character(doc, options = "no_declaration")
+
+## ---------------------------------------------------------------------------
+## Making room: shifting rows down
+## ---------------------------------------------------------------------------
+
+#' Move every row at or below `from_row` down by `by` rows.
+#'
+#' A listing's shell has ONE template row standing for however many rows the
+#' data has, so filling it means inserting rows -- and openxlsx2 has no API
+#' for that (there is no `wb_insert_rows()`; `delete_data` and
+#' `wb_clean_sheet` are the whole of it). The insertion is therefore done
+#' here, against the four pieces of worksheet state that carry a row number:
+#'
+#'   sheet_data$cc        every cell's reference (`r`) and row (`row_r`)
+#'   sheet_data$row_attr  the per-row record, including its height
+#'   mergeCells           a merged range that starts at or below the point
+#'   dimension            the sheet's declared extent
+#'
+#' Miss any one of them and the file still opens, which is the danger: a
+#' stale merge silently swallows a data row, and a stale dimension makes
+#' Excel ignore rows past the old extent.
+#'
+#' The moved rows keep their own heights, and the rows opened up inherit the
+#' template row's, so an expanded listing keeps the row height its author
+#' chose rather than reverting to the default.
+#'
+#' @param template_row The row whose height newly-opened rows inherit.
+#' @return The worksheet, mutated.
+#' @noRd
+.shift_rows_down <- function(ws, from_row, by, template_row = NA_integer_) {
+  if (by <= 0) return(ws)
+
+  ## Cells.
+  cc <- ws$sheet_data$cc
+  if (!is.null(cc) && nrow(cc) > 0) {
+    rows <- suppressWarnings(as.integer(cc$row_r))
+    move <- !is.na(rows) & rows >= from_row
+    if (any(move)) {
+      cc$row_r[move] <- as.character(rows[move] + by)
+      cc$r[move] <- paste0(cc$c_r[move], cc$row_r[move])
+    }
+    ws$sheet_data$cc <- cc
+  }
+
+  ## Per-row records, plus one new record per opened row so the inserted
+  ## rows are real rows rather than gaps.
+  attr_df <- ws$sheet_data$row_attr
+  if (!is.null(attr_df) && nrow(attr_df) > 0) {
+    rows <- suppressWarnings(as.integer(attr_df$r))
+    move <- !is.na(rows) & rows >= from_row
+    attr_df$r[move] <- as.character(rows[move] + by)
+
+    template <- attr_df[!is.na(rows) & rows == template_row, , drop = FALSE]
+    blank <- if (nrow(template) == 1) template[1, , drop = FALSE] else attr_df[1, , drop = FALSE]
+    added <- blank[rep(1, by), , drop = FALSE]
+    added$r <- as.character(seq.int(from_row, length.out = by))
+    attr_df <- rbind(attr_df, added)
+    attr_df <- attr_df[order(suppressWarnings(as.integer(attr_df$r))), , drop = FALSE]
+    rownames(attr_df) <- NULL
+    ws$sheet_data$row_attr <- attr_df
+  }
+
+  ## Merged ranges. A range that STRADDLES the insertion point is extended;
+  ## one entirely below it moves whole.
+  if (length(ws$mergeCells)) {
+    ws$mergeCells <- vapply(ws$mergeCells, function(node) {
+      ref <- sub('.*ref="([^"]+)".*', "\\1", node)
+      halves <- strsplit(ref, ":", fixed = TRUE)[[1]]
+      if (length(halves) != 2) return(node)
+      from <- .xlsx_a1_to_rc(halves[[1]])
+      to   <- .xlsx_a1_to_rc(halves[[2]])
+      if (anyNA(c(from, to)) || to[["row"]] < from_row) return(node)
+      r1 <- if (from[["row"]] >= from_row) from[["row"]] + by else from[["row"]]
+      r2 <- to[["row"]] + by
+      sprintf('<mergeCell ref="%s:%s"/>',
+              .xlsx_rc_to_a1(r1, from[["col"]]), .xlsx_rc_to_a1(r2, to[["col"]]))
+    }, character(1))
+  }
+
+  ## Declared extent.
+  if (length(ws$dimension) == 1 && !is.na(ws$dimension)) {
+    ref <- sub('.*ref="([^"]+)".*', "\\1", ws$dimension)
+    halves <- strsplit(ref, ":", fixed = TRUE)[[1]]
+    if (length(halves) == 2) {
+      from <- .xlsx_a1_to_rc(halves[[1]])
+      to   <- .xlsx_a1_to_rc(halves[[2]])
+      if (!anyNA(c(from, to))) {
+        ws$dimension <- sprintf(
+          '<dimension ref="%s:%s"/>',
+          .xlsx_rc_to_a1(from[["row"]], from[["col"]]),
+          .xlsx_rc_to_a1(to[["row"]] + by, to[["col"]]))
+      }
+    }
+  }
+
+  ws
+}
 
 ## ---------------------------------------------------------------------------
 ## Filling one sheet
@@ -675,6 +778,400 @@
   cc
 }
 
+## ---------------------------------------------------------------------------
+## Listings: one template row becomes N
+## ---------------------------------------------------------------------------
+
+#' An `<is>` container carrying `text`, in the formatting of an existing one.
+#'
+#' The template row's cells are the model for every row written under it, so
+#' their run properties are reused rather than reconstructed -- the same
+#' reason the table writer edits run XML (see the file header). Runs after the
+#' first are dropped: the template cell holds one placeholder, and the value
+#' replacing it is one string.
+#' @noRd
+.cell_with_text <- function(template_xml, text) {
+  if (is.na(template_xml) || !nzchar(template_xml)) {
+    return(sprintf("<is><t xml:space=\"preserve\">%s</t></is>", .xml_escape(text)))
+  }
+  doc <- xml2::read_xml(template_xml)
+  runs <- xml2::xml_find_all(doc, "./*[local-name()='r']")
+  if (length(runs) > 1) for (i in seq_along(runs)[-1]) xml2::xml_remove(runs[[i]])
+  node <- xml2::xml_find_first(doc, ".//*[local-name()='t']")
+  if (inherits(node, "xml_missing")) {
+    return(sprintf("<is><t xml:space=\"preserve\">%s</t></is>", .xml_escape(text)))
+  }
+  xml2::xml_text(node) <- text
+  xml2::xml_set_attr(node, "xml:space", "preserve")
+  .is_xml(doc)
+}
+
+#' The five characters XML cannot carry raw.
+#' @noRd
+.xml_escape <- function(x) {
+  x <- gsub("&", "&amp;", x, fixed = TRUE)
+  x <- gsub("<", "&lt;", x, fixed = TRUE)
+  x <- gsub(">", "&gt;", x, fixed = TRUE)
+  x
+}
+
+#' How a listing value is written.
+#'
+#' Everything becomes text, because a listing column is a display of what the
+#' data says, not a recomputation of it: a subject id, a coded severity, a
+#' date that is already a formatted string in the ADaM data. `NA` becomes an
+#' empty cell -- in a listing, unlike a table, a blank means "not recorded"
+#' rather than zero.
+#' @noRd
+.listing_value <- function(x) {
+  if (length(x) == 0 || is.na(x)) return("")
+  if (inherits(x, "Date")) return(format(x, "%Y-%m-%d"))
+  if (is.numeric(x)) {
+    return(if (x == round(x)) format(x, trim = TRUE) else format(x, trim = TRUE))
+  }
+  as.character(x)
+}
+
+#' Expand a listing's template row into one row per record.
+#'
+#' The shell states a listing as a header row and ONE row of placeholders
+#' standing for however many rows the data has. Filling it therefore changes
+#' the shape of the sheet, which is what makes a listing different from a
+#' table: rows below the template -- a footnote and its merge -- have to move
+#' down to make room (`.shift_rows_down()`).
+#'
+#' Each written row is built from the template row's own cells, so the
+#' author's fonts, alignment and borders carry down the block.
+#'
+#' @return list(records) -- one record for the listing as a whole.
+#' @noRd
+.fill_listing_sheet <- function(wb, sheet_index, plan, rows, keep_pending) {
+  template_row <- plan$template_row %||% NA_integer_
+  record <- list(ref = NA_character_, row = template_row, col = NA_integer_,
+                 analysis_id = NA_character_)
+
+  if (is.na(template_row)) {
+    record$status <- "pending"
+    record$reason <- "the shell has no template row to expand"
+    return(list(records = list(record)))
+  }
+  if (is.null(rows)) {
+    record$status <- "pending"
+    record$reason <- "the listing's rows could not be read from the data"
+    return(list(records = list(record)))
+  }
+  if (nrow(rows) == 0) {
+    ## A listing with no rows is a real answer -- no subject met the criteria
+    ## -- but it is not the same as one that was never filled, so the template
+    ## stays and it is reported.
+    record$status <- "pending"
+    record$reason <- "the listing selected no rows"
+    return(list(records = list(record)))
+  }
+
+  n <- nrow(rows)
+  ws <- wb$worksheets[[sheet_index]]
+
+  ## Make room BEFORE writing, so the template row's own cells are still where
+  ## the plan says they are.
+  if (n > 1) {
+    ws <- .shift_rows_down(ws, from_row = template_row + 1L, by = n - 1L,
+                           template_row = template_row)
+  }
+
+  cc <- ws$sheet_data$cc
+  template <- cc[cc$row_r == as.character(template_row), , drop = FALSE]
+  if (nrow(template) == 0) {
+    record$status <- "skipped"
+    record$reason <- "the template row is not in the workbook"
+    return(list(records = list(record)))
+  }
+
+  written <- 0L
+  for (i in seq_len(n)) {
+    target <- template_row + i - 1L
+    for (k in seq_len(nrow(template))) {
+      col <- .xlsx_col_to_num(template$c_r[[k]])
+      if (is.na(col) || col > ncol(rows)) next
+      value <- .listing_value(rows[[col]][[i]])
+      xml <- .cell_with_text(.cell_is_xml(wb, template, k), value)
+      ref <- .xlsx_rc_to_a1(target, col)
+
+      slot <- which(cc$r == ref)
+      if (length(slot) == 1) {
+        cc <- .cell_set_is(cc, slot, xml)
+      } else {
+        ## A row opened up by the shift has no cells yet: clone the template's,
+        ## so the new row inherits its style index.
+        new <- template[k, , drop = FALSE]
+        new$r <- ref
+        new$row_r <- as.character(target)
+        new$is <- xml
+        new$c_t <- "inlineStr"
+        new$v <- ""
+        cc <- rbind(cc, new)
+      }
+      written <- written + 1L
+    }
+  }
+
+  cc <- cc[order(suppressWarnings(as.integer(cc$row_r)),
+                 vapply(cc$c_r, .xlsx_col_to_num, integer(1))), , drop = FALSE]
+  rownames(cc) <- NULL
+  ws$sheet_data$cc <- cc
+  wb$worksheets[[sheet_index]] <- ws
+
+  record$status <- "filled"
+  record$rows <- n
+  record$cells <- written
+  list(records = list(record))
+}
+
+#' The rows a listing displays, or NULL when they cannot be read.
+#'
+#' Delegates to `.listing_data()` in `ars_render_listing.R` -- the same
+#' assembly the renderer uses, so a filled listing and a rendered one cannot
+#' contain different subjects.
+#' @noRd
+.listing_rows <- function(spec, output, adam_dir, sheet) {
+  if (is.null(adam_dir) || !nzchar(adam_dir) || !dir.exists(adam_dir)) {
+    .diag_gap(
+      stage = "fill_shell", severity = "WARN", input = INPUT_DATA,
+      problem = sprintf("Listing %s needs the subject-level data to fill.",
+                        output$id %||% sheet),
+      why = "A listing's rows ARE the data; there is nothing to compute them from.",
+      fix = "Pass adam_dir = the folder holding your ADaM datasets.",
+      location = sheet %||% "")
+    return(NULL)
+  }
+  tryCatch(
+    .listing_data(spec, output, adam_dir, max_rows = Inf)$data,
+    error = function(e) {
+      .diag_gap(
+        stage = "fill_shell", severity = "WARN", input = INPUT_DATA,
+        problem = sprintf("Listing %s could not be assembled: %s",
+                          output$id %||% sheet, conditionMessage(e)),
+        why = "Its sheet is left as authored.",
+        fix = "Check that the datasets the listing references are in adam_dir.",
+        location = sheet %||% "")
+      NULL
+    })
+}
+
+## ---------------------------------------------------------------------------
+## Figures: a series computed from the shell's own prose
+## ---------------------------------------------------------------------------
+
+#' `DATASET.VARIABLE` out of a figure directive's value.
+#'
+#' A directive says things like `ADVS.AVISITN (label ADVS.AVISIT)` or
+#' `mean of ADVS.AVAL`; only the first qualified reference is the variable.
+#' @noRd
+.figure_ref <- function(value) {
+  m <- regmatches(value, regexpr("[A-Za-z][A-Za-z0-9]*\\.[A-Za-z][A-Za-z0-9_]*",
+                                 value %||% ""))
+  if (length(m) == 0) return(NULL)
+  parts <- strsplit(m[[1]], ".", fixed = TRUE)[[1]]
+  list(dataset = toupper(parts[[1]]), variable = parts[[2]])
+}
+
+#' The second qualified reference, when a directive names a label variable
+#' alongside the plotted one (`ADVS.AVISITN (label ADVS.AVISIT)`).
+#' @noRd
+.figure_label_ref <- function(value) {
+  m <- gregexpr("[A-Za-z][A-Za-z0-9]*\\.[A-Za-z][A-Za-z0-9_]*", value %||% "")
+  hits <- regmatches(value %||% "", m)[[1]]
+  if (length(hits) < 2) return(NULL)
+  parts <- strsplit(hits[[2]], ".", fixed = TRUE)[[1]]
+  list(dataset = toupper(parts[[1]]), variable = parts[[2]])
+}
+
+#' Write a figure's data series where its annotation block was.
+#'
+#' A figure sheet has no analyses -- the shell states the plot as prose
+#' ("Y axis -> mean of ADVS.AVAL", "Series (colour) -> ADVS.TRTA"), and the
+#' ARS carries those directives rather than an analysis per series. So unlike
+#' a table or a listing, a figure's numbers are computed here, from the
+#' datasets, against what the shell asked for.
+#'
+#' What is written is the series TABLE, not a chart: one row per series and
+#' x-value, with n, the mean and its standard error. The shell's own chart
+#' object stays whatever the author made it; a programmer picks the series up
+#' from these cells. Drawing a chart into someone else's workbook is a
+#' different job from filling one in.
+#'
+#' @return list(records).
+#' @noRd
+.fill_figure_sheet <- function(wb, sheet_index, plan, adam_dir, sheet) {
+  anchor <- plan$series_anchor %||% NA_integer_
+  record <- list(ref = NA_character_, row = anchor, col = NA_integer_,
+                 analysis_id = NA_character_)
+
+  directive <- function(key) {
+    hit <- Filter(function(d) identical(d$key, key), plan$directives %||% list())
+    if (length(hit) == 0) NULL else hit[[1]]$value
+  }
+
+  if (is.na(anchor)) {
+    record$status <- "pending"
+    record$reason <- "the shell states no annotation block to write the series into"
+    return(list(records = list(record)))
+  }
+  if (is.null(adam_dir) || !nzchar(adam_dir) || !dir.exists(adam_dir)) {
+    record$status <- "pending"
+    record$reason <- "no ADaM directory was given, so the series could not be computed"
+    return(list(records = list(record)))
+  }
+
+  x <- .figure_ref(directive("x_axis"))
+  y <- .figure_ref(directive("y_axis"))
+  s <- .figure_ref(directive("series"))
+  if (is.null(x) || is.null(y)) {
+    record$status <- "pending"
+    record$reason <- "the shell does not name both an x axis and a y axis variable"
+    return(list(records = list(record)))
+  }
+
+  df <- .listing_load(adam_dir, y$dataset)
+  if (is.null(df)) {
+    record$status <- "pending"
+    record$reason <- sprintf("dataset %s is not in the ADaM directory", y$dataset)
+    return(list(records = list(record)))
+  }
+
+  ## The filter is an ordinary where clause, so it goes through the same
+  ## parser the annotations use rather than a second dialect.
+  filter_txt <- directive("filter")
+  if (!is.null(filter_txt) && nzchar(filter_txt)) {
+    ## parse_where_clause() already returns the { condition: ... } wrapper
+    ## .listing_eval_where() expects; wrapping it again makes the filter a
+    ## silent no-op that averages every parameter in the dataset together.
+    wc <- parse_where_clause(filter_txt)
+    if (is.null(wc)) {
+      .diag_gap(
+        stage = "fill_shell", severity = "WARN", input = INPUT_SHELL,
+        problem = sprintf("Figure filter %s could not be parsed.",
+                          dQuote(filter_txt, q = FALSE)),
+        why = "The series would be computed over unfiltered data.",
+        fix = "Write the filter as DATASET.VAR='VALUE'.",
+        location = sheet %||% "")
+      record$status <- "pending"
+      record$reason <- "the figure's filter could not be parsed"
+      return(list(records = list(record)))
+    }
+    df <- df[.listing_eval_where(df, wc), , drop = FALSE]
+  }
+
+  need <- c(x$variable, y$variable, if (!is.null(s)) s$variable)
+  missing <- setdiff(need, names(df))
+  if (length(missing) > 0) {
+    record$status <- "pending"
+    record$reason <- sprintf("%s does not have %s",
+                             y$dataset, paste(missing, collapse = ", "))
+    return(list(records = list(record)))
+  }
+  if (nrow(df) == 0) {
+    record$status <- "pending"
+    record$reason <- "the figure's filter selected no records"
+    return(list(records = list(record)))
+  }
+
+  label_ref <- .figure_label_ref(directive("x_axis"))
+  label_var <- if (!is.null(label_ref) && label_ref$variable %in% names(df)) {
+    label_ref$variable
+  } else NULL
+
+  ## One row per series and x value: n, mean, and the standard error the
+  ## shell's error-bar directive asks for.
+  keys <- list(df[[x$variable]])
+  names(keys) <- x$variable
+  if (!is.null(label_var)) keys[[label_var]] <- df[[label_var]]
+  if (!is.null(s)) keys[[s$variable]] <- df[[s$variable]]
+
+  key_df <- data.frame(keys, stringsAsFactors = FALSE, check.names = FALSE)
+  grp    <- do.call(paste, c(key_df, sep = "\r"))
+  parts  <- split(df[[y$variable]], grp)
+  series <- as.data.frame(
+    do.call(rbind, strsplit(names(parts), "\r", fixed = TRUE)),
+    stringsAsFactors = FALSE)
+  names(series) <- names(key_df)
+  series$n    <- vapply(parts, function(v) sum(!is.na(v)), integer(1))
+  series$mean <- vapply(parts, function(v) mean(v, na.rm = TRUE), numeric(1))
+  series$se   <- vapply(parts, function(v) {
+    v <- v[!is.na(v)]
+    if (length(v) < 2) NA_real_ else stats::sd(v) / sqrt(length(v))
+  }, numeric(1))
+
+  ord <- order(suppressWarnings(as.numeric(series[[x$variable]])),
+               if (!is.null(s)) series[[s$variable]] else seq_len(nrow(series)))
+  series <- series[ord, , drop = FALSE]
+
+  ## Write a header row then the series, plainly: these cells were the red
+  ## annotation block a moment ago, so they carry no formatting worth keeping.
+  headers <- c(names(keys), "n", "mean", "se")
+  ws <- wb$worksheets[[sheet_index]]
+  cc <- ws$sheet_data$cc
+
+  ## A number goes in as a NUMBER, not as formatted text. This block is data
+  ## a programmer picks up to draw the chart, not a table cell -- rounding it
+  ## to look tidy would mean the series no longer equals what the reader
+  ## computes from the same datasets, and they would have to work out why.
+  ## (The opposite of a table placeholder, where text is what preserves the
+  ## trailing zero the author asked for.)
+  put <- function(cc, row, col, value) {
+    ref  <- .xlsx_rc_to_a1(row, col)
+    slot <- which(cc$r == ref)
+    numeric_cell <- is.numeric(value) && !is.na(value)
+
+    if (length(slot) != 1) {
+      new <- cc[1, , drop = FALSE]
+      new$r <- ref; new$row_r <- as.character(row)
+      new$c_r <- .xlsx_num_to_col(col)
+      new$c_s <- ""; new$f <- ""; new$f_attr <- ""
+      cc <- rbind(cc, new)
+      slot <- nrow(cc)
+    }
+
+    if (numeric_cell) {
+      cc$c_t[[slot]] <- ""
+      cc$v[[slot]]   <- format(value, scientific = FALSE, digits = 15,
+                               trim = TRUE)
+      cc$is[[slot]]  <- ""
+    } else {
+      text <- if (is.na(value)) "" else as.character(value)
+      cc$c_t[[slot]] <- "inlineStr"
+      cc$v[[slot]]   <- ""
+      cc$is[[slot]]  <- sprintf("<is><t xml:space=\"preserve\">%s</t></is>",
+                                .xml_escape(text))
+    }
+    cc
+  }
+
+  for (j in seq_along(headers)) cc <- put(cc, anchor, j, headers[[j]])
+  for (i in seq_len(nrow(series))) {
+    for (j in seq_along(headers)) {
+      value <- series[[headers[[j]]]][[i]]
+      ## The x axis and any key columns come out of a split as text; put the
+      ## numeric ones back so the sheet sorts and plots as numbers.
+      if (!is.numeric(value)) {
+        as_num <- suppressWarnings(as.numeric(value))
+        if (!is.na(as_num) && identical(as.character(as_num), value)) value <- as_num
+      }
+      cc <- put(cc, anchor + i, j, value)
+    }
+  }
+
+  cc <- cc[order(suppressWarnings(as.integer(cc$row_r)),
+                 vapply(cc$c_r, .xlsx_col_to_num, integer(1))), , drop = FALSE]
+  rownames(cc) <- NULL
+  ws$sheet_data$cc <- cc
+  wb$worksheets[[sheet_index]] <- ws
+
+  record$status <- "filled"
+  record$rows <- nrow(series)
+  list(records = list(record))
+}
+
 #' Strip every annotation run from one sheet.
 #'
 #' The annotations are instructions to the programmer, not part of the table,
@@ -696,7 +1193,7 @@
   stripped <- 0L
   for (slot in seq_len(nrow(cc))) {
     if (cc$r[[slot]] %in% annotated) {
-      cc <- .cell_set_is(cc, slot, "<is><t/></is>")
+      cc <- .cell_set_is(cc, slot, "<is><t/></is>", drop_style = TRUE)
       stripped <- stripped + 1L
       next
     }
@@ -710,7 +1207,7 @@
 
     remaining <- .is_text_nodes(doc)
     cc <- if (length(remaining) == 0 || !nzchar(trimws(.is_text(doc)))) {
-      .cell_set_is(cc, slot, "<is><t/></is>")
+      .cell_set_is(cc, slot, "<is><t/></is>", drop_style = TRUE)
     } else {
       .cell_set_is(cc, slot, .is_xml(doc))
     }
@@ -764,8 +1261,11 @@
 #'   parsed list.
 #' @param ard The ARD from [ars_to_ard()] holding the results to write.
 #' @param output_path Where to write the filled workbook.
-#' @param datasets Unused; accepted so a later listing fill can take the
-#'   subject-level data it expands from.
+#' @param adam_dir Directory holding the ADaM datasets (`.xpt`, `.sas7bdat`
+#'   or `.csv`). Required to fill a listing, whose rows are the subject-level
+#'   data itself, and a figure, whose series the shell states as prose rather
+#'   than as an analysis. Tables need only the ARD; leave it `NULL` and any
+#'   listing or figure sheet is reported instead of filled.
 #' @param strip_annotations Remove the red programming annotations. `TRUE` for
 #'   a deliverable; `FALSE` to keep them beside the numbers while reviewing.
 #' @param keep_pending_placeholders Leave an unfillable cell showing its
@@ -787,7 +1287,7 @@
 #'     ard         = ard,
 #'     output_path = "outputs/filled_shells.xlsx")
 #' }
-ars_fill_shell <- function(shell_path, ars, ard, output_path, datasets = NULL,
+ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
                            strip_annotations = TRUE,
                            keep_pending_placeholders = TRUE,
                            overwrite = FALSE) {
@@ -864,21 +1364,33 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, datasets = NULL,
       next
     }
 
-    cells <- fill$cells %||% list()
-    if (length(cells) > 0) {
-      result <- .fill_table_sheet(wb, sheet_index, cells, index,
-                                  keep_pending_placeholders, sheet)
-      for (record in result$records) {
-        record$output_id <- output$id %||% NA_character_
-        record$sheet <- sheet
-        records[[length(records) + 1L]] <- record
-      }
-    }
-
+    ## Strip BEFORE filling, not after. A figure's series is written into the
+    ## very cells its annotation block occupied, so stripping second would
+    ## erase what was just written. Placeholders carry no annotation runs, so
+    ## a table is unaffected by the order.
     if (isTRUE(strip_annotations)) {
       stripped <- stripped + .strip_sheet_annotations(
         wb, sheet_index, annotated[[sheet]] %||% character())$stripped
     }
+
+    result <- NULL
+    cells <- fill$cells %||% list()
+    if (length(cells) > 0) {
+      result <- .fill_table_sheet(wb, sheet_index, cells, index,
+                                  keep_pending_placeholders, sheet)
+    } else if (!is.null(fill$listing)) {
+      result <- .fill_listing_sheet(
+        wb, sheet_index, fill$listing,
+        .listing_rows(spec, output, adam_dir, sheet), keep_pending_placeholders)
+    } else if (!is.null(fill$figure)) {
+      result <- .fill_figure_sheet(wb, sheet_index, fill$figure, adam_dir, sheet)
+    }
+    for (record in (result$records %||% list())) {
+      record$output_id <- output$id %||% NA_character_
+      record$sheet <- sheet
+      records[[length(records) + 1L]] <- record
+    }
+
   }
 
   ## The annotations on a sheet that carries no cell map -- a listing, a

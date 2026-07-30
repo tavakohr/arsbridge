@@ -9,7 +9,7 @@ ars_fill_shell(
   ars,
   ard,
   output_path,
-  datasets = NULL,
+  adam_dir = NULL,
   strip_annotations = TRUE,
   keep_pending_placeholders = TRUE,
   overwrite = FALSE
@@ -25,8 +25,11 @@ parsed list.}
 
 \item{output_path}{Where to write the filled workbook.}
 
-\item{datasets}{Unused; accepted so a later listing fill can take the
-subject-level data it expands from.}
+\item{adam_dir}{Directory holding the ADaM datasets (\code{.xpt}, \code{.sas7bdat}
+or \code{.csv}). Required to fill a listing, whose rows are the subject-level
+data itself, and a figure, whose series the shell states as prose rather
+than as an analysis. Tables need only the ARD; leave it \code{NULL} and any
+listing or figure sheet is reported instead of filled.}
 
 \item{strip_annotations}{Remove the red programming annotations. \code{TRUE} for
 a deliverable; \code{FALSE} to keep them beside the numbers while reviewing.}
