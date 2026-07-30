@@ -1,5 +1,37 @@
 # arsbridge (development version)
 
+* **New `ars_workflow_run()`: the whole pipeline in one call, as a value.**
+  Takes paths, runs `spec_to_ars()` → `ars_to_ard()` → `ars_fill_shell()`, and
+  returns one structured list — status, per-stage timings, every artifact's
+  path, the metadata the run was built with, the diagnostics, the cells
+  reserved for manual derivation, and the workbook cells left unfilled with
+  their reasons. It holds no state and **never throws**: a run that dies still
+  returns a payload saying which stage failed and where its log is, which is
+  when a log is worth having.
+
+  It exists because `ars_workflow()` is a Shiny app and a six-minute build
+  must not run on the UI's process. The build is now a plain function that
+  knows nothing about Shiny, so it can be sent to a background process. It is
+  also useful on its own — in a script, a scheduled job, or a validation run.
+
+  **Diagnostics now survive a process boundary.** They live in a package-level
+  environment, so in a background worker they accumulate there and
+  `ars_diagnostics()` in the calling session returns nothing; every FAIL and
+  WARN would vanish silently. They are returned in the payload instead, as one
+  table with a `severity` column rather than split by severity — so `INFO`
+  findings survive too, including the shell-label-to-data-code pairings the
+  fill writer reports for review.
+
+  Diagnostics are harvested **after each stage**, not once at the end, because
+  `spec_to_ars()` and `ars_to_ard()` each call `diag_reset()` on entry. On the
+  nine-sheet fixture, reading once at the end returns 1 finding; harvesting
+  per stage returns 41.
+
+  A background process also inherits no options and no environment, so
+  `derived_dt` (which pins ARD timestamps, and therefore reproducibility), the
+  LLM provider and the API key are explicit parameters, echoed back in
+  `metadata` so an archived payload says what produced it.
+
 * **`ars_fill_shell()` now fills listings and figures too, not just tables.**
 
   A listing's shell states ONE template row standing for however many rows the
