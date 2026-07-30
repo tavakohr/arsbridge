@@ -52,6 +52,7 @@ reference:
     clinical table out.
   contents:
   - ars_workflow
+  - ars_workflow_run
   - spec_to_ars
   - spec_to_ars_example
   - ars_to_ard
