@@ -134,6 +134,13 @@ scope or the ARD contract — they explain *why* the current boundaries exist:
   carries (`_meta.shell_layout`, `_meta.column_tree`) so a rendered output can
   be compared against the shell it came from, and the three annotation layers
   (in-cell, below-table arrow lines, supplement) that can bind a row.
+* `0004-xlsx-shell-input.md` — why Word and Excel shells are both supported
+  permanently, the two seams a reader plugs into, and the three classes every
+  section-object field falls in. Read it before changing either reader.
+* `0005-filled-shell-output.md` — the cell map (`_meta.shell_fill`) that binds
+  each placeholder to the result belonging in it: why it is built at build
+  time, the three row shapes that select from the ARD differently, and why the
+  ARD join keys on the operation id rather than its display name.
 
 When you make a design-level change, add or update an ADR in the same PR. Keep
 the standard `ARS → ARD → tfrmt` pipeline — the shell is never the source of

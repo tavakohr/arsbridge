@@ -1,5 +1,24 @@
 # arsbridge (development version)
 
+* **The ARS now records which worksheet cell each result belongs in.** For an
+  Excel shell, every output carries `_meta$shell_fill`: a cell map binding
+  each placeholder to an analysis, a column-axis position, and the statistics
+  its tokens stand for -- with the decimals taken from the placeholder itself.
+  It is built at build time because that is the only moment the shell's
+  geometry and the analyses exist together; the writer that consumes it
+  follows. `adr/0005-filled-shell-output.md` records the design, including the
+  three row shapes that select from the ARD differently (a row with its own
+  analysis, a statistic line under a continuous parent, a level under a
+  categorical one).
+
+  Two consequences worth knowing. A pending cell now carries the *reason* it
+  is unbound, so "no analysis covers this row" is distinguishable from "this
+  column is not on the column axis". And a placeholder that asks for more
+  statistics than its analysis produces -- a row showing `xx (xx.x)` typed as
+  a plain count -- is reported as a WARN naming the row; nothing compared the
+  two before. `_meta` is arsbridge's own namespace, so conformance is
+  unaffected and Word output is byte-identical.
+
 * **`spec_to_ars()` now accepts an Excel shell.** Pass a `.xlsx` with one
   worksheet per output, or the `.docx` you have always passed; a new internal
   `parse_shell()` dispatches on the extension and everything downstream is

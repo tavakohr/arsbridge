@@ -928,10 +928,10 @@ build_ars_json <- function(sections,
       analyses[[length(analyses) + 1L]]         <<- an2
       analysis_ids                              <<- c(analysis_ids, an2$id)
       note_value_decode(er2$primary_dataset, er2$primary_variable, method2_id)
-      shell_layout[[length(shell_layout) + 1L]] <<- list(
+      shell_layout[[length(shell_layout) + 1L]] <<- .with_sheet_row(list(
         order = length(shell_layout) + 1L,
         label = label %||% "", indent = indent,
-        analysis_id = an2$id, kind = "supplement_added")
+        analysis_id = an2$id, kind = "supplement_added"), row2)
       invisible(an2$id)
     }
 
@@ -953,10 +953,10 @@ build_ars_json <- function(sections,
         ## the layout so the renderer keeps it, but it has no analysis.
         ## A spacer also ends any categorical block above it.
         cat_parent <- NULL
-        shell_layout[[length(shell_layout) + 1L]] <- list(
+        shell_layout[[length(shell_layout) + 1L]] <- .with_sheet_row(list(
           order = length(shell_layout) + 1L,
           label = row$label %||% "", indent = indent,
-          analysis_id = NA_character_, kind = "label")
+          analysis_id = NA_character_, kind = "label"), row)
         next
       }
 
@@ -1055,11 +1055,11 @@ build_ars_json <- function(sections,
           hit <- match(lv, as.character(decode_terms$term))
           if (!is.na(hit)) lv_display <- decode_terms$decode[hit]
         }
-        shell_layout[[length(shell_layout) + 1L]] <- list(
+        shell_layout[[length(shell_layout) + 1L]] <- .with_sheet_row(list(
           order = length(shell_layout) + 1L,
           label = row$label %||% "", indent = indent,
           analysis_id = cat_parent$aid, kind = "level", level = lv_display,
-          level_code = lv)
+          level_code = lv), row)
         diag_add(
           stage = "build_ars", severity = "INFO",
           problem = sprintf("Row '%s' is a level of the categorical block above (%s='%s')",
@@ -1283,11 +1283,11 @@ build_ars_json <- function(sections,
                      else if (identical(row_method_id, "MTH_SUMMARY_STATISTICS_CONTINUOUS") &&
                                 identical(row_kind, "row")) "continuous"
                      else row_kind
-      layout_entry <- list(
+      layout_entry <- .with_sheet_row(list(
         order = length(shell_layout) + 1L,
         label = row$label %||% "", indent = indent,
         analysis_id = an_obj$id,
-        kind = layout_kind)
+        kind = layout_kind), row)
       if (identical(nested_role, "nested_child") &&
             !is.null(nested_parent_ctx)) {
         layout_entry$parent_order <- nested_parent_ctx$order
@@ -1432,10 +1432,17 @@ build_ars_json <- function(sections,
       analysis_ids <- c(analysis_ids, an$id)
     }
 
+    ## The cell map, for a shell that came from a workbook: which worksheet
+    ## cell each computed number belongs in. Built HERE because this is the
+    ## only point at which the shell's geometry and the analyses are both in
+    ## hand (see R/shell_fill_meta.R and ADR 0005).
+    shell_fill <- .build_shell_fill(sec, shell_layout, analyses, methods)
+
     outputs[[length(outputs) + 1L]] <-
       .build_output(sec, analysis_ids, ship_annotations = ship_annotations,
                     shell_layout = shell_layout,
-                    result_group_paths = result_group_paths)
+                    result_group_paths = result_group_paths,
+                    shell_fill = shell_fill)
   }
 
   ## Siera iterates `seq_len(nrow(JSON_DataSubsets))` and
@@ -2064,7 +2071,8 @@ build_ars_json <- function(sections,
 }
 
 .build_output <- function(section, analysis_ids, ship_annotations = FALSE,
-                          shell_layout = NULL, result_group_paths = NULL) {
+                          shell_layout = NULL, result_group_paths = NULL,
+                          shell_fill = NULL) {
   ## Shipped footnotes are the true footnotes only; programmer annotation
   ## lines are mapping instructions, not display text (ADR 0003 Layer B).
   ## ship_annotations = TRUE re-attaches them for debugging.
@@ -2081,6 +2089,11 @@ build_ars_json <- function(sections,
   )
   if (length(shell_layout %||% list()) > 0) {
     out_meta$shell_layout <- shell_layout
+  }
+  ## The cell map for writing results back into the shell workbook. Absent
+  ## for a Word shell, which has no cell addresses.
+  if (length(shell_fill %||% list()) > 0) {
+    out_meta$shell_fill <- shell_fill
   }
   ## Supplement channels arsbridge records but does not yet compute
   ## (record filters, sorting, denominators, provenance). They travel in the

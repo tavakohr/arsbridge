@@ -193,10 +193,26 @@ test_that("both formats build the same ARS reporting event", {
   d <- build("shells_parity_apx.docx")
   x <- build("shells_parity_apx.xlsx")
 
-  ## Everything except the provenance block, which records the input path and
-  ## the time of the run.
+  ## Everything except the provenance block (input path, run time) and the
+  ## CLASS-3 additive fields the contract in adr/0004-xlsx-shell-input.md
+  ## allows an Excel output to carry: the cell map, and the sheet row each
+  ## layout entry came from. Both exist so the fill writer can find its way
+  ## back to a cell, and a Word shell has no cells -- so their absence on one
+  ## side is the contract working, not a divergence.
+  ##
+  ## Everything else in `_meta` is still compared, so a real difference in
+  ## the layout, the source datasets or the column tree still fails here.
   strip <- function(re) {
     re$`_meta` <- NULL
+    re$outputs <- lapply(re$outputs, function(o) {
+      o$`_meta`$shell_fill <- NULL
+      o$`_meta`$shell_layout <- lapply(o$`_meta`$shell_layout %||% list(),
+                                       function(e) {
+                                         e$sheet_row <- NULL
+                                         e
+                                       })
+      o
+    })
     re
   }
   expect_identical(strip(d), strip(x))

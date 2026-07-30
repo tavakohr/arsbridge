@@ -156,6 +156,10 @@ parse_shell_xlsx <- function(xlsx_path, spec_lookup = NULL,
   sec$source_format <- "xlsx"
   sec$sheet_name    <- sheet$name
   sec$layout        <- layout
+  ## Which body cells are placeholders waiting for a number, and how many
+  ## decimals each wants. Carried on the section because the workbook itself
+  ## is long gone by the time the ARS is assembled.
+  sec$cell_grid     <- .cell_placeholder_grid(sheet, layout)
   ## Class 2: an Excel header row cannot be flagged the way <w:tblHeader/>
   ## flags a Word one, so the count is always inferred.
   n_header <- length(layout$header_rows %||% integer(0))
