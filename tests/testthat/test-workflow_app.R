@@ -1,5 +1,9 @@
-# The workflow app's server flows under testServer: scaffold, instruction
-# writing, blueprint and supplement receive/validate, and resume.
+# The workflow app's server flows under testServer.
+#
+# One phase, five panels: set up the project, build, optionally correct with a
+# supplement, review, read the results. The tests below follow that journey,
+# and pay particular attention to the two things the redesign changed --
+# the build comes before the supplement, and the results survive a restart.
 
 skip_if_not_installed("shiny")
 skip_if_not_installed("bslib")
@@ -16,7 +20,21 @@ skip_if_not_installed("DT")
   arsbridge:::.ars_workflow_app(project_dir)
 }
 
-test_that("the app scaffolds a project and writes the instruction files", {
+## Builds run in-process here. testServer drives a virtual clock, so the
+## background poller would never fire and the test would assert on a run that
+## has not finished -- it would be testing the harness, not the app.
+.wfa_no_keys <- function(code) {
+  withr::with_options(
+    list(arsbridge.workflow_background = FALSE),
+    withr::with_envvar(
+      c(ANTHROPIC_API_KEY = "", OPENAI_API_KEY = "", GEMINI_API_KEY = "",
+        GLM_API_KEY = "", ARS_LLM_PROVIDER = ""),
+      suppressMessages(suppressWarnings(code))))
+}
+
+test_that("the app scaffolds a project and unlocks the build immediately", {
+  ## The point of the one-phase flow: nothing stands between recording the
+  ## inputs and seeing what the engine can do on its own.
   td <- withr::local_tempdir()
   project <- file.path(td, "study")
   inputs <- .wfa_inputs()
@@ -25,88 +43,130 @@ test_that("the app scaffolds a project and writes the instruction files", {
     session$setInputs(project_dir = project,
                       shell_path  = inputs$shell,
                       spec_path   = inputs$spec,
+                      adam_dir    = "",
                       study_id    = "CDSC-ALZ-201")
     session$setInputs(init_project = 1)
 
     expect_true(file.exists(arsbridge:::.workflow_paths(project)$state))
     st <- status()
     expect_true(st$done[st$step == "project"])
-    expect_true(st$available[st$step == "instructions"])
+    expect_true(st$available[st$step == "build"])
+    ## The supplement waits for a parse to have happened.
+    expect_false(st$available[st$step == "supplement"])
+  })
+})
 
-    session$setInputs(write_instructions = 1)
-    paths <- arsbridge:::.workflow_paths(current_dir())
-    expect_true(file.exists(paths$phase1_md))
-    expect_true(file.exists(paths$phase2_md))
-    expect_true(file.exists(paths$schema))
+test_that("the project records an ADaM folder when given one", {
+  td <- withr::local_tempdir()
+  project <- file.path(td, "study")
+  inputs <- .wfa_inputs()
+  adam <- test_path("fixtures", "adam_apx_drm_301")
+
+  shiny::testServer(.wfa_server(NULL), {
+    session$setInputs(project_dir = project, shell_path = inputs$shell,
+                      spec_path = inputs$spec, adam_dir = adam,
+                      study_id = "S1")
+    session$setInputs(init_project = 1)
+    recorded <- arsbridge:::.workflow_read_state(project)
+    expect_true(dir.exists(recorded$adam_dir))
+  })
+})
+
+test_that("a build runs, and its payload drives the results panel", {
+  td <- withr::local_tempdir()
+  project <- file.path(td, "study")
+  inputs <- .wfa_inputs()
+  arsbridge:::.workflow_init(project, inputs$shell, inputs$spec)
+
+  .wfa_no_keys(
+    shiny::testServer(.wfa_server(project), {
+      session$setInputs(run_build = 1)
+
+      payload <- state$last_result()
+      expect_false(is.null(payload))
+      expect_true(payload$status %in% c("success", "partial"))
+      ## Every stage's diagnostics, not just the last stage's.
+      expect_gt(nrow(payload$diagnostics), 0)
+      expect_true("parse_shell" %in% payload$diagnostics$stage)
+
+      st <- status()
+      expect_true(st$done[st$step == "build"])
+      expect_true(st$available[st$step == "supplement"])
+      expect_true(st$available[st$step == "results"])
+    })
+  )
+})
+
+test_that("the results panel reads the payload from disk after a restart", {
+  ## Nothing is remembered in the session. A user who closes the app and comes
+  ## back must still see what the last run produced and what it declined to.
+  td <- withr::local_tempdir()
+  project <- file.path(td, "study")
+  inputs <- .wfa_inputs()
+  arsbridge:::.workflow_init(project, inputs$shell, inputs$spec)
+  paths <- arsbridge:::.workflow_paths(project)
+  state0 <- arsbridge:::.workflow_read_state(project)
+  .wfa_no_keys(arsbridge:::.workflow_run_build(state0, paths))
+  expect_true(file.exists(paths$payload))
+
+  ## A brand-new session: last_result() is empty, so the panel must fall back
+  ## to the payload the previous run left behind.
+  shiny::testServer(.wfa_server(project), {
+    expect_null(state$last_result())
+    recovered <- arsbridge:::.workflow_last_payload(paths, state)
+    expect_false(is.null(recovered))
+    expect_gt(nrow(recovered$diagnostics), 0)
     st <- status()
-    expect_true(st$done[st$step == "instructions"])
-    expect_true(st$available[st$step == "build"])   # deterministic skip
+    expect_true(st$done[st$step == "results"])
   })
 })
 
-test_that("blueprint paste and upload land in copilot/ with findings", {
+test_that("the supplement step drafts, and validates what comes back", {
   td <- withr::local_tempdir()
   project <- file.path(td, "study")
   inputs <- .wfa_inputs()
   arsbridge:::.workflow_init(project, inputs$shell, inputs$spec)
-  suppressMessages(ars_copilot_instructions(
-    dir = arsbridge:::.workflow_dirs(project)$copilot,
-    workflow = "two_phase", open = FALSE, overwrite = TRUE
-  ))
+  paths <- arsbridge:::.workflow_paths(project)
+  state0 <- arsbridge:::.workflow_read_state(project)
+  .wfa_no_keys(arsbridge:::.workflow_run_build(state0, paths))
 
-  bp_json <- jsonlite::toJSON(list(
-    blueprint_version = 2,
-    tlfs = list(`14.1.1` = list(blueprint_status = "READY_FOR_PHASE_2"))
-  ), auto_unbox = TRUE)
+  .wfa_no_keys(
+    shiny::testServer(.wfa_server(project), {
+      session$setInputs(write_instructions = 1)
+      expect_true(file.exists(paths$instructions))
+      expect_true(file.exists(paths$schema))
 
-  shiny::testServer(.wfa_server(project), {
-    # Paste path (with a chat-style code fence).
-    session$setInputs(blueprint_paste = paste("```json", bp_json, "```",
-                                              sep = "\n"))
-    session$setInputs(blueprint_save_paste = 1)
-    paths <- arsbridge:::.workflow_paths(project)
-    expect_true(file.exists(paths$blueprint))
-    expect_false(any(state$blueprint_findings()$severity == "FAIL"))
-    expect_true(status()$done[status()$step == "phase1"])
+      session$setInputs(generate_draft = 1)
+      expect_true(file.exists(paths$draft))
 
-    # Upload path: a plain temp file standing in for fileInput's datapath.
-    tmp <- file.path(td, "upload.json")
-    writeLines(as.character(bp_json), tmp)
-    session$setInputs(blueprint_upload = list(name = "b.json",
-                                              datapath = tmp))
-    expect_true(file.exists(paths$blueprint))
-  })
+      ## A reviewed supplement, validated on request rather than on arrival:
+      ## the user edits it outside the app now, so there is no paste to catch.
+      good <- paste(readLines(test_path("fixtures", "supplement_v4_example.json"),
+                              warn = FALSE), collapse = "\n")
+      writeLines(good, paths$supplement)
+      session$setInputs(validate_supplement = 1)
+      findings <- state$supplement_findings()
+      expect_false(is.null(findings))
+
+      st <- status()
+      expect_true(st$done[st$step == "supplement"])
+      expect_match(st$detail[st$step == "build"], "reviewed supplement")
+    })
+  )
 })
 
-test_that("a valid supplement completes phase 2; a broken one shows the repair prompt", {
+test_that("validating a supplement that is not there says so", {
   td <- withr::local_tempdir()
   project <- file.path(td, "study")
   inputs <- .wfa_inputs()
   arsbridge:::.workflow_init(project, inputs$shell, inputs$spec)
-  suppressMessages(ars_copilot_instructions(
-    dir = arsbridge:::.workflow_dirs(project)$copilot,
-    workflow = "two_phase", open = FALSE, overwrite = TRUE
-  ))
-
-  good <- paste(readLines(test_path("fixtures", "supplement_v4_example.json"),
-                          warn = FALSE), collapse = "\n")
+  paths <- arsbridge:::.workflow_paths(project)
+  state0 <- arsbridge:::.workflow_read_state(project)
+  .wfa_no_keys(arsbridge:::.workflow_run_build(state0, paths))
 
   shiny::testServer(.wfa_server(project), {
-    session$setInputs(supplement_paste = good)
-    session$setInputs(supplement_save_paste = 1)
-    paths <- arsbridge:::.workflow_paths(project)
-    expect_true(file.exists(paths$supplement))
-    findings <- state$supplement_findings()
-    expect_false(any(findings$severity == "FAIL"))
-
-    # A wrong-version supplement: FAIL findings with a repair prompt, and
-    # the phase-2 badge logic treats the step as not complete.
-    broken <- sub('"supplement_version": 4', '"supplement_version": 3', good,
-                  fixed = TRUE)
-    session$setInputs(supplement_paste = broken)
-    session$setInputs(supplement_save_paste = 2)
-    findings <- state$supplement_findings()
-    expect_true(any(findings$severity == "FAIL"))
+    session$setInputs(validate_supplement = 1)
+    expect_null(state$supplement_findings())
   })
 })
 
@@ -115,27 +175,17 @@ test_that("a resumed project derives statuses and exposes the hand-off", {
   project <- file.path(td, "study")
   inputs <- .wfa_inputs()
   arsbridge:::.workflow_init(project, inputs$shell, inputs$spec, "APX-DRM-301")
-  suppressMessages(ars_copilot_instructions(
-    dir = arsbridge:::.workflow_dirs(project)$copilot,
-    workflow = "two_phase", open = FALSE, overwrite = TRUE
-  ))
-  state0 <- arsbridge:::.workflow_read_state(project)
   paths0 <- arsbridge:::.workflow_paths(project)
-  withr::with_envvar(
-    c(ANTHROPIC_API_KEY = "", OPENAI_API_KEY = "", GEMINI_API_KEY = "",
-      GLM_API_KEY = "", ARS_LLM_PROVIDER = ""),
-    suppressMessages(suppressWarnings(
-      arsbridge:::.workflow_run_build(state0, paths0)
-    ))
-  )
+  state0 <- arsbridge:::.workflow_read_state(project)
+  .wfa_no_keys(arsbridge:::.workflow_run_build(state0, paths0))
 
   shiny::testServer(.wfa_server(project), {
     st <- status()
-    expect_true(all(st$done[st$step %in% c("project", "instructions", "build")]))
+    expect_true(st$done[st$step == "build"])
     expect_true(st$available[st$step == "review"])
-
-    payload <- arsbridge:::.workflow_handoff_payload(current_dir())
-    expect_identical(payload$action, "edit")
-    expect_true(file.exists(payload$ars_path))
   })
+
+  payload <- arsbridge:::.workflow_handoff_payload(project)
+  expect_identical(payload$action, "edit")
+  expect_identical(payload$ars_path, paths0$ars)
 })

@@ -1,5 +1,36 @@
 # arsbridge (development version)
 
+* **`ars_workflow()` is one phase, not two.** The app used to make you carry a
+  blueprint out to a chat assistant and a supplement back before anything could
+  be built — two manual round-trips in front of the first result. A
+  deterministic build needs neither, so the build now comes **second**, right
+  after recording the inputs, and the supplement became an optional loop after
+  it: generate a draft from what the parser already found, correct the handful
+  of judgements that are wrong, rebuild. Correcting specific decisions beats
+  authoring a document from scratch.
+
+  Five panels replace six: project setup, build, supplement (optional), review
+  & edit, and a new **Results** step showing every artifact, every diagnostic
+  with its severity and its fix, and the cells the run declined to fill. The
+  results are read from the payload on disk, so they survive closing and
+  reopening the app.
+
+  **The build runs off the UI's process.** A real study takes minutes, and an
+  app that runs that on its own process is frozen for the duration — you cannot
+  tell a slow build from a hung one. It goes to a background R process
+  (`callr`, a new Suggests) and the panel tails the run log while it runs. A
+  fresh process each time means no state carries over between runs. Without
+  `callr`, or with `options(arsbridge.workflow_background = FALSE)`, the build
+  runs in-process instead: a frozen UI is worse than a responsive one, and much
+  better than not being able to build.
+
+  The project layout follows: `copilot/` is now `supplement/`, and `ars/` also
+  holds `ard.rds`, `filled_shells.xlsx`, `run.log`, and the payload of the last
+  run. A project can now record an ADaM folder, so one build produces the
+  reporting event, the results and the filled workbook together; without one
+  the reporting event is still built and the rest is reported as not produced
+  rather than treated as a failure.
+
 * **New `ars_workflow_run()`: the whole pipeline in one call, as a value.**
   Takes paths, runs `spec_to_ars()` → `ars_to_ard()` → `ars_fill_shell()`, and
   returns one structured list — status, per-stage timings, every artifact's

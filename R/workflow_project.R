@@ -10,23 +10,24 @@
 ##
 ## Layout under a project directory:
 ##   arsbridge_project.json    shell/spec paths, study id, timestamps
-##   copilot/                  the two-phase instruction files + JSON schema,
-##                             plus everything the Copilot round-trips return:
-##                             tlf_extraction_blueprints.json, supplement.json,
-##                             extraction_validation_report.json
-##   ars/                      reporting_event.json, validation xlsx, code/
+##   supplement/               the instruction file + JSON schema, the draft
+##                             supplement the project can generate, and the
+##                             reviewed supplement.json the next build uses
+##   ars/                      reporting_event.json, validation xlsx, code/,
+##                             ard.rds, filled_shells.xlsx, run.log, and the
+##                             payload of the last build
 
 .WORKFLOW_STATE_FILE <- "arsbridge_project.json"
-.WORKFLOW_BLUEPRINT_FILE <- "tlf_extraction_blueprints.json"
+.WORKFLOW_DRAFT_FILE <- "supplement_draft.json"
 .WORKFLOW_SUPPLEMENT_FILE <- "supplement.json"
-.WORKFLOW_EXTRACTION_REPORT_FILE <- "extraction_validation_report.json"
+.WORKFLOW_PAYLOAD_FILE <- "last_run.rds"
 
 #' The project's subdirectories (paths only; nothing is created).
 #' @noRd
 .workflow_dirs <- function(project_dir) {
   list(
-    copilot = file.path(project_dir, "copilot"),
-    ars     = file.path(project_dir, "ars")
+    supplement = file.path(project_dir, "supplement"),
+    ars        = file.path(project_dir, "ars")
   )
 }
 
@@ -35,23 +36,25 @@
 .workflow_paths <- function(project_dir) {
   dirs <- .workflow_dirs(project_dir)
   list(
-    state             = file.path(project_dir, .WORKFLOW_STATE_FILE),
-    phase1_md         = file.path(dirs$copilot, .COPILOT_PHASE1_FILE),
-    phase2_md         = file.path(dirs$copilot, .COPILOT_PHASE2_FILE),
-    schema            = file.path(dirs$copilot, .SUPPLEMENT_SCHEMA_FILE),
-    blueprint         = file.path(dirs$copilot, .WORKFLOW_BLUEPRINT_FILE),
-    supplement        = file.path(dirs$copilot, .WORKFLOW_SUPPLEMENT_FILE),
-    extraction_report = file.path(dirs$copilot, .WORKFLOW_EXTRACTION_REPORT_FILE),
-    ars               = file.path(dirs$ars, "reporting_event.json"),
-    report            = file.path(dirs$ars, "spec_validation_report.xlsx"),
-    code_dir          = file.path(dirs$ars, "code")
+    state            = file.path(project_dir, .WORKFLOW_STATE_FILE),
+    instructions     = file.path(dirs$supplement, .COPILOT_INSTRUCTIONS_FILE),
+    schema           = file.path(dirs$supplement, .SUPPLEMENT_SCHEMA_FILE),
+    draft            = file.path(dirs$supplement, .WORKFLOW_DRAFT_FILE),
+    supplement       = file.path(dirs$supplement, .WORKFLOW_SUPPLEMENT_FILE),
+    ars              = file.path(dirs$ars, "reporting_event.json"),
+    report           = file.path(dirs$ars, "validation_report.xlsx"),
+    code_dir         = file.path(dirs$ars, "code"),
+    ard              = file.path(dirs$ars, "ard.rds"),
+    filled_workbook  = file.path(dirs$ars, "filled_shells.xlsx"),
+    run_log          = file.path(dirs$ars, "run.log"),
+    payload          = file.path(dirs$ars, .WORKFLOW_PAYLOAD_FILE)
   )
 }
 
 #' Create the project: the four subdirectories and the state file.
 #' @noRd
 .workflow_init <- function(project_dir, shell_path, adam_spec_path,
-                           study_id = "STUDY-001") {
+                           study_id = "STUDY-001", adam_dir = NULL) {
   shell_path     <- trimws(shell_path %||% "")
   adam_spec_path <- trimws(adam_spec_path %||% "")
   study_id       <- trimws(study_id %||% "")
@@ -95,6 +98,12 @@
     updated           = now,
     shell_path        = normalizePath(shell_path),
     adam_spec_path    = normalizePath(adam_spec_path),
+    ## Optional: without it the reporting event is still built, and the
+    ## results and filled workbook are reported as not produced rather than
+    ## treated as a failure.
+    adam_dir          = if (is.null(adam_dir) || !nzchar(trimws(adam_dir)))
+                          NULL else normalizePath(trimws(adam_dir),
+                                                  mustWork = FALSE),
     study_id          = study_id
   )
   .workflow_write_state(project_dir, state)
@@ -138,17 +147,23 @@
   .workflow_write_state(project_dir, state)
 }
 
-## The step ids, in journey order. Steps 3 and 4 (the manual Copilot
-## round-trips) are skippable: the build runs deterministically without them.
-.WORKFLOW_STEPS <- c("project", "instructions", "phase1", "phase2",
-                     "build", "review")
+## The step ids, in journey order.
+##
+## One phase, not two. The old flow made a user carry a blueprint out to a
+## chat assistant and a supplement back before anything could be built, which
+## put two manual round-trips in front of the first result. A deterministic
+## build needs neither, so the build comes SECOND -- you see outputs before
+## you decide whether anything needs helping -- and the supplement became an
+## optional loop after it: generate a draft from what the parser already
+## found, edit the handful of judgements that are wrong, rebuild.
+.WORKFLOW_STEPS <- c("project", "build", "supplement", "review", "results")
 
 #' Step statuses, derived entirely from what is on disk.
 #'
 #' Returns one row per step: `step`, `done`, `available` (all prerequisites
-#' met), and a human `detail`. The skip rule: phase1/phase2 become available
-#' once the instruction files exist, but the BUILD step needs only the
-#' instructions too -- a project can go straight to a deterministic build.
+#' met), and a human `detail`. Nothing is remembered in the session, so
+#' closing the app loses nothing and reopening it resumes where the files say
+#' the work stands.
 #' @noRd
 .workflow_status <- function(project_dir) {
   paths <- .workflow_paths(project_dir)
@@ -166,36 +181,49 @@
     sprintf("%s -- shell and spec recorded.", state$study_id %||% "")
   }
 
-  instructions_done <- file.exists(paths$phase1_md) &&
-    file.exists(paths$phase2_md) && file.exists(paths$schema)
-  blueprint_done  <- file.exists(paths$blueprint)
-  supplement_done <- file.exists(paths$supplement)
   ars_done        <- file.exists(paths$ars)
+  supplement_done <- file.exists(paths$supplement)
+  draft_done      <- file.exists(paths$draft)
+  results_done    <- file.exists(paths$payload)
+
+  build_detail <- if (!ars_done) {
+    "Build the reporting event, the results, and the filled workbook."
+  } else if (supplement_done) {
+    "Built, using the reviewed supplement."
+  } else {
+    "Built deterministically."
+  }
+
+  supplement_detail <- if (supplement_done) {
+    "A reviewed supplement is in place; the next build will use it."
+  } else if (draft_done) {
+    "Draft generated -- edit the judgements that are wrong and save it as supplement.json."
+  } else {
+    "Optional. Generate a draft from what the parser already found."
+  }
 
   data.frame(
     step = .WORKFLOW_STEPS,
-    done = c(project_done && inputs_ok, instructions_done, blueprint_done,
-             supplement_done, ars_done, FALSE),
+    done = c(project_done && inputs_ok, ars_done, supplement_done, FALSE,
+             results_done),
     available = c(
       TRUE,
       project_done && inputs_ok,
-      instructions_done,
-      instructions_done,
-      project_done && inputs_ok && instructions_done,
-      ars_done
+      ## The supplement describes what the parser found, so it needs a parse
+      ## to have happened -- which is why it follows the build rather than
+      ## blocking it.
+      ars_done,
+      ars_done,
+      results_done
     ),
     detail = c(
       project_detail,
-      if (instructions_done) "Instruction files are in copilot/." else
-        "Write the Phase 1 / Phase 2 instruction files.",
-      if (blueprint_done) "Blueprint received." else
-        "Run Phase 1 in your chat assistant, then drop the blueprint here.",
-      if (supplement_done) "supplement.json received." else
-        "Run Phase 2 in your chat assistant, then drop supplement.json here.",
-      if (ars_done) "Reporting event built." else
-        "Build the reporting event (with the supplement, or deterministically).",
+      build_detail,
+      supplement_detail,
       if (ars_done) "Open the reporting event in the review editor." else
-        "Available after the build."
+        "Available after the build.",
+      if (results_done) "Everything the last run produced, and what it could not."
+        else "Available after the build."
     ),
     stringsAsFactors = FALSE
   )
@@ -237,23 +265,38 @@
   list(ok = TRUE, path = dest, message = paste0("Saved ", basename(dest), "."))
 }
 
-#' Run the build: spec_to_ars() with the project's inputs, in supplement mode
-#' when supplement.json exists and deterministically otherwise. Kept out of
-#' the Shiny observer so tests exercise it directly.
+#' Run the whole build for a project and keep its payload.
+#'
+#' Everything the run produced -- and everything it could not -- comes back in
+#' one value (`ars_workflow_run()`), which is written to `ars/last_run.rds` so
+#' the Results step can render it after the app has been closed and reopened.
+#' Nothing about this is Shiny-aware, so it runs identically from a script and
+#' inside a background worker.
+#'
+#' The supplement is used when a reviewed one exists and ignored otherwise: a
+#' deterministic build is a first-class mode, not a degraded one.
+#'
+#' @param adam_dir Optional; without it the ARS is still built and the missing
+#'   results are reported rather than treated as a failure.
+#' @return The payload, invisibly.
 #' @noRd
-.workflow_run_build <- function(state, paths) {
+.workflow_run_build <- function(state, paths, adam_dir = NULL,
+                                use_llm = FALSE, api_key = NULL,
+                                log_path = NULL) {
   supplement <- if (file.exists(paths$supplement)) paths$supplement else NULL
-  spec_to_ars(
+  payload <- ars_workflow_run(
     shell_path     = state$shell_path,
     adam_spec_path = state$adam_spec_path,
-    output_path    = paths$ars,
+    output_dir     = dirname(paths$ars),
+    adam_dir       = adam_dir %||% state$adam_dir %||% NULL,
     study_id       = state$study_id %||% "STUDY-001",
     supplement     = supplement,
-    report_path    = paths$report,
-    code_dir       = paths$code_dir,
-    use_llm        = FALSE,
-    verbose        = FALSE
+    use_llm        = use_llm,
+    api_key        = api_key,
+    log_path       = log_path %||% NULL
   )
+  saveRDS(payload, paths$payload)
+  invisible(payload)
 }
 
 #' The stopApp payload that hands the built event to the editor.

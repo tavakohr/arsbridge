@@ -43,46 +43,54 @@ test_that("init rejects wrong or missing inputs", {
   )
 })
 
-test_that("step statuses are derived purely from files, with the skip rule", {
+test_that("step statuses are derived purely from files", {
+  ## Nothing is remembered in the session: closing the app and reopening it
+  ## must resume exactly where the files say the work stands.
   td <- withr::local_tempdir()
   project <- file.path(td, "study")
   inputs <- .wfp_inputs()
 
-  # Nothing yet: only the project step is available.
+  ## Nothing yet: only the project step is available.
   st0 <- arsbridge:::.workflow_status(project)
+  expect_identical(st0$step, c("project", "build", "supplement", "review",
+                               "results"))
   expect_false(any(st0$done))
-  expect_identical(st0$available, c(TRUE, FALSE, FALSE, FALSE, FALSE, FALSE))
+  expect_identical(st0$available, c(TRUE, FALSE, FALSE, FALSE, FALSE))
 
+  ## Inputs recorded: the build unlocks immediately. No instruction files, no
+  ## round-trips -- a deterministic build is a first-class mode, and the whole
+  ## point of the one-phase flow is that nothing stands in front of it.
   arsbridge:::.workflow_init(project, inputs$shell, inputs$spec)
   st1 <- arsbridge:::.workflow_status(project)
   expect_true(st1$done[st1$step == "project"])
-  expect_true(st1$available[st1$step == "instructions"])
-  expect_false(st1$available[st1$step == "build"])
+  expect_true(st1$available[st1$step == "build"])
+  expect_false(st1$available[st1$step == "supplement"])
+  expect_false(st1$available[st1$step == "review"])
 
-  # Instruction files unlock BOTH phases and the build (deterministic skip).
-  suppressMessages(ars_copilot_instructions(
-    dir = arsbridge:::.workflow_dirs(project)$copilot,
-    workflow = "two_phase", open = FALSE, overwrite = TRUE
-  ))
-  st2 <- arsbridge:::.workflow_status(project)
-  expect_true(st2$done[st2$step == "instructions"])
-  expect_true(all(st2$available[st2$step %in% c("phase1", "phase2", "build")]))
-  expect_false(st2$done[st2$step == "phase1"])
-
-  # Dropping the built event marks build done and review available.
+  ## The supplement describes what the parser found, so it needs a parse to
+  ## have happened -- it follows the build rather than blocking it.
   paths <- arsbridge:::.workflow_paths(project)
   dir.create(dirname(paths$ars), recursive = TRUE, showWarnings = FALSE)
   writeLines("{}", paths$ars)
-  st3 <- arsbridge:::.workflow_status(project)
-  expect_true(st3$done[st3$step == "build"])
-  expect_true(st3$available[st3$step == "review"])
+  st2 <- arsbridge:::.workflow_status(project)
+  expect_true(st2$done[st2$step == "build"])
+  expect_true(st2$available[st2$step == "supplement"])
+  expect_true(st2$available[st2$step == "review"])
+  expect_false(st2$done[st2$step == "supplement"])
 
-  # A vanished input flags the project as broken.
-  arsbridge:::.workflow_touch_state(project,
-                                    shell_path = file.path(td, "gone.docx"))
+  ## A reviewed supplement marks that step done and changes what the build
+  ## step says about itself.
+  writeLines("{}", paths$supplement)
+  st3 <- arsbridge:::.workflow_status(project)
+  expect_true(st3$done[st3$step == "supplement"])
+  expect_match(st3$detail[st3$step == "build"], "reviewed supplement")
+
+  ## Results become available once a run has left its payload behind.
+  expect_false(st3$available[st3$step == "results"])
+  saveRDS(list(status = "success"), paths$payload)
   st4 <- arsbridge:::.workflow_status(project)
-  expect_false(st4$done[st4$step == "project"])
-  expect_match(st4$detail[st4$step == "project"], "no longer exists")
+  expect_true(st4$available[st4$step == "results"])
+  expect_true(st4$done[st4$step == "results"])
 })
 
 test_that("receive_json takes clean and fenced pastes and rejects garbage", {
@@ -168,8 +176,12 @@ test_that("the build helper produces the reporting event deterministically", {
 
   expect_true(file.exists(paths$ars))
   expect_true(file.exists(paths$report))
-  expect_identical(res$extraction_mode, "deterministic")
-  expect_gt(res$n_tlfs, 0)
+  ## The build now returns the whole payload, and leaves it on disk so the
+  ## Results step can render it after the app has been closed and reopened.
+  expect_true(file.exists(paths$payload))
+  expect_true(res$status %in% c("success", "partial"))
+  expect_true(nrow(res$diagnostics) > 0)
+  expect_identical(res$metadata$shell_path, state$shell_path)
 
   # Hand-off payload points the editor at the built artifacts.
   payload <- arsbridge:::.workflow_handoff_payload(project)
