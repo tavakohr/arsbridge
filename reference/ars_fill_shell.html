@@ -15,7 +15,7 @@ rebuilt, only left alone."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9056</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9057</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -63,7 +63,7 @@ rebuilt, only left alone.</p>
 <span>  <span class="va">ars</span>,</span>
 <span>  <span class="va">ard</span>,</span>
 <span>  <span class="va">output_path</span>,</span>
-<span>  datasets <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  adam_dir <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  strip_annotations <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  keep_pending_placeholders <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  overwrite <span class="op">=</span> <span class="cn">FALSE</span></span>
@@ -91,9 +91,12 @@ parsed list.</p></dd>
 <dd><p>Where to write the filled workbook.</p></dd>
 
 
-<dt id="arg-datasets">datasets<a class="anchor" aria-label="anchor" href="#arg-datasets"></a></dt>
-<dd><p>Unused; accepted so a later listing fill can take the
-subject-level data it expands from.</p></dd>
+<dt id="arg-adam-dir">adam_dir<a class="anchor" aria-label="anchor" href="#arg-adam-dir"></a></dt>
+<dd><p>Directory holding the ADaM datasets (<code>.xpt</code>, <code>.sas7bdat</code>
+or <code>.csv</code>). Required to fill a listing, whose rows are the subject-level
+data itself, and a figure, whose series the shell states as prose rather
+than as an analysis. Tables need only the ARD; leave it <code>NULL</code> and any
+listing or figure sheet is reported instead of filled.</p></dd>
 
 
 <dt id="arg-strip-annotations">strip_annotations<a class="anchor" aria-label="anchor" href="#arg-strip-annotations"></a></dt>

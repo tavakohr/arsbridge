@@ -31,7 +31,7 @@ to its source.
 | **Native ARD execution** | Run ARS JSON directly against `.xpt` or `.csv` datasets using [cards](https://github.com/insightsengineering/cards), with no dataset-loading boilerplate. |
 | **Codelist-decoded categories** | A coded categorical variable (e.g. a numeric `DCSREASN`) is decoded through the ADaM spec’s codelist: the ARD and rendered table show `DEATH`, not `1`, in codelist order, with unobserved terms reported as n = 0. Unannotated coded column axes get their column labels from the codelist too. |
 | **Publication-ready tables** | [`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md) builds a formatted GT table: treatment columns detected, percentages rescaled, row groups labelled, ARS footnotes carried through. |
-| **The filled shell, back in Excel** | For an Excel shell, [`ars_fill_shell()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_shell.md) returns the author’s own workbook with the results in it and the red annotations gone. The layout, labels, merges, fonts and footnotes are never rebuilt — only left alone — and each placeholder’s own `xx.x` decides how its number is formatted. A cell whose result does not exist keeps its placeholder and is reported, because a blank cell in a clinical table reads as a zero. |
+| **The filled shell, back in Excel** | For an Excel shell, [`ars_fill_shell()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_shell.md) returns the author’s own workbook with the results in it and the red annotations gone. Tables, listings and figures: a listing’s one template row expands into a row per record, with the footnote below it moved down; a figure’s series is computed from the prose the shell states it in. The layout, labels, merges, fonts and footnotes are never rebuilt — only left alone — and each placeholder’s own `xx.x` decides how its number is formatted. A cell whose result does not exist keeps its placeholder and is reported, because a blank cell in a clinical table reads as a zero. |
 | **Partial tables, full traceability** | Statistics arsbridge cannot yet compute are reserved as keyed `manual_pending` rows. Each shows a `[‡ manual]` marker in the table until a programmer fills it with a validated script. Nothing is ever an orphan number. |
 
 ------------------------------------------------------------------------
@@ -475,6 +475,7 @@ res <- ars_fill_shell(
   shell_path  = "inputs/shells.xlsx",
   ars         = "outputs/reporting_event.json",
   ard         = ard,
+  adam_dir    = "inputs/ADaM",     # listings and figures need the data
   output_path = "outputs/filled_shells.xlsx"
 )
 
@@ -507,8 +508,26 @@ Three things are deliberate:
 - **`strip_annotations = FALSE`** keeps the red annotations next to the
   numbers, which is useful while reviewing and wrong for a deliverable.
 
-Listings and figures are not filled yet; their sheets are stripped of
-annotations and otherwise left as they are.
+A listing is filled differently from a table, because its shell states
+**one** template row standing for however many rows the data has.
+Filling it inserts rows — and everything below, including a footnote and
+its merge, moves down to make room. The rows written inherit the
+template row’s own fonts and alignment.
+
+A figure sheet has no analyses at all: the shell states the plot as
+prose (`Y axis -> mean of ADVS.AVAL`, `Series (colour) -> ADVS.TRTA`,
+`Filter -> ADVS.PARAMCD='PULSE'`).
+[`ars_fill_shell()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_shell.md)
+computes that series from the datasets and writes it as a data block —
+one row per series and x-value, with `n`, the mean and its standard
+error — where the annotation block was. The numbers go in as numbers,
+not rounded text, because a programmer picks them up to draw the chart.
+The chart object itself stays whatever the author made it; drawing into
+someone else’s workbook is a different job from filling one in.
+
+Both need `adam_dir`, since a listing’s rows *are* the subject-level
+data and a figure’s series is computed from it. Tables need only the
+ARD.
 
 ------------------------------------------------------------------------
 

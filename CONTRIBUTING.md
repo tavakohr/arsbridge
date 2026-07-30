@@ -131,6 +131,34 @@ Two rules hold in the writer, and both are load-bearing:
   An empty cell in a clinical table reads as a zero, and a plausible
   wrong number is the one that survives review.
 
+The three output kinds are filled from three different places, and that
+is the thing to hold in mind when changing any of them:
+
+|  | filled from | shape |
+|----|----|----|
+| table | the ARD, via the cell map | fixed — cells are substituted in place |
+| listing | the ADaM data, via `.listing_data()` | **changes** — one template row becomes N |
+| figure | the ADaM data, via the shell’s prose directives | fixed block at the annotation anchor |
+
+A listing is the awkward one. openxlsx2 has no row-insertion API, so
+`.shift_rows_down()` does it: cell references, per-row records, merged
+ranges and the declared extent all carry row numbers and must move
+together. A file with only some of them updated still opens, so the
+failure is silent — a stale merge swallows a data row, a stale dimension
+makes Excel ignore rows past the old extent. Change it with a test that
+reads the saved file back.
+
+It moves four things and knows it: `.unshiftable_features()` lists what
+it cannot move — conditional formatting, data validation, hyperlinks, an
+autofilter, worksheet tables, row breaks, formulas — and a sheet
+carrying any of them is declined with a FAIL rather than shifted
+wrongly. If you teach the shifter one of those, take it off that list in
+the same change.
+
+Annotations are stripped BEFORE cells are filled, not after: a figure’s
+series is written into the cells its annotation block occupied, so the
+other order erases it.
+
 Two gates apply to any change in shared code:
 
 - **The Word path must stay byte-identical.** Re-run

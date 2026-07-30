@@ -14,7 +14,7 @@ ars_fill_shell(
   ars,
   ard,
   output_path,
-  datasets = NULL,
+  adam_dir = NULL,
   strip_annotations = TRUE,
   keep_pending_placeholders = TRUE,
   overwrite = FALSE
@@ -42,10 +42,13 @@ ars_fill_shell(
 
   Where to write the filled workbook.
 
-- datasets:
+- adam_dir:
 
-  Unused; accepted so a later listing fill can take the subject-level
-  data it expands from.
+  Directory holding the ADaM datasets (`.xpt`, `.sas7bdat` or `.csv`).
+  Required to fill a listing, whose rows are the subject-level data
+  itself, and a figure, whose series the shell states as prose rather
+  than as an analysis. Tables need only the ARD; leave it `NULL` and any
+  listing or figure sheet is reported instead of filled.
 
 - strip_annotations:
 

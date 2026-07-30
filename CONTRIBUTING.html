@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9056</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9057</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -88,7 +88,25 @@
 <strong>Edit the run XML, never rebuild the cell.</strong> Cells are changed through <code>wb$worksheets[[i]]$sheet_data$cc$is</code>, so a run that is kept is never deserialized. Going through <code>wb_add_data()</code> or <code>fmt_txt()</code> instead would drop every run property arsbridge does not model — <code>rFont</code> and <code>sz</code> are on every run of a real shell, and a superscript footnote marker would add <code>vertAlign</code>. See the Mechanism section of <a href="adr/0005-filled-shell-output.html"><code>adr/0005-filled-shell-output.md</code></a>, and re-run <code>tools/xlsx_roundtrip_check.R</code> after any openxlsx2 upgrade — the writer depends on that internal representation.</li>
 <li>
 <strong>Never write a value you are not sure of.</strong> A cell whose result is missing, ambiguous, or reserved keeps its placeholder and is reported. An empty cell in a clinical table reads as a zero, and a plausible wrong number is the one that survives review.</li>
-</ul><p>Two gates apply to any change in shared code:</p>
+</ul><p>The three output kinds are filled from three different places, and that is the thing to hold in mind when changing any of them:</p>
+<table class="table"><colgroup><col width="33%"><col width="33%"><col width="33%"></colgroup><thead><tr><th></th>
+<th>filled from</th>
+<th>shape</th>
+</tr></thead><tbody><tr><td>table</td>
+<td>the ARD, via the cell map</td>
+<td>fixed — cells are substituted in place</td>
+</tr><tr><td>listing</td>
+<td>the ADaM data, via <code>.listing_data()</code>
+</td>
+<td>
+<strong>changes</strong> — one template row becomes N</td>
+</tr><tr><td>figure</td>
+<td>the ADaM data, via the shell’s prose directives</td>
+<td>fixed block at the annotation anchor</td>
+</tr></tbody></table><p>A listing is the awkward one. openxlsx2 has no row-insertion API, so <code>.shift_rows_down()</code> does it: cell references, per-row records, merged ranges and the declared extent all carry row numbers and must move together. A file with only some of them updated still opens, so the failure is silent — a stale merge swallows a data row, a stale dimension makes Excel ignore rows past the old extent. Change it with a test that reads the saved file back.</p>
+<p>It moves four things and knows it: <code>.unshiftable_features()</code> lists what it cannot move — conditional formatting, data validation, hyperlinks, an autofilter, worksheet tables, row breaks, formulas — and a sheet carrying any of them is declined with a FAIL rather than shifted wrongly. If you teach the shifter one of those, take it off that list in the same change.</p>
+<p>Annotations are stripped BEFORE cells are filled, not after: a figure’s series is written into the cells its annotation block occupied, so the other order erases it.</p>
+<p>Two gates apply to any change in shared code:</p>
 <ul><li>
 <strong>The Word path must stay byte-identical.</strong> Re-run <code><a href="reference/parse_decision_digest.html">parse_decision_digest()</a></code> over the <code>.docx</code> fixtures and <code><a href="reference/spec_to_ars.html">spec_to_ars()</a></code> over the shell/spec pairs and require identical output (bar the version stamp and timestamp).</li>
 <li>
