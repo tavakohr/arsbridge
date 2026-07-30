@@ -109,6 +109,8 @@ access” article.
   spec_to_ars()
 - [`write_supplement_draft()`](https://tavakohr.github.io/arsbridge/reference/write_supplement_draft.md)
   : Write a draft supplement from a parsed shell
+- [`parse_decision_digest()`](https://tavakohr.github.io/arsbridge/reference/parse_decision_digest.md)
+  : Write a privacy-safe digest of the parser's decisions for a shell
 
 ## Examples
 

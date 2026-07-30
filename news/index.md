@@ -2,6 +2,20 @@
 
 ## arsbridge (development version)
 
+- **New
+  [`parse_decision_digest()`](https://tavakohr.github.io/arsbridge/reference/parse_decision_digest.md):
+  privacy-safe record of what the parser decided.** The counterpart of
+  `tools/shell_structure_digest.R`: the same A/a/9 silhouette rules
+  applied to the parser’s conclusions – header rows flagged vs inferred,
+  physical grid width vs flattened column-label count, column labels and
+  stub-row labels as silhouettes, column-tree shape, and per-severity
+  diagnostic counts. Diffing the two JSONs on a locked machine localizes
+  where a parse diverged from the document (e.g. column headers that
+  came out placeholder-shaped) without any study text leaving it.
+  `.populate_table()` now records its header decision
+  (`header_rows_flagged` / `header_rows_inferred` / `n_header_rows` /
+  `n_physical_cols`) on the section to support this.
+
 - **A cell’s paragraph list is now the lossless source both consumers
   build from.** New `.cell_paragraphs()` keeps a multi-paragraph cell’s
   paragraphs intact (normalized, trimmed, order preserved), and
