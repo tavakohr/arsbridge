@@ -45,7 +45,8 @@ No manual transcription. No orphan numbers. Every value auditable back to its so
 
 ```mermaid
 flowchart TD
-    SHELL(["Annotated Word Shell\n(.docx)"])
+    SHELL_D(["Annotated shell — Word\n(.docx)"])
+    SHELL_X(["Annotated shell — Excel\n(.xlsx, one sheet per output)"])
     SPEC(["ADaM Spec\n(define.xml or .xlsx)"])
     ADAM(["ADaM Datasets\n(.xpt or .csv)"])
 
@@ -79,7 +80,8 @@ flowchart TD
         FS["ars_fill_shell()\nthe Excel shell, filled\n(.xlsx shells only)"]
     end
 
-    SHELL --> STEP1
+    SHELL_D --> STEP1
+    SHELL_X --> STEP1
     SPEC --> G
     G -->|"pass"| ARS["ARS JSON\n(CDISC v1.0)"]
     G -->|"reject"| BLK["Blocker log\n(named and fixable)"]
@@ -93,7 +95,7 @@ flowchart TD
     E --> STEP5
     MP -->|"fill + validate"| STEP5
     T --> TLF["Clinical table\n(GT · Word-ready)"]
-    SHELL -.->|"the same workbook"| FS
+    SHELL_X -.->|"the same workbook"| FS
     FS --> XL["Filled shell\n(.xlsx · annotations removed)"]
 ```
 
@@ -560,7 +562,7 @@ When arsbridge finds no heading — or finds a number but no title — it says s
 
 ## Annotation format reference
 
-The lead programmer marks up the Word shell before handing it off. The most common conventions:
+The lead programmer marks up the shell before handing it off — a Word `.docx`, or an Excel `.xlsx` where the same annotations go in the cell alongside the label. The most common conventions:
 
 | What to annotate | Format | Example |
 |---|---|---|
