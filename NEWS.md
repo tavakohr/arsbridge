@@ -1,161 +1,66 @@
 # arsbridge (development version)
 
-* **New `ars_fill_shell()`: the Excel shell you started from, with the numbers
-  in it.** Takes the shell, the ARS built from it and the ARD, and returns the
-  author's own workbook with the results written into their placeholders and
-  the red annotations removed. The layout, row labels, column headers, merges,
-  fonts, column widths and footnotes are never rebuilt — only left alone —
-  because none of them were ever lost. Each placeholder's own `xx.x (xx.xx)`
-  decides how its number is formatted, punctuation and all.
+* **Excel shells, end to end: `spec_to_ars()` reads them, and
+  `ars_fill_shell()` writes the results back into them.** A study can now be
+  authored as a `.xlsx` with one worksheet per output, annotated in-cell in
+  red, and the rest of the pipeline behaves exactly as it does for the `.docx`
+  you have always passed — `spec_to_ars()`, `parse_decision_digest()`,
+  `write_supplement_draft()` and `ars_workflow()` all dispatch on the file
+  extension. Word support is unchanged and permanent: every Word fixture was
+  checked byte-for-byte at each step of this work.
 
-  Cells are edited as run XML rather than through openxlsx2's data model. That
-  is not incidental: a run in a real shell carries `rFont` and `sz`, which
-  arsbridge's run model does not represent because it exists to *detect*
-  annotations, not reproduce formatting. Rebuilding a stripped cell would have
-  quietly reset Arial 10 to the workbook default on exactly the cells being
-  edited. A run that is kept is now never deserialized, so it cannot be
-  degraded. `tools/xlsx_roundtrip_check.R` is the standing proof, and should
-  be re-run after any openxlsx2 upgrade.
+  The reason to author in Excel is the new deliverable. `ars_fill_shell()`
+  takes the shell, the ARS built from it and the ARD, and returns the author's
+  own workbook with the numbers in their placeholders and the annotations
+  gone. Nothing is laid out or re-created: the layout, row labels, column
+  headers, merges, fonts, column widths and footnotes come through untouched
+  because none of them were ever lost, and each placeholder's own
+  `xx.x (xx.xx)` decides how its number is formatted, punctuation and all.
+
+  Which result belongs in which cell is decided when the ARS is built, not
+  when the workbook is written — each output carries a `_meta$shell_fill` cell
+  map, recorded at the one moment the shell's geometry and the analyses are
+  both in hand. `_meta` is arsbridge's own namespace, so conformance is
+  unaffected and a consumer that ignores it sees what it always saw.
 
   Nothing uncertain is written. A cell keeps its placeholder and is reported
   when the ARD has no result for it, when the result is reserved for a manual
   derivation (ADR 0002), or when the row is a template standing for a repeated
   block such as `<System Organ Class>` — writing one system organ class's
-  count there would hide every other one behind a real-looking number. The
-  return value carries a per-cell diagnostic table saying which and why.
-  `keep_pending_placeholders = FALSE` blanks them instead, and
-  `strip_annotations = FALSE` keeps the annotations beside the numbers for
-  review. Listings and figures are not filled yet.
+  count there would hide every other one behind a real-looking number. An
+  empty cell in a clinical table reads as a zero, which is why the placeholder
+  stays; `keep_pending_placeholders = FALSE` blanks them instead, and
+  `strip_annotations = FALSE` keeps the annotations beside the numbers while
+  reviewing. Listings and figures are not filled yet.
 
-* **A shell's decoded row labels are matched to the data's codes**, so a
-  demographics table whose rows read "Female" and "Male" fills from an
-  `ADSL.SEX` holding `F` and `M`. The pairing is refused rather than guessed
-  unless each label names exactly one data value and the result is one-to-one
-  across the whole block; every pairing that is used is reported as an INFO
-  diagnostic.
+  Two disagreements this surfaced that nothing compared before. A placeholder
+  asking for more statistics than its analysis produces — a row showing
+  `xx (xx.x)` typed as a plain subject count — is now a WARN naming the row.
+  And a shell's decoded row labels are matched to the data's codes, so rows
+  reading "Female" and "Male" fill from an `ADSL.SEX` holding `F` and `M`;
+  that pairing is refused rather than guessed unless each label names exactly
+  one value and the whole block is one-to-one, and every pairing used is
+  reported as an INFO diagnostic.
+
+  The two readers are held together by a test rather than by intention:
+  `test-parity_docx_xlsx.R` parses the same study authored both ways and
+  requires the identical-semantics fields to match and the same ARS to come
+  out. Design records: `adr/0004-xlsx-shell-input.md` (why both formats are
+  permanent, and the three classes every section field falls in) and
+  `adr/0005-filled-shell-output.md` (the cell map, and why the writer edits
+  run XML instead of going through openxlsx2's data model — a run in a real
+  shell carries `rFont` and `sz`, which rebuilding would silently reset).
+  New tooling: `tools/parity_check_shell.R` compares your own Word/Excel pair
+  outside CI, `tools/shell_structure_digest_xlsx.R` is the privacy-safe
+  geometry digest for a locked machine, and `tools/xlsx_roundtrip_check.R`
+  re-verifies the writer's assumptions after an openxlsx2 upgrade.
 
 * **Fixed: `ars_to_ard()` failed outright on a study mixing a declared
   multi-grouping column axis with ordinary by-treatment analyses.** The two
   executor paths disagreed on whether the `*_level` columns are list columns,
   and binding them aborted with "Can't combine `<list>` and `<character>`",
-  losing the whole ARD for a perfectly well-formed study. Columns are now
+  losing the entire ARD for a perfectly well-formed study. Columns are now
   aligned to the `{cards}` convention before binding.
-
-* Percentage rescaling is now one function shared by the fill writer and the
-  rendering path, so a filled shell and a rendered table cannot disagree about
-  whether a cell reads `25.0` or `0.3`.
-
-* **The ARS now records which worksheet cell each result belongs in.** For an
-  Excel shell, every output carries `_meta$shell_fill`: a cell map binding
-  each placeholder to an analysis, a column-axis position, and the statistics
-  its tokens stand for -- with the decimals taken from the placeholder itself.
-  It is built at build time because that is the only moment the shell's
-  geometry and the analyses exist together; the writer that consumes it
-  follows. `adr/0005-filled-shell-output.md` records the design, including the
-  three row shapes that select from the ARD differently (a row with its own
-  analysis, a statistic line under a continuous parent, a level under a
-  categorical one).
-
-  Two consequences worth knowing. A pending cell now carries the *reason* it
-  is unbound, so "no analysis covers this row" is distinguishable from "this
-  column is not on the column axis". And a placeholder that asks for more
-  statistics than its analysis produces -- a row showing `xx (xx.x)` typed as
-  a plain count -- is reported as a WARN naming the row; nothing compared the
-  two before. `_meta` is arsbridge's own namespace, so conformance is
-  unaffected and Word output is byte-identical.
-
-* **`spec_to_ars()` now accepts an Excel shell.** Pass a `.xlsx` with one
-  worksheet per output, or the `.docx` you have always passed; a new internal
-  `parse_shell()` dispatches on the extension and everything downstream is
-  unchanged. The same lift applies to `parse_decision_digest()`,
-  `write_supplement_draft()`, and `ars_workflow()`. Because both inputs can
-  now be `.xlsx`, passing one file as both the shell and the ADaM spec is
-  refused with a clear message instead of parsing the spec as a shell.
-  Diagnostics now name the shell as "annotated TLF shell (.docx or .xlsx)"
-  rather than pointing an Excel user at a Word file.
-
-* **The two readers are held in lockstep by a test, not by intention.**
-  `test-parity_docx_xlsx.R` parses the same three outputs authored as Word and
-  as Excel and requires every identical-semantics section field to match --
-  and requires the two to build the same ARS reporting event end to end. The
-  differences that are legitimately allowed are pinned by their own
-  assertions, so they stay known rather than becoming folklore. For your own
-  sponsor-format pair, `tools/parity_check_shell.R` runs the same comparison
-  outside CI and exits non-zero on an unexpected difference.
-
-* **New `tools/shell_structure_digest_xlsx.R`**, the Excel twin of the
-  privacy-safe geometry digest: `xml2` + `jsonlite` only, so it runs where
-  arsbridge is not installed, and it emits nothing but A/a/9 silhouettes.
-  `tools/LOCKED_MACHINE_DEBUGGING.md` gains the Excel reading of each
-  diagnostic step, and a new first step for when the study exists in both
-  formats -- the fastest way to localize a divergence.
-
-* **`parse_shell_xlsx()`: an annotated Excel workbook now parses to the same
-  section objects a Word shell does.** One worksheet per output, the
-  workbook's own legend skipped; tables, listings and figures all supported.
-  Everything about annotations -- the grammar, the detection layers, the
-  column-group resolution, the row binding, the section finalization -- is the
-  shared code in `parse_shell_core.R`, so the two readers cannot disagree
-  about what a shell says. The section object's fields are now formally
-  classed in `adr/0004-xlsx-shell-input.md`: identical-semantics fields (which
-  a parity check compares between the two readers), format-specific
-  whitelisted fields, and additive Excel-only fields that no existing consumer
-  may require. A merged column header over conditioned sub-columns builds a
-  nested column tree through `column_tree.R` unchanged. Still not reachable
-  from `spec_to_ars()` -- the input gate lifts next.
-
-* **New sheet-layout layer (`R/xlsx_grid.R`), the second half of reading an
-  Excel shell.** Decides what the cells of a worksheet mean: which sheet is
-  an output (from its name, falling back to row 1) and which is the workbook's
-  own legend, which rows are the banner (number / title / population /
-  column headers), what each body row is (data, group parent, footnote,
-  programmer instruction, spacer), which cells are placeholders, and what a
-  figure sheet's `X axis -> ADVS.AVISITN` prose declares. The header row is
-  emitted as the same header-grid records the Word reader produces, so
-  `column_tree.R` builds an Excel column hierarchy with no change at all.
-  Two decisions worth knowing: a placeholder's own x's *are* its decimal
-  specification (`xx.x` means one decimal), so a filled shell needs no
-  separate format declaration; and a cell whose text is not cleanly a
-  placeholder is reported as literal, which means the fill writer will leave
-  it exactly as authored. The rows 1-4 convention is the first guess, never
-  the only one -- each part is otherwise located by what it is, and a
-  deviation becomes a diagnostic rather than a failure.
-
-* `.tlf_identity()` in `parse_shell_core.R` now derives an output's
-  `tlf_number` and `tlf_type` from a heading match, replacing the same
-  derivation written out twice in the Word reader. A reader that finds its
-  heading somewhere new -- a paragraph, a page header, an Excel sheet name --
-  names the output identically.
-
-* **New SpreadsheetML cell reader (`R/xlsx_cells.R`), the first half of
-  reading an Excel shell.** `xlsx_read_shell_cells()` returns every sheet's
-  populated cells with their per-run formatting metadata -- the same run list
-  the docx reader produces -- so the shared detection layers in
-  `parse_shell_core.R` read an Excel cell with no format branch at all. It
-  reads the XML directly because every high-level Excel reader flattens a
-  cell's formatting runs into one string, and in these shells the red run
-  *is* the annotation. Both string conventions are handled (inline strings,
-  as openpyxl and openxlsx2 write them; interned `sharedStrings.xml`, as
-  Excel writes them back after a review), as are both spellings of a boolean
-  run property, both relationship Target forms, merged ranges, sparse rows,
-  and numeric cells. A cell coloured as a whole is presented as a single
-  styled run, so whole-cell and in-cell annotation reach detection through
-  one interface. Nothing yet consumes this -- no user-visible behaviour
-  changes, and `.docx` remains the only accepted shell input.
-
-* **Shell parsing is split into a format-agnostic core and an OOXML
-  reader.** The annotation grammar, the bracket tokenizer, the detection
-  layers, the heading grammar, and section assembly (`.new_section()`,
-  `bind_annotations()`, the column-group resolvers, `.finalize_section()`)
-  move verbatim from `R/parse_shell_docx.R` into a new
-  `R/parse_shell_core.R`; `parse_shell_docx.R` keeps only the OOXML body
-  walker, the grid readers, and the run/cell readers. Nothing about parsing
-  behaviour changes -- this is code motion that gives a second shell reader
-  (Excel, next) one shared implementation to plug into instead of a fork.
-  The two seams a reader must honour -- the per-run metadata list and the
-  header-grid record -- are documented at the top of the core file.
-  `.normalize_docx_text()` is renamed `.normalize_shell_text()`, as it
-  normalizes shell text of either format.
 
 * **New `parse_decision_digest()`: privacy-safe record of what the parser
   decided.** The counterpart of `tools/shell_structure_digest.R`: the same
