@@ -11,7 +11,8 @@
 #' Results Standard (ARS) v1.0 ARM-TS JSON file consumable by
 #' \code{siera::readARS()}.
 #'
-#' @param shell_path     Path to annotated TLF shells `.docx`.
+#' @param shell_path     Path to the annotated TLF shells document: a Word
+#'   `.docx`, or an Excel `.xlsx` with one worksheet per output.
 #' @param sap_path       Optional path to the Statistical Analysis Plan `.docx`.
 #'   When supplied, its prose is matched per TLF and carried into each analysis
 #'   as `sapDescription`, becoming the human-readable comment above the emitted
@@ -263,8 +264,22 @@ spec_to_ars <- function(shell_path,
 
   .require_file(shell_path, "shell_path", INPUT_SHELL)
   .require_file(adam_spec_path, "adam_spec_path", INPUT_SPEC)
-  if (!grepl("\\.docx?$", shell_path, ignore.case = TRUE)) {
-    cli::cli_abort("Shell file must have a {.val .docx} extension: {.path {shell_path}}")
+  if (!.is_shell_path(shell_path)) {
+    cli::cli_abort(c(
+      "Shell file must be {.val .docx} or {.val .xlsx}: {.path {shell_path}}",
+      "i" = "A Word shell is read paragraph by paragraph; an Excel shell one worksheet per output."
+    ))
+  }
+  ## Both inputs can now be .xlsx, so the extension alone no longer tells them
+  ## apart -- and pointing both at the same file parses the spec as a shell
+  ## and reports nothing useful about why the run is empty.
+  if (identical(normalizePath(shell_path, mustWork = FALSE),
+                normalizePath(adam_spec_path, mustWork = FALSE))) {
+    cli::cli_abort(c(
+      "{.arg shell_path} and {.arg adam_spec_path} are the same file.",
+      "x" = "Got {.path {shell_path}} for both.",
+      "i" = "The shell is the annotated TLF document; the spec is the ADaM variable specification."
+    ))
   }
   if (!grepl("\\.(xml|xlsx?)$", adam_spec_path, ignore.case = TRUE)) {
     cli::cli_abort(c(
@@ -339,9 +354,9 @@ spec_to_ars <- function(shell_path,
   spec <- parse_adam_spec(adam_spec_path, column_aliases = spec_column_aliases)
 
   if (verbose) cli::cli_alert_info("Parsing annotated shell {.path {basename(shell_path)}}...")
-  sections <- parse_shell_docx(shell_path, spec_lookup = spec$lookup,
-                               heading_patterns = heading_patterns,
-                               progress = verbose)
+  sections <- parse_shell(shell_path, spec_lookup = spec$lookup,
+                          heading_patterns = heading_patterns,
+                          progress = verbose)
   if (length(sections) == 0) {
     ## The parser has already said WHY each heading-shaped line was
     ## rejected; repeat those reasons in the abort so they survive into

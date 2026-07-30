@@ -57,13 +57,25 @@
   study_id       <- trimws(study_id %||% "")
   if (!nzchar(study_id)) study_id <- "STUDY-001"
 
-  if (!grepl("\\.docx$", shell_path, ignore.case = TRUE) ||
-      !file.exists(shell_path)) {
-    cli::cli_abort("The shell must be an existing {.file .docx} file (got {.path {shell_path}}).")
+  if (!.is_shell_path(shell_path) || !file.exists(shell_path)) {
+    cli::cli_abort(
+      "The shell must be an existing {.file .docx} or {.file .xlsx} file (got {.path {shell_path}}).")
   }
   if (!grepl("\\.(xlsx|xml)$", adam_spec_path, ignore.case = TRUE) ||
       !file.exists(adam_spec_path)) {
     cli::cli_abort("The ADaM spec must be an existing {.file .xlsx} or {.file .xml} file (got {.path {adam_spec_path}}).")
+  }
+  ## An Excel shell and an Excel spec have the same extension, so the two
+  ## inputs can no longer be told apart by their names alone. One path given
+  ## for both would parse the spec as a shell and produce an empty project
+  ## with no useful explanation.
+  if (identical(normalizePath(shell_path, mustWork = FALSE),
+                normalizePath(adam_spec_path, mustWork = FALSE))) {
+    cli::cli_abort(c(
+      "The shell and the ADaM spec are the same file.",
+      "x" = "Got {.path {shell_path}} for both.",
+      "i" = "The shell is the annotated TLF document; the spec lists the ADaM variables."
+    ))
   }
 
   if (!dir.exists(project_dir)) {

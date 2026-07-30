@@ -1,5 +1,31 @@
 # arsbridge (development version)
 
+* **`spec_to_ars()` now accepts an Excel shell.** Pass a `.xlsx` with one
+  worksheet per output, or the `.docx` you have always passed; a new internal
+  `parse_shell()` dispatches on the extension and everything downstream is
+  unchanged. The same lift applies to `parse_decision_digest()`,
+  `write_supplement_draft()`, and `ars_workflow()`. Because both inputs can
+  now be `.xlsx`, passing one file as both the shell and the ADaM spec is
+  refused with a clear message instead of parsing the spec as a shell.
+  Diagnostics now name the shell as "annotated TLF shell (.docx or .xlsx)"
+  rather than pointing an Excel user at a Word file.
+
+* **The two readers are held in lockstep by a test, not by intention.**
+  `test-parity_docx_xlsx.R` parses the same three outputs authored as Word and
+  as Excel and requires every identical-semantics section field to match --
+  and requires the two to build the same ARS reporting event end to end. The
+  differences that are legitimately allowed are pinned by their own
+  assertions, so they stay known rather than becoming folklore. For your own
+  sponsor-format pair, `tools/parity_check_shell.R` runs the same comparison
+  outside CI and exits non-zero on an unexpected difference.
+
+* **New `tools/shell_structure_digest_xlsx.R`**, the Excel twin of the
+  privacy-safe geometry digest: `xml2` + `jsonlite` only, so it runs where
+  arsbridge is not installed, and it emits nothing but A/a/9 silhouettes.
+  `tools/LOCKED_MACHINE_DEBUGGING.md` gains the Excel reading of each
+  diagnostic step, and a new first step for when the study exists in both
+  formats -- the fastest way to localize a divergence.
+
 * **`parse_shell_xlsx()`: an annotated Excel workbook now parses to the same
   section objects a Word shell does.** One worksheet per output, the
   workbook's own legend skipped; tables, listings and figures all supported.

@@ -22,9 +22,9 @@ knitr::opts_chunk$set(
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 <!-- badges: end -->
 
-> **From annotated Word shell to publication-ready clinical table, in one reproducible pipeline.**
+> **From annotated TLF shell to publication-ready clinical table, in one reproducible pipeline.**
 
-Clinical programmers spend hours translating a lead programmer's annotated TLF shell into R code, then reformatting output to match the shell layout. `{arsbridge}` automates both halves. It reads the annotations directly from the Word document, checks every variable against your ADaM spec, generates a CDISC Analysis Results Standard (ARS) JSON, executes it against real ADaM datasets with `{cards}`, and renders a formatted GT table ready to ship.
+Clinical programmers spend hours translating a lead programmer's annotated TLF shell into R code, then reformatting output to match the shell layout. `{arsbridge}` automates both halves. It reads the annotations directly from the shell -- a Word `.docx`, or an Excel `.xlsx` with one worksheet per output -- checks every variable against your ADaM spec, generates a CDISC Analysis Results Standard (ARS) JSON, executes it against real ADaM datasets with `{cards}`, and renders a formatted GT table ready to ship.
 
 No manual transcription. No orphan numbers. Every value auditable back to its source.
 
@@ -34,6 +34,7 @@ No manual transcription. No orphan numbers. Every value auditable back to its so
 
 | Capability | What it means for you |
 |---|---|
+| **Word or Excel shells** | Point `spec_to_ars()` at a `.docx` or an `.xlsx` and the rest of the pipeline is identical. An Excel shell is one worksheet per output, annotated in-cell in red; a Word shell is annotated the way it always was. Both readers share one annotation grammar, and a parity check enforces that the same study read either way produces the same ARS. |
 | **Three ways to read the shell** | A deterministic regex baseline always runs; you choose how the gaps it cannot resolve get filled — **regex only** (no key), a **Copilot supplement** (no API call), or a **live LLM** (opt-in with a key). Same spec-gated output from all three. |
 | **Spec-gated validation** | Every variable proposed — by the regex, a supplement, or the LLM — is checked against your ADaM spec. A variable missing from the spec is rejected and logged, never silently invented. |
 | **Human-in-the-loop review** | `edit_ars()` opens the generated ARS in a structured Shiny editor: the shell's outputs and lines with validation findings badged on, spec-constrained dropdowns, add/remove/reorder for missed lines, undo and crash recovery. Every save is backed up, logged to a QC sidecar, and checked against the official ARS v1.0 schema. |
@@ -250,7 +251,16 @@ spec_to_ars(..., model = "glm-4.6")
 
 ### Step 2: Extract ARS JSON from the annotated shell
 
-`spec_to_ars()` is the main entry point. Point it at your annotated Word shell and ADaM spec; it writes a CDISC ARS JSON and an Excel validation report.
+`spec_to_ars()` is the main entry point. Point it at your annotated shell and ADaM spec; it writes a CDISC ARS JSON and an Excel validation report.
+
+The shell can be **Word or Excel** -- everything downstream is the same either way:
+
+| Shell format | How each output is found | How a row is annotated |
+|---|---|---|
+| `.docx` | a heading paragraph (`Table 14.1.1`) followed by its table | a red run in the stub cell, or a `Label -> DATASET.VAR` line below the table |
+| `.xlsx` | one worksheet per output, named for it | a red run in the stub cell; the column axis and source dataset in the header cell (`[columns -> ADSL.TRT01A; source ADSL]`) |
+
+An Excel shell needs no `heading_patterns`: the worksheet name is the output number.
 
 ```r
 res <- spec_to_ars(
@@ -266,7 +276,7 @@ res <- spec_to_ars(
 
 | Argument | What to pass |
 |---|---|
-| `shell_path` | The annotated `.docx` file from the lead programmer |
+| `shell_path` | The annotated shell from the lead programmer: `.docx` or `.xlsx` |
 | `adam_spec_path` | `define.xml` (preferred) or an ADaM spec `.xlsx` / `.xls` |
 | `output_path` | Where to save the CDISC ARS JSON |
 | `report_path` | Where to save the Excel validation workbook |
@@ -387,13 +397,13 @@ Every clinical study annotates its TLF shells differently. The ADaM variable for
 
 Two things are the same no matter how you run arsbridge:
 
-- **A deterministic regex baseline** (`parse_shell_docx()`) always runs — a four-layer detector over every stub cell and listing header (colour `#C00000` runs, bold/italic/underline, plain-text `DATASET.VARIABLE`, bracketed `[DATASET.VAR WHERE ...]`), plus flexible TLF-heading recognition: a bare `Table 14.1.1`, a colon title `Table 14.1.1: Title`, and one-line headings that also carry the population, an inline annotation, and a `[PROGRAMMING DATASETS USED: ...]` suffix (values single-, double-, or unquoted-numeric). No API call, no key. A sponsor style the built-ins miss is handled by `spec_to_ars(heading_patterns = ...)`.
+- **A deterministic regex baseline** (`parse_shell_docx()` for Word, `parse_shell_xlsx()` for Excel — one shared annotation grammar behind both) always runs — a four-layer detector over every stub cell and listing header (colour `#C00000` runs, bold/italic/underline, plain-text `DATASET.VARIABLE`, bracketed `[DATASET.VAR WHERE ...]`), plus flexible TLF-heading recognition: a bare `Table 14.1.1`, a colon title `Table 14.1.1: Title`, and one-line headings that also carry the population, an inline annotation, and a `[PROGRAMMING DATASETS USED: ...]` suffix (values single-, double-, or unquoted-numeric). No API call, no key. A sponsor style the built-ins miss is handled by `spec_to_ars(heading_patterns = ...)`.
 - **A hard spec gate.** Every `DATASET.VARIABLE` — whoever proposed it — must exist in your ADaM spec, or it is dropped, never shipped, and logged as a named blocker. The spec is the ground-truth oracle.
 
 What differs is **how the rows the regex could not resolve get filled** — and that is the three approaches:
 
 ```
-                 annotated shell (.docx)
+           annotated shell (.docx or .xlsx)
                           |
               regex baseline  (always runs)
                           |

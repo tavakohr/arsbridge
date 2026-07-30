@@ -22,8 +22,8 @@
 #' TLF shell to a reviewed CDISC ARS reporting event:
 #'
 #' 1. **Project setup** -- pick a project folder and name the annotated shell
-#'    (`.docx`), the ADaM spec (`.xlsx`/`.xml`), and a study id. The folder
-#'    gets a fixed layout (`copilot/`, `ars/`) and a
+#'    (`.docx` or `.xlsx`), the ADaM spec (`.xlsx`/`.xml`), and a study id. The
+#'    folder gets a fixed layout (`copilot/`, `ars/`) and a
 #'    small `arsbridge_project.json` state file.
 #' 2. **Instruction files** -- writes the two-phase Copilot instructions and
 #'    the supplement JSON schema into `copilot/` (see
@@ -169,7 +169,7 @@ ars_workflow <- function(project_dir = NULL) {
         shiny::uiOutput("badge_project"),
         shiny::textInput("project_dir", "Project folder",
                          value = project_dir %||% "", width = "100%"),
-        shiny::textInput("shell_path", "Annotated TLF shell (.docx)",
+        shiny::textInput("shell_path", "Annotated TLF shell (.docx or .xlsx)",
                          value = initial_state$shell_path %||% "",
                          width = "100%"),
         shiny::textInput("spec_path", "ADaM specification (.xlsx / .xml)",

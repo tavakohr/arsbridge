@@ -11,7 +11,7 @@ parse_decision_digest(
 )
 }
 \arguments{
-\item{shell_path}{Path to the annotated TLF shell \code{.docx}.}
+\item{shell_path}{Path to the annotated TLF shell (\code{.docx} or \code{.xlsx}).}
 
 \item{out_json}{Where to write the digest JSON.}
 

@@ -30,7 +30,7 @@
 #' listed in the entry's `provenance$reviewItems` so the reviewer sees the
 #' full roster of open questions per TLF.
 #'
-#' @param shell_path Path to the annotated TLF shell `.docx`.
+#' @param shell_path Path to the annotated TLF shell (`.docx` or `.xlsx`).
 #' @param output_path Where to write the draft JSON.
 #' @param adam_spec_path Optional path to the ADaM specification workbook.
 #'   When given, a draft analysis whose variable is not in the spec is
@@ -50,8 +50,8 @@ write_supplement_draft <- function(shell_path,
     spec_lookup <- parse_adam_spec(adam_spec_path)$lookup
   }
 
-  sections <- parse_shell_docx(shell_path, spec_lookup = spec_lookup,
-                               heading_patterns = heading_patterns)
+  sections <- parse_shell(shell_path, spec_lookup = spec_lookup,
+                          heading_patterns = heading_patterns)
   if (length(sections) == 0) {
     cli::cli_abort("No TLF sections parsed from {.path {shell_path}} -- nothing to draft.")
   }

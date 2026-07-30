@@ -37,7 +37,7 @@
 #' cannot. Diff it against the raw-geometry digest from
 #' `tools/shell_structure_digest.R` to localize a parsing divergence.
 #'
-#' @param shell_path Path to the annotated TLF shell `.docx`.
+#' @param shell_path Path to the annotated TLF shell (`.docx` or `.xlsx`).
 #' @param out_json Where to write the digest JSON.
 #' @param heading_patterns Optional custom heading patterns, as understood
 #'   by the shell parser.
@@ -49,7 +49,7 @@ parse_decision_digest <- function(shell_path,
                                   heading_patterns = NULL) {
   diag_reset()
   sections <- suppressMessages(suppressWarnings(
-    parse_shell_docx(shell_path, heading_patterns = heading_patterns)))
+    parse_shell(shell_path, heading_patterns = heading_patterns)))
   d <- diag_records()
 
   tlfs <- lapply(sections, .section_decision_digest)

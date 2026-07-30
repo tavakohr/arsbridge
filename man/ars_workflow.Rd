@@ -20,8 +20,8 @@ TLF shell to a reviewed CDISC ARS reporting event:
 \details{
 \enumerate{
 \item \strong{Project setup} -- pick a project folder and name the annotated shell
-(\code{.docx}), the ADaM spec (\code{.xlsx}/\code{.xml}), and a study id. The folder
-gets a fixed layout (\verb{copilot/}, \verb{ars/}) and a
+(\code{.docx} or \code{.xlsx}), the ADaM spec (\code{.xlsx}/\code{.xml}), and a study id. The
+folder gets a fixed layout (\verb{copilot/}, \verb{ars/}) and a
 small \code{arsbridge_project.json} state file.
 \item \strong{Instruction files} -- writes the two-phase Copilot instructions and
 the supplement JSON schema into \verb{copilot/} (see

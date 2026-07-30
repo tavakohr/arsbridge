@@ -87,10 +87,20 @@ exactly one half:
   bug), format-specific and whitelisted, or additive Excel-only — and nothing
   outside the fill writer may require the additive ones.
 
-Both readers must stay behaviour-identical on Word input. Every change to
-shared code is checked by re-running `parse_decision_digest()` over the `.docx`
-fixtures and `spec_to_ars()` over the shell/spec pairs and requiring
-byte-identical output; if you touch `parse_shell_core.R`, do the same.
+Nothing calls a reader directly: [`R/parse_shell.R`](R/parse_shell.R)
+dispatches on the file extension, and adding a format is a change there plus a
+new reader.
+
+Two gates apply to any change in shared code:
+
+* **The Word path must stay byte-identical.** Re-run `parse_decision_digest()`
+  over the `.docx` fixtures and `spec_to_ars()` over the shell/spec pairs and
+  require identical output (bar the version stamp and timestamp).
+* **The two readers must stay in lockstep.** `test-parity_docx_xlsx.R` is the
+  net; run `tools/parity_check_shell.R` against a real pair as well if you
+  have one. When parity fails, the answer is almost never to relax the test —
+  it is either a bug in the reader you changed, or a difference that belongs
+  in the class-2 whitelist *with a written reason*.
 
 The two halves meet at two seams, documented at the top of the core file: the
 **per-run metadata list** (`text`, `raw_text`, `color_hex`, `highlight`,

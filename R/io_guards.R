@@ -15,7 +15,7 @@
 ## Plain-English names for the four input documents arsbridge consumes. Used
 ## as the `input` field of diagnostics and inside abort messages so the user
 ## always knows which file to open.
-INPUT_SHELL <- "annotated shell (.docx)"
+INPUT_SHELL <- "annotated TLF shell (.docx or .xlsx)"
 INPUT_SPEC  <- "ADaM spec (.xlsx/.xml)"
 INPUT_DATA  <- "ADaM dataset"
 INPUT_ARS   <- "ARS JSON"

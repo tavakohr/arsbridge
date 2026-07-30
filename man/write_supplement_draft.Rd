@@ -12,7 +12,7 @@ write_supplement_draft(
 )
 }
 \arguments{
-\item{shell_path}{Path to the annotated TLF shell \code{.docx}.}
+\item{shell_path}{Path to the annotated TLF shell (\code{.docx} or \code{.xlsx}).}
 
 \item{output_path}{Where to write the draft JSON.}
 

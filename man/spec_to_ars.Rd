@@ -31,7 +31,8 @@ spec_to_ars(
 )
 }
 \arguments{
-\item{shell_path}{Path to annotated TLF shells \code{.docx}.}
+\item{shell_path}{Path to the annotated TLF shells document: a Word
+\code{.docx}, or an Excel \code{.xlsx} with one worksheet per output.}
 
 \item{adam_spec_path}{Path to the ADaM specification. Accepts either:
 \itemize{
