@@ -26,7 +26,7 @@ to its source.
 | **Three ways to read the shell** | A deterministic regex baseline always runs; you choose how the gaps it cannot resolve get filled — **regex only** (no key), a **Copilot supplement** (no API call), or a **live LLM** (opt-in with a key). Same spec-gated output from all three. |
 | **Spec-gated validation** | Every variable proposed — by the regex, a supplement, or the LLM — is checked against your ADaM spec. A variable missing from the spec is rejected and logged, never silently invented. |
 | **Human-in-the-loop review** | [`edit_ars()`](https://tavakohr.github.io/arsbridge/reference/edit_ars.md) opens the generated ARS in a structured Shiny editor: the shell’s outputs and lines with validation findings badged on, spec-constrained dropdowns, add/remove/reorder for missed lines, undo and crash recovery. Every save is backed up, logged to a QC sidecar, and checked against the official ARS v1.0 schema. |
-| **A guided end-to-end workflow** | `ars_workflow("my_study/")` walks the whole journey in one app: project folders, the two-phase Copilot instruction files, both manual assistant round-trips (paste the replies straight from the chat, validated on arrival), the [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md) build, and a hand-off into the review editor. Every step’s status is derived from the files on disk, so closing the app never loses progress. |
+| **A guided end-to-end workflow** | `ars_workflow("my_study/")` walks the whole journey in one app, in five steps: set up the project, **build**, optionally correct with a supplement, review, read the results. The build runs in a background process, so the UI stays responsive and shows the run log as it goes; everything it produced — and everything it declined to produce, with the reason — comes back in one payload. Every step’s status is derived from the files on disk, so closing the app never loses progress, and the results survive a restart. |
 | **CDISC ARS JSON output** | The extraction result is a structured, versioned file you can diff, review, and feed to downstream tools like [siera](https://clymbclinical.github.io/siera/). |
 | **Native ARD execution** | Run ARS JSON directly against `.xpt` or `.csv` datasets using [cards](https://github.com/insightsengineering/cards), with no dataset-loading boilerplate. |
 | **Codelist-decoded categories** | A coded categorical variable (e.g. a numeric `DCSREASN`) is decoded through the ADaM spec’s codelist: the ARD and rendered table show `DEATH`, not `1`, in codelist order, with unobserved terms reported as n = 0. Unannotated coded column axes get their column labels from the codelist too. |
@@ -40,19 +40,20 @@ to its source.
 
 ``` mermaid
 flowchart TD
-    SHELL(["Annotated Word Shell\n(.docx)"])
+    SHELL_D(["Annotated shell — Word\n(.docx)"])
+    SHELL_X(["Annotated shell — Excel\n(.xlsx, one sheet per output)"])
     SPEC(["ADaM Spec\n(define.xml or .xlsx)"])
     ADAM(["ADaM Datasets\n(.xpt or .csv)"])
 
     subgraph STEP1 ["Step 1 · Read the shell"]
         R["Regex baseline\n(colour · bold · brackets · plain-text)\nALWAYS runs"]
         F{"Row the regex\ncould not resolve?"}
-        C["Copilot supplement\n(no API call)"]
+        C["Reviewed supplement\n(no API call)"]
         L["Live LLM\n(use_llm = TRUE)"]
         G{"Spec gate\nDATASET.VARIABLE\nexists in spec?"}
         R --> F
         F -->|"regex only"| G
-        F -->|"regex + Copilot"| C --> G
+        F -->|"+ supplement"| C --> G
         F -->|"LLM API"| L --> G
     end
 
@@ -74,7 +75,8 @@ flowchart TD
         FS["ars_fill_shell()\nthe Excel shell, filled\n(.xlsx shells only)"]
     end
 
-    SHELL --> STEP1
+    SHELL_D --> STEP1
+    SHELL_X --> STEP1
     SPEC --> G
     G -->|"pass"| ARS["ARS JSON\n(CDISC v1.0)"]
     G -->|"reject"| BLK["Blocker log\n(named and fixable)"]
@@ -88,9 +90,70 @@ flowchart TD
     E --> STEP5
     MP -->|"fill + validate"| STEP5
     T --> TLF["Clinical table\n(GT · Word-ready)"]
-    SHELL -.->|"the same workbook"| FS
+    SHELL_X -.->|"the same workbook"| FS
     FS --> XL["Filled shell\n(.xlsx · annotations removed)"]
 ```
+
+------------------------------------------------------------------------
+
+## The app, step by step
+
+`ars_workflow("my_study/")` is the whole pipeline with a UI on it. One
+phase, five steps:
+
+``` mermaid
+flowchart TD
+    P["1 · Project setup\nshell · ADaM spec · ADaM folder"]
+    B["2 · Build\nbackground process"]
+    S["3 · Supplement (optional)\ndraft → correct → rebuild"]
+    RV["4 · Review & edit\nedit_ars()"]
+    RS["5 · Results\nartifacts · diagnostics · what was left undone"]
+
+    P --> B
+    B --> RS
+    B -.->|"something wrong?"| S
+    S -.->|"rebuild"| B
+    B --> RV
+    RV -.->|"corrected"| B
+```
+
+**The build comes second, before any supplement.** A deterministic build
+needs no assistant and no API key, so nothing stands between recording
+your inputs and seeing what the engine can do on its own. If it got
+something wrong, *then* generate a draft supplement from what the parser
+already found, correct the handful of judgements that are wrong, and
+rebuild. Correcting specific decisions beats authoring a document from
+scratch.
+
+**The build runs off the UI’s process.** A real study takes minutes, and
+an app that runs that on its own process is frozen for the duration —
+you cannot tell a slow build from a hung one. `arsbridge` sends it to a
+background R process (`callr`) and tails the run log while it goes. A
+fresh process each time means no state carries over between runs, which
+is worth having when the output is a regulatory deliverable.
+
+The same build is available headlessly, and returns the same value:
+
+``` r
+
+payload <- ars_workflow_run(
+  shell_path     = "inputs/shells.xlsx",
+  adam_spec_path = "inputs/adam_spec.xlsx",
+  adam_dir       = "inputs/ADaM",
+  output_dir     = "outputs"
+)
+
+payload$status                                    # success | partial | error
+payload$artifacts$filled_workbook                 # what it produced
+subset(payload$diagnostics, severity == "FAIL")   # what stopped it
+payload$unfilled_cells                            # cells left showing xx.x, and why
+```
+
+[`ars_workflow_run()`](https://tavakohr.github.io/arsbridge/reference/ars_workflow_run.md)
+takes paths, holds no state, and **never throws** — a run that dies
+still returns a payload saying which stage failed and where its log is.
+That is what makes it safe to send to a worker, and useful in a script
+or a scheduled job.
 
 ------------------------------------------------------------------------
 
@@ -586,14 +649,19 @@ What differs is **how the rows the regex could not resolve get filled**
 2.  **Regex + Copilot (supplement)** —
     `spec_to_ars(supplement = "supplement.json")`. A chat assistant
     (Copilot/ChatGPT) reads the shell + spec by hand and returns a JSON
-    supplement (format v3, with typed CDISC ARS conditions — no string
+    supplement (format v4, with typed CDISC ARS conditions — no string
     parsing); its label-keyed analyses fill **only** rows the regex left
     blank — your authored shell annotations win a disagreement by
     default, or pass `supplement_trust = "prefer_supplement"` to let a
     validated supplement value override — and it confirms the table set
-    by title and row anchors. No API call. For large shells,
-    `ars_copilot_instructions(workflow = "two_phase")` splits it into
-    evidence discovery then construction. See
+    by title and row anchors. No API call. For an Excel shell, run
+    [`write_supplement_draft()`](https://tavakohr.github.io/arsbridge/reference/write_supplement_draft.md)
+    first and hand the draft over too: the parser can already state the
+    column axis and the row bindings, so the assistant corrects a
+    structured draft instead of authoring one from scratch. For large
+    shells, `ars_copilot_instructions(workflow = "two_phase")` splits it
+    into evidence discovery then construction (CLI only; the app uses
+    the single-file workflow). See
     [`vignette("no-api-access")`](https://tavakohr.github.io/arsbridge/articles/no-api-access.md).
 3.  **LLM API (live)** — opt in with `use_llm = TRUE` and a key.
     `extract_shell_llm()` re-reads each cell and separates the display
@@ -683,8 +751,9 @@ rather than reformatting the shell.
 
 ## Annotation format reference
 
-The lead programmer marks up the Word shell before handing it off. The
-most common conventions:
+The lead programmer marks up the shell before handing it off — a Word
+`.docx`, or an Excel `.xlsx` where the same annotations go in the cell
+alongside the label. The most common conventions:
 
 | What to annotate | Format | Example |
 |----|----|----|

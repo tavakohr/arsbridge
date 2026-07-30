@@ -7,6 +7,8 @@ clinical table out.
 
 - [`ars_workflow()`](https://tavakohr.github.io/arsbridge/reference/ars_workflow.md)
   : Run the guided arsbridge workflow
+- [`ars_workflow_run()`](https://tavakohr.github.io/arsbridge/reference/ars_workflow_run.md)
+  : Build every output for a study, in one call
 - [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
   : Convert annotated TLF shell and ADaM spec to CDISC ARS JSON
 - [`spec_to_ars_example()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars_example.md)

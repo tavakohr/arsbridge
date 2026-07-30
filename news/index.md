@@ -2,6 +2,160 @@
 
 ## arsbridge (development version)
 
+- **Fixed: a reviewed `methodId` was silently dropped whenever the
+  supplement agreed with the shell about the variable.** Found by the
+  end-to-end acceptance run, and it broke the exact loop the draft
+  workflow is for. `.apply_supplement_bindings()` treated an
+  already-annotated row as settled the moment the supplement’s variable
+  matched the shell’s, and returned before it ever read the row’s
+  `methodId`. But a draft from
+  [`write_supplement_draft()`](https://tavakohr.github.io/arsbridge/reference/write_supplement_draft.md)
+  is generated *from* the shell, so its variable always matches —
+  meaning the one correction a reviewer most often makes, the
+  statistical method, was the one correction that could never land. It
+  only worked if you also changed the variable to something else, which
+  is not a thing anyone would do on purpose.
+
+  The method is now recorded on an agreeing row too. Nothing else about
+  agreement changes: the shell’s annotation still stands, the row is not
+  flagged as a conflict, and the decision to honour the value still
+  belongs to `build_ars_json()`, which applies it for a supplement-bound
+  row or under `supplement_trust = "prefer_supplement"`. An
+  off-catalogue id is still ignored.
+
+- **Fixed: the supplement instructions still told you the shell had to
+  be a `.docx`.** Excel shells have been readable since the parser
+  landed, but the three Copilot instruction files, the console hint from
+  [`ars_copilot_instructions()`](https://tavakohr.github.io/arsbridge/reference/ars_copilot_instructions.md),
+  and its help page all named `.docx` as the input — so anyone with an
+  Excel shell was being told, by the package itself, that their shell
+  was the wrong kind of file. All of them now say `.docx` or `.xlsx`,
+  and the single-file instructions describe what an Excel shell looks
+  like to the assistant: one worksheet per output, the annotation
+  coloured in the stub cell, the header band merged across the top.
+
+- **Fixed: the README said supplement format v3.** Same fault as the
+  vignette fixed above, in the “three ways to read the shell” section.
+  The shipped schema is v4 and a v3 file is rejected.
+
+- Both the README and
+  [`ars_copilot_instructions()`](https://tavakohr.github.io/arsbridge/reference/ars_copilot_instructions.md)
+  now point Excel users at
+  [`write_supplement_draft()`](https://tavakohr.github.io/arsbridge/reference/write_supplement_draft.md)
+  first. It is a materially better loop: the Excel parser already
+  settles the column axis and the row bindings on its own, so the
+  assistant corrects a structured draft instead of authoring one from
+  nothing — and what is left for it to decide is the statistical
+  judgement (which `methodId`, which denominator), which is where an
+  assistant is actually worth consulting.
+
+- Fixed: `inputs/README.md` documented `shell_to_ars()` and
+  `shell_annotate()`, neither of which exists — the file predated
+  [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
+  and had never been updated. It also promised the folder was excluded
+  from git, which stopped being true when the APX-DRM-301 practice files
+  were allowlisted. Rewritten against the actual API, the actual
+  default-deny policy, and the files that are really in there.
+
+- `DESCRIPTION` and the pkgdown home page described a Word-only reader.
+  `DESCRIPTION` also now carries the pkgdown site URL alongside the
+  GitHub one.
+
+- **A draft supplement now states the column axis for an Excel shell.**
+  [`write_supplement_draft()`](https://tavakohr.github.io/arsbridge/reference/write_supplement_draft.md)
+  fills `groupings`, `columnHierarchy`, `includeTotal` and
+  `listingColumns` from the parse — a nested header becomes a column
+  hierarchy, a flat one a grouping, and a listing gets its columns.
+  These stay blank for a Word shell, deliberately: a Word header grid
+  has to be inferred, and a draft that asserts an axis and gets it wrong
+  is worse than one that stays quiet, because a reviewer checks what is
+  flagged and trusts what is stated. An Excel sheet has no such doubt.
+
+- Fixed:
+  [`vignette("no-api-access")`](https://tavakohr.github.io/arsbridge/articles/no-api-access.md)
+  told you to have the assistant reply in supplement format **v3**. The
+  shipped schema is v4, and v3 is rejected — so anyone following the
+  vignette produced a supplement the validator refused.
+
+- **[`ars_workflow()`](https://tavakohr.github.io/arsbridge/reference/ars_workflow.md)
+  is one phase, not two.** The app used to make you carry a blueprint
+  out to a chat assistant and a supplement back before anything could be
+  built — two manual round-trips in front of the first result. A
+  deterministic build needs neither, so the build now comes **second**,
+  right after recording the inputs, and the supplement became an
+  optional loop after it: generate a draft from what the parser already
+  found, correct the handful of judgements that are wrong, rebuild.
+  Correcting specific decisions beats authoring a document from scratch.
+
+  Five panels replace six: project setup, build, supplement (optional),
+  review & edit, and a new **Results** step showing every artifact,
+  every diagnostic with its severity and its fix, and the cells the run
+  declined to fill. The results are read from the payload on disk, so
+  they survive closing and reopening the app.
+
+  **The build runs off the UI’s process.** A real study takes minutes,
+  and an app that runs that on its own process is frozen for the
+  duration — you cannot tell a slow build from a hung one. It goes to a
+  background R process (`callr`, a new Suggests) and the panel tails the
+  run log while it runs. A fresh process each time means no state
+  carries over between runs. Without `callr`, or with
+  `options(arsbridge.workflow_background = FALSE)`, the build runs
+  in-process instead: a frozen UI is worse than a responsive one, and
+  much better than not being able to build.
+
+  The project layout follows: `copilot/` is now `supplement/`, and
+  `ars/` also holds `ard.rds`, `filled_shells.xlsx`, `run.log`, and the
+  payload of the last run. A project can now record an ADaM folder, so
+  one build produces the reporting event, the results and the filled
+  workbook together; without one the reporting event is still built and
+  the rest is reported as not produced rather than treated as a failure.
+
+- **New
+  [`ars_workflow_run()`](https://tavakohr.github.io/arsbridge/reference/ars_workflow_run.md):
+  the whole pipeline in one call, as a value.** Takes paths, runs
+  [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
+  →
+  [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)
+  →
+  [`ars_fill_shell()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_shell.md),
+  and returns one structured list — status, per-stage timings, every
+  artifact’s path, the metadata the run was built with, the diagnostics,
+  the cells reserved for manual derivation, and the workbook cells left
+  unfilled with their reasons. It holds no state and **never throws**: a
+  run that dies still returns a payload saying which stage failed and
+  where its log is, which is when a log is worth having.
+
+  It exists because
+  [`ars_workflow()`](https://tavakohr.github.io/arsbridge/reference/ars_workflow.md)
+  is a Shiny app and a six-minute build must not run on the UI’s
+  process. The build is now a plain function that knows nothing about
+  Shiny, so it can be sent to a background process. It is also useful on
+  its own — in a script, a scheduled job, or a validation run.
+
+  **Diagnostics now survive a process boundary.** They live in a
+  package-level environment, so in a background worker they accumulate
+  there and
+  [`ars_diagnostics()`](https://tavakohr.github.io/arsbridge/reference/ars_diagnostics.md)
+  in the calling session returns nothing; every FAIL and WARN would
+  vanish silently. They are returned in the payload instead, as one
+  table with a `severity` column rather than split by severity — so
+  `INFO` findings survive too, including the shell-label-to-data-code
+  pairings the fill writer reports for review.
+
+  Diagnostics are harvested **after each stage**, not once at the end,
+  because
+  [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
+  and
+  [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)
+  each call `diag_reset()` on entry. On the nine-sheet fixture, reading
+  once at the end returns 1 finding; harvesting per stage returns 41.
+
+  A background process also inherits no options and no environment, so
+  `derived_dt` (which pins ARD timestamps, and therefore
+  reproducibility), the LLM provider and the API key are explicit
+  parameters, echoed back in `metadata` so an archived payload says what
+  produced it.
+
 - **[`ars_fill_shell()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_shell.md)
   now fills listings and figures too, not just tables.**
 

@@ -4,9 +4,9 @@ Environments with no LLM API access can still boost
 [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
 accuracy with a chat assistant (GitHub Copilot, ChatGPT, an enterprise
 portal): upload the instruction file(s) this function writes TOGETHER
-WITH your annotated shell `.docx`, ADaM spec `.xlsx`, and the shipped
-JSON Schema, and the assistant replies with one strict `supplement.json`
-(format v4). Pass that file to
+WITH your annotated shell (`.docx` or `.xlsx`), ADaM spec `.xlsx`, and
+the shipped JSON Schema, and the assistant replies with one strict
+`supplement.json` (format v4). Pass that file to
 `spec_to_ars(supplement = "supplement.json")`.
 
 ## Usage
@@ -46,6 +46,13 @@ ars_copilot_instructions(
 Invisibly, a character vector of the absolute paths written.
 
 ## Details
+
+For an `.xlsx` shell, consider writing a draft first with
+[`write_supplement_draft()`](https://tavakohr.github.io/arsbridge/reference/write_supplement_draft.md)
+and uploading that too: the Excel parser can already state the column
+axis and the row bindings, so the assistant corrects a structured draft
+instead of authoring one from scratch. Feed the reviewed file back with
+`supplement_trust = "prefer_supplement"`.
 
 Two workflows are offered:
 
