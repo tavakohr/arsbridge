@@ -461,13 +461,14 @@ test_that("annotations can be kept for review", {
   expect_match(cell_text(book, "Table 14.1.2", "B6"), "^66")
 })
 
-test_that("the writer and the renderer share one definition of a percentage", {
-  ## Not two implementations agreeing -- one function, called by both. If a
-  ## filled shell said 0.3 where the rendered table said 25.0, nobody would
-  ## notice until a reviewer did, so the duplication was removed rather than
-  ## tested around. This pins that ars_to_tfrmt.R still routes through it.
-  renderer <- paste(readLines(test_path("..", "..", "R", "ars_to_tfrmt.R"),
-                              warn = FALSE), collapse = "\n")
-  skip_if_not(nzchar(renderer), "renderer source not available")
-  expect_match(renderer, ".rescale_proportions(", fixed = TRUE)
-})
+## There is deliberately no test here that the writer and the renderer agree
+## on what a percentage is. They agree by construction: `.rescale_proportions()`
+## is one function and `.tfrmt_prep_ard_layout()` calls it. The behaviour is
+## covered by the unit tests at the top of this file and, end to end, by
+## "counts and percentages match, in the right columns" above, which checks
+## the written cell against 100 * n / N computed from the raw dataset.
+##
+## An earlier version grepped R/ars_to_tfrmt.R for the call. Do not bring that
+## back: tests run from the installed package under R CMD check, where there
+## is no R/ directory, so it errored on every platform that got that far --
+## and it asserted nothing about behaviour even when it passed.
