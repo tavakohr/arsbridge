@@ -87,13 +87,130 @@ ars_workflow <- function(project_dir = NULL) {
 }
 
 #' @noRd
+## ---------------------------------------------------------------------------
+## Running the build off the UI's process
+## ---------------------------------------------------------------------------
+
+#' Start the build in a background process, or NULL when that is not possible.
+#'
+#' callr is a Suggests: the app must still work without it, just synchronously.
+#' Returning NULL rather than aborting is deliberate -- a frozen UI is worse
+#' than a responsive one, and much better than not being able to build.
+#'
+#' The worker is a FRESH R process, so it inherits no options and no
+#' environment. Everything the run needs is passed explicitly -- which is why
+#' `ars_workflow_run()` takes them as arguments rather than reading them.
+#' @noRd
+.workflow_start_build <- function(state, paths, use_llm = FALSE) {
+  ## Two ways to end up synchronous: callr is not installed, or the caller
+  ## asked for it. `arsbridge.workflow_background = FALSE` makes a build
+  ## deterministic to observe, which is what the app's own tests need and
+  ## what anyone debugging a build wants.
+  if (!isTRUE(getOption("arsbridge.workflow_background", TRUE))) return(NULL)
+  if (!requireNamespace("callr", quietly = TRUE)) return(NULL)
+
+  ## The worker loads the INSTALLED arsbridge, not the one running this app.
+  ## In production they are the same package; in development they are not, and
+  ## a silent version skew means the app builds with code you are not looking
+  ## at. Fall back to running in-process, which at least uses the right code.
+  running   <- as.character(utils::packageVersion("arsbridge"))
+  installed <- tryCatch(
+    as.character(utils::packageVersion("arsbridge", lib.loc = .libPaths())),
+    error = function(e) NA_character_)
+  if (is.na(installed) || !identical(installed, running)) {
+    shiny::showNotification(
+      sprintf(paste("Running the build in this process: the installed",
+                    "arsbridge is %s but this session is %s."),
+              installed %||% "absent", running),
+      type = "warning", duration = 8)
+    return(NULL)
+  }
+  supplement <- if (file.exists(paths$supplement)) paths$supplement else NULL
+  tryCatch(
+    callr::r_bg(
+      ## payload_path is the worker's own business, not an argument of
+      ## ars_workflow_run() -- it is where the worker leaves the payload so
+      ## the Results step can find it after a restart.
+      func = function(args, payload_path) {
+        payload <- do.call(arsbridge::ars_workflow_run, args)
+        saveRDS(payload, payload_path)
+        payload
+      },
+      args = list(payload_path = paths$payload, args = list(
+        shell_path     = state$shell_path,
+        adam_spec_path = state$adam_spec_path,
+        output_dir     = dirname(paths$ars),
+        adam_dir       = state$adam_dir %||% NULL,
+        study_id       = state$study_id %||% "STUDY-001",
+        supplement     = supplement,
+        use_llm        = use_llm,
+        log_path       = paths$run_log
+      )),
+      stdout = paths$run_log, stderr = "2>&1",
+      supervise = TRUE),
+    error = function(e) NULL)
+}
+
+#' Common handling for a finished build, however it ran.
+#' @noRd
+.workflow_finish_build <- function(res, state, bump) {
+  if (inherits(res, "error") || inherits(res, "condition")) {
+    shiny::showNotification(paste("Build failed:", conditionMessage(res)),
+                            type = "error", duration = 10)
+    bump()
+    return(invisible(NULL))
+  }
+  state$last_result(res)
+  bump()
+  status <- res$status %||% "success"
+  shiny::showNotification(
+    switch(status,
+           success = "Build complete.",
+           partial = "Build complete, with findings -- see Results.",
+           error   = paste("Build failed at", res$failed_stage %||% "an early stage.")),
+    type = if (identical(status, "success")) "message" else "warning",
+    duration = 8)
+  bslib::accordion_panel_open("wizard", "panel_results")
+  invisible(res)
+}
+
+#' The payload of the last run: this session's if there was one, otherwise
+#' whatever the project has on disk -- so Results survives a restart.
+#' @noRd
+.workflow_last_payload <- function(paths, state) {
+  live <- state$last_result()
+  if (!is.null(live)) return(live)
+  if (is.null(paths) || !file.exists(paths$payload)) return(NULL)
+  tryCatch(readRDS(paths$payload), error = function(e) NULL)
+}
+
+#' The one-line verdict on a run.
+#' @noRd
+.workflow_summary_ui <- function(payload) {
+  status <- payload$status %||% "success"
+  tone <- switch(status, success = "alert-success", partial = "alert-warning",
+                 "alert-danger")
+  fails <- sum((payload$diagnostics$severity %||% character()) %in% "FAIL")
+  seconds <- payload$timings$total %||% NA_real_
+  shiny::div(
+    class = paste("alert py-1 px-2 small mb-0 mt-2", tone),
+    shiny::strong(toupper(status)), " -- ",
+    if (!is.na(seconds)) sprintf("%.1fs. ", seconds) else "",
+    if (fails > 0) sprintf("%d blocking finding(s). ", fails) else "",
+    if (!is.null(payload$error)) payload$error else "",
+    if (identical(status, "success") && fails == 0) "Nothing was left undone." else ""
+  )
+}
+
 .workflow_app_state <- function(project_dir) {
   list(
     project_dir         = shiny::reactiveVal(project_dir),
     nonce               = shiny::reactiveVal(0L),
     last_result         = shiny::reactiveVal(NULL),
-    blueprint_findings  = shiny::reactiveVal(NULL),
-    supplement_findings = shiny::reactiveVal(NULL)
+    supplement_findings = shiny::reactiveVal(NULL),
+    ## The background build: whether one is in flight, and its handle.
+    running             = shiny::reactiveVal(FALSE),
+    job                 = shiny::reactiveVal(NULL)
   )
 }
 
@@ -175,88 +292,63 @@ ars_workflow <- function(project_dir = NULL) {
         shiny::textInput("spec_path", "ADaM specification (.xlsx / .xml)",
                          value = initial_state$adam_spec_path %||% "",
                          width = "100%"),
+        shiny::textInput("adam_dir", "ADaM dataset folder (optional)",
+                         value = initial_state$adam_dir %||% "",
+                         width = "100%"),
         shiny::textInput("study_id", "Study id",
                          value = initial_state$study_id %||% "STUDY-001"),
         shiny::actionButton("init_project", "Create / update project",
                             class = "btn-primary btn-sm"),
         shiny::div(class = "text-muted small mt-2",
-                   "The folder gets copilot/ and ars/ ",
-                   "subfolders plus arsbridge_project.json. Reopening the ",
-                   "same folder resumes the journey.")
+                   "The folder gets supplement/ and ars/ subfolders plus ",
+                   "arsbridge_project.json. Reopening the same folder ",
+                   "resumes where the files say the work stands. Without an ",
+                   "ADaM folder the reporting event is still built; the ",
+                   "results and the filled workbook are not.")
       ),
 
       bslib::accordion_panel(
-        title = "2. Instruction files", value = "panel_instructions",
-        shiny::uiOutput("badge_instructions"),
-        shiny::p(class = "small",
-                 "Writes the Phase 1 and Phase 2 Copilot instructions and ",
-                 "the supplement JSON schema into the project's copilot/ ",
-                 "folder. Re-running refreshes them after a package upgrade."),
-        shiny::uiOutput("instructions_actions"),
-        shiny::uiOutput("instructions_paths")
-      ),
-
-      bslib::accordion_panel(
-        title = "3. Phase 1 -- blueprint (manual Copilot step)",
-        value = "panel_phase1",
-        shiny::uiOutput("badge_phase1"),
-        shiny::uiOutput("phase1_checklist"),
-        shiny::p(class = "small",
-                 "When the assistant replies, bring ",
-                 shiny::tags$code("tlf_extraction_blueprints.json"),
-                 " back here -- upload the file or paste the JSON."),
-        shiny::fileInput("blueprint_upload", NULL, accept = ".json",
-                         buttonLabel = "Upload blueprint...",
-                         placeholder = "tlf_extraction_blueprints.json"),
-        shiny::textAreaInput("blueprint_paste", "...or paste the JSON reply",
-                             rows = 4, width = "100%"),
-        shiny::actionButton("blueprint_save_paste", "Save pasted blueprint",
-                            class = "btn-sm"),
-        DT::DTOutput("blueprint_findings")
-      ),
-
-      bslib::accordion_panel(
-        title = "4. Phase 2 -- supplement (manual Copilot step)",
-        value = "panel_phase2",
-        shiny::uiOutput("badge_phase2"),
-        shiny::uiOutput("phase2_checklist"),
-        shiny::p(class = "small",
-                 "Bring back ", shiny::tags$code("supplement.json"),
-                 " (and optionally the extraction validation report). It is ",
-                 "validated immediately; FAILs come with a paste-ready ",
-                 "repair prompt."),
-        shiny::fileInput("supplement_upload", NULL, accept = ".json",
-                         buttonLabel = "Upload supplement...",
-                         placeholder = "supplement.json"),
-        shiny::textAreaInput("supplement_paste", "...or paste the JSON reply",
-                             rows = 4, width = "100%"),
-        shiny::actionButton("supplement_save_paste", "Save pasted supplement",
-                            class = "btn-sm"),
-        shiny::fileInput("extraction_report_upload",
-                         "Extraction validation report (optional)",
-                         accept = ".json",
-                         buttonLabel = "Upload report...",
-                         placeholder = "extraction_validation_report.json"),
-        DT::DTOutput("supplement_findings"),
-        shiny::uiOutput("supplement_repair")
-      ),
-
-      bslib::accordion_panel(
-        title = "5. Build the reporting event", value = "panel_build",
+        title = "2. Build", value = "panel_build",
         shiny::uiOutput("badge_build"),
         shiny::uiOutput("build_mode"),
         shiny::uiOutput("build_actions"),
+        shiny::uiOutput("build_progress"),
         shiny::uiOutput("build_summary")
       ),
 
       bslib::accordion_panel(
-        title = "6. Review & edit", value = "panel_review",
+        title = "3. Supplement (optional)", value = "panel_supplement",
+        shiny::uiOutput("badge_supplement"),
+        shiny::p(class = "small",
+                 "Only if the build got something wrong. Generate a draft ",
+                 "from what the parser already found, correct the handful of ",
+                 "judgements that are wrong, save it as ",
+                 shiny::tags$code("supplement.json"), " and rebuild."),
+        shiny::uiOutput("supplement_actions"),
+        shiny::uiOutput("supplement_paths"),
+        DT::DTOutput("supplement_findings")
+      ),
+
+      bslib::accordion_panel(
+        title = "4. Review & edit", value = "panel_review",
         shiny::uiOutput("badge_review"),
         shiny::uiOutput("review_paths"),
         shiny::uiOutput("review_actions"),
         shiny::div(class = "text-muted small mt-2",
                    "The editor opens in this window's place; when you close ",
                    "it, the workflow returns with fresh statuses.")
+      ),
+
+      bslib::accordion_panel(
+        title = "5. Results", value = "panel_results",
+        shiny::uiOutput("badge_results"),
+        shiny::uiOutput("results_artifacts"),
+        shiny::p(class = "small mt-2 mb-1",
+                 shiny::strong("What the run could not do."),
+                 " Everything arsbridge declined to guess at, with the ",
+                 "reason and the fix."),
+        DT::DTOutput("results_diagnostics"),
+        shiny::uiOutput("results_pending")
       )
     )
   )
@@ -328,7 +420,7 @@ ars_workflow <- function(project_dir = NULL) {
       }
       init <- tryCatch(
         .workflow_init(dir, input$shell_path, input$spec_path,
-                       input$study_id),
+                       input$study_id, adam_dir = input$adam_dir),
         error = function(e) e
       )
       if (inherits(init, "error")) {
@@ -339,295 +431,251 @@ ars_workflow <- function(project_dir = NULL) {
       state$project_dir(normalizePath(dir))
       bump()
       shiny::showNotification("Project ready.", type = "message", duration = 4)
-      bslib::accordion_panel_open("wizard", "panel_instructions")
+      bslib::accordion_panel_open("wizard", "panel_build")
     })
 
-    ## --- step 2: instruction files ---------------------------------------
-    output$instructions_actions <- shiny::renderUI({
-      if (!isTRUE(step_row("instructions")$available)) {
+    ## --- step 3: supplement (optional, AFTER the build) -------------------
+    ##
+    ## The old flow put two manual chat round-trips in front of the first
+    ## build. This one runs the build first and offers a draft supplement
+    ## generated from what the parser already found -- so the user corrects
+    ## specific judgements rather than authoring a document from scratch.
+    output$supplement_actions <- shiny::renderUI({
+      state$nonce()
+      if (!isTRUE(step_row("supplement")$available)) {
         return(shiny::div(class = "text-muted small",
-                          "Finish the project setup first."))
+                          "Available once there is a build to correct."))
       }
-      shiny::actionButton("write_instructions", "Write instruction files",
-                          class = "btn-primary btn-sm")
+      shiny::div(
+        shiny::actionButton("write_instructions", "Write assistant instructions",
+                            class = "btn-outline-secondary btn-sm me-1"),
+        shiny::actionButton("generate_draft", "Generate draft supplement",
+                            class = "btn-primary btn-sm me-1"),
+        shiny::actionButton("validate_supplement", "Validate supplement.json",
+                            class = "btn-outline-secondary btn-sm")
+      )
+    })
+
+    output$supplement_paths <- shiny::renderUI({
+      state$nonce()
+      paths <- paths_r()
+      if (is.null(paths)) return(NULL)
+      line <- function(label, path) {
+        if (!file.exists(path)) return(NULL)
+        shiny::div(class = "small", label, ": ", shiny::tags$code(path))
+      }
+      shiny::div(
+        class = "mt-2",
+        line("Instructions", paths$instructions),
+        line("Schema", paths$schema),
+        line("Draft", paths$draft),
+        line("Reviewed supplement", paths$supplement),
+        if (file.exists(paths$draft) && !file.exists(paths$supplement)) {
+          shiny::div(class = "alert alert-info py-1 px-2 mt-2 mb-0 small",
+                     "Edit the draft, then save it as ",
+                     shiny::tags$code(basename(paths$supplement)),
+                     " in the same folder and rebuild.")
+        }
+      )
     })
 
     shiny::observeEvent(input$write_instructions, {
-      dir <- current_dir()
-      if (is.null(dir)) return()
-      written <- tryCatch(
+      paths <- paths_r()
+      if (is.null(paths)) return()
+      done <- tryCatch({
         suppressMessages(ars_copilot_instructions(
-          dir = .workflow_dirs(dir)$copilot, workflow = "two_phase",
-          open = FALSE, overwrite = TRUE
-        )),
-        error = function(e) e
-      )
-      if (inherits(written, "error")) {
-        shiny::showNotification(conditionMessage(written), type = "error",
+          dir = dirname(paths$instructions), workflow = "single",
+          open = FALSE, overwrite = TRUE))
+        TRUE
+      }, error = function(e) e)
+      if (inherits(done, "error")) {
+        shiny::showNotification(conditionMessage(done), type = "error",
                                 duration = 8)
         return()
       }
       bump()
-      shiny::showNotification("Instruction files written.", type = "message",
-                              duration = 4)
-      bslib::accordion_panel_open("wizard", "panel_phase1")
+      shiny::showNotification("Instructions and schema written.",
+                              type = "message", duration = 4)
     })
 
-    output$instructions_paths <- shiny::renderUI({
-      state$nonce()
-      paths <- paths_r()
-      if (is.null(paths) || !file.exists(paths$phase1_md)) return(NULL)
-      .workflow_upload_list("Written into copilot/:", list(
-        paths$phase1_md, paths$phase2_md, paths$schema
-      ))
-    })
-
-    ## --- step 3: phase 1 blueprint ---------------------------------------
-    output$phase1_checklist <- shiny::renderUI({
-      state$nonce()
+    shiny::observeEvent(input$generate_draft, {
       paths <- paths_r()
       m <- meta()
-      if (is.null(paths) || is.null(m)) return(NULL)
-      .workflow_upload_list(
-        "Upload these to your chat assistant for Phase 1:",
-        list(paths$phase1_md, m$shell_path, m$adam_spec_path)
+      if (is.null(paths) || is.null(m)) return()
+      done <- tryCatch(
+        suppressMessages(suppressWarnings(write_supplement_draft(
+          shell_path     = m$shell_path,
+          adam_spec_path = m$adam_spec_path,
+          output_path    = paths$draft))),
+        error = function(e) e
       )
-    })
-
-    save_blueprint <- function(text) {
-      paths <- paths_r()
-      if (is.null(paths)) return()
-      received <- .workflow_receive_json(text, paths$blueprint,
-                                         "the Phase 1 blueprint")
-      if (!received$ok) {
-        shiny::showNotification(received$message, type = "error", duration = 8)
+      if (inherits(done, "error")) {
+        shiny::showNotification(paste("Could not draft:",
+                                      conditionMessage(done)),
+                                type = "error", duration = 10)
         return()
       }
-      state$blueprint_findings(.validate_blueprint(paths$blueprint))
       bump()
-      shiny::showNotification(received$message, type = "message", duration = 4)
-      bslib::accordion_panel_open("wizard", "panel_phase2")
-    }
-
-    shiny::observeEvent(input$blueprint_upload, {
-      ## Read the uploaded temp file immediately -- its datapath is not
-      ## guaranteed to outlive this flush.
-      text <- tryCatch(readLines(input$blueprint_upload$datapath, warn = FALSE),
-                       error = function(e) "")
-      save_blueprint(text)
-    })
-    shiny::observeEvent(input$blueprint_save_paste, {
-      save_blueprint(input$blueprint_paste)
+      shiny::showNotification("Draft written -- edit it, save it as supplement.json, rebuild.",
+                              type = "message", duration = 8)
     })
 
-    output$blueprint_findings <- DT::renderDT({
-      state$nonce()
-      findings <- state$blueprint_findings()
-      paths <- paths_r()
-      if (is.null(findings) && !is.null(paths) &&
-          file.exists(paths$blueprint)) {
-        findings <- .validate_blueprint(paths$blueprint)
-        state$blueprint_findings(findings)
-      }
-      if (is.null(findings) || nrow(findings) == 0) return(NULL)
-      DT::datatable(findings, rownames = FALSE, selection = "none",
-                    options = list(pageLength = 8, dom = "tp"))
-    }, server = TRUE)
-
-    ## --- step 4: phase 2 supplement --------------------------------------
-    output$phase2_checklist <- shiny::renderUI({
-      state$nonce()
+    shiny::observeEvent(input$validate_supplement, {
       paths <- paths_r()
       m <- meta()
-      if (is.null(paths) || is.null(m)) return(NULL)
-      .workflow_upload_list(
-        "Upload these to your chat assistant for Phase 2:",
-        list(paths$phase2_md, paths$schema, m$shell_path,
-             if (file.exists(paths$blueprint)) paths$blueprint)
-      )
-    })
-
-    save_supplement <- function(text) {
-      paths <- paths_r()
-      m <- meta()
-      if (is.null(paths)) return()
-      received <- .workflow_receive_json(text, paths$supplement,
-                                         "the Phase 2 supplement")
-      if (!received$ok) {
-        shiny::showNotification(received$message, type = "error", duration = 8)
+      if (is.null(paths) || is.null(m)) return()
+      if (!file.exists(paths$supplement)) {
+        shiny::showNotification("No supplement.json in the project yet.",
+                                type = "warning", duration = 6)
         return()
       }
       findings <- tryCatch(
         suppressMessages(ars_validate_supplement(
-          paths$supplement, adam_spec_path = m$adam_spec_path
-        )),
+          paths$supplement, adam_spec_path = m$adam_spec_path)),
         error = function(e) {
           data.frame(severity = "FAIL", tlf = NA_character_, where = "file",
                      problem = conditionMessage(e), stringsAsFactors = FALSE)
-        }
-      )
+        })
       state$supplement_findings(findings)
       bump()
       n_fail <- sum(findings$severity == "FAIL")
-      if (n_fail > 0) {
-        shiny::showNotification(
-          paste(n_fail, "FAIL finding(s) -- paste the repair prompt back to the assistant."),
-          type = "error", duration = 8
-        )
-      } else {
-        shiny::showNotification("Supplement received and validated.",
-                                type = "message", duration = 4)
-        bslib::accordion_panel_open("wizard", "panel_build")
-      }
-    }
-
-    shiny::observeEvent(input$supplement_upload, {
-      text <- tryCatch(readLines(input$supplement_upload$datapath, warn = FALSE),
-                       error = function(e) "")
-      save_supplement(text)
-    })
-    shiny::observeEvent(input$supplement_save_paste, {
-      save_supplement(input$supplement_paste)
-    })
-
-    shiny::observeEvent(input$extraction_report_upload, {
-      paths <- paths_r()
-      if (is.null(paths)) return()
-      text <- tryCatch(
-        readLines(input$extraction_report_upload$datapath, warn = FALSE),
-        error = function(e) ""
-      )
-      received <- .workflow_receive_json(text, paths$extraction_report,
-                                         "the extraction validation report")
-      shiny::showNotification(received$message,
-                              type = if (received$ok) "message" else "error",
-                              duration = 5)
+      shiny::showNotification(
+        if (n_fail > 0) paste(n_fail, "FAIL finding(s) -- fix them before rebuilding.")
+        else "Supplement validates; rebuild to use it.",
+        type = if (n_fail > 0) "error" else "message", duration = 6)
     })
 
     output$supplement_findings <- DT::renderDT({
       state$nonce()
       findings <- state$supplement_findings()
-      paths <- paths_r()
-      m <- meta()
-      if (is.null(findings) && !is.null(paths) &&
-          file.exists(paths$supplement)) {
-        findings <- tryCatch(
-          suppressMessages(ars_validate_supplement(
-            paths$supplement, adam_spec_path = m$adam_spec_path
-          )),
-          error = function(e) NULL
-        )
-        state$supplement_findings(findings)
-      }
       if (is.null(findings) || nrow(findings) == 0) return(NULL)
-      DT::datatable(findings, rownames = FALSE, selection = "none",
-                    options = list(pageLength = 8, dom = "tp"))
-    }, server = TRUE)
-
-    output$supplement_repair <- shiny::renderUI({
-      findings <- state$supplement_findings()
-      if (is.null(findings)) return(NULL)
-      prompt <- attr(findings, "repair_prompt")
-      if (is.null(prompt)) return(NULL)
-      shiny::div(
-        class = "mt-2",
-        shiny::div(class = "fw-bold small",
-                   "Repair prompt -- paste this back to the assistant:"),
-        shiny::tags$pre(class = "small bg-body-tertiary p-2 rounded", prompt)
-      )
+      DT::datatable(findings, rownames = FALSE, options = list(
+        pageLength = 5, dom = "tp", scrollX = TRUE))
     })
 
-    ## --- step 5: build ----------------------------------------------------
+    ## --- step 2: build ----------------------------------------------------
+    ##
+    ## The build runs in a BACKGROUND PROCESS. It takes seconds on a small
+    ## study and minutes on a real one with an LLM pass, and a Shiny app that
+    ## runs that on its own process is frozen for the duration -- the user
+    ## cannot tell a slow build from a hung one, and cannot cancel either.
+    ##
+    ## callr rather than a persistent worker pool: a build is one long job,
+    ## not many small ones, so start-up cost is noise against it, and a fresh
+    ## process each time means no state survives from the previous run --
+    ## which is worth having when the output is a regulatory deliverable.
+    ## `ars_workflow_run()` was written for this: paths in, one value out,
+    ## never throws. Swapping the engine touches only this block.
     output$build_mode <- shiny::renderUI({
       state$nonce()
       paths <- paths_r()
+      m <- meta()
       if (is.null(paths)) return(NULL)
-      if (file.exists(paths$supplement)) {
-        shiny::p(class = "small",
-                 "Mode: ", shiny::strong("supplement"),
-                 " -- copilot/supplement.json will drive the extraction.")
-      } else {
-        shiny::p(class = "small",
-                 "Mode: ", shiny::strong("deterministic"),
-                 " -- no supplement present; the regex/annotation pass runs ",
-                 "alone (you can add the supplement later and rebuild).")
-      }
+      has_data <- !is.null(m$adam_dir) && nzchar(m$adam_dir %||% "") &&
+        dir.exists(m$adam_dir %||% "")
+      shiny::div(
+        class = "small",
+        shiny::p(class = "mb-1",
+                 "Mode: ",
+                 shiny::strong(if (file.exists(paths$supplement)) "supplement"
+                               else "deterministic"),
+                 if (file.exists(paths$supplement))
+                   " -- the reviewed supplement will drive the extraction."
+                 else
+                   " -- the annotation pass runs alone. Add a supplement later and rebuild."),
+        if (!has_data) {
+          shiny::div(class = "alert alert-warning py-1 px-2 mb-0",
+                     "No ADaM folder recorded: the reporting event is built, ",
+                     "but not the results or the filled workbook.")
+        }
+      )
     })
 
     output$build_actions <- shiny::renderUI({
+      state$nonce()
       if (!isTRUE(step_row("build")$available)) {
         return(shiny::div(class = "text-muted small",
-                          "Finish the project setup and instruction files first."))
+                          "Record the shell and the ADaM spec first."))
       }
-      label <- if (isTRUE(step_row("build")$done)) "Rebuild reporting event"
-               else "Build reporting event"
-      shiny::actionButton("run_build", label, class = "btn-primary btn-sm")
+      if (isTRUE(state$running())) {
+        return(shiny::div(
+          shiny::actionButton("run_build", "Building...", class = "btn-sm",
+                              disabled = TRUE)))
+      }
+      shiny::actionButton(
+        "run_build",
+        if (isTRUE(step_row("build")$done)) "Rebuild" else "Build",
+        class = "btn-primary btn-sm")
+    })
+
+    ## Progress is the run log, tailed. The background process writes its
+    ## console output to ars/run.log, which doubles as an artifact worth
+    ## archiving beside the deliverable.
+    output$build_progress <- shiny::renderUI({
+      if (!isTRUE(state$running())) return(NULL)
+      shiny::invalidateLater(700)
+      paths <- paths_r()
+      tail_lines <- if (!is.null(paths) && file.exists(paths$run_log)) {
+        utils::tail(readLines(paths$run_log, warn = FALSE), 3)
+      } else character()
+      shiny::div(
+        class = "border rounded p-2 small bg-light",
+        shiny::div(class = "spinner-border spinner-border-sm me-2"),
+        shiny::span("Running in a background process..."),
+        if (length(tail_lines)) {
+          shiny::pre(class = "mb-0 mt-1 small",
+                     paste(tail_lines, collapse = "\n"))
+        }
+      )
     })
 
     shiny::observeEvent(input$run_build, {
       paths <- paths_r()
       m <- meta()
-      if (is.null(paths) || is.null(m)) return()
-      res <- tryCatch(
-        shiny::withProgress(
-          message = "Building the reporting event...",
-          value = NULL,
-          suppressMessages(suppressWarnings(.workflow_run_build(m, paths)))
-        ),
-        error = function(e) e
-      )
-      if (inherits(res, "error")) {
-        shiny::showNotification(
-          paste("Build failed:", conditionMessage(res)),
-          type = "error", duration = 10
-        )
+      if (is.null(paths) || is.null(m) || isTRUE(state$running())) return()
+
+      dir.create(dirname(paths$run_log), recursive = TRUE, showWarnings = FALSE)
+      state$running(TRUE)
+      handle <- .workflow_start_build(m, paths)
+      if (is.null(handle)) {
+        ## No background engine available: run in-process rather than refuse.
+        ## A frozen UI is worse than a responsive one, but it is much better
+        ## than not being able to build at all.
+        res <- tryCatch(
+          shiny::withProgress(message = "Building (in this process)...",
+                              value = NULL,
+                              suppressMessages(suppressWarnings(
+                                .workflow_run_build(m, paths)))),
+          error = function(e) e)
+        state$running(FALSE)
+        .workflow_finish_build(res, state, bump)
         return()
       }
-      state$last_result(res)
-      bump()
-      shiny::showNotification("Reporting event built.", type = "message",
-                              duration = 4)
-      bslib::accordion_panel_open("wizard", "panel_review")
+      state$job(handle)
+    })
+
+    ## Poll the background process. Nothing about the payload is recomputed
+    ## here -- the worker already assembled it, including its diagnostics.
+    shiny::observe({
+      if (!isTRUE(state$running())) return()
+      handle <- state$job()
+      if (is.null(handle)) return()
+      shiny::invalidateLater(700)
+      if (handle$is_alive()) return()
+      res <- tryCatch(handle$get_result(), error = function(e) e)
+      state$running(FALSE)
+      state$job(NULL)
+      .workflow_finish_build(res, state, bump)
     })
 
     output$build_summary <- shiny::renderUI({
       state$nonce()
-      res <- state$last_result()
-      paths <- paths_r()
-      if (is.null(res)) {
-        if (!is.null(paths) && file.exists(paths$ars)) {
-          return(shiny::div(
-            class = "small text-muted",
-            "Built earlier this project: ", shiny::tags$code(paths$ars),
-            " (", format(file.mtime(paths$ars), "%Y-%m-%d %H:%M"), ")."
-          ))
-        }
-        return(NULL)
-      }
-      blockers <- res$blockers
-      shiny::div(
-        class = "border rounded p-2 small",
-        shiny::p(class = "mb-1",
-                 shiny::strong("Extraction mode: "), res$extraction_mode, " | ",
-                 shiny::strong(res$n_tlfs), " output(s), ",
-                 shiny::strong(res$n_analyses), " analyses, ",
-                 shiny::strong(res$n_warnings), " warning(s)."),
-        if (!is.null(blockers) && nrow(blockers) > 0) {
-          shiny::div(class = "alert alert-danger py-1 px-2 mb-1",
-                     paste(nrow(blockers),
-                           "blocker(s) -- see the validation report."))
-        },
-        shiny::div("ARS JSON: ", shiny::tags$code(res$ars_path)),
-        if (!is.null(res$report_path)) {
-          shiny::div("Validation report: ", shiny::tags$code(res$report_path))
-        },
-        if (!is.null(res$code_dir)) {
-          shiny::div("cards scripts: ", shiny::tags$code(res$code_dir))
-        }
-      )
+      payload <- .workflow_last_payload(paths_r(), state)
+      if (is.null(payload)) return(NULL)
+      .workflow_summary_ui(payload)
     })
 
-    ## --- step 6: review hand-off -------------------------------------------
+    ## --- step 4: review hand-off -------------------------------------------
     output$review_paths <- shiny::renderUI({
       state$nonce()
       paths <- paths_r()
@@ -656,6 +704,75 @@ ars_workflow <- function(project_dir = NULL) {
 
     shiny::observeEvent(input$quit_workflow, {
       shiny::stopApp(list(action = "quit", project_dir = current_dir()))
+    })
+
+    ## --- step 5: results ---------------------------------------------------
+    ##
+    ## Everything the run produced, and -- the part that matters -- everything
+    ## it declined to produce, with the reason and the fix. The whole writer
+    ## is built to report rather than guess; this is where the reporting
+    ## becomes visible to someone who never reads a console.
+    output$results_artifacts <- shiny::renderUI({
+      state$nonce()
+      payload <- .workflow_last_payload(paths_r(), state)
+      if (is.null(payload)) {
+        return(shiny::div(class = "text-muted small",
+                          "Available after the first build."))
+      }
+      labels <- c(ars_json = "Reporting event", validation_report = "Validation report",
+                  code_dir = "cards scripts", ard_rds = "ARD",
+                  filled_workbook = "Filled workbook", run_log = "Run log")
+      rows <- lapply(names(labels), function(key) {
+        path <- payload$artifacts[[key]] %||% NA_character_
+        if (is.na(path)) {
+          return(shiny::div(class = "small text-muted",
+                            labels[[key]], ": not produced"))
+        }
+        shiny::div(class = "small", labels[[key]], ": ", shiny::tags$code(path))
+      })
+      shiny::div(.workflow_summary_ui(payload),
+                 shiny::div(class = "mt-2", rows))
+    })
+
+    output$results_diagnostics <- DT::renderDT({
+      state$nonce()
+      payload <- .workflow_last_payload(paths_r(), state)
+      diagnostics <- payload$diagnostics
+      if (is.null(diagnostics) || nrow(diagnostics) == 0) return(NULL)
+      ## FAIL first: they are what stopped something happening. INFO is kept
+      ## rather than filtered out -- it is where arsbridge reports the
+      ## inferences it made on the user's behalf, and those are worth reading.
+      order_by <- match(diagnostics$severity, c("FAIL", "WARN", "INFO"))
+      diagnostics <- diagnostics[order(order_by, diagnostics$stage), , drop = FALSE]
+      DT::datatable(
+        diagnostics[, c("severity", "stage", "tlf_number", "location",
+                        "problem", "action")],
+        rownames = FALSE, filter = "top",
+        options = list(pageLength = 8, scrollX = TRUE, dom = "ftp"))
+    })
+
+    output$results_pending <- shiny::renderUI({
+      state$nonce()
+      payload <- .workflow_last_payload(paths_r(), state)
+      if (is.null(payload)) return(NULL)
+      unfilled <- payload$unfilled_cells
+      pending  <- payload$pending
+      n_unfilled <- if (is.null(unfilled)) 0L else nrow(unfilled)
+      n_pending  <- if (is.null(pending)) 0L else nrow(pending)
+      if (n_unfilled == 0 && n_pending == 0) return(NULL)
+      shiny::div(
+        class = "mt-2 small",
+        if (n_unfilled > 0) {
+          shiny::div(sprintf(
+            "%d workbook cell(s) still show their placeholder. An empty cell in a clinical table reads as a zero, so they were left as they are.",
+            n_unfilled))
+        },
+        if (n_pending > 0) {
+          shiny::div(sprintf(
+            "%d result(s) reserved for a manual derivation (ADR 0002).",
+            n_pending))
+        }
+      )
     })
   }
 
