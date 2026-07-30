@@ -89,6 +89,62 @@ template row, the footnote row to relocate, and the column variables. A figure
 is filled by writing a computed series where its annotation block was, so its
 plan is that anchor row and the declared aspects.
 
+## Mechanism
+
+Established by `tools/xlsx_roundtrip_check.R`, which is kept so the findings
+below can be re-tested whenever openxlsx2 changes.
+
+**7. The writer edits the author's file; it never rebuilds one.**
+`openxlsx2::wb_load()` → mutate → `wb_save()` was measured on both an
+openpyxl-authored workbook and an openxlsx2-authored one, and is lossless:
+sheets, cells, text, formatting runs, colours, merged ranges, column widths,
+row heights, per-cell style indices and every zip part come back unchanged.
+Overwriting a cell also leaves its `s=` style index alone, so alignment,
+borders, indentation and number format survive a fill for free.
+
+**8. Cells are edited as run XML, not through the data model.** The obvious
+route — `wb_add_data()`, or rebuilding a stripped cell with `fmt_txt()` —
+loses run-level formatting, because seam 1 models only what annotation
+*detection* needs (`color_hex`, `highlight`, `bold`, `italic`, `underline`,
+`strike`). Real shells put more than that on a run:
+
+```xml
+<r><rPr><rFont val="Arial"/><i val="1"/><color rgb="FF000000"/><sz val="10"/></rPr>
+   <t xml:space="preserve">Safety Population  </t></r>
+```
+
+`rFont` and `sz` are on every run of the exemplar workbook and in neither the
+run model nor `fmt_txt()`'s reach here; a superscript footnote marker
+(`vertAlign`) would go the same way. Rebuilding from the model would silently
+reset Arial 10 to the workbook default on every cell the writer touched — a
+change nobody asked for, on exactly the cells under edit.
+
+So the writer works on the run XML directly, through
+`wb$worksheets[[i]]$sheet_data$cc$is`, which openxlsx2 stores verbatim. Runs
+that are kept are kept *byte-identical*, because they are never deserialized:
+stripping an annotation removes an `<r>` element and leaves its siblings
+untouched, and filling a placeholder rewrites the text inside one `<t>`. The
+properties arsbridge does not model are preserved precisely because it does
+not model them.
+
+This is the plan's raw-XML contingency, chosen for fidelity rather than
+forced by corruption — openxlsx2 still owns the file mechanics, so there is no
+hand-rolled unzip/rezip anywhere in the writer.
+
+**9. Editing a shared string converts the cell to an inline one.** A cell's
+runs live in one of two places: inline in the sheet (`t="inlineStr"`, how
+openpyxl writes, and how every current fixture is authored) or interned in
+`xl/sharedStrings.xml` (`t="s"`, how Excel writes — so any shell a user has
+opened and re-saved). One `<si>` can back many cells, and in a TLF shell it
+routinely does: `xx.x (xx.xx)` is the same string in every data cell of a
+table. Editing the `<si>` in place would write one analysis's result into
+every cell that happened to share its placeholder.
+
+The writer therefore never edits a shared entry. It copies the `<si>` to the
+cell as an `<is>`, sets `t="inlineStr"`, clears `<v>`, and edits the copy —
+detaching that one cell and leaving every other user of the string alone. The
+cost is a slightly larger file; the alternative is silent cross-contamination.
+
 ## Consequences
 
 **A mismatch between the shell and the analysis typing becomes visible.** A
