@@ -63,6 +63,7 @@ reference:
   - ars_render_split
   - ars_render_listing
   - ars_render_figure
+  - ars_fill_shell
 
 - title: Review and correct
   desc: >
