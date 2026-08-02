@@ -1,5 +1,21 @@
 # arsbridge (development version)
 
+* **A `(N=XX)` column header is now filled, not only stripped.** The
+  decoration was removed before matching a column to the ARD and then
+  discarded, so every filled workbook shipped with `Placebo (N=XX)` above real
+  numbers. Each result column's header now gets the denominator its own
+  percentages are computed against -- `Placebo (N=86)` in the bundled example
+  -- written as an ordinary cell edit, so the arm's name, its font and the
+  author's spacing inside the brackets are untouched, and the write is
+  counted and reported like any other.
+
+  Where the number comes from is deliberate and narrow: the `N` of the
+  analyses **this column shows a percentage for**, so a reader can check the
+  header against the cells beneath it. A column whose analyses disagree, and a
+  column showing no percentage at all, keep their placeholder -- `N` on a
+  continuous analysis is {cards}' count of non-missing values, a different
+  quantity wearing the same name, and a header is not the place to guess.
+
 * **The bundled Excel shell is now the whole study, not half of it.** It
   carried four of CDSC-ALZ-201's eight outputs while the Word shell carried
   all eight -- and the bundle's own README advertised "one worksheet per

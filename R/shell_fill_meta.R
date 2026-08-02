@@ -220,7 +220,11 @@
       sheet          = section$sheet_name %||% NA_character_,
       format         = "xlsx",
       first_body_row = layout$first_body_row %||% NA_integer_,
-      header_row     = layout$header_row %||% NA_integer_
+      header_row     = layout$header_row %||% NA_integer_,
+      ## Every header row, not just the last one: a column's "(N=XX)" sits
+      ## wherever its arm label does, which in a stacked header is the row
+      ## above the one the body columns are read from.
+      header_rows    = as.integer(layout$header_rows %||% integer())
     ),
     columns = .fill_result_columns(section),
     cells   = list()

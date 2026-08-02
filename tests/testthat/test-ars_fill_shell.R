@@ -506,6 +506,55 @@ test_that("annotations can be kept for review", {
 ## and it asserted nothing about behaviour even when it passed.
 
 ## ---------------------------------------------------------------------------
+## The big N in a column header
+## ---------------------------------------------------------------------------
+
+test_that("the (N=xx) placeholder is located, whatever the author's spacing", {
+  span <- function(text) {
+    s <- .n_placeholder_span(text)
+    if (is.null(s)) NA_character_ else substr(text, s$start, s$stop)
+  }
+  expect_equal(span("Placebo (N=XX)"), "XX")
+  expect_equal(span("Drug 10 mg ( N = xx )"), "xx")
+  expect_equal(span("Placebo (n=XXX)"), "XXX")
+
+  ## A number the author typed is a literal, not a placeholder: filling it
+  ## would overwrite a decision someone made deliberately.
+  expect_null(.n_placeholder_span("Placebo (N=86)"))
+  expect_null(.n_placeholder_span("Placebo"))
+  expect_null(.n_placeholder_span(NULL))
+})
+
+test_that("a header N is the denominator its own column's percentages use", {
+  index <- data.frame(
+    analysis_id    = c("AN1", "AN1", "AN2", "AN3"),
+    group_level    = c("Placebo", "Drug 10 mg", "Placebo", "Placebo"),
+    variable_level = c("COMPLETED", "COMPLETED", "COMPLETED", NA),
+    stat_name      = c("N", "N", "N", "N"),
+    value          = c(86, 96, 86, 40),
+    status         = rep("computed", 4),
+    stringsAsFactors = FALSE)
+
+  ## Agreeing analyses in the column: the value they agree on.
+  hit <- .column_denominator(index, c("AN1", "AN2"), "Placebo")
+  expect_equal(hit$status, "computed")
+  expect_equal(hit$value, 86)
+
+  ## The column decides, not the table: the other arm has its own.
+  expect_equal(.column_denominator(index, "AN1", "Drug 10 mg")$value, 96)
+
+  ## Disagreement is reported, not averaged or arbitrated.
+  clash <- .column_denominator(index, c("AN1", "AN3"), "Placebo")
+  expect_equal(clash$status, "pending")
+  expect_match(clash$reason, "different denominators")
+
+  ## Nothing to reconcile means nothing is written.
+  expect_equal(.column_denominator(index, character(), "Placebo")$status,
+               "pending")
+  expect_equal(.column_denominator(index, "AN9", "Placebo")$status, "pending")
+})
+
+## ---------------------------------------------------------------------------
 ## Listings: one template row becomes N
 ## ---------------------------------------------------------------------------
 
