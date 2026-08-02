@@ -108,6 +108,38 @@ test_that("the [a] footnote marker survives in the filled stub label", {
   expect_match(ncell(run$book, "Table 14.1.5", "A7"), "\\[a\\]")
 })
 
+test_that("each arm header's (N=XX) is filled with that arm's own denominator", {
+  ## The decoration is not just stripped for matching any more -- it is
+  ## answered. Each arm has 4 subjects, so a header that came back with
+  ## another arm's N, or with the table's total, would show something other
+  ## than 4 and fail here.
+  run <- nheader_run()
+  for (col in c("B", "C", "D")) {
+    expect_match(ncell(run$book, "Table 14.1.5", paste0(col, "4")),
+                 "\\(N=4\\)", info = col)
+  }
+  ## The arm's name is untouched -- only the number inside the brackets moved.
+  expect_equal(ncell(run$book, "Table 14.1.5", "B4"), "Placebo (N=4)")
+
+  ## And it is recorded, so the QC sidecar can show where the number came from.
+  diags <- run$res$diagnostics
+  if (is.data.frame(diags) && nrow(diags) > 0) {
+    expect_false(any(diags$ref %in% c("B4", "C4", "D4") &
+                       diags$sheet == "Table 14.1.5"))
+  } else {
+    succeed()
+  }
+})
+
+test_that("a header N is left as authored when nothing under it states a denominator", {
+  ## Table 14.1.6 is continuous all the way down: a mean has no denominator
+  ## the way a percentage does. Writing the arm's subject count there would
+  ## be a number the table cannot be checked against, so the placeholder
+  ## stays.
+  run <- nheader_run()
+  expect_match(ncell(run$book, "Table 14.1.6", "B4"), "\\(N=XX\\)")
+})
+
 test_that("no dialect cell is lost to the column axis", {
   ## "not on the output's column axis" is the drift signature: it means a
   ## column failed to map at all, which is what the blank stub header used

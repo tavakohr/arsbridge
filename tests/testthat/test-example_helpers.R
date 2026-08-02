@@ -115,6 +115,10 @@ test_that("the bundle demos the whole chain offline: build, execute, fill", {
   expect_equal(cell("C5"), "96")   # Xanomeline Low Dose
   expect_equal(cell("D5"), "72")   # Xanomeline High Dose
 
+  ## The one arm header the shell decorates with "(N=XX)" is answered with
+  ## the same 86 the column's percentages are computed against.
+  expect_equal(cell("B4"), "Placebo (N=86)")
+
   ## The bundle is the only place a listing of this size is written -- 1,191
   ## rows, five columns -- and a listing that reads back perfectly in R can
   ## still open in Excel with four of its columns empty. Checked against the

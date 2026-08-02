@@ -940,6 +940,142 @@
   list(records = records)
 }
 
+## ---------------------------------------------------------------------------
+## The big N in a column header
+## ---------------------------------------------------------------------------
+
+#' The `xx` of an `(N=xx)` header placeholder, as a range in the cell's
+#' normalized text -- the coordinates `.replace_ranges()` works in.
+#'
+#' Only the number is replaced, never the decoration around it: the author
+#' wrote "(N=XX)" or "(N = xx)" and gets their own spacing and brackets back.
+#' A header that already states a number ("(N=86)") is left alone -- it is a
+#' literal the author typed, and this writer never overwrites those.
+#' @noRd
+.n_placeholder_span <- function(text) {
+  hit <- regexpr("\\(\\s*[Nn]\\s*=\\s*[xX]+\\s*\\)", text %||% "", perl = TRUE)
+  if (hit[[1]] == -1L) return(NULL)
+  group <- substr(text, hit[[1]], hit[[1]] + attr(hit, "match.length") - 1L)
+  token <- regexpr("[xX]+", group)
+  start <- hit[[1]] + token[[1]] - 1L
+  list(start = start, stop = start + attr(token, "match.length") - 1L)
+}
+
+#' The denominator one column's percentages are computed against.
+#'
+#' A header's big N is the population of that column, and the reading of it a
+#' reviewer can CHECK is the denominator the percentages under it divide by --
+#' `N` in the ARD, for the analyses this column actually shows a percentage
+#' for. Sourcing it from anywhere else (a subject-count row, the dataset)
+#' would let a header read 86 over percentages computed out of 84, and
+#' nothing in the deliverable would say which was wrong.
+#'
+#' A column showing no percentage therefore gets nothing: `N` on a continuous
+#' analysis is {cards}' count of non-missing values, which is a different
+#' quantity that happens to share a name, and writing it into a header would
+#' state a population the table cannot be checked against.
+#'
+#' Nothing is written unless the column's analyses agree either. They can
+#' disagree legitimately -- a table whose rows are reported against different
+#' populations -- and then the header is not one number.
+#'
+#' @return list(value, status, reason).
+#' @noRd
+.column_denominator <- function(index, analysis_ids, group_label) {
+  none <- function(reason) list(value = NA_real_, status = "pending",
+                                reason = reason)
+  if (is.null(index) || length(analysis_ids) == 0) {
+    return(none("no result in this column is shown as a percentage"))
+  }
+
+  rows <- index$analysis_id %in% analysis_ids &
+    index$stat_name %in% "N" &
+    index$status %in% "computed" & !is.na(index$value)
+  if (!is.null(group_label) && !is.na(group_label) && nzchar(group_label)) {
+    rows <- rows & !is.na(index$group_level) &
+      (index$group_level %in% group_label |
+         .same_label(index$group_level, group_label))
+  }
+
+  values <- unique(index$value[rows])
+  if (length(values) == 0) {
+    return(none("no analysis in this column reports a denominator"))
+  }
+  if (length(values) > 1) {
+    return(none(paste("the column's analyses report different denominators",
+                      paste(sort(values), collapse = " / "))))
+  }
+  list(value = values[[1]], status = "computed", reason = NA_character_)
+}
+
+#' Write each result column's big N into its header.
+#'
+#' Separate from the body fill because the answer is a property of the COLUMN,
+#' not of any one cell: it is looked up once per column rather than per row,
+#' and a header cell is never blanked when pending placeholders are cleared --
+#' emptying it would take the arm's name with it.
+#'
+#' @return list(records) -- one record per header that carried a placeholder.
+#' @noRd
+.fill_header_n <- function(wb, sheet_index, fill, index) {
+  rows <- fill$source$header_rows %||% integer()
+  columns <- fill$columns %||% list()
+  if (length(rows) == 0 || length(columns) == 0) return(list(records = list()))
+
+  cc <- wb$worksheets[[sheet_index]]$sheet_data$cc
+  records <- list()
+
+  for (column in columns) {
+    ## The analyses this column shows a PERCENTAGE for -- the ones whose
+    ## denominator the header has to agree with. Not every analysis in the
+    ## column, and not the table at large: see `.column_denominator()`.
+    own <- Filter(function(cell) {
+      identical(cell$col, column$col) && identical(cell$kind, "result") &&
+        any(vapply(cell$slots %||% list(), function(s) {
+          identical(s$stat_name %||% NA_character_, "p")
+        }, logical(1)))
+    }, fill$cells %||% list())
+    ids <- unique(vapply(own, function(cell) {
+      cell$analysis_id %||% NA_character_
+    }, character(1)))
+    ids <- ids[!is.na(ids)]
+
+    for (row in rows) {
+      ref  <- .xlsx_rc_to_a1(row, column$col)
+      slot <- which(cc$r == ref)
+      if (length(slot) != 1) next
+      xml <- .cell_is_xml(wb, cc, slot)
+      if (is.na(xml)) next
+
+      doc  <- xml2::read_xml(xml)
+      span <- .n_placeholder_span(.is_text(doc))
+      if (is.null(span)) next
+
+      record <- list(ref = ref, row = row, col = column$col,
+                     analysis_id = NA_character_, kind = "header_n",
+                     placeholder = "(N=xx)")
+      hit <- .column_denominator(index, ids, column$label)
+      if (!identical(hit$status, "computed")) {
+        record$status <- "pending"
+        record$reason <- hit$reason
+      } else if (.replace_ranges(doc, list(list(start = span$start,
+                                                stop  = span$stop,
+                                                text  = .format_value(hit$value, 0L))))) {
+        cc <- .cell_set_is(cc, slot, .is_xml(doc))
+        record$status <- "filled"
+        record$text   <- .is_text(doc)
+      } else {
+        record$status <- "skipped"
+        record$reason <- "the (N=xx) placeholder could not be located in the cell"
+      }
+      records[[length(records) + 1L]] <- record
+    }
+  }
+
+  wb$worksheets[[sheet_index]]$sheet_data$cc <- cc
+  list(records = records)
+}
+
 #' Clear the placeholders of cells that were never filled.
 #'
 #' Off by default. A shell whose unfilled cells still read "xx.x" says which
@@ -1598,6 +1734,10 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
     if (length(cells) > 0) {
       result <- .fill_table_sheet(wb, sheet_index, cells, index,
                                   keep_pending_placeholders, sheet)
+      ## The arm headers, after the body: the denominator written there is
+      ## read out of the same ARD the cells underneath it came from.
+      result$records <- c(result$records,
+                          .fill_header_n(wb, sheet_index, fill, index)$records)
     } else if (!is.null(fill$listing)) {
       result <- .fill_listing_sheet(
         wb, sheet_index, fill$listing,
