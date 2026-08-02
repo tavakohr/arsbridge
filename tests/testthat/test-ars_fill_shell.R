@@ -406,6 +406,13 @@ test_that("the author's layout comes through untouched", {
     xml2::xml_attr(xml2::xml_find_all(
       doc, paste0("//*[local-name()='", tag, "']")), attr)
   }
+  ## Row heights keyed by row number rather than by position, so a sheet that
+  ## gains rows can still be checked row for row.
+  heights <- function(dir, part) {
+    doc <- xml2::read_xml(file.path(dir, part))
+    rows <- xml2::xml_find_all(doc, "//*[local-name()='row']")
+    stats::setNames(xml2::xml_attr(rows, "ht"), xml2::xml_attr(rows, "r"))
+  }
 
   ## A listing legitimately changes shape -- its template row becomes N rows,
   ## and everything below moves down -- so the strict "nothing moved" check
@@ -419,8 +426,13 @@ test_that("the author's layout comes through untouched", {
     expect_identical(sort(b$merges$ref), sort(a$merges$ref), info = name)
     expect_identical(attrs(db, b$part, "col", "width"),
                      attrs(da, a$part, "col", "width"), info = name)
-    expect_identical(attrs(db, b$part, "row", "ht"),
-                     attrs(da, a$part, "row", "ht"), info = name)
+    ## Every row the author wrote keeps its own height. A figure sheet may
+    ## have GAINED rows -- a series longer than the annotation block it
+    ## replaces needs them, and a written row that has no row record is
+    ## dropped from the file entirely -- but none of the author's may change.
+    hb <- heights(db, b$part); ha <- heights(da, a$part)
+    expect_identical(ha[names(hb)], hb, info = name)
+    if (!grepl("^Figure", name)) expect_identical(names(ha), names(hb), info = name)
   }
 
   ## Column widths are a property of the sheet, not of its rows, so they must
@@ -451,6 +463,10 @@ test_that("labels, titles and footnotes are exactly as authored", {
 test_that("the filled workbook still opens", {
   run <- filled_run()
   expect_s3_class(openxlsx2::wb_load(run$path), "wbWorkbook")
+  ## Opening is not enough: openxlsx2 will happily read back a workbook whose
+  ## cells Excel drops on sight. Every sheet of the deliverable is checked
+  ## against the raw XML.
+  expect_rows_well_formed(run$path)
 })
 
 test_that("pending placeholders can be cleared when the workbook is going out for manual entry", {
@@ -536,6 +552,67 @@ test_that("a template row expands into one row per record", {
   expect_equal(txt("A3"), "S1"); expect_equal(txt("B3"), "Headache")
   expect_equal(txt("A4"), "S2"); expect_equal(txt("B4"), "Rash")
   expect_equal(txt("A5"), "S3"); expect_equal(txt("B5"), "Nausea")
+})
+
+test_that("an expanded listing is written the way Excel reads it, not just the way R does", {
+  ## The defect this is here for: every cell of columns B onwards was
+  ## serialized inside the LAST <row> element of the sheet. openxlsx2 reads
+  ## cells by their `r` attribute, so the test above passed and the listing
+  ## looked complete in R; Excel goes by the enclosing row, discards the lot,
+  ## and opens the listing with one column filled and the rest blank.
+  path <- mini_listing()
+  wb <- openxlsx2::wb_load(path)
+  rows <- data.frame(a = paste0("S", 1:20), b = paste0("Term", 1:20),
+                     stringsAsFactors = FALSE)
+  .fill_listing_sheet(wb, 1L, list(template_row = 3L), rows, TRUE)
+
+  out <- tempfile(fileext = ".xlsx")
+  openxlsx2::wb_save(wb, out, overwrite = TRUE)
+  expect_rows_well_formed(out)
+
+  ## Read straight out of the XML, so a cell in the wrong row element cannot
+  ## answer for one in the right place.
+  expect_equal(xlsx_raw_cell_text(out, "sheet1.xml", "B3"), "Term1")
+  expect_equal(xlsx_raw_cell_text(out, "sheet1.xml", "B22"), "Term20")
+  expect_equal(xlsx_raw_cell_text(out, "sheet1.xml", "A22"), "S20")
+})
+
+test_that("a sheet arriving with cells filed under the wrong row is reported, not saved quietly", {
+  ## The standing check behind the defect above: nothing a user can do makes
+  ## it fire, so it is provoked here by hand.
+  wb <- openxlsx2::wb_workbook()$add_worksheet("S")
+  wb$add_data(sheet = "S", x = data.frame(a = 1:3), dims = "A1", col_names = FALSE)
+  cc <- wb$worksheets[[1]]$sheet_data$cc
+  cc$key[[3]] <- .cc_key(1, 1)          # A3 filed under row 1
+  wb$worksheets[[1]]$sheet_data$cc <- cc
+
+  expect_match(.cc_problems(wb$worksheets[[1]]), "wrong row")
+
+  diag_reset()
+  .check_sheets_writable(wb, "S")
+  recs <- diag_records()
+  expect_equal(nrow(recs), 1L)
+  expect_equal(recs$severity, "FAIL")
+  expect_match(recs$problem, "Sheet S came out malformed")
+  diag_reset()
+})
+
+test_that("a row that has no row record is given one, so its cells survive the save", {
+  ## openxlsx2 writes rows from `row_attr`; a cell in a row with no record is
+  ## not written at all. Nothing warns, and the workbook opens fine -- short.
+  wb <- openxlsx2::wb_workbook()$add_worksheet("S")
+  wb$add_data(sheet = "S", x = data.frame(a = 1:2), dims = "A1", col_names = FALSE)
+  ws <- wb$worksheets[[1]]
+  ws$sheet_data$cc <- .cc_add(ws$sheet_data$cc, ws$sheet_data$cc[1, , drop = FALSE],
+                              row = 9, col = 1)
+  expect_match(.cc_problems(ws), "no row record")
+
+  ws <- .ensure_row_records(ws, 1:9)
+  expect_equal(.cc_problems(ws), character())
+  wb$worksheets[[1]] <- ws
+  out <- tempfile(fileext = ".xlsx")
+  openxlsx2::wb_save(wb, out, overwrite = TRUE)
+  expect_false(is.na(xlsx_raw_cell_text(out, "sheet1.xml", "A9")))
 })
 
 test_that("the footnote below a template row moves down with it, merge and all", {
@@ -686,6 +763,14 @@ test_that("listings and figures fill end to end, and nothing else regresses", {
   ## Tables are still filled as before.
   t2 <- run$book$sheets[["Table 14.1.2"]]
   expect_equal(t2$cells$text[t2$cells$ref == "B6"], "66.0 (5.16)")
+
+  ## And what Excel will show equals what R read back -- the listing's own
+  ## first data row, from the raw XML, columns and all.
+  part <- run$book$sheets[["Listing 16.2.1"]]$part
+  expect_equal(xlsx_raw_cell_text(run$path, basename(part), "A5"),
+               sheet$cells$text[sheet$cells$ref == "A5"])
+  expect_equal(xlsx_raw_cell_text(run$path, basename(part), "B5"),
+               sheet$cells$text[sheet$cells$ref == "B5"])
 })
 
 test_that("a sheet carrying something unshiftable is refused, not half-moved", {

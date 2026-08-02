@@ -367,6 +367,136 @@
   cc
 }
 
+## ---------------------------------------------------------------------------
+## Where openxlsx2 thinks a cell is
+## ---------------------------------------------------------------------------
+##
+## Every cell in `sheet_data$cc` carries a `key`, and the writer serializes the
+## sheet FROM that key alone: cells are grouped into `<row>` elements by
+## `key %/% 16384`, whatever their `r` and `row_r` say, and a row with no
+## `row_attr` record is not written at all. Both failures are silent, and both
+## are worse than a crash:
+##
+##   * A cell serialized inside the wrong `<row>` is invalid XLSX, so Excel
+##     discards it -- while openxlsx2's own reader places cells by `r` and
+##     reports the sheet as complete. A filled listing can therefore pass every
+##     check on the R side and open in Excel with its columns empty.
+##   * A cell in a row with no `row_attr` record simply is not in the file.
+##
+## So everything below that moves a cell or adds one maintains the key, and
+## every row written to gets a row record first. `.cc_problems()` states both
+## invariants and is checked before the workbook is saved.
+
+## openxlsx2's stride: one row is 16384 columns wide, and the key is
+## row * stride + column.
+.CC_ROW_STRIDE <- 16384
+
+#' The key openxlsx2 files a cell under.
+#' @noRd
+.cc_key <- function(row, col) as.numeric(row) * .CC_ROW_STRIDE + as.numeric(col)
+
+#' Add a cell to `cc`, cloning `template` for its style and filing it under
+#' the key its own row and column give it.
+#' @noRd
+.cc_add <- function(cc, template, row, col) {
+  new <- template
+  new$key   <- .cc_key(row, col)
+  new$r     <- .xlsx_rc_to_a1(row, col)
+  new$row_r <- as.character(row)
+  new$c_r   <- .xlsx_num_to_col(col)
+  rbind(cc, new)
+}
+
+#' Put `cc` back in the order openxlsx2 keeps it in.
+#' @noRd
+.cc_sorted <- function(cc) {
+  cc <- cc[order(cc$key), , drop = FALSE]
+  rownames(cc) <- NULL
+  cc
+}
+
+#' Give every row in `rows` a `row_attr` record, so cells written there are
+#' serialized at all. Rows that already have one keep theirs, heights and all.
+#' @noRd
+.ensure_row_records <- function(ws, rows) {
+  attr_df <- ws$sheet_data$row_attr
+  if (is.null(attr_df) || nrow(attr_df) == 0) return(ws)
+
+  have <- suppressWarnings(as.integer(attr_df$r))
+  need <- setdiff(rows, have[!is.na(have)])
+  if (length(need) == 0) return(ws)
+
+  added <- attr_df[rep(1, length(need)), , drop = FALSE]
+  added[] <- lapply(added, function(column) rep("", length(need)))
+  added$r <- as.character(need)
+
+  attr_df <- rbind(attr_df, added)
+  attr_df <- attr_df[order(suppressWarnings(as.integer(attr_df$r))), , drop = FALSE]
+  rownames(attr_df) <- NULL
+  ws$sheet_data$row_attr <- attr_df
+  ws
+}
+
+#' Every way one worksheet's cells could fail to survive being written.
+#'
+#' Cheap enough to run on every sheet of every fill: it is two vector
+#' comparisons. See the section note above for why it exists.
+#'
+#' @return A character vector of problems, empty when the sheet is sound.
+#' @noRd
+.cc_problems <- function(ws) {
+  cc <- ws$sheet_data$cc
+  if (is.null(cc) || nrow(cc) == 0) return(character())
+
+  rows <- suppressWarnings(as.integer(cc$row_r))
+  cols <- vapply(cc$c_r, .xlsx_col_to_num, integer(1), USE.NAMES = FALSE)
+  problems <- character()
+
+  misfiled <- which(!is.na(rows) & !is.na(cols) &
+                      cc$key != .cc_key(rows, cols))
+  if (length(misfiled) > 0) {
+    problems <- c(problems, sprintf(
+      "%d cell(s) are filed under the wrong row, starting at %s",
+      length(misfiled), cc$r[[misfiled[[1]]]]))
+  }
+
+  attr_df <- ws$sheet_data$row_attr
+  have <- suppressWarnings(as.integer(attr_df$r %||% character()))
+  orphans <- setdiff(rows[!is.na(rows)], have[!is.na(have)])
+  if (length(orphans) > 0) {
+    problems <- c(problems, sprintf(
+      "%d row(s) hold cells but have no row record, starting at row %d",
+      length(orphans), min(orphans)))
+  }
+
+  problems
+}
+
+#' Check every sheet against `.cc_problems()` on the way out.
+#'
+#' Nothing a user does can make this fire -- it fires when arsbridge itself has
+#' built a workbook that will lose cells on the way to Excel. It reports rather
+#' than stops so the rest of the run still lands, but it says plainly that the
+#' file is not trustworthy.
+#' @noRd
+.check_sheets_writable <- function(wb, sheet_names = character()) {
+  for (i in seq_along(wb$worksheets)) {
+    problems <- .cc_problems(wb$worksheets[[i]])
+    if (length(problems) == 0) next
+    name <- if (i <= length(sheet_names)) sheet_names[[i]] else as.character(i)
+    .diag_gap(
+      stage = "fill_shell", severity = "FAIL", input = INPUT_SHELL,
+      problem = sprintf("Sheet %s came out malformed: %s.",
+                        name, paste(problems, collapse = "; ")),
+      why = paste("Excel discards cells written like this, so the sheet would",
+                  "open with data missing even though R can still read it."),
+      fix = paste("This is an arsbridge bug, not a shell problem -- please",
+                  "report it with the shell that produced it."),
+      location = name)
+  }
+  invisible(NULL)
+}
+
 #' The `<t>` nodes of an `<is>` container, in document order -- one per run,
 #' or a single bare one for an unformatted cell.
 #' @noRd
@@ -543,7 +673,7 @@
 #' `wb_clean_sheet` are the whole of it). The insertion is therefore done
 #' here, against the four pieces of worksheet state that carry a row number:
 #'
-#'   sheet_data$cc        every cell's reference (`r`) and row (`row_r`)
+#'   sheet_data$cc        every cell's reference (`r`), row (`row_r`) and key
 #'   sheet_data$row_attr  the per-row record, including its height
 #'   mergeCells           a merged range that starts at or below the point
 #'   dimension            the sheet's declared extent
@@ -570,8 +700,11 @@
     if (any(move)) {
       cc$row_r[move] <- as.character(rows[move] + by)
       cc$r[move] <- paste0(cc$c_r[move], cc$row_r[move])
+      ## The key is what the cell is actually written by, so it moves too --
+      ## by whole rows, which is exactly one stride each.
+      cc$key[move] <- cc$key[move] + by * .CC_ROW_STRIDE
     }
-    ws$sheet_data$cc <- cc
+    ws$sheet_data$cc <- .cc_sorted(cc)
   }
 
   ## Per-row records, plus one new record per opened row so the inserted
@@ -975,21 +1108,17 @@
         ## A row opened up by the shift has no cells yet: clone the template's,
         ## so the new row inherits its style index.
         new <- template[k, , drop = FALSE]
-        new$r <- ref
-        new$row_r <- as.character(target)
         new$is <- xml
         new$c_t <- "inlineStr"
         new$v <- ""
-        cc <- rbind(cc, new)
+        cc <- .cc_add(cc, new, target, col)
       }
       written <- written + 1L
     }
   }
 
-  cc <- cc[order(suppressWarnings(as.integer(cc$row_r)),
-                 vapply(cc$c_r, .xlsx_col_to_num, integer(1))), , drop = FALSE]
-  rownames(cc) <- NULL
-  ws$sheet_data$cc <- cc
+  ws$sheet_data$cc <- .cc_sorted(cc)
+  ws <- .ensure_row_records(ws, seq.int(template_row, length.out = n))
   wb$worksheets[[sheet_index]] <- ws
 
   record$status <- "filled"
@@ -1196,10 +1325,8 @@
 
     if (length(slot) != 1) {
       new <- cc[1, , drop = FALSE]
-      new$r <- ref; new$row_r <- as.character(row)
-      new$c_r <- .xlsx_num_to_col(col)
       new$c_s <- ""; new$f <- ""; new$f_attr <- ""
-      cc <- rbind(cc, new)
+      cc <- .cc_add(cc, new, row, col)
       slot <- nrow(cc)
     }
 
@@ -1232,10 +1359,10 @@
     }
   }
 
-  cc <- cc[order(suppressWarnings(as.integer(cc$row_r)),
-                 vapply(cc$c_r, .xlsx_col_to_num, integer(1))), , drop = FALSE]
-  rownames(cc) <- NULL
-  ws$sheet_data$cc <- cc
+  ws$sheet_data$cc <- .cc_sorted(cc)
+  ## A series longer than the annotation block it replaces runs past the last
+  ## row the author left behind, and those rows do not exist yet.
+  ws <- .ensure_row_records(ws, seq.int(anchor, length.out = nrow(series) + 1L))
   wb$worksheets[[sheet_index]] <- ws
 
   record$status <- "filled"
@@ -1502,6 +1629,7 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
     }
   }
 
+  .check_sheets_writable(wb, sheet_names)
   openxlsx2::wb_save(wb, output_path, overwrite = TRUE)
 
   status <- vapply(records, function(r) r$status, character(1))

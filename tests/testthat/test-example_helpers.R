@@ -86,4 +86,19 @@ test_that("the bundle demos the whole chain offline: build, execute, fill", {
   expect_equal(cell("B5"), "86")   # Placebo
   expect_equal(cell("C5"), "96")   # Xanomeline Low Dose
   expect_equal(cell("D5"), "72")   # Xanomeline High Dose
+
+  ## The bundle is the only place a listing of this size is written -- 1,191
+  ## rows, five columns -- and a listing that reads back perfectly in R can
+  ## still open in Excel with four of its columns empty. Checked against the
+  ## raw XML, where Excel's view is the only view.
+  expect_rows_well_formed(payload$artifacts$filled_workbook)
+  listing <- book$sheets[["Listing 16.2.7.1"]]
+  last <- max(listing$cells$row)
+  for (col in c("A", "B", "C", "D", "E")) {
+    ref <- paste0(col, last)
+    expect_equal(
+      xlsx_raw_cell_text(payload$artifacts$filled_workbook,
+                         basename(listing$part), ref),
+      listing$cells$text[listing$cells$ref == ref], info = ref)
+  }
 })
