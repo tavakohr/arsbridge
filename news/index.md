@@ -2,6 +2,43 @@
 
 ## arsbridge (development version)
 
+- **The bundled example study is now CDSC-ALZ-201 – an Alzheimer’s study
+  built entirely from public pharmaverse data.** The invented
+  APX-DRM-301 dermatology bundle retires; its files live on locally
+  under `inputs/DRM/` (never tracked). The replacement’s datasets are
+  the CDISC pilot Xanomeline data straight from
+  [pharmaverseadam](https://pharmaverse.github.io/pharmaverseadam/)
+  (Apache-2.0, no real patient data), and – for the first time – the
+  whole bundle is reproducible: `data-raw/build_example_bundle.R`
+  generates every file from one curated variable list. The old bundle
+  had no generator at all; it was committed as opaque binaries nobody
+  could rebuild.
+
+  The bundle also gains what the old one never had: an annotated
+  **Excel** shell (`annotated_shell.xlsx`), so the example now demos the
+  package’s headline end to end, offline – build the ARS, execute it,
+  and write the shell back filled with the study’s real numbers. A
+  permanent test pins that chain with pharmaverseadam itself as the
+  oracle (86 / 96 / 72 safety subjects landing under their own arm
+  headers).
+  [`spec_to_ars_example()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars_example.md)
+  gains `shell_format = c("docx", "xlsx")`, runs deterministically in
+  seconds (8 TLFs), and stamps the new study identity. The ADaM spec –
+  pharmaverseadam labels and types, plus codelists for the decoded
+  categories – is also written to `inputs/adam_spec_CDSC-ALZ-201.xlsx`
+  for hands-on use.
+
+- **`inputs/` is now purely your workspace.** No study files are tracked
+  there any more except the public example spec above and the README:
+  everything else is ignored by default, so `git add -A` can never sweep
+  in study material. The old per-file allowlist for the retired example
+  is gone with it.
+
+- **callr is now an Imports**, so it installs with the package – as a
+  Suggests it never arrived automatically, and every workflow-app build
+  on a fresh machine silently fell back to the frozen in-process mode.
+  The app’s fallback gate stays, as a defensive backstop.
+
 - **The build shows its progress – in both of the app’s modes.** A real
   study takes minutes, and the person watching had no way to tell a slow
   run from a hung one: the in-process fallback showed a bare “Building

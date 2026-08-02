@@ -203,7 +203,7 @@ No other code changes.
 
 ## What the spec gate catches in practice
 
-During extraction on the bundled APX-DRM-301 study, the spec gate
+During extraction on the bundled CDSC-ALZ-201 study, the spec gate
 produces a distribution like this:
 
 | Gate result | Typical cause |

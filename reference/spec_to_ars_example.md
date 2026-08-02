@@ -2,10 +2,9 @@
 
 Zero-argument entry point that runs the full
 [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
-pipeline against `arsbridge_example("annotated_shell.docx")` +
-`arsbridge_example("adam_spec.xlsx")`. Useful as a first call after
-installation – you get a real ARS JSON and validation report from the
-APX-DRM-301 training shell without owning a study.
+pipeline against the bundled CDSC-ALZ-201 shell and ADaM spec. Useful as
+a first call after installation – you get a real ARS JSON and validation
+report from the training shell without owning a study.
 
 ## Usage
 
@@ -13,6 +12,7 @@ APX-DRM-301 training shell without owning a study.
 spec_to_ars_example(
   output_path = file.path(tempdir(), "reporting_event.json"),
   report_path = file.path(tempdir(), "spec_validation_report.xlsx"),
+  shell_format = c("docx", "xlsx"),
   ...
 )
 ```
@@ -30,6 +30,13 @@ spec_to_ars_example(
   `"spec_validation_report.xlsx"` in
   [`tempdir()`](https://rdrr.io/r/base/tempfile.html).
 
+- shell_format:
+
+  Which bundled shell to read: `"docx"` (default, all 8 outputs) or
+  `"xlsx"` (the Excel worksheets – the shell that
+  [`ars_fill_shell()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_shell.md)
+  can write back filled).
+
 - ...:
 
   Additional arguments forwarded to
@@ -45,11 +52,9 @@ result list.
 
 ``` r
 if (FALSE) { # \dontrun{
-# One-call demo. Takes ~6 minutes (40 LLM calls).
+# One-call demo. Deterministic (no API key needed); seconds, not minutes.
 res <- spec_to_ars_example()
-res$n_tlfs       # 40
-res$n_analyses   # ~226
-res$n_warnings   # ~29
+res$n_tlfs       # 8
 str(res$reporting_event, max.level = 1)
 } # }
 ```

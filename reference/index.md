@@ -118,7 +118,8 @@ access” article.
 
 ## Examples
 
-Access the bundled APX-DRM-301 study files for offline testing.
+Access the bundled CDSC-ALZ-201 Alzheimer training study – shells in
+Word and Excel, spec, and pharmaverseadam datasets – for offline use.
 
 - [`arsbridge_example()`](https://tavakohr.github.io/arsbridge/reference/arsbridge_example.md)
   : Bundled training files shipped with arsbridge
