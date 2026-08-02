@@ -15,7 +15,8 @@ ars_workflow_run(
   llm_provider = NULL,
   api_key = NULL,
   derived_dt = NULL,
-  log_path = NULL
+  log_path = NULL,
+  on_progress = NULL
 )
 }
 \arguments{
@@ -44,12 +45,21 @@ fixed value to make a run byte-reproducible; \code{NULL} uses the clock.}
 \item{log_path}{Where the run's console output was captured, if the caller
 redirected it. Recorded in \code{artifacts$run_log} so the payload can point
 at its own log.}
+
+\item{on_progress}{Optional function called with one progress event at a
+time: a list with \code{stage}, \code{stage_idx}, \code{n_stages}, \code{i}, \code{n}, \code{label}.
+Each stage announces itself with \code{i = 0}, then ticks once per TLF,
+analysis, or sheet. Errors it raises are swallowed -- a progress bar
+must never take a build down. \code{NULL} (the default) reports nothing and
+changes nothing.}
 }
 \value{
 A list with \code{status} (\code{"success"}, \code{"partial"} or \code{"error"}),
 \code{timings}, \code{artifacts}, \code{metadata}, \code{diagnostics} (one row per finding,
 with \code{severity} -- never split, so \code{INFO} findings survive),
 \code{pending} (cells reserved for manual derivation, ADR 0002),
+\code{fill} (the fill stage's headline counts -- \code{filled}, \code{pending},
+\code{skipped} -- or \code{NULL} when no fill ran),
 \code{unfilled_cells} (workbook cells left showing a placeholder, and why),
 and \code{error}.
 }

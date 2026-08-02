@@ -127,6 +127,12 @@
 #' @param log_path Where the run's console output was captured, if the caller
 #'   redirected it. Recorded in `artifacts$run_log` so the payload can point
 #'   at its own log.
+#' @param on_progress Optional function called with one progress event at a
+#'   time: a list with `stage`, `stage_idx`, `n_stages`, `i`, `n`, `label`.
+#'   Each stage announces itself with `i = 0`, then ticks once per TLF,
+#'   analysis, or sheet. Errors it raises are swallowed -- a progress bar
+#'   must never take a build down. `NULL` (the default) reports nothing and
+#'   changes nothing.
 #'
 #' @return A list with `status` (`"success"`, `"partial"` or `"error"`),
 #'   `timings`, `artifacts`, `metadata`, `diagnostics` (one row per finding,
@@ -153,8 +159,38 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
                              adam_dir = NULL, study_id = "STUDY-001",
                              supplement = NULL, use_llm = FALSE,
                              llm_provider = NULL, api_key = NULL,
-                             derived_dt = NULL, log_path = NULL) {
+                             derived_dt = NULL, log_path = NULL,
+                             on_progress = NULL) {
   started <- Sys.time()
+
+  ## The stage plan is known before anything runs, so the progress events can
+  ## say "stage 2 of 3" truthfully. A stage that will be skipped (no data, or
+  ## a Word shell) is simply not counted.
+  has_data <- !is.null(adam_dir) && nzchar(adam_dir) && dir.exists(adam_dir)
+  will_fill <- has_data && grepl("\\.xlsx$", shell_path, ignore.case = TRUE)
+  n_stages <- 1L + as.integer(has_data) + as.integer(will_fill)
+
+  ## Wrap one stage with the progress hook: announce entry (i = 0), then let
+  ## the stage's own per-item loop tick through `.progress_tick()`, which
+  ## reads the option installed here. Installed per stage and restored even
+  ## when the stage dies, so an error can never leak the hook into the
+  ## caller's session.
+  stage_no <- 0L
+  with_stage_progress <- function(stage_name, expr) {
+    if (is.null(on_progress)) return(force(expr))
+    stage_no <<- stage_no + 1L
+    idx <- stage_no
+    emit <- function(i, n, label = NA_character_) {
+      tryCatch(on_progress(list(stage = stage_name, stage_idx = idx,
+                                n_stages = n_stages, i = i, n = n,
+                                label = label)),
+               error = function(e) NULL)
+    }
+    emit(0L, 0L)
+    old <- options(arsbridge.progress = emit)
+    on.exit(options(old), add = TRUE)
+    force(expr)
+  }
 
   ## Settings a fresh process does not inherit, applied here and restored on
   ## the way out so a caller running this in-process is left as it was found.
@@ -194,17 +230,18 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
   }
 
   ## 1. The reporting event.
-  build <- record(.workflow_stage("spec_to_ars", spec_to_ars(
-    shell_path     = shell_path,
-    adam_spec_path = adam_spec_path,
-    output_path    = paths$ars_json,
-    study_id       = study_id,
-    supplement     = supplement,
-    report_path    = paths$validation_report,
-    code_dir       = paths$code_dir,
-    use_llm        = use_llm,
-    api_key        = api_key,
-    verbose        = FALSE)))
+  build <- with_stage_progress("spec_to_ars",
+    record(.workflow_stage("spec_to_ars", spec_to_ars(
+      shell_path     = shell_path,
+      adam_spec_path = adam_spec_path,
+      output_path    = paths$ars_json,
+      study_id       = study_id,
+      supplement     = supplement,
+      report_path    = paths$validation_report,
+      code_dir       = paths$code_dir,
+      use_llm        = use_llm,
+      api_key        = api_key,
+      verbose        = FALSE))))
 
   ## 2. The results. Skipped, and said so, when there is no data to run
   ##    against -- which is a normal way to use the build, not an error.
@@ -217,8 +254,9 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
         action = "Pass adam_dir to produce the ARD and the filled workbook.",
         stringsAsFactors = FALSE))
     } else {
-      run <- record(.workflow_stage("ars_to_ard",
-                                    ars_to_ard(paths$ars_json, adam_dir)))
+      run <- with_stage_progress("ars_to_ard",
+        record(.workflow_stage("ars_to_ard",
+                               ars_to_ard(paths$ars_json, adam_dir))))
       ard <- run$value
       if (!is.null(ard)) saveRDS(ard, paths$ard_rds)
     }
@@ -227,13 +265,14 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
   ## 3. The deliverable, for an Excel shell.
   if (is.null(failure) && !is.null(ard) &&
       grepl("\\.xlsx$", shell_path, ignore.case = TRUE)) {
-    filled <- record(.workflow_stage("ars_fill_shell", ars_fill_shell(
-      shell_path  = shell_path,
-      ars         = paths$ars_json,
-      ard         = ard,
-      output_path = paths$filled_workbook,
-      adam_dir    = adam_dir,
-      overwrite   = TRUE)))
+    filled <- with_stage_progress("ars_fill_shell",
+      record(.workflow_stage("ars_fill_shell", ars_fill_shell(
+        shell_path  = shell_path,
+        ars         = paths$ars_json,
+        ard         = ard,
+        output_path = paths$filled_workbook,
+        adam_dir    = adam_dir,
+        overwrite   = TRUE))))
     fill <- filled$value
   }
 

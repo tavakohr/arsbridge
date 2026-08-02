@@ -1417,8 +1417,12 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
 
   records <- list()
   stripped <- 0L
+  n_walked <- 0L   # progress ticks count every output, mapless ones included
 
   for (output in outputs) {
+    n_walked <- n_walked + 1L
+    .progress_tick(n_walked, length(outputs),
+                   as.character(output$id %||% "?"))
     fill <- output$`_meta`$shell_fill
     if (is.null(fill)) {
       ## Exiting silently here is how a run "does nothing" with no trace: the

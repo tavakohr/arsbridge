@@ -446,6 +446,7 @@ spec_to_ars <- function(shell_path,
     if (verbose) {
       cli::cli_alert("  [{i}/{length(sections)}] {.val {sec$tlf_number}}: {substr(sec$title, 1, 60)}")
     }
+    .progress_tick(i, length(sections), sec$tlf_number %||% "?")
     enriched[[i]] <- switch(extraction_mode,
       llm = enrich_with_llm(sec, spec_lookup = spec$lookup,
                             model = model, api_key = api_key,
