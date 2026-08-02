@@ -1,7 +1,15 @@
 ## tests/testthat/fixtures/build_ars_fixture.R
 ## ---------------------------------------------------------------------------
-## Re-generates the ARS reporting-event fixture used by the round-trip and
-## editor tests. Run from the package root:
+## FROZEN (2026-08, 0.1.0.9061). This script generated the committed
+## ars_apx_drm_301_deterministic.json / ars_apx_drm_301_validation.csv from
+## the retired APX-DRM-301 example bundle. spec_to_ars_example() now runs
+## the CDSC-ALZ-201 bundle and will NOT reproduce these files. Do not
+## regenerate: the committed JSON/CSV are the editor tests' INPUTS -- a
+## self-contained reporting event those tests read, edit, and round-trip --
+## and nothing about them requires the study that produced them to still
+## be shipping. Kept for provenance.
+##
+## Historical usage, from the package root:
 ##
 ##   Rscript tests/testthat/fixtures/build_ars_fixture.R
 ##

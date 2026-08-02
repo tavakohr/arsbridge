@@ -200,8 +200,21 @@ test_that("padding duplicates in the contents list are not reported", {
 })
 
 test_that("the ADaM spec overlay flags datasets and variables it cannot find", {
-  spec  <- parse_adam_spec(arsbridge_example("adam_spec.xlsx"))
-  model <- .ars_validate_model()
+  ## The model and the spec must belong to the SAME study for "clean
+  ## validates clean" to mean anything -- the frozen APX fixture model
+  ## references dermatology variables no Alzheimer spec can carry. So this
+  ## test builds its model from the bundle itself: the deterministic parse
+  ## of the bundled shell, validated against the bundled spec.
+  spec <- parse_adam_spec(arsbridge_example("adam_spec.xlsx"))
+  ars_path <- withr::local_tempfile(fileext = ".json")
+  withr::with_envvar(
+    c(ANTHROPIC_API_KEY = "", OPENAI_API_KEY = "", GEMINI_API_KEY = "",
+      GLM_API_KEY = "", ARS_LLM_PROVIDER = ""),
+    suppressMessages(suppressWarnings(spec_to_ars_example(
+      output_path = ars_path,
+      report_path = withr::local_tempfile(fileext = ".xlsx"),
+      api_key = "", verbose = FALSE))))
+  model <- ars_to_model(ars_path)
 
   clean <- validate_ars_model(model, spec = spec)
   expect_equal(sum(clean$severity == "FAIL"), 0)

@@ -7,6 +7,7 @@
 spec_to_ars_example(
   output_path = file.path(tempdir(), "reporting_event.json"),
   report_path = file.path(tempdir(), "spec_validation_report.xlsx"),
+  shell_format = c("docx", "xlsx"),
   ...
 )
 }
@@ -17,6 +18,10 @@ spec_to_ars_example(
 \item{report_path}{Where to write the spec validation report. Default:
 \code{"spec_validation_report.xlsx"} in \code{tempdir()}.}
 
+\item{shell_format}{Which bundled shell to read: \code{"docx"} (default, all
+8 outputs) or \code{"xlsx"} (the Excel worksheets -- the shell that
+\code{\link[=ars_fill_shell]{ars_fill_shell()}} can write back filled).}
+
 \item{...}{Additional arguments forwarded to \code{\link[=spec_to_ars]{spec_to_ars()}}.}
 }
 \value{
@@ -24,18 +29,15 @@ Invisibly returns the \code{\link[=spec_to_ars]{spec_to_ars()}} result list.
 }
 \description{
 Zero-argument entry point that runs the full \code{spec_to_ars()} pipeline
-against \code{arsbridge_example("annotated_shell.docx")} +
-\code{arsbridge_example("adam_spec.xlsx")}. Useful as a first call after
-installation -- you get a real ARS JSON and validation report from the
-APX-DRM-301 training shell without owning a study.
+against the bundled CDSC-ALZ-201 shell and ADaM spec. Useful as a first
+call after installation -- you get a real ARS JSON and validation report
+from the training shell without owning a study.
 }
 \examples{
 \dontrun{
-# One-call demo. Takes ~6 minutes (40 LLM calls).
+# One-call demo. Deterministic (no API key needed); seconds, not minutes.
 res <- spec_to_ars_example()
-res$n_tlfs       # 40
-res$n_analyses   # ~226
-res$n_warnings   # ~29
+res$n_tlfs       # 8
 str(res$reporting_event, max.level = 1)
 }
 }
