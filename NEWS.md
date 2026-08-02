@@ -55,6 +55,14 @@
   `tools/LOCKED_MACHINE_DEBUGGING.md` gains a reason-by-reason triage
   table, sharable as-is because the reason strings carry no study text.
 
+  And the fully clean shell -- the variant the live acceptance run caught:
+  zero analyses execute, `ars_to_ard()` returns `NULL`, and the fill stage
+  is *skipped*, so there is no census to warn from and the run announced
+  plain success. The payload now carries two WARN diagnostics ("no
+  executable analyses" / "the filled workbook was not produced"), and the
+  app's notification and clean-shell callout recognise the fill-never-ran
+  shape as well as the filled-nothing one.
+
 * **Fixed: a reviewed `methodId` was silently dropped whenever the supplement
   agreed with the shell about the variable.** Found by the end-to-end
   acceptance run, and it broke the exact loop the draft workflow is for.

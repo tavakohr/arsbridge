@@ -286,3 +286,24 @@ test_that("an in-process build reports progress and leaves the last event", {
     })
   )
 })
+
+test_that("the notice catches the fill that never ran at all", {
+  ## Variant B of the field failure: an Excel shell with data, but zero
+  ## analyses executed, so payload$fill is NULL rather than filled = 0.
+  meta_x <- list(shell_path = "shells.xlsx", adam_dir = "/data/adam")
+  never_ran <- list(status = "success", fill = NULL,
+                    unfilled_cells = data.frame(), metadata = meta_x)
+  notice <- arsbridge:::.workflow_build_notice(never_ran)
+  expect_equal(notice$type, "warning")
+  expect_match(notice$text, "not filled")
+
+  ## A Word shell, or a run without data, legitimately has no fill: silence.
+  meta_docx <- list(shell_path = "shells.docx", adam_dir = "/data/adam")
+  expect_equal(arsbridge:::.workflow_build_notice(
+    list(status = "success", fill = NULL, unfilled_cells = data.frame(),
+         metadata = meta_docx))$text, "Build complete.")
+  meta_nodata <- list(shell_path = "shells.xlsx", adam_dir = NA_character_)
+  expect_equal(arsbridge:::.workflow_build_notice(
+    list(status = "success", fill = NULL, unfilled_cells = data.frame(),
+         metadata = meta_nodata))$text, "Build complete.")
+})

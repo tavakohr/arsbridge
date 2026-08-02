@@ -196,3 +196,34 @@ test_that("a run with no fill stage carries a NULL fill, not a fake zero", {
     output_dir = tempfile("wf_"), adam_dir = NULL))
   expect_null(p$fill)
 })
+
+test_that("a clean shell's run says the fill never happened, and why", {
+  ## The fully clean shell executes zero analyses; ars_to_ard() returns NULL
+  ## and the fill stage is skipped by its guard -- so there is no per-cell
+  ## census to warn from. Found live during acceptance: that run announced
+  ## plain success. The payload must carry the explanation itself.
+  skip_if_not_installed("openxlsx2")
+  clean <- tempfile(fileext = ".xlsx")
+  wb <- openxlsx2::wb_workbook()
+  wb$add_worksheet("Table 14.1.1")
+  cells <- list(c(1, 1, "Table 14.1.1"), c(2, 1, "Summary of Disposition"),
+                c(4, 1, "Item"), c(4, 2, "Placebo"), c(4, 3, "Drug 10 mg"),
+                c(5, 1, "Subjects treated"), c(5, 2, "xx"), c(5, 3, "xx"))
+  for (cell in cells) {
+    wb$add_data(sheet = "Table 14.1.1", x = cell[[3]],
+                start_row = as.integer(cell[[1]]),
+                start_col = as.integer(cell[[2]]), col_names = FALSE)
+  }
+  wb$save(clean)
+
+  p <- no_keys(ars_workflow_run(
+    shell_path = clean, adam_spec_path = SPEC_X, adam_dir = ADAM_X,
+    output_dir = tempfile("wf_clean_")))
+
+  expect_null(p$fill)
+  expect_true(any(p$diagnostics$stage == "execute_ard" &
+                    grepl("no executable analyses", p$diagnostics$problem)))
+  expect_true(any(p$diagnostics$stage == "fill_shell" &
+                    grepl("was not produced", p$diagnostics$problem)))
+  expect_true(is.na(p$artifacts$filled_workbook))
+})

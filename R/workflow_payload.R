@@ -259,6 +259,29 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
                                ars_to_ard(paths$ars_json, adam_dir))))
       ard <- run$value
       if (!is.null(ard)) saveRDS(ard, paths$ard_rds)
+      if (is.null(ard) && is.null(failure)) {
+        ## ars_to_ard() returns NULL when not one analysis executed -- on a
+        ## fully clean shell, for instance. The fill guard below then skips
+        ## stage 3 entirely, so no per-cell census ever exists to warn from:
+        ## without these rows the payload reads "Build complete." while the
+        ## deliverable the user asked for (data was given!) quietly never
+        ## happened. This is the one gap the field run's own artifacts
+        ## cannot explain, so the explanation must be written here.
+        diagnostics <- rbind(diagnostics, data.frame(
+          stage = "execute_ard", severity = "WARN", input = INPUT_ARS,
+          tlf_number = NA_character_, location = NA_character_,
+          problem = "The reporting event carries no executable analyses, so no results were computed.",
+          action = "Usually a shell with no (or unreadable) annotations: annotate it, or declare the bindings in a reviewed supplement, then rebuild.",
+          stringsAsFactors = FALSE))
+        if (will_fill) {
+          diagnostics <- rbind(diagnostics, data.frame(
+            stage = "fill_shell", severity = "WARN", input = INPUT_SHELL,
+            tlf_number = NA_character_, location = NA_character_,
+            problem = "Without results, the filled workbook was not produced.",
+            action = "Fix the analyses above; the fill will run on the next build.",
+            stringsAsFactors = FALSE))
+        }
+      }
     }
   }
 

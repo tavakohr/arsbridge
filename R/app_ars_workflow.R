@@ -240,11 +240,28 @@ ars_workflow <- function(project_dir = NULL) {
       text = "Build complete, but the workbook was left unfilled -- see Results for why.",
       type = "warning"))
   }
+  ## The fill never RAN, on a run that should have produced it: an Excel
+  ## shell with data, but the ARD came back empty (a fully clean shell does
+  ## this -- zero analyses execute, ars_to_ard() returns NULL, and stage 3
+  ## is skipped). Without this branch that run announces plain success.
+  if (is.null(fill) && .workflow_fill_expected(payload)) {
+    return(list(
+      text = "Build complete, but no results were computed, so the workbook was not filled -- see Results for why.",
+      type = "warning"))
+  }
   if (identical(status, "partial")) {
     return(list(text = "Build complete, with findings -- see Results.",
                 type = "warning"))
   }
   list(text = "Build complete.", type = "message")
+}
+
+#' Should this run have produced a filled workbook? From the payload alone.
+#' @noRd
+.workflow_fill_expected <- function(payload) {
+  meta <- payload$metadata
+  grepl("\\.xlsx$", meta$shell_path %||% "", ignore.case = TRUE) &&
+    !is.na(meta$adam_dir %||% NA_character_)
 }
 
 #' Common handling for a finished build, however it ran.
@@ -900,8 +917,12 @@ ars_workflow <- function(project_dir = NULL) {
       diags <- payload$diagnostics
       no_annots <- !is.null(diags) && nrow(diags) > 0 &&
         any(grepl("no annotations were detected", diags$problem %||% ""))
-      filled_zero <- !is.null(payload$fill) &&
-        (payload$fill$filled %||% 1) == 0
+      ## "Nothing filled" has two shapes: the fill ran and placed nothing,
+      ## or a fully clean shell executed zero analyses so the fill never ran
+      ## at all (payload$fill is NULL on a run that should have had one).
+      filled_zero <-
+        (!is.null(payload$fill) && (payload$fill$filled %||% 1) == 0) ||
+        (is.null(payload$fill) && .workflow_fill_expected(payload))
       callout <- if (no_annots && filled_zero) {
         shiny::div(
           class = "alert alert-warning small mt-2 mb-2",
