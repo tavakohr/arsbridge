@@ -181,3 +181,18 @@ test_that("the payload survives serialization, which is how it travels", {
   expect_identical(back$diagnostics, p$diagnostics)
   expect_identical(back$metadata, p$metadata)
 })
+
+test_that("the fill's headline counts ride the payload", {
+  ## A UI deciding "did this build actually produce a filled workbook?"
+  ## reads three numbers, not the per-cell census.
+  p <- payload_run()
+  expect_named(p$fill, c("filled", "pending", "skipped"))
+  expect_gt(p$fill$filled, 0)
+})
+
+test_that("a run with no fill stage carries a NULL fill, not a fake zero", {
+  p <- no_keys(ars_workflow_run(
+    shell_path = SHELL_X, adam_spec_path = SPEC_X,
+    output_dir = tempfile("wf_"), adam_dir = NULL))
+  expect_null(p$fill)
+})

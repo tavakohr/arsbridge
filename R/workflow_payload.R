@@ -132,6 +132,8 @@
 #'   `timings`, `artifacts`, `metadata`, `diagnostics` (one row per finding,
 #'   with `severity` -- never split, so `INFO` findings survive),
 #'   `pending` (cells reserved for manual derivation, ADR 0002),
+#'   `fill` (the fill stage's headline counts -- `filled`, `pending`,
+#'   `skipped` -- or `NULL` when no fill ran),
 #'   `unfilled_cells` (workbook cells left showing a placeholder, and why),
 #'   and `error`.
 #'
@@ -272,6 +274,13 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
     ),
     diagnostics    = diagnostics,
     pending        = pending,
+    ## The fill's own headline numbers. A UI deciding "did this build
+    ## actually produce a filled workbook?" should not have to re-derive
+    ## that from the per-cell census.
+    fill           = if (!is.null(fill)) {
+      list(filled = fill$filled, pending = fill$pending,
+           skipped = fill$skipped)
+    } else NULL,
     unfilled_cells = unfilled,
     error          = failure,
     failed_stage   = stage_failed

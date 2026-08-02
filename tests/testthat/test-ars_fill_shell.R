@@ -742,3 +742,59 @@ test_that("a single-row listing is filled even on a sheet that cannot shift", {
     data.frame(a = "S1", b = "x", stringsAsFactors = FALSE), TRUE, "L")
   expect_equal(res$records[[1]]$status, "filled")
 })
+
+## ---------------------------------------------------------------------------
+## An unfilled workbook says so
+## ---------------------------------------------------------------------------
+
+test_that("outputs the fill passes over leave records, not silence", {
+  ## Both exits used to be bare `next`s: an output without a cell map, and a
+  ## map naming a sheet the workbook does not have. A run hitting them looked
+  ## like it "did nothing" -- zero rows in the census, no visible cause.
+  run <- filled_run()
+  ars2 <- jsonlite::fromJSON(run$ars, simplifyVector = FALSE)
+
+  ## One real output keeps the length(fills) == 0 abort out of the way; then
+  ## one output stripped of its map, and one whose map names a ghost sheet.
+  no_map <- ars2$outputs[[1]]
+  no_map$id <- "OUT_NO_MAP"
+  no_map$`_meta`$shell_fill <- NULL
+  ghost <- ars2$outputs[[1]]
+  ghost$id <- "OUT_GHOST_SHEET"
+  ghost$`_meta`$shell_fill$source$sheet <- "Table 99.9.9"
+  ars2$outputs <- c(ars2$outputs, list(no_map, ghost))
+  path2 <- tempfile(fileext = ".json")
+  jsonlite::write_json(ars2, path2, auto_unbox = TRUE, null = "null")
+
+  res <- suppressMessages(suppressWarnings(ars_fill_shell(
+    shell_path = SHELL, ars = path2, ard = run$ard,
+    output_path = tempfile(fileext = ".xlsx"),
+    adam_dir = ADAM, overwrite = TRUE)))
+
+  d <- res$diagnostics
+  expect_true("OUT_NO_MAP" %in% d$output_id)
+  expect_equal(d$reason[d$output_id == "OUT_NO_MAP"],
+               "no cell map recorded for this output")
+  expect_true("OUT_GHOST_SHEET" %in% d$output_id)
+  expect_match(d$reason[d$output_id == "OUT_GHOST_SHEET"], "Table 99.9.9")
+  expect_true(all(d$status[d$output_id %in%
+                             c("OUT_NO_MAP", "OUT_GHOST_SHEET")] == "skipped"))
+})
+
+test_that("a run that fills nothing warns with the dominant reason", {
+  ## An empty ARD stands in for the clean-shell case: every cell resolves to
+  ## the same no-result reason, and the summary must say so out loud -- a
+  ## workbook that looks identical to the shell is otherwise easy to trust.
+  run <- filled_run()
+  empty_ard <- run$ard[0, , drop = FALSE]
+  ## No adam_dir either: listings fill straight from the datasets, so leaving
+  ## it in would fill listing cells and defeat the zero-fill scenario. And
+  ## several warnings fire on this path ("the ARD carries no results" first),
+  ## so collect them all rather than racing for the first.
+  warnings <- testthat::capture_warnings(
+    suppressMessages(ars_fill_shell(
+      shell_path = SHELL, ars = run$ars, ard = empty_ard,
+      output_path = tempfile(fileext = ".xlsx"),
+      overwrite = TRUE)))
+  expect_true(any(grepl("Nothing was filled", warnings)))
+})

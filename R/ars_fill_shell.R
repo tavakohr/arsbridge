@@ -1420,7 +1420,17 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
 
   for (output in outputs) {
     fill <- output$`_meta`$shell_fill
-    if (is.null(fill)) next
+    if (is.null(fill)) {
+      ## Exiting silently here is how a run "does nothing" with no trace: the
+      ## output simply never appears in the census. One skipped record keeps
+      ## the accounting honest -- the caller sees the output was passed over
+      ## and why, instead of inferring it from an absence.
+      records[[length(records) + 1L]] <- list(
+        output_id = output$id %||% NA_character_,
+        sheet = NA_character_, ref = NA_character_, status = "skipped",
+        reason = "no cell map recorded for this output")
+      next
+    }
     sheet <- fill$source$sheet %||% NA_character_
     sheet_index <- match(sheet, sheet_names)
     if (is.na(sheet_index)) {
@@ -1432,6 +1442,14 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
         why = "Its results cannot be written.",
         fix = "Fill the shell the ARS was built from.",
         location = sheet %||% "")
+      ## The diagnostic above lives in a collector this function neither
+      ## resets nor returns, so on its own it vanishes in a hand-run
+      ## pipeline. The record travels with the return value.
+      records[[length(records) + 1L]] <- list(
+        output_id = output$id %||% NA_character_,
+        sheet = sheet, ref = NA_character_, status = "skipped",
+        reason = sprintf("the output names sheet '%s', which is not in the workbook",
+                         sheet %||% "?"))
       next
     }
 
@@ -1509,6 +1527,27 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
       c("i" = "Removed annotations from {stripped} cell{?s}.")
     } else NULL
   ))
+
+  ## "Filled 0 cells" scrolls past; a workbook that LOOKS identical to the
+  ## shell does not. When nothing at all was filled, name the dominant
+  ## reason here, where the user is -- the per-cell census alone is easy to
+  ## never open. The commonest cause in the field is the simplest: a clean
+  ## shell, with nothing annotated, has nothing for the pipeline to bind.
+  if (filled == 0 && length(records) > 0) {
+    reasons <- vapply(records, function(r) r$reason %||% "unstated",
+                      character(1))
+    dominant <- names(sort(table(reasons), decreasing = TRUE))[[1]]
+    cli::cli_warn(c(
+      "Nothing was filled: all {length(records)} cell{?s} came back unresolved.",
+      "i" = "The most common reason: {dominant}",
+      if (identical(dominant, "no analysis covers this row")) {
+        c("i" = paste("That usually means no annotations were detected in the",
+                      "shell. Annotate it, or declare the bindings in a",
+                      "reviewed supplement -- a supplement can bind the rows",
+                      "of a clean shell."))
+      } else NULL
+    ))
+  }
 
   invisible(list(path = output_path, filled = filled, pending = pending,
                  skipped = skipped, diagnostics = diagnostics))
