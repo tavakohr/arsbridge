@@ -151,6 +151,34 @@ ars_workflow <- function(project_dir = NULL) {
     error = function(e) NULL)
 }
 
+#' What to announce for a finished build's payload.
+#'
+#' Pure, so the choice of words is testable without a Shiny session. The
+#' unfilled case outranks "partial": a workbook that looks identical to the
+#' shell is the one outcome a user will misread as success.
+#' @noRd
+.workflow_build_notice <- function(payload) {
+  status <- payload$status %||% "success"
+  if (identical(status, "error")) {
+    return(list(
+      text = paste("Build failed at", payload$failed_stage %||% "an early stage."),
+      type = "warning"))
+  }
+  n_unfilled <- if (is.null(payload$unfilled_cells)) 0L
+                else nrow(payload$unfilled_cells)
+  fill <- payload$fill
+  if (!is.null(fill) && (fill$filled %||% 1) == 0 && n_unfilled > 0) {
+    return(list(
+      text = "Build complete, but the workbook was left unfilled -- see Results for why.",
+      type = "warning"))
+  }
+  if (identical(status, "partial")) {
+    return(list(text = "Build complete, with findings -- see Results.",
+                type = "warning"))
+  }
+  list(text = "Build complete.", type = "message")
+}
+
 #' Common handling for a finished build, however it ran.
 #' @noRd
 .workflow_finish_build <- function(res, state, bump) {
@@ -162,14 +190,8 @@ ars_workflow <- function(project_dir = NULL) {
   }
   state$last_result(res)
   bump()
-  status <- res$status %||% "success"
-  shiny::showNotification(
-    switch(status,
-           success = "Build complete.",
-           partial = "Build complete, with findings -- see Results.",
-           error   = paste("Build failed at", res$failed_stage %||% "an early stage.")),
-    type = if (identical(status, "success")) "message" else "warning",
-    duration = 8)
+  notice <- .workflow_build_notice(res)
+  shiny::showNotification(notice$text, type = notice$type, duration = 8)
   bslib::accordion_panel_open("wizard", "panel_results")
   invisible(res)
 }
@@ -320,9 +342,11 @@ ars_workflow <- function(project_dir = NULL) {
         title = "3. Supplement (optional)", value = "panel_supplement",
         shiny::uiOutput("badge_supplement"),
         shiny::p(class = "small",
-                 "Only if the build got something wrong. Generate a draft ",
-                 "from what the parser already found, correct the handful of ",
-                 "judgements that are wrong, save it as ",
+                 "When the build got something wrong -- or when the shell ",
+                 "carries no annotations at all: a reviewed supplement can ",
+                 "declare the bindings for a clean shell. Generate a draft ",
+                 "from what the parser already found, correct or add the ",
+                 "judgements, save it as ",
                  shiny::tags$code("supplement.json"), " and rebuild."),
         shiny::uiOutput("supplement_actions"),
         shiny::uiOutput("supplement_paths"),
@@ -348,6 +372,8 @@ ars_workflow <- function(project_dir = NULL) {
                  " Everything arsbridge declined to guess at, with the ",
                  "reason and the fix."),
         DT::DTOutput("results_diagnostics"),
+        shiny::uiOutput("results_unfilled_intro"),
+        DT::DTOutput("results_unfilled"),
         shiny::uiOutput("results_pending")
       )
     )
@@ -751,6 +777,30 @@ ars_workflow <- function(project_dir = NULL) {
         options = list(pageLength = 8, scrollX = TRUE, dom = "ftp"))
     })
 
+    output$results_unfilled_intro <- shiny::renderUI({
+      state$nonce()
+      payload <- .workflow_last_payload(paths_r(), state)
+      unfilled <- payload$unfilled_cells
+      if (is.null(unfilled) || nrow(unfilled) == 0) return(NULL)
+      shiny::p(class = "small mt-3 mb-1",
+               shiny::strong("Cells still showing their placeholder."),
+               " Per cell, with the reason. An empty cell in a clinical ",
+               "table reads as a zero, so nothing was blanked or guessed.")
+    })
+
+    output$results_unfilled <- DT::renderDT({
+      state$nonce()
+      payload <- .workflow_last_payload(paths_r(), state)
+      unfilled <- payload$unfilled_cells
+      if (is.null(unfilled) || nrow(unfilled) == 0) return(NULL)
+      ## The reason is the payload's most useful column: on a run that
+      ## filled nothing, its value distribution IS the diagnosis.
+      DT::datatable(
+        unfilled[, c("sheet", "ref", "status", "reason")],
+        rownames = FALSE, filter = "top",
+        options = list(pageLength = 8, scrollX = TRUE, dom = "ftp"))
+    })
+
     output$results_pending <- shiny::renderUI({
       state$nonce()
       payload <- .workflow_last_payload(paths_r(), state)
@@ -759,14 +809,31 @@ ars_workflow <- function(project_dir = NULL) {
       pending  <- payload$pending
       n_unfilled <- if (is.null(unfilled)) 0L else nrow(unfilled)
       n_pending  <- if (is.null(pending)) 0L else nrow(pending)
-      if (n_unfilled == 0 && n_pending == 0) return(NULL)
+
+      ## The clean-shell case, said in one box instead of scattered WARNs:
+      ## the parse found stub rows but not one annotation, and the fill
+      ## consequently placed nothing. Without this, the first sign a user
+      ## gets is a "filled" workbook identical to the shell.
+      diags <- payload$diagnostics
+      no_annots <- !is.null(diags) && nrow(diags) > 0 &&
+        any(grepl("no annotations were detected", diags$problem %||% ""))
+      filled_zero <- !is.null(payload$fill) &&
+        (payload$fill$filled %||% 1) == 0
+      callout <- if (no_annots && filled_zero) {
+        shiny::div(
+          class = "alert alert-warning small mt-2 mb-2",
+          shiny::strong("The shell carries no annotations, so nothing could be filled. "),
+          "That is by design -- an unannotated shell gives the pipeline ",
+          "nothing to bind, and it does not guess. Annotate the shell ",
+          "(red ", shiny::tags$code("DATASET.VARIABLE"),
+          " in the stub cells), or open Step 3: a reviewed supplement can ",
+          "declare the bindings for a clean shell. Then rebuild.")
+      }
+
+      if (is.null(callout) && n_unfilled == 0 && n_pending == 0) return(NULL)
       shiny::div(
         class = "mt-2 small",
-        if (n_unfilled > 0) {
-          shiny::div(sprintf(
-            "%d workbook cell(s) still show their placeholder. An empty cell in a clinical table reads as a zero, so they were left as they are.",
-            n_unfilled))
-        },
+        callout,
         if (n_pending > 0) {
           shiny::div(sprintf(
             "%d result(s) reserved for a manual derivation (ADR 0002).",

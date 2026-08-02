@@ -189,3 +189,32 @@ test_that("a resumed project derives statuses and exposes the hand-off", {
   expect_identical(payload$action, "edit")
   expect_identical(payload$ars_path, paths0$ars)
 })
+
+test_that("the completion notice calls an unfilled workbook what it is", {
+  ## The one outcome a user will misread as success is a workbook that looks
+  ## identical to the shell -- it outranks the generic "partial" wording.
+  filled <- list(status = "success",
+                 fill = list(filled = 12L, pending = 0L, skipped = 0L),
+                 unfilled_cells = data.frame())
+  expect_equal(arsbridge:::.workflow_build_notice(filled)$type, "message")
+
+  unfilled <- list(status = "partial",
+                   fill = list(filled = 0L, pending = 20L, skipped = 0L),
+                   unfilled_cells = data.frame(reason = rep("x", 20)))
+  notice <- arsbridge:::.workflow_build_notice(unfilled)
+  expect_equal(notice$type, "warning")
+  expect_match(notice$text, "left unfilled")
+
+  partial <- list(status = "partial", fill = list(filled = 5L),
+                  unfilled_cells = data.frame(reason = "x"))
+  expect_match(arsbridge:::.workflow_build_notice(partial)$text, "findings")
+
+  failed <- list(status = "error", failed_stage = "spec_to_ars")
+  expect_match(arsbridge:::.workflow_build_notice(failed)$text, "spec_to_ars")
+
+  ## No fill stage at all (Word shell, or no data): never the unfilled text.
+  no_fill <- list(status = "success", fill = NULL,
+                  unfilled_cells = data.frame())
+  expect_equal(arsbridge:::.workflow_build_notice(no_fill)$text,
+               "Build complete.")
+})
