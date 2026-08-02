@@ -142,8 +142,9 @@ test_that("spec_to_ars end-to-end on minimal synthetic fixture (requires API key
 test_that("spec_to_ars end-to-end on real APX-DRM-301 fixture (requires API key + real fixture)", {
   skip_if(Sys.getenv("ANTHROPIC_API_KEY") == "",
           "ANTHROPIC_API_KEY not set")
+  ## The retired dermatology example lives locally under inputs/DRM/ now.
   real_shell <- normalizePath(
-    file.path(test_path("fixtures"), "..", "..", "..", "inputs",
+    file.path(test_path("fixtures"), "..", "..", "..", "inputs", "DRM",
               "APX-DRM-301_TLF_Shells_v1.0_sample_annotated.docx"),
     mustWork = FALSE
   )

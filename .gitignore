@@ -24,18 +24,20 @@ docs/
 
 # Study-specific working dirs (NEVER commit client data)
 #
-# inputs/ is DEFAULT-DENY. It holds the shared APX-DRM-301 practice files,
-# which are synthetic and tracked; anything else dropped there is presumed
-# to be real study material and must never reach a commit. Listing the
-# permitted files (rather than banning risky extensions) means a sponsor
-# document copied in under ANY name is ignored by default -- `git add -A`
-# cannot sweep it in. To add a genuinely shareable input, allowlist it
-# below; to commit one deliberately, `git add -f` it.
+# inputs/ is DEFAULT-DENY and WORKSPACE-ONLY. Anything dropped here is
+# presumed to be real study material and must never reach a commit --
+# `git add -A` cannot sweep it in. The training example ships inside the
+# package (arsbridge_example()), not here. Only two files are tracked: this
+# folder's README, and the public pharmaverseadam-derived ADaM spec, which
+# data-raw/build_example_bundle.R regenerates. The allowlist names it
+# EXACTLY -- no wildcard, so no pattern can ever brush against a sponsor
+# file's name.
 inputs/*
 !inputs/README.md
-!inputs/ADaM.zip
-!inputs/APX-DRM-301_*
-!inputs/adam_spec_APX-DRM-301.xlsx
+!inputs/adam_spec_CDSC-ALZ-201.xlsx
+# inputs/DRM/ holds the retired APX-DRM-301 dermatology example, kept on
+# this machine only.
+inputs/DRM/
 
 # Local planning / handoff notes. These describe work against real studies
 # and are written for one machine, not for the repo. Kept out of commits by
