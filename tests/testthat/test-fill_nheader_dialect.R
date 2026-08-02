@@ -71,13 +71,14 @@ test_that("counts land under their own (N=XX) headers, not one column over", {
   }
 })
 
-test_that("a level absent from the data leaves its cell as authored", {
-  ## No Placebo subject discontinued, so the ARD has no row for that cell;
-  ## the writer leaves the placeholder rather than inventing a zero. Same
-  ## behaviour as the plain fixture -- pinned here because sparse levels are
-  ## common in real studies and a silent "0" would be a fabricated result.
+test_that("an arm with no qualifying subject reads zero, in the shell's own case", {
+  ## No Placebo subject discontinued, so the subset leaves that arm with no
+  ## records and {cards} reports none. The ARD is completed with the zero
+  ## before the writer sees it -- and the cell takes the decimals the
+  ## UPPERCASE placeholder states, like every other cell on this sheet.
+  ## Sparse arms are common in real studies, and a blank reads as missing.
   run <- nheader_run()
-  expect_equal(ncell(run$book, "Table 14.1.5", "B7"), "XX (XX.X)")
+  expect_equal(ncell(run$book, "Table 14.1.5", "B7"), "0 (0.0)")
 })
 
 test_that("uppercase placeholders resolve with the decimals they state", {

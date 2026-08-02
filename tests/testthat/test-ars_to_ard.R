@@ -413,3 +413,99 @@ test_that("ars_to_ard errors when the ADaM directory is missing", {
     ars_to_ard(.edge_write(.edge_spec()), tempfile("no_dir_")),
     regexp = "dir|exist|found")
 })
+
+# ---- zero-count groups -----------------------------------------------------
+
+## An analysis's data subset is applied before the executor runs, so an arm
+## with no qualifying subject is not in the frame {cards} sees and gets no row
+## at all. Zero is the answer, though, and everything downstream trusts the
+## ARD -- so the gap is closed there. See .complete_zero_groups().
+.zero_adam <- function(envir = parent.frame()) {
+  dir <- withr::local_tempdir(.local_envir = envir)
+  utils::write.csv(data.frame(
+    USUBJID = sprintf("S%02d", 1:6),
+    TRT01A  = rep(c("Drug A", "Placebo"), each = 3),
+    SAFFL   = "Y",
+    AGE     = c(45, 50, 55, 60, 65, 70),
+    ## Only Drug A discontinues; Placebo vanishes from the subset entirely.
+    EOSSTT  = c("DISCONTINUED", "DISCONTINUED", "COMPLETED",
+                "COMPLETED", "COMPLETED", "COMPLETED"),
+    stringsAsFactors = FALSE
+  ), file.path(dir, "ADSL.csv"), row.names = FALSE)
+  dir
+}
+
+.zero_spec <- function(method = "MTH_SUBJECT_COUNT_PCT") {
+  list(
+    id = "S", name = "S", version = "1",
+    analysisSets = list(list(id = "AS_SAF", name = "Safety",
+      condition = list(dataset = "ADSL", variable = "SAFFL",
+                       comparator = "EQ", value = list("Y")))),
+    dataSubsets = list(list(id = "DS_DISC", name = "Discontinued",
+      condition = list(dataset = "ADSL", variable = "EOSSTT",
+                       comparator = "EQ", value = list("DISCONTINUED")))),
+    analysisGroupings = list(list(id = "GF_TRT", name = "TRT01A",
+      groupingVariable = list(dataset = "ADSL", variable = "TRT01A"))),
+    methods = list(list(id = method, name = method)),
+    analyses = list(list(id = "AN_Z", methodId = method,
+      analysisSetId = "AS_SAF", dataSubsetId = "DS_DISC",
+      analysisVariable = list(dataset = "ADSL", variable = "EOSSTT"),
+      orderedGroupings = list(list(order = 1, groupingId = "GF_TRT",
+                                   resultsByGroup = TRUE)))),
+    outputs = list(list(id = "T_Z", name = "T-Z",
+      referencedAnalysisIds = list("AN_Z"))))
+}
+
+test_that("an arm the subset empties still gets a row, with zero in it", {
+  skip_if_not_installed("cards")
+  ard <- suppressMessages(suppressWarnings(
+    ars_to_ard(.edge_write(.zero_spec()), .zero_adam())))
+  expect_s3_class(ard, "card")
+
+  chr <- function(col) vapply(col, function(x) {
+    if (length(x) == 0 || is.null(x[[1]]) || is.function(x[[1]])) NA_character_
+    else as.character(x[[1]])[[1]]
+  }, character(1))
+
+  arms <- chr(ard$group1_level)
+  expect_setequal(unique(arms[!is.na(arms)]), c("Drug A", "Placebo"))
+
+  zero <- ard[!is.na(arms) & arms == "Placebo", , drop = FALSE]
+  stat <- stats::setNames(as.numeric(chr(zero$stat)),
+                          as.character(zero$stat_name))
+  expect_equal(unname(stat[["n"]]), 0)
+  expect_equal(unname(stat[["p"]]), 0)
+  ## The denominator is the arm's own population, not the emptied subset.
+  expect_equal(unname(stat[["N"]]), 3)
+
+  ## It is a computed result, stamped like every other row -- not a stub, and
+  ## not something the writer invented later.
+  expect_equal(unique(as.character(zero$result_status)), "computed")
+  expect_equal(unique(as.character(zero$analysis_id)), "AN_Z")
+
+  ## The arm that HAS data is untouched: 2 of its 3 subjects discontinued.
+  drug <- ard[!is.na(arms) & arms == "Drug A", , drop = FALSE]
+  drug_stat <- stats::setNames(as.numeric(chr(drug$stat)),
+                               as.character(drug$stat_name))
+  expect_equal(unname(drug_stat[["n"]]), 2)
+})
+
+test_that("a continuous summary is never completed with zeros", {
+  ## The mean of nothing is nothing. Only counting methods are completed, so
+  ## the emptied arm stays absent here rather than claiming a mean of 0 --
+  ## which would be a fabricated result, not a missing one.
+  skip_if_not_installed("cards")
+  spec <- .zero_spec(method = "MTH_SUMMARY_STATISTICS_CONTINUOUS")
+  spec$analyses[[1]]$analysisVariable <- list(dataset = "ADSL",
+                                              variable = "AGE")
+  ard <- suppressMessages(suppressWarnings(
+    ars_to_ard(.edge_write(spec), .zero_adam())))
+
+  chr <- function(col) vapply(col, function(x) {
+    if (length(x) == 0 || is.null(x[[1]]) || is.function(x[[1]])) NA_character_
+    else as.character(x[[1]])[[1]]
+  }, character(1))
+  arms <- chr(ard$group1_level)
+  expect_equal(unique(arms[!is.na(arms)]), "Drug A")
+  expect_false("Placebo" %in% arms)
+})

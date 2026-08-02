@@ -371,13 +371,42 @@ test_that("a template row is left alone rather than given one level's value", {
 
 test_that("an unfillable cell keeps its placeholder and is reported", {
   run <- filled_run()
-  ## Placebo has no discontinuation in the fixture, so no ARD row exists.
-  ## An empty cell would read as a zero; the placeholder says "not computed".
-  expect_match(cell_text(run$book, "Table 14.1.1", "B7"), "x")
+  ## The repeated block is the honest example of "not computed": the row
+  ## stands for however many system organ classes the data has, and no single
+  ## number answers it. An empty cell would read as a zero.
+  expect_match(cell_text(run$book, "Table 14.3.1", "B7"), "x")
   expect_true(any(run$res$diagnostics$ref == "B7" &
-                    run$res$diagnostics$sheet == "Table 14.1.1"))
+                    run$res$diagnostics$sheet == "Table 14.3.1"))
   expect_gt(run$res$pending, 0)
   expect_equal(run$res$skipped, 0)
+})
+
+test_that("an arm the filter emptied is filled with zero, not left blank", {
+  ## No Placebo subject discontinued in the fixture, so the subset leaves that
+  ## arm with no records and {cards} reports no row for it. Zero IS the
+  ## answer, though, and a blank cell in a clinical table reads as missing --
+  ## so the ARD is completed before anything consumes it.
+  run <- filled_run()
+  expect_equal(cell_text(run$book, "Table 14.1.1", "B7"), "0 (0.0)")
+  expect_false(any(run$res$diagnostics$ref == "B7" &
+                     run$res$diagnostics$sheet == "Table 14.1.1"))
+
+  ## And it is a real ARD row, stamped like any other computed result -- not a
+  ## zero the writer invented at the last moment.
+  chr <- function(col) vapply(col, function(x) {
+    if (length(x) == 0 || is.null(x[[1]]) || is.function(x[[1]])) NA_character_
+    else as.character(x[[1]])[[1]]
+  }, character(1))
+  ard <- run$ard
+  rows <- chr(ard$group1_level) == "Placebo" &
+    as.character(ard$analysis_id) == "AN_T_14_1_1_003"
+  expect_true(any(rows))
+  stats <- stats::setNames(as.numeric(chr(ard$stat)[rows]),
+                           as.character(ard$stat_name)[rows])
+  expect_equal(unname(stats[["n"]]), 0)
+  expect_equal(unname(stats[["p"]]), 0)
+  expect_gt(stats[["N"]], 0)
+  expect_true(all(as.character(ard$result_status)[rows] == "computed"))
 })
 
 test_that("no annotation survives into the deliverable", {
@@ -476,9 +505,11 @@ test_that("pending placeholders can be cleared when the workbook is going out fo
     shell_path = SHELL, ars = run$ars, ard = run$ard, output_path = out,
     keep_pending_placeholders = FALSE, overwrite = TRUE)))
   book <- xlsx_read_shell_cells(out)
-  expect_equal(cell_text(book, "Table 14.1.1", "B7") %||% "", "")
-  ## A filled cell is still filled.
+  ## The repeated-block row is the pending one: it is blanked.
+  expect_equal(cell_text(book, "Table 14.3.1", "B7") %||% "", "")
+  ## A filled cell is still filled -- including a zero, which is a result.
   expect_match(cell_text(book, "Table 14.1.2", "B6"), "^66")
+  expect_equal(cell_text(book, "Table 14.1.1", "B7"), "0 (0.0)")
 })
 
 test_that("annotations can be kept for review", {
