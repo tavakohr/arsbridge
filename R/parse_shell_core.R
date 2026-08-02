@@ -915,8 +915,7 @@ bind_annotations <- function(sec) {
   for (cand in conditioned) {
     if (!identical(cand$variable, axis_var)) next
     ## Display level label: the header text without its (N=XX) placeholder.
-    level_label <- sub("\\s*\\(\\s*[Nn]\\s*=\\s*[^)]*\\)\\s*$", "", cand$label)
-    level_label <- trimws(gsub("\\s+", " ", level_label))
+    level_label <- .strip_n_placeholder(cand$label)
     groups[[length(groups) + 1L]] <- list(
       label      = level_label,
       annotation = cand$annotation,

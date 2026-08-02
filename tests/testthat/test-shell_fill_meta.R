@@ -334,3 +334,50 @@ test_that("a label that is not a statistic line is treated as a level", {
   expect_null(.stats_for_line("American Indian or Alaska Native"))
   expect_null(.stats_for_line(""))
 })
+
+## ---------------------------------------------------------------------------
+## The column axis under real-world header dialects
+## ---------------------------------------------------------------------------
+## Two failure modes from the first sponsor-format workbook in the field, both
+## of which left every cell unfilled with no visible cause: an "(N=XX)"
+## decoration on the arm headers, and a header cell whose only content was an
+## annotation (so its label came back blank).
+
+test_that("(N=...) header decorations are stripped from fill-map labels", {
+  ## The ARD carries "Placebo", never "Placebo (N=XX)" -- the ARS side strips
+  ## the decoration when it derives grouping levels, so the fill side has to
+  ## match it stripped or the value-to-column join never succeeds.
+  sec <- list(col_labels_full = c("Item", "Placebo (N=XX)", "Drug 10 mg (N=64)"))
+  cols <- .fill_result_columns(sec)
+  expect_equal(vapply(cols, function(c) c$label, character(1)),
+               c("Placebo", "Drug 10 mg"))
+  expect_equal(vapply(cols, function(c) c$col, integer(1)), 2:3)
+})
+
+test_that("a blank header cell keeps its column, and its neighbours theirs", {
+  ## An annotation-only header cell leaves a blank label. The old compacted
+  ## vector dropped it and renumbered, so every later column joined one to
+  ## the left -- the wrong-number-in-the-right-looking-cell failure. The
+  ## blank column itself stays unmapped: an empty label cannot be matched to
+  ## an ARD group level, and pending beats a cross-column match.
+  sec <- list(col_labels_full = c("", "Placebo", "", "Drug 10 mg"))
+  cols <- .fill_result_columns(sec)
+  expect_equal(vapply(cols, function(c) c$col, integer(1)), c(2L, 4L))
+  expect_equal(vapply(cols, function(c) c$label, character(1)),
+               c("Placebo", "Drug 10 mg"))
+})
+
+test_that("a section without col_labels_full falls back to col_headers", {
+  sec <- list(col_headers = c("Item", "Placebo (N=XX)"))
+  cols <- .fill_result_columns(sec)
+  expect_length(cols, 1L)
+  expect_equal(cols[[1]]$label, "Placebo")
+  expect_equal(cols[[1]]$col, 2L)
+})
+
+test_that("order arithmetic is unchanged where no blanks exist", {
+  ## order = col - 1 is what every existing _meta.shell_fill golden carries.
+  sec <- list(col_labels_full = c("Item", "A", "B", "C"))
+  cols <- .fill_result_columns(sec)
+  expect_equal(vapply(cols, function(c) c$order, integer(1)), 1:3)
+})

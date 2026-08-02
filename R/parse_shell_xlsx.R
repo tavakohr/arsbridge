@@ -347,6 +347,11 @@ parse_shell_xlsx <- function(xlsx_path, spec_lookup = NULL,
   ## understands a flat axis still gets one; the hierarchy travels on the grid.
   flat <- .xlsx_combine_header_grid(grid)
   keep <- nzchar(flat$labels)
+  ## The fill map needs the UNCOMPACTED vector: dropping blank labels below
+  ## renumbers the columns, and a header cell whose only content was an
+  ## annotation (stripped above) leaves a blank behind. The fill writer joins
+  ## ARD values to sheet cells by physical column, so it must see the blanks.
+  sec$col_labels_full <- flat$labels
   sec$col_headers <- flat$labels[keep]
   sec$.pending_column_annotations <- list(
     labels = flat$labels[keep], annotations = flat$annotations[keep])

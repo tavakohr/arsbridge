@@ -162,11 +162,39 @@
 #' evidence the shell offers for which is which.
 #' @noRd
 .fill_result_columns <- function(section) {
-  headers <- as.character(section$col_headers %||% character())
-  if (length(headers) < 2L) return(list())
-  lapply(seq_along(headers)[-1], function(i) {
-    list(col = i, order = i - 1L, label = headers[[i]])
-  })
+  ## Two lessons from the first workbook that came back unfilled, both of
+  ## which broke the value-to-column join silently:
+  ##
+  ## 1. Shells decorate arm headers with an "(N=XX)" placeholder, but the ARD
+  ##    carries the bare group level ("Placebo", never "Placebo (N=XX)") --
+  ##    the ARS side strips the decoration when it derives grouping levels,
+  ##    so the fill side must strip it the same way or nothing ever matches.
+  ## 2. The compacted `col_headers` loses physical positions: a header cell
+  ##    whose only content was an annotation leaves a blank that compaction
+  ##    drops, shifting every later column one to the left. `col_labels_full`
+  ##    (one entry per physical column, blanks preserved) is the honest map.
+  full <- as.character(section$col_labels_full %||% character())
+  if (length(full) == 0) {
+    ## Older sections carry only the compacted vector. Same treatment, minus
+    ## the physical fidelity it cannot offer.
+    full <- as.character(section$col_headers %||% character())
+  }
+  if (length(full) < 2L) return(list())
+
+  columns <- list()
+  for (j in seq_along(full)[-1]) {
+    label <- .strip_n_placeholder(full[[j]])
+    ## A blank label cannot be matched to an ARD group level, and an empty
+    ## group_level fails .ard_value()'s nzchar gate and would match across
+    ## every column. Leave the column unmapped; its cells stay pending under
+    ## the column-axis reason instead of joining wrongly.
+    if (!nzchar(label)) next
+    ## order stays col - 1: it is the column's physical rank, and keeping the
+    ## old arithmetic keeps existing _meta.shell_fill output byte-identical.
+    columns[[length(columns) + 1L]] <-
+      list(col = j, order = j - 1L, label = label)
+  }
+  columns
 }
 
 #' The cell map for one output.
