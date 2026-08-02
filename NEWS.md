@@ -1,5 +1,26 @@
 # arsbridge (development version)
 
+* **The bundled Excel shell is now the whole study, not half of it.** It
+  carried four of CDSC-ALZ-201's eight outputs while the Word shell carried
+  all eight -- and the bundle's own README advertised "one worksheet per
+  output". The generator now authors the missing four: the TEAE overview
+  (14.3.1), adverse events by system organ class and preferred term (14.3.2),
+  study drug exposure (14.2.1), and the concomitant-medications listing
+  (16.2.4.1), in the Word shell's order. `spec_to_ars_example(shell_format =
+  "xlsx")` reports 8 outputs, and a new test compares the two shells output
+  for output, so the drift cannot come back unnoticed.
+
+  The example run fills 59 cells and leaves 7: the six cells of 14.3.2's
+  `<System Organ Class>` / `<Preferred Term>` template rows, which the Excel
+  writer does not expand, and one Serious-TEAE cell for an arm that had no
+  serious event -- a cell with no result keeps its placeholder rather than
+  being written as a zero. It reports no diagnostics, and takes about 30
+  seconds end to end.
+
+  `ADaM.zip` shrinks to 217 KB: ADCM keeps each subject's first occurrence of
+  a medication, which is what its listing shows -- the full 7,510 records
+  would have made the filled workbook a listing of repeat administrations.
+
 * **A count row that shows a percentage now declares one.** A row annotated as
   a filter on its own variable -- "Completed study `[ADSL.EOSSTT =
   'COMPLETED']`" -- was always typed `MTH_SUBJECT_COUNT`, which declares the

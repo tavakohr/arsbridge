@@ -18,9 +18,9 @@ spec_to_ars_example(
 \item{report_path}{Where to write the spec validation report. Default:
 \code{"spec_validation_report.xlsx"} in \code{tempdir()}.}
 
-\item{shell_format}{Which bundled shell to read: \code{"docx"} (default, all
-8 outputs) or \code{"xlsx"} (the Excel worksheets -- the shell that
-\code{\link[=ars_fill_shell]{ars_fill_shell()}} can write back filled).}
+\item{shell_format}{Which bundled shell to read: \code{"docx"} (default) or
+\code{"xlsx"} (the Excel worksheets -- the shell that \code{\link[=ars_fill_shell]{ars_fill_shell()}} can
+write back filled). Both carry the same 8 outputs.}
 
 \item{...}{Additional arguments forwarded to \code{\link[=spec_to_ars]{spec_to_ars()}}.}
 }
