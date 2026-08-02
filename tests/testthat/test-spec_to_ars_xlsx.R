@@ -163,3 +163,41 @@ test_that("the validation report is written", {
   built <- build_apx()
   expect_true(file.exists(built$res$report_path))
 })
+
+## ---------------------------------------------------------------------------
+## The second header dialect: (N=XX) decorations and a label-less stub header
+## ---------------------------------------------------------------------------
+## shells_apx_nheaders.xlsx recreates, with invented content, the conventions
+## that broke the first field workbook. Table 14.1.5 combines all of them;
+## Table 14.1.6 carries only the (N=XX) decoration -- so when one of these
+## tests fails, the name says which fix regressed.
+
+test_that("(N=XX) arm headers reach the fill map stripped, at true columns", {
+  b <- build_apx(shell = test_path("fixtures", "shells_apx_nheaders.xlsx"))
+  hit <- Filter(function(o) identical(o$id, "T_14_1_6"), b$ars$outputs)
+  expect_length(hit, 1L)
+  cols <- hit[[1]]$`_meta`$shell_fill$columns
+  expect_equal(vapply(cols, function(c) c$label, character(1)),
+               c("Placebo", "Drug 10 mg", "Drug 20 mg"))
+  expect_equal(vapply(cols, function(c) c$col, integer(1)), 2:4)
+})
+
+test_that("a stub header holding only the directive does not shift columns", {
+  ## The stub header cell is red directive text alone; once the annotation is
+  ## lifted, its label is blank. The compacted header vector then starts at
+  ## "Placebo", and a map built from it would put Placebo's values under the
+  ## stub -- every number one column left of its header.
+  b <- build_apx(shell = test_path("fixtures", "shells_apx_nheaders.xlsx"))
+  hit <- Filter(function(o) identical(o$id, "T_14_1_5"), b$ars$outputs)
+  expect_length(hit, 1L)
+  cols <- hit[[1]]$`_meta`$shell_fill$columns
+  expect_equal(vapply(cols, function(c) c$col, integer(1)), 2:4)
+  expect_equal(vapply(cols, function(c) c$label, character(1)),
+               c("Placebo", "Drug 10 mg", "Drug 20 mg"))
+})
+
+test_that("a stub label's [a] footnote marker does not block its analysis", {
+  b <- build_apx(shell = test_path("fixtures", "shells_apx_nheaders.xlsx"))
+  labels <- vapply(b$ars$analyses, function(a) a$label %||% "", character(1))
+  expect_true(any(grepl("^Discontinued study$", labels)))
+})

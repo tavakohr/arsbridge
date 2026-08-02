@@ -502,3 +502,61 @@ for (i in seq_along(notes)) {
 full_path <- file.path(here, "shells_apx_drm_301.xlsx")
 wb3$save(full_path)
 cat("wrote", full_path, "\n")
+
+## ---------------------------------------------------------------------------
+## Fixture 4 -- a second header dialect, shells_apx_nheaders.xlsx
+## ---------------------------------------------------------------------------
+##
+## The conventions that broke the first field workbook, recreated with the
+## same invented APX-DRM-301 content. Two sheets so the two fixes regress
+## independently by test name:
+##
+##   Table 14.1.5  the combined case: the stub header cell holds ONLY the red
+##                 column directive (no visible label -- its column label is
+##                 blank once the annotation is stripped), the arm headers
+##                 carry an "(N=XX)" decoration, the placeholders are
+##                 UPPERCASE, and one stub label ends in a "[a]" footnote
+##                 marker.
+##   Table 14.1.6  the decoration alone: a labelled stub, "(N=XX)" arm
+##                 headers, an Age block with statistic sub-rows.
+
+wb4 <- wb_workbook()
+arm_n <- paste0(arm, " (N=XX)")
+
+## A header cell that is nothing but the directive -- red italic, no label.
+directive_only <- function(text) {
+  fmt_txt(text, color = wb_color(hex = RED), size = 8, italic = TRUE)
+}
+
+## --- Table 14.1.5: blank stub header + (N=XX) + uppercase + [a] ------------
+wb4$add_worksheet("Table 14.1.5")
+sheet_banner(wb4, "Table 14.1.5", "Table 14.1.5",
+             "Summary of Study Completion", "Safety Population")
+wb4$add_data(sheet = "Table 14.1.5",
+             x = directive_only("[columns -> ADSL.TRT01A; source ADSL]"),
+             start_row = 4, start_col = 1, col_names = FALSE)
+for (j in seq_along(arm_n)) {
+  wb4$add_data(sheet = "Table 14.1.5", x = arm_n[[j]], start_row = 4,
+               start_col = j + 1L, col_names = FALSE)
+}
+data_row(wb4, "Table 14.1.5", 5, "Subjects treated", "[ADSL.SAFFL = 'Y']",
+         value = "XX")
+data_row(wb4, "Table 14.1.5", 6, "Completed study",
+         "[ADSL.EOSSTT = 'COMPLETED']", value = "XX (XX.X)")
+data_row(wb4, "Table 14.1.5", 7, "Discontinued study [a]",
+         "[ADSL.EOSSTT = 'DISCONTINUED']", value = "XX (XX.X)")
+sheet_footnote(wb4, "Table 14.1.5", 9, "[a] End-of-study status.")
+
+## --- Table 14.1.6: (N=XX) headers over an Age block ------------------------
+wb4$add_worksheet("Table 14.1.6")
+sheet_banner(wb4, "Table 14.1.6", "Table 14.1.6",
+             "Summary of Age", "Safety Population")
+sheet_header(wb4, "Table 14.1.6", 4, "Characteristic",
+             "[columns -> ADSL.TRT01A; source ADSL]", arms = arm_n)
+data_row(wb4, "Table 14.1.6", 5, "Age (years)", "[ADSL.AGE]", value = NULL)
+data_row(wb4, "Table 14.1.6", 6, "Mean (SD)", value = "XX.X (XX.XX)")
+data_row(wb4, "Table 14.1.6", 7, "Median", value = "XX.X")
+
+path4 <- file.path(here, "shells_apx_nheaders.xlsx")
+wb4$save(path4)
+cat("wrote", path4, "\n")
