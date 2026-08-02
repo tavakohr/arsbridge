@@ -498,8 +498,22 @@ parse_shell_xlsx <- function(xlsx_path, spec_lookup = NULL,
     return(sec)
   }
 
-  sec$stub_rows <- .xlsx_stub_rows(sheet, body, sec$tlf_number)
+  sec$stub_rows <- .xlsx_stub_rows(sheet, body, sec$tlf_number, sec$cell_grid)
   sec
+}
+
+#' How many statistics one body row displays, off the sheet's cell grid --
+#' the Excel side of `.row_display_slots()`, which the Word reader calls on
+#' its own cells. The grid has already classified every cell, so this only
+#' has to pick the row's widest placeholder.
+#'
+#' @return The count, or NA when the row shows no placeholder at all.
+#' @noRd
+.xlsx_row_slots <- function(cell_grid, row) {
+  if (is.null(cell_grid) || nrow(cell_grid) == 0) return(NA_integer_)
+  hits <- cell_grid$kind == "placeholder" & cell_grid$row == row
+  if (!any(hits)) return(NA_integer_)
+  max(cell_grid$n_slots[hits])
 }
 
 #' Stub rows of a table sheet.
@@ -511,7 +525,8 @@ parse_shell_xlsx <- function(xlsx_path, spec_lookup = NULL,
 #' method name is namespaced, to record whether a run's colour or the whole
 #' cell's font was the evidence.
 #' @noRd
-.xlsx_stub_rows <- function(sheet, body, tlf_number = NA_character_) {
+.xlsx_stub_rows <- function(sheet, body, tlf_number = NA_character_,
+                            cell_grid = NULL) {
   rows <- list()
   for (i in seq_len(nrow(body))) {
     if (!body$kind[[i]] %in% c("data", "group")) next
@@ -544,8 +559,11 @@ parse_shell_xlsx <- function(xlsx_path, spec_lookup = NULL,
       detection_confidence = detection$confidence,
       raw_text             = raw_text,
       ## Class 3: which sheet row this came from, so the fill writer can put
-      ## the number back where it belongs.
+      ## the number back where it belongs, and how many statistics its cells
+      ## are written to show -- which is what tells a count row displayed as
+      ## "xx (xx.x)" from one displayed as "xx".
       sheet_row            = body$row[[i]],
+      n_slots              = .xlsx_row_slots(cell_grid, body$row[[i]]),
       row_kind             = body$kind[[i]],
       is_template          = isTRUE(body$is_template[[i]])
     )

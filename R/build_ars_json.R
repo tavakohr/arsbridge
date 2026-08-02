@@ -162,6 +162,53 @@
       parameters = list()
     )
   ),
+  ## Subject Count's own arithmetic, plus the percentage the cell shows.
+  ##
+  ## A disposition or exposure row -- "Completed [ADSL.EOSSTT = 'COMPLETED']"
+  ## displayed as "xx (xx.x)" -- counts subjects in a state AND states what
+  ## share of the arm they are. Subject Count declares only the count, so the
+  ## percentage the executor already computes is never asked for and the cell
+  ## ships as "58 (xx.x)". Count and Percentage would declare it, but counts
+  ## RECORDS: on a record-level dataset ("[ADAE.TRTEMFL = 'Y']") that turns a
+  ## subject count into an event count without saying so. This method is the
+  ## honest pairing: one row per subject first, then n / % / denominator.
+  "Subject Count and Percentage" = list(
+    id          = "MTH_SUBJECT_COUNT_PCT",
+    name        = "Subject Count and Percentage",
+    label       = "Subject Count and Percentage",
+    description = "Unique subject count with percentage of the denominator",
+    operations = list(
+      list(id = "OP_N",     name = "Count",       label = "Count",       order = 1L, resultPattern = "XXX"),
+      list(id = "OP_PCT",   name = "Percentage",  label = "Percentage",  order = 2L, resultPattern = "XX.X"),
+      list(id = "OP_DENOM", name = "Denominator", label = "Denominator", order = 3L, resultPattern = "XXX")
+    ),
+    codeTemplate = list(
+      context = "R (siera)",
+      code = paste(
+        "denom_n <- length(unique(df2_analysisidhere$USUBJID))",
+        "df3_analysisidhere <- df2_analysisidhere |>",
+        "  dplyr::distinct(USUBJID, .keep_all = TRUE) |>",
+        "  dplyr::group_by(anavarhere) |>",
+        "  dplyr::summarise(",
+        "    OP_N     = dplyr::n_distinct(USUBJID),",
+        "    OP_DENOM = denom_n,",
+        "    .groups  = 'drop'",
+        "  ) |>",
+        "  dplyr::mutate(OP_PCT = 100 * OP_N / OP_DENOM) |>",
+        "  tidyr::pivot_longer(",
+        "    dplyr::starts_with('OP_'),",
+        "    names_to  = 'operation',",
+        "    values_to = 'res'",
+        "  ) |>",
+        "  dplyr::mutate(pattern = 'XXX')",
+        sep = "\n"
+      ),
+      parameters = list(
+        list(name = "anavarhere", valueSource = "ana_var",
+             description = "Variable whose state the subjects are counted in")
+      )
+    )
+  ),
   "Kaplan-Meier Estimate" = list(
     id          = "MTH_KAPLAN_MEIER_ESTIMATE",
     name        = "Kaplan-Meier Estimate",
@@ -249,7 +296,8 @@
 #' (ADR 0003 Layer C). Deterministic: the annotation is authored ground truth,
 #' so it overrides the section-level LLM method for this row.
 #'
-#' @param row  Stub row (needs `annotation`).
+#' @param row  Stub row (needs `annotation`; `n_slots` when the shell said how
+#'   many statistics the row displays -- see the filtered-count branch).
 #' @param var_is_categorical NA/TRUE/FALSE -- the spec's verdict on the row's
 #'   primary variable (from `.var_is_categorical`).
 #' @return list(method = standard-catalogue name, kind = layout kind), or
@@ -274,6 +322,17 @@
     fs <- flat_data_subset(ann)
     filter_var <- toupper(fs$variable %||% "")
     if (!nzchar(filter_var) || identical(filter_var, toupper(primary))) {
+      ## What the cell shows decides whether the percentage is declared. An
+      ## Excel shell states this exactly -- "xx (xx.x)" is two statistics,
+      ## "xx" is one -- and a method declaring only the count leaves the
+      ## second token unfillable however well the executor computes it. A
+      ## Word shell carries no cell grid, so `n_slots` is absent there and
+      ## the count-only method stands, as before.
+      slots <- suppressWarnings(as.integer(row$n_slots %||% NA_integer_))
+      if (!is.na(slots) && slots >= 2L) {
+        return(list(method = "Subject Count and Percentage",
+                    kind = "filtered_count_pct"))
+      }
       return(list(method = "Subject Count", kind = "filtered_count"))
     }
     ## fall through: subset on another variable; type decides the method
@@ -631,7 +690,8 @@ build_ars_json <- function(sections,
   ## the variable's values -- the ones a decode applies to.
   .DECODE_METHOD_IDS <- c("MTH_COUNT_AND_PERCENTAGE",
                           "MTH_AE_FREQUENCY_COUNT",
-                          "MTH_SUBJECT_COUNT")
+                          "MTH_SUBJECT_COUNT",
+                          "MTH_SUBJECT_COUNT_PCT")
 
   ## `_meta$value_decodes` accumulator: one entry per DATASET.VARIABLE that
   ## some categorical-family analysis displays, each an ordered list of

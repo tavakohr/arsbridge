@@ -616,6 +616,7 @@ The ARS method identifier in each analysis maps to a specific `{cards}` function
 | `MTH_COUNT_AND_PERCENTAGE` | `cards::ard_categorical()` |
 | `MTH_AE_FREQUENCY_COUNT` | Distinct-subject dedup, then `cards::ard_categorical()` |
 | `MTH_SUBJECT_COUNT` | `cards::ard_total_n()` or `cards::ard_categorical()` |
+| `MTH_SUBJECT_COUNT_PCT` | Distinct-subject dedup, then `cards::ard_categorical()` |
 | `MTH_PROPORTION_CI_EXACT` | `arsbridge::ard_proportion_ci_exact()` |
 | `MTH_CMH_TEST` | `arsbridge::ard_cmh_test()` |
 

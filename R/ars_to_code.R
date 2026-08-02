@@ -167,7 +167,7 @@
   if (is.null(decode) || length(decode) == 0) return("")
   method <- res$method_id %||% ""
   if (!method %in% c("MTH_COUNT_AND_PERCENTAGE", "MTH_AE_FREQUENCY_COUNT",
-                     "MTH_SUBJECT_COUNT")) {
+                     "MTH_SUBJECT_COUNT", "MTH_SUBJECT_COUNT_PCT")) {
     return("")
   }
   var <- .clean_emit_name(res$variable)
@@ -229,6 +229,7 @@
     MTH_COUNT_AND_PERCENTAGE          = "Count (%)",
     MTH_AE_FREQUENCY_COUNT            = "AE frequency, n (%)",
     MTH_SUBJECT_COUNT                 = "Subject count",
+    MTH_SUBJECT_COUNT_PCT             = "Subject count, n (%)",
     "Analysis")
 }
 
@@ -353,7 +354,8 @@
 
   call_for <- function(b) {
     if (.is_bare_flag(res) &&
-        method %in% c("MTH_SUBJECT_COUNT", "MTH_COUNT_AND_PERCENTAGE")) {
+        method %in% c("MTH_SUBJECT_COUNT", "MTH_SUBJECT_COUNT_PCT",
+                      "MTH_COUNT_AND_PERCENTAGE")) {
       lab <- res$label %||% res$description %||% var
       sprintf(paste0(
         "cards::ard_categorical(\n",
@@ -368,7 +370,7 @@
         "  data = %s |>\n    dplyr::mutate(%s = as.numeric(%s)),\n",
         "  variables = all_of(%s)%s\n)"),
         data_e, .bt(var), .bt(var), qvar, by_line(b))
-    } else if (identical(method, "MTH_SUBJECT_COUNT")) {
+    } else if (method %in% c("MTH_SUBJECT_COUNT", "MTH_SUBJECT_COUNT_PCT")) {
       distinct_e <- sprintf("%s |>\n    dplyr::distinct(%s, .keep_all = TRUE)",
                             data_e, sk)
       if (identical(var, sk) && length(b)) {

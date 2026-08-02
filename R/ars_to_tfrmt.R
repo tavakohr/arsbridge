@@ -317,7 +317,7 @@ detect_row_roles <- function(ard, col_var) {
   }
 
   count_like <- c("MTH_COUNT_AND_PERCENTAGE", "MTH_AE_FREQUENCY_COUNT",
-                  "FALLBACK_CATEGORICAL")
+                  "MTH_SUBJECT_COUNT_PCT", "FALLBACK_CATEGORICAL")
 
   if (method_id %in% count_like && has("n", "p")) {
     structs <- c(structs, list(fs(".default", tfrmt::frmt_combine(

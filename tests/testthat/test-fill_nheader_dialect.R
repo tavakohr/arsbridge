@@ -54,18 +54,19 @@ test_that("the dialect workbook fills at all", {
 test_that("counts land under their own (N=XX) headers, not one column over", {
   ## Completed-study counts are 4 / 3 / 2 across the arms -- the values
   ## themselves prove the column join, which is the point of this fixture.
-  ## The percent slot stays as authored: a [VAR = 'value'] filter row's
-  ## method binds only the count statistic today, identically on the plain
-  ## fixture ("4 (xx.x)" there) -- a pre-existing limit, not this dialect's.
+  ## Both slots fill: the row shows "XX (XX.X)", so the [VAR = 'value'] filter
+  ## row is typed as a subject count WITH its percentage, and the percentage
+  ## is out of the arm's population, not of the filtered rows.
   run <- nheader_run()
   adsl <- utils::read.csv(file.path(N_ADAM, "ADSL.csv"),
                           stringsAsFactors = FALSE)
   for (col in list(c("B", "Placebo"), c("C", "Drug 10 mg"),
                    c("D", "Drug 20 mg"))) {
-    n_done <- sum(adsl$TRT01A == col[[2]] & adsl$EOSSTT == "COMPLETED")
+    in_arm <- adsl$TRT01A == col[[2]]
+    n_done <- sum(in_arm & adsl$EOSSTT == "COMPLETED")
     expect_equal(
       ncell(run$book, "Table 14.1.5", paste0(col[[1]], "6")),
-      sprintf("%d (XX.X)", n_done),
+      sprintf("%d (%.1f)", n_done, 100 * n_done / sum(in_arm)),
       info = col[[2]])
   }
 })

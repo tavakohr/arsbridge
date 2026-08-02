@@ -11,7 +11,8 @@
 ## in mod_detail.R.
 
 ## The methods whose cells read as count-and-percentage in the shell.
-.SHELL_COUNT_METHODS <- c("MTH_COUNT_AND_PERCENTAGE", "MTH_AE_FREQUENCY_COUNT")
+.SHELL_COUNT_METHODS <- c("MTH_COUNT_AND_PERCENTAGE", "MTH_AE_FREQUENCY_COUNT",
+                          "MTH_SUBJECT_COUNT_PCT")
 
 ## What a body cell shows before real numbers exist -- the same placeholder
 ## conventions the authored shell document uses. `kind` is the row's own kind
@@ -21,6 +22,8 @@
 .shell_placeholder <- function(kind, label, method_id = NA_character_,
                                owner_kind = NA_character_) {
   if (kind %in% c("subject_count", "filtered_count")) return("xxx")
+  ## The same count, in a shell that also shows what share of the arm it is.
+  if (identical(kind, "filtered_count_pct")) return("xx (xx.x%)")
 
   ## Parent header lines print their label in the stub and nothing in the
   ## body; their numbers live on the sub-rows beneath them.
