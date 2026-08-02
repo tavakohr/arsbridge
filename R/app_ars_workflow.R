@@ -93,7 +93,9 @@ ars_workflow <- function(project_dir = NULL) {
 
 #' Start the build in a background process, or NULL when that is not possible.
 #'
-#' callr is a Suggests: the app must still work without it, just synchronously.
+#' callr is an Imports since 0.1.0.9061, so its gate below is near-unreachable
+#' (a broken library only); the app still degrades to synchronous rather than
+#' refusing if it ever fires.
 #' Returning NULL rather than aborting is deliberate -- a frozen UI is worse
 #' than a responsive one, and much better than not being able to build.
 #'

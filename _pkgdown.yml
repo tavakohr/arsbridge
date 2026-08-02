@@ -126,6 +126,8 @@ reference:
   - parse_decision_digest
 
 - title: Examples
-  desc: Access the bundled APX-DRM-301 study files for offline testing.
+  desc: >
+    Access the bundled CDSC-ALZ-201 Alzheimer training study -- shells in
+    Word and Excel, spec, and pharmaverseadam datasets -- for offline use.
   contents:
   - arsbridge_example

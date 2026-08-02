@@ -49,9 +49,12 @@ than one analysis variable is present.
 }
 \examples{
 \dontrun{
-  ars  <- arsbridge_example("reporting_event.json")
-  ard  <- ars_to_ard(ars, "inputs/ADaM")
-  spec <- ars_to_tfrmt(ars, ard, "T_14_1_1")
+  ## Build the ARS from the bundled example, then execute and render it.
+  res  <- spec_to_ars_example()
+  adam <- file.path(tempdir(), "ADaM")
+  unzip(arsbridge_example("ADaM.zip"), exdir = adam)
+  ard  <- ars_to_ard(res$ars_path, adam)
+  spec <- ars_to_tfrmt(res$ars_path, ard, "T_14_1_1")
 }
 }
 \seealso{

@@ -1011,9 +1011,12 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
 #' @export
 #' @examples
 #' \dontrun{
-#'   ars  <- arsbridge_example("reporting_event.json")
-#'   ard  <- ars_to_ard(ars, "inputs/ADaM")
-#'   spec <- ars_to_tfrmt(ars, ard, "T_14_1_1")
+#'   ## Build the ARS from the bundled example, then execute and render it.
+#'   res  <- spec_to_ars_example()
+#'   adam <- file.path(tempdir(), "ADaM")
+#'   unzip(arsbridge_example("ADaM.zip"), exdir = adam)
+#'   ard  <- ars_to_ard(res$ars_path, adam)
+#'   spec <- ars_to_tfrmt(res$ars_path, ard, "T_14_1_1")
 #' }
 ars_to_tfrmt <- function(ars_path, ard, output_id,
                          col_var = NULL, label_var = NULL, group_vars = NULL) {

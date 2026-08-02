@@ -84,9 +84,10 @@ see `?spec_to_ars`) instead of reformatting the shell.
 
 ## The fastest path: `spec_to_ars_example()`
 
-The package ships with a small bundled training example so you can run the
-entire pipeline before you own a study. This is the best way to get a feel
-for the output and the validation report.
+The package ships the CDSC-ALZ-201 training study -- a synthetic Alzheimer's
+study on the public pharmaverse (CDISC pilot Xanomeline) data -- so you can
+run the entire pipeline before you own a study. This is the best way to get
+a feel for the output and the validation report.
 
 ```{r}
 library(arsbridge)
@@ -97,15 +98,17 @@ res <- spec_to_ars_example()
 # Or, with a key configured, opt in to the LLM tier:
 res <- spec_to_ars_example(use_llm = TRUE)
 
+# Or read the study's Excel shell instead of the Word one:
+res <- spec_to_ars_example(shell_format = "xlsx")
+
 # ARS JSON and validation report land in tempdir(); paths are in res.
-res$n_tlfs        # 40 TLF shells
-res$n_analyses    # ~226 analyses
-res$n_warnings    # ~29 warnings to review
+res$n_tlfs        # 8 TLF shells (5 tables, 2 listings, 1 figure)
+res$n_analyses    # ~35 analyses
 res$extraction_mode   # "deterministic" by default, "llm" with use_llm = TRUE
 ```
 
 The default deterministic run is fast and offline. With `use_llm = TRUE` it
-makes about 40 LLM calls (one per TLF section) and takes a few minutes.
+makes about 8 LLM calls (one per TLF section).
 
 ---
 
@@ -215,15 +218,17 @@ annotations reference ADaM variables.
 ```{r}
 arsbridge_example()                              # list all bundle contents
 arsbridge_example("annotated_shell.docx")        # absolute path to a file
+arsbridge_example("annotated_shell.xlsx")
 arsbridge_example("adam_spec.xlsx")
 arsbridge_example("ADaM.zip")
 ```
 
 | File | Purpose |
 |---|---|
-| `annotated_shell.docx` | TLF shells with red ADaM annotations (the input) |
-| `adam_spec.xlsx` | ADaM variable spec (the grounding truth) |
-| `ADaM.zip` | 60-subject simulated ADaM datasets (for `ars_to_ard()`) |
+| `annotated_shell.docx` | TLF shells with red ADaM annotations, Word (the input) |
+| `annotated_shell.xlsx` | the Excel counterpart -- the shell `ars_fill_shell()` writes back filled |
+| `adam_spec.xlsx` | ADaM variable spec with codelists (the grounding truth) |
+| `ADaM.zip` | five pharmaverseadam datasets as XPT (for `ars_to_ard()`) |
 
 ---
 

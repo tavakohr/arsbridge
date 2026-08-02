@@ -226,16 +226,14 @@ install.packages("cardx")
 
 ## Quick start with the bundled example
 
-You do not need any external files to run the full pipeline. The package ships with a complete clinical study example (40 TLF shells, simulated ADaM data) so you can see the whole thing before touching your own study.
+You do not need any external files -- or an API key -- to run the full pipeline. The package ships the **CDSC-ALZ-201 training study**: a synthetic Alzheimer's study whose shells are annotated in both Word and Excel and whose datasets are the public CDISC pilot Xanomeline data from `{pharmaverseadam}` (Apache-2.0, no real patient data).
 
 ```r
 library(arsbridge)
 
-# 1. Run the full extraction pipeline on the bundled study
+# 1. Run the extraction pipeline on the bundled study (deterministic; seconds)
 res <- spec_to_ars_example()
-#    Takes about 6 minutes (40 LLM calls)
-#    res$n_tlfs      # 40
-#    res$n_analyses  # ~226
+#    res$n_tlfs      # 8  (5 tables, 2 listings, 1 figure)
 
 # 2. Review the validation findings
 table(res$validation$status)
@@ -244,7 +242,7 @@ table(res$validation$status)
 #    (needs the optional shiny, bslib and DT packages)
 edit_ars(res)
 
-# 4. Load the bundled simulated ADaM data
+# 4. Load the bundled ADaM data
 adam_dir <- file.path(tempdir(), "ADaM")
 unzip(arsbridge_example("ADaM.zip"), exdir = adam_dir)
 
@@ -253,6 +251,21 @@ ard <- ars_to_ard(ars_path = res$ars_path, adam_dir = adam_dir)
 
 # 6. Render the Subject Disposition table
 ars_render_tlf(res$ars_path, ard, "T_14_1_1")
+```
+
+And because the bundle also carries an **Excel** shell, the filled-workbook deliverable works offline too:
+
+```r
+res <- spec_to_ars_example(shell_format = "xlsx")
+ard <- ars_to_ard(res$ars_path, adam_dir = adam_dir)
+ars_fill_shell(
+  shell_path  = arsbridge_example("annotated_shell.xlsx"),
+  ars         = res$ars_path,
+  ard         = ard,
+  output_path = file.path(tempdir(), "filled_shells.xlsx"),
+  adam_dir    = adam_dir
+)
+# open it: the placeholders now hold the study's real numbers
 ```
 
 ---
@@ -314,12 +327,12 @@ An Excel shell needs no `heading_patterns`: the worksheet name is the output num
 
 ```r
 res <- spec_to_ars(
-  shell_path     = "inputs/APX-DRM-301_TLF_Shells_v1.0_sample_annotated.docx",
-  adam_spec_path = "inputs/adam_spec_APX-DRM-301.xlsx",   # or define.xml
+  shell_path     = "inputs/my_study_TLF_shells_annotated.xlsx",  # or .docx
+  adam_spec_path = "inputs/adam_spec_CDSC-ALZ-201.xlsx",         # or define.xml
   output_path    = "outputs/reporting_event.json",
   report_path    = "outputs/spec_validation_report.xlsx",
-  study_id       = "APX-DRM-301",
-  study_name     = "PROSVALIN Phase 3 Study",
+  study_id       = "CDSC-ALZ-201",
+  study_name     = "Xanomeline Transdermal System in Alzheimer's Disease",
   verbose        = TRUE
 )
 ```
