@@ -2,6 +2,75 @@
 
 ## arsbridge (development version)
 
+- **The build shows its progress – in both of the app’s modes.** A real
+  study takes minutes, and the person watching had no way to tell a slow
+  run from a hung one: the in-process fallback showed a bare “Building
+  (in this process)…” with no bar and no updates, and even a background
+  build’s log tail was near-empty.
+  [`ars_workflow_run()`](https://tavakohr.github.io/arsbridge/reference/ars_workflow_run.md)
+  gains `on_progress`, a callback receiving one event per stage entry
+  and per TLF / analysis / sheet within it. In-process the app forwards
+  events to a live Shiny progress bar (“Building the reporting event –
+  T-14-1-1 (3/12)”); in background mode the worker writes one
+  `[progress]` line per event into `run.log` and the build panel renders
+  a real bar from the last one, with the log’s human lines beneath.
+  Opt-in: a run with nobody listening behaves exactly as before.
+
+- **Every road to the in-process fallback now says so.** Three of the
+  four were silent – a user staring at a frozen UI could not learn why,
+  or that `install.packages("callr")` would fix it. The callr-missing
+  gate says exactly that; the option gate and a failed background launch
+  notify too; and the version-skew message no longer prints “the
+  installed arsbridge is NA” when the package is absent.
+
+- **Fixed: an `(N=XX)` decoration on a column header made every cell in
+  that column unfillable.** The ARS side strips the decoration when it
+  derives grouping levels, but the fill map stored the header label
+  verbatim – so “Placebo (N=XX)” could never match the ARD’s “Placebo”,
+  and every result cell came back pending with no visible cause. The
+  fill map now strips the same way, with the same helper.
+
+- **Fixed: a header cell holding only an annotation shifted every fill
+  column one to the left.** An annotation-only stub header leaves a
+  blank label once the directive is lifted; the compacted header vector
+  dropped the blank and renumbered, so the fill map’s columns pointed
+  one cell left of their headers – the
+  wrong-number-under-the-right-header failure, which nothing downstream
+  can catch. The parser now keeps the uncompacted per-physical-column
+  labels and the fill map is built from those; a blank column stays
+  unmapped rather than joining wrongly. Both fixes are pinned by a new
+  fixture workbook recreating the dialect (uppercase `XX` placeholders
+  and `[a]` footnote markers included).
+
+- **An unfilled workbook now says so, everywhere it can.** The field
+  failure: a build completes, every artifact exists, and the “filled”
+  workbook shows every placeholder intact – with the explanation buried.
+  Now
+  [`ars_fill_shell()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_shell.md)
+  warns with the dominant reason when it filled nothing (naming the
+  clean-shell case outright: no annotations detected – annotate the
+  shell, or declare the bindings in a reviewed supplement, which can
+  bind a clean shell’s rows); the two silent exits (an output with no
+  cell map, a sheet missing from the workbook) leave skipped records
+  instead of vanishing; the payload carries the headline counts as
+  `payload$fill`; the app’s completion notification distinguishes
+  “complete, but the workbook was left unfilled”; the Results step
+  renders the per-cell census as a filterable table and shows a
+  clean-shell callout; and the supplement step’s copy no longer claims
+  it is “only if the build got something wrong”.
+  `tools/LOCKED_MACHINE_DEBUGGING.md` gains a reason-by-reason triage
+  table, sharable as-is because the reason strings carry no study text.
+
+  And the fully clean shell – the variant the live acceptance run
+  caught: zero analyses execute,
+  [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)
+  returns `NULL`, and the fill stage is *skipped*, so there is no census
+  to warn from and the run announced plain success. The payload now
+  carries two WARN diagnostics (“no executable analyses” / “the filled
+  workbook was not produced”), and the app’s notification and
+  clean-shell callout recognise the fill-never-ran shape as well as the
+  filled-nothing one.
+
 - **Fixed: a reviewed `methodId` was silently dropped whenever the
   supplement agreed with the shell about the variable.** Found by the
   end-to-end acceptance run, and it broke the exact loop the draft

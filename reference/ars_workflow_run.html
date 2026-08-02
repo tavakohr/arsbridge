@@ -15,7 +15,7 @@ rendered by a UI."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9059</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9060</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -69,7 +69,8 @@ rendered by a UI.</p>
 <span>  llm_provider <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  api_key <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  derived_dt <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  log_path <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  log_path <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  on_progress <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -122,6 +123,15 @@ fixed value to make a run byte-reproducible; <code>NULL</code> uses the clock.</
 redirected it. Recorded in <code>artifacts$run_log</code> so the payload can point
 at its own log.</p></dd>
 
+
+<dt id="arg-on-progress">on_progress<a class="anchor" aria-label="anchor" href="#arg-on-progress"></a></dt>
+<dd><p>Optional function called with one progress event at a
+time: a list with <code>stage</code>, <code>stage_idx</code>, <code>n_stages</code>, <code>i</code>, <code>n</code>, <code>label</code>.
+Each stage announces itself with <code>i = 0</code>, then ticks once per TLF,
+analysis, or sheet. Errors it raises are swallowed – a progress bar
+must never take a build down. <code>NULL</code> (the default) reports nothing and
+changes nothing.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
@@ -129,6 +139,8 @@ at its own log.</p></dd>
 <code>timings</code>, <code>artifacts</code>, <code>metadata</code>, <code>diagnostics</code> (one row per finding,
 with <code>severity</code> – never split, so <code>INFO</code> findings survive),
 <code>pending</code> (cells reserved for manual derivation, ADR 0002),
+<code>fill</code> (the fill stage's headline counts – <code>filled</code>, <code>pending</code>,
+<code>skipped</code> – or <code>NULL</code> when no fill ran),
 <code>unfilled_cells</code> (workbook cells left showing a placeholder, and why),
 and <code>error</code>.</p>
     </div>

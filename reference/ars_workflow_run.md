@@ -25,7 +25,8 @@ ars_workflow_run(
   llm_provider = NULL,
   api_key = NULL,
   derived_dt = NULL,
-  log_path = NULL
+  log_path = NULL,
+  on_progress = NULL
 )
 ```
 
@@ -77,13 +78,24 @@ ars_workflow_run(
   it. Recorded in `artifacts$run_log` so the payload can point at its
   own log.
 
+- on_progress:
+
+  Optional function called with one progress event at a time: a list
+  with `stage`, `stage_idx`, `n_stages`, `i`, `n`, `label`. Each stage
+  announces itself with `i = 0`, then ticks once per TLF, analysis, or
+  sheet. Errors it raises are swallowed – a progress bar must never take
+  a build down. `NULL` (the default) reports nothing and changes
+  nothing.
+
 ## Value
 
 A list with `status` (`"success"`, `"partial"` or `"error"`), `timings`,
 `artifacts`, `metadata`, `diagnostics` (one row per finding, with
 `severity` – never split, so `INFO` findings survive), `pending` (cells
-reserved for manual derivation, ADR 0002), `unfilled_cells` (workbook
-cells left showing a placeholder, and why), and `error`.
+reserved for manual derivation, ADR 0002), `fill` (the fill stage's
+headline counts – `filled`, `pending`, `skipped` – or `NULL` when no
+fill ran), `unfilled_cells` (workbook cells left showing a placeholder,
+and why), and `error`.
 
 ## Details
 
