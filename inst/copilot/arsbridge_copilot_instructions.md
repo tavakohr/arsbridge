@@ -195,6 +195,7 @@ Per-`analyses` entry:
 | `MTH_SUMMARY_STATISTICS_CONTINUOUS` | n, mean, SD, median, Q1, Q3, min, max |
 | `MTH_COUNT_AND_PERCENTAGE` | n (%) per category |
 | `MTH_SUBJECT_COUNT` | distinct subject counts |
+| `MTH_SUBJECT_COUNT_PCT` | distinct subject counts shown as n (%) |
 | `MTH_KAPLAN_MEIER_ESTIMATE` | Kaplan-Meier estimates |
 | `MTH_AE_FREQUENCY_COUNT` | adverse-event frequency counts |
 | `MTH_LISTING` | subject-level listing (no summary) |

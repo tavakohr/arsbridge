@@ -105,7 +105,10 @@ only real footnotes.
 - Emit **one analysis per authored stub row**, in authored order, each carrying
   its shell label and an inferred method from the bound annotation form:
   - bare `DATASET.VAR` "count of USUBJID" → `MTH_SUBJECT_COUNT` (distinct USUBJID)
-  - `DATASET.VAR='val'` / `WHERE` → data subset + subject count
+  - `DATASET.VAR='val'` / `WHERE` → data subset + subject count, or
+    `MTH_SUBJECT_COUNT_PCT` when the row's own cells show two statistics
+    ("xx (xx.x)") -- the shell states what the row displays, and a method
+    declaring only the count leaves the second number unfillable
   - flag `SAFFL='Y'` → subject count within subset
   - categorical var (AGEGR1, SEX) → `MTH_COUNT_AND_PERCENTAGE` (expands to level rows nested under the stub label)
   - continuous var (AGE) → `MTH_SUMMARY_STATISTICS_CONTINUOUS` (expands to Mean(SD)/Median/(Min,Max) sub-rows)

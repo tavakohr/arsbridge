@@ -602,7 +602,15 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
       has_annot            = nzchar(detection$annotation),
       detection_method     = detection$method,
       detection_confidence = detection$confidence,
-      raw_text             = raw_text   ## unsplit cell, for the LLM extractor
+      raw_text             = raw_text,  ## unsplit cell, for the LLM extractor
+      ## How many statistics the row's own cells are written to show, which
+      ## is what tells a count row displayed as "xx (xx.x)" from one shown as
+      ## "xx". Read from the data cells here and from the cell grid in the
+      ## Excel reader, both through `.row_display_slots()`, so the two
+      ## formats infer the same method for the same row.
+      n_slots              = if (length(cells) > 1) {
+        .row_display_slots(vapply(cells[-1], .cell_text, character(1)))
+      } else NA_integer_
     )
 
     ## A Word comment anchored to the stub cell is a deliberate,

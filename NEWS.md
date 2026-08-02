@@ -1,5 +1,25 @@
 # arsbridge (development version)
 
+* **A count row that shows a percentage now declares one.** A row annotated as
+  a filter on its own variable -- "Completed study `[ADSL.EOSSTT =
+  'COMPLETED']`" -- was always typed `MTH_SUBJECT_COUNT`, which declares the
+  count and nothing else. Shells write those rows as `xx (xx.x)`, so the second
+  number had no statistic to fetch and the cell shipped as `58 (xx.x)` with a
+  warning, even though the engine had computed the percentage all along. The
+  method inference now reads what the row actually displays -- from the cell
+  grid in an Excel shell, from the row's own data cells in a Word one, so both
+  formats still build the same ARS -- and types a two-number row as the new
+  `MTH_SUBJECT_COUNT_PCT`.
+
+  That method is Subject Count's arithmetic (one row per subject, then counted)
+  with the percentage and denominator declared alongside, rather than Count and
+  Percentage, which counts RECORDS: on a record-level dataset
+  (`[ADAE.TRTEMFL = 'Y']`) borrowing that method would have turned a subject
+  count into an event count without saying so. The executor is shared with
+  `MTH_SUBJECT_COUNT`, so no number changes -- only which of them the ARS says
+  the output shows. The example study's disposition rows now fill as
+  `58 (67.4)` / `28 (32.6)`, and its run reports no diagnostics at all.
+
 * **A filled listing no longer opens in Excel with its columns empty.** Every
   cell arsbridge added to a sheet -- the rows a listing's template expands
   into, the block a figure's series is written to -- was filed against

@@ -242,32 +242,29 @@ test_that("a mapped cell is either bound or explained", {
   }
 })
 
-test_that("a placeholder asking for more statistics than exist is reported", {
-  ## The fixture's disposition rows show "xx (xx.x)" but are typed as plain
-  ## counts -- a real disagreement between the shell and the analysis typing,
-  ## which used to go unnoticed because nothing compared the two.
-  ##
-  ## Built fresh rather than from the cache: diagnostics are global and the
-  ## last run wins, so a cached result would be checked against some other
-  ## build's findings.
-  out <- withr::local_tempfile(fileext = ".json")
-  withr::with_envvar(
-    c(ANTHROPIC_API_KEY = "", OPENAI_API_KEY = "", GEMINI_API_KEY = "",
-      GLM_API_KEY = "", ARS_LLM_PROVIDER = ""),
-    suppressMessages(suppressWarnings(spec_to_ars(
-      shell_path     = test_path("fixtures", "shells_apx_drm_301.xlsx"),
-      adam_spec_path = test_path("fixtures", "adam_spec_apx_drm_301.xlsx"),
-      api_key = "", output_path = out,
-      report_path = withr::local_tempfile(fileext = ".xlsx"),
-      verbose = FALSE))))
+test_that("a disposition row showing two numbers binds both of them", {
+  ## The fixture's disposition rows are annotated as a filter on their own
+  ## variable and displayed as "xx (xx.x)". The count alone used to be
+  ## declared, which left the percentage unbindable however well the engine
+  ## computed it; the row is now typed as a subject count WITH a percentage,
+  ## so both slots have a statistic to fetch.
+  slots <- cell_at("T_14_1_1", "B6")$slots
+  expect_length(slots, 2L)
+  expect_equal(slots[[1]]$stat_name, "n")
+  expect_equal(slots[[2]]$stat_name, "p")
+})
 
-  d <- ars_diagnostics()
-  hits <- grepl("but its analysis produces", d$problem)
-  expect_true(any(hits))
-  expect_equal(unique(d$severity[hits]), "WARN")
+test_that("a placeholder asking for more statistics than exist is reported", {
+  ## The remaining disagreement: a shell showing two numbers on a row whose
+  ## analysis really does produce one. Provoked directly, because the point
+  ## of the diagnostic is the case the inference CANNOT type away.
+  cell_slots <- .parse_placeholder("xx (xx.x)")$slots
+  stats <- .method_operation_slots(
+    list(.STANDARD_METHODS[["Subject Count"]]), "MTH_SUBJECT_COUNT")
+  expect_length(stats, 1L)
 
   ## The surplus slot is unbound rather than bound to the wrong statistic.
-  slots <- cell_at("T_14_1_1", "B6")$slots
+  slots <- .bind_slots(cell_slots, stats)
   expect_equal(slots[[1]]$stat_name, "n")
   expect_true(is.na(slots[[2]]$stat_name %||% NA_character_))
 })

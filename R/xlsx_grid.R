@@ -569,6 +569,29 @@
   list(kind = kind, slots = slots, n_slots = length(slots))
 }
 
+#' How many statistics a body row is written to display, from the text of its
+#' own result cells.
+#'
+#' "xx (xx.x)" is two, "xx" is one. Read as the widest placeholder on the row,
+#' because that is what the row asks for -- a column an author left as a single
+#' token is still filled from the same analysis. Cells that are not
+#' placeholders (a label, a footnote, a hard-coded value) say nothing about
+#' statistics and are not counted.
+#'
+#' Shared by both readers so a Word shell and an Excel one answer the question
+#' the same way: it decides the analysis method for a filtered-count row
+#' (`.infer_row_method()`), and the two formats must build the same ARS.
+#'
+#' @return The count, or NA when the row displays no placeholder at all.
+#' @noRd
+.row_display_slots <- function(texts) {
+  n <- vapply(texts, function(text) {
+    p <- .parse_placeholder(text)
+    if (identical(p$kind, "placeholder")) p$n_slots else NA_integer_
+  }, integer(1), USE.NAMES = FALSE)
+  if (all(is.na(n))) NA_integer_ else max(n, na.rm = TRUE)
+}
+
 #' Classify every body cell of a sheet as placeholder, template, literal or
 #' empty -- the map the fill writer works from, and the evidence the parser
 #' uses to tell a result column from a label column.

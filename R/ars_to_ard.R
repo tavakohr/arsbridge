@@ -66,6 +66,13 @@
   }
 )
 
+## Subject Count with the percentage declared as well. The arithmetic is
+## Subject Count's -- one row per subject, then counted -- so the two methods
+## produce the SAME ARD for the same analysis; what differs is which of those
+## statistics the ARS says the output shows. Sharing the executor is the point:
+## a declaration that changed the numbers would be a different analysis.
+.ARD_EXECUTORS$MTH_SUBJECT_COUNT_PCT <- .ARD_EXECUTORS$MTH_SUBJECT_COUNT
+
 ## ---------------------------------------------------------------------------
 ## Declared-but-unexecutable methods (ADR 0001 descriptor seeds / ADR 0002).
 ## These statistics are describable in the ARS but have no {cards}/{cardx}
@@ -718,7 +725,8 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     }
 
     if (!subject_key %in% names(df_filtered) &&
-        method_id %in% c("MTH_AE_FREQUENCY_COUNT", "MTH_SUBJECT_COUNT")) {
+        method_id %in% c("MTH_AE_FREQUENCY_COUNT", "MTH_SUBJECT_COUNT",
+                         "MTH_SUBJECT_COUNT_PCT")) {
       cli::cli_warn("Skipping analysis {.val {analysis_id}}: subject key {.val {subject_key}} not in dataset {.val {analysis_ds}}.")
       diag_add(
         stage = "execute_ard", severity = "FAIL", input = INPUT_DATA,
@@ -766,7 +774,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     ## both paths judge that condition on the raw column.
     if (legacy && !is_stub && !is.null(res$decode) && length(res$decode) > 0 &&
         method_id %in% c("MTH_COUNT_AND_PERCENTAGE", "MTH_AE_FREQUENCY_COUNT",
-                         "MTH_SUBJECT_COUNT") &&
+                         "MTH_SUBJECT_COUNT", "MTH_SUBJECT_COUNT_PCT") &&
         !identical(toupper(analysis_var), toupper(subject_key)) &&
         !.is_bare_flag(res) &&
         analysis_var %in% names(df_filtered)) {

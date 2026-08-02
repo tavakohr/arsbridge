@@ -100,8 +100,8 @@ Per-`analyses` entry (required: `rowLabel`, `variable`):
 Group entry (in `groupings[].groups`): `{label, order, condition|compoundExpression}`.
 
 Method id catalogue: `MTH_SUMMARY_STATISTICS_CONTINUOUS`,
-`MTH_COUNT_AND_PERCENTAGE`, `MTH_SUBJECT_COUNT`, `MTH_KAPLAN_MEIER_ESTIMATE`,
-`MTH_AE_FREQUENCY_COUNT`, `MTH_LISTING`.
+`MTH_COUNT_AND_PERCENTAGE`, `MTH_SUBJECT_COUNT`, `MTH_SUBJECT_COUNT_PCT`,
+`MTH_KAPLAN_MEIER_ESTIMATE`, `MTH_AE_FREQUENCY_COUNT`, `MTH_LISTING`.
 
 ## 3. Mapping Phase-1 evidence to v4 fields
 
