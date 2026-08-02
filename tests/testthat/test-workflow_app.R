@@ -218,3 +218,71 @@ test_that("the completion notice calls an unfilled workbook what it is", {
   expect_equal(arsbridge:::.workflow_build_notice(no_fill)$text,
                "Build complete.")
 })
+
+test_that("the skew message names an absent install instead of printing NA", {
+  ## NA_character_ is neither NULL nor empty, so %||% could not catch it and
+  ## the old message read "the installed arsbridge is NA".
+  msg <- arsbridge:::.workflow_skew_message(NA_character_, "0.1.0.9060")
+  expect_match(msg, "absent")
+  expect_false(grepl("\\bNA\\b", msg))
+  expect_match(arsbridge:::.workflow_skew_message("0.1.0.9059", "0.1.0.9060"),
+               "0\\.1\\.0\\.9059")
+})
+
+test_that("progress read back from a run log matches what the worker wrote", {
+  log <- withr::local_tempfile(fileext = ".log")
+  writeLines("Parsed 9 TLF sections from shells.xlsx", log)
+  ## Append the way the worker does: through the emitter.
+  lines <- utils::capture.output({
+    arsbridge:::.progress_emit_line(list(
+      stage = "ars_to_ard", stage_idx = 2L, n_stages = 3L,
+      i = 5L, n = 32L, label = "AN_T_14_1_1_001"))
+  })
+  cat(lines, file = log, sep = "\n", append = TRUE)
+
+  info <- arsbridge:::.workflow_read_progress(log)
+  expect_equal(info$ev$stage, "ars_to_ard")
+  expect_equal(info$ev$i, 5L)
+  ## The tail excludes the [progress] lines -- they are the bar's food, not
+  ## reading material -- and keeps the human output.
+  expect_true(any(grepl("Parsed 9 TLF", info$tail)))
+  expect_false(any(grepl("^\\[progress\\]", info$tail)))
+
+  expect_null(arsbridge:::.workflow_read_progress(NULL))
+  expect_null(arsbridge:::.workflow_read_progress(tempfile("gone_")))
+})
+
+test_that("the progress block is a bar with an event and a spinner without", {
+  with_ev <- arsbridge:::.workflow_progress_ui(list(
+    ev = list(stage = "ars_fill_shell", stage_idx = 3L, n_stages = 3L,
+              i = 4L, n = 9L, label = "T_14_2_1"),
+    tail = character()))
+  html <- as.character(with_ev)
+  expect_match(html, "progress-bar")
+  expect_match(html, "Filling the workbook")
+  expect_match(html, "T_14_2_1 \\(4/9\\)")
+
+  waiting <- arsbridge:::.workflow_progress_ui(list(ev = NULL,
+                                                    tail = character()))
+  expect_match(as.character(waiting), "spinner-border")
+})
+
+test_that("an in-process build reports progress and leaves the last event", {
+  td <- withr::local_tempdir()
+  project <- file.path(td, "study")
+  inputs <- .wfa_inputs()
+  arsbridge:::.workflow_init(project, inputs$shell, inputs$spec)
+
+  .wfa_no_keys(
+    shiny::testServer(.wfa_server(project), {
+      session$setInputs(run_build = 1)
+      ## The callback fed state$progress throughout; what remains is the
+      ## final event of the last stage that ran (a Word shell without data:
+      ## the build stage alone).
+      info <- state$progress()
+      expect_false(is.null(info))
+      expect_equal(info$ev$stage, "spec_to_ars")
+      expect_equal(info$ev$i, info$ev$n)
+    })
+  )
+})

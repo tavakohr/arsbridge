@@ -102,12 +102,24 @@ ars_workflow <- function(project_dir = NULL) {
 #' `ars_workflow_run()` takes them as arguments rather than reading them.
 #' @noRd
 .workflow_start_build <- function(state, paths, use_llm = FALSE) {
-  ## Two ways to end up synchronous: callr is not installed, or the caller
-  ## asked for it. `arsbridge.workflow_background = FALSE` makes a build
-  ## deterministic to observe, which is what the app's own tests need and
-  ## what anyone debugging a build wants.
-  if (!isTRUE(getOption("arsbridge.workflow_background", TRUE))) return(NULL)
-  if (!requireNamespace("callr", quietly = TRUE)) return(NULL)
+  ## Every road to the synchronous fallback says so. Three of the four used
+  ## to be silent, and a user staring at a frozen UI could not learn why --
+  ## or that installing one package would fix it.
+  if (!isTRUE(getOption("arsbridge.workflow_background", TRUE))) {
+    shiny::showNotification(
+      paste("Background builds are disabled (arsbridge.workflow_background",
+            "= FALSE); building in this process."),
+      type = "message", duration = 4)
+    return(NULL)
+  }
+  if (!requireNamespace("callr", quietly = TRUE)) {
+    shiny::showNotification(
+      paste("callr is not installed, so the build runs in this process and",
+            "the UI will pause until it finishes. install.packages(\"callr\")",
+            "and restart for a responsive build with a live log."),
+      type = "warning", duration = 10)
+    return(NULL)
+  }
 
   ## The worker loads the INSTALLED arsbridge, not the one running this app.
   ## In production they are the same package; in development they are not, and
@@ -118,11 +130,8 @@ ars_workflow <- function(project_dir = NULL) {
     as.character(utils::packageVersion("arsbridge", lib.loc = .libPaths())),
     error = function(e) NA_character_)
   if (is.na(installed) || !identical(installed, running)) {
-    shiny::showNotification(
-      sprintf(paste("Running the build in this process: the installed",
-                    "arsbridge is %s but this session is %s."),
-              installed %||% "absent", running),
-      type = "warning", duration = 8)
+    shiny::showNotification(.workflow_skew_message(installed, running),
+                            type = "warning", duration = 8)
     return(NULL)
   }
   supplement <- if (file.exists(paths$supplement)) paths$supplement else NULL
@@ -131,7 +140,13 @@ ars_workflow <- function(project_dir = NULL) {
       ## payload_path is the worker's own business, not an argument of
       ## ars_workflow_run() -- it is where the worker leaves the payload so
       ## the Results step can find it after a restart.
+      ##
+      ## The progress emitter is resolved inside the worker, from ITS
+      ## namespace: passing the function object would serialize it, and the
+      ## version-skew gate above already guarantees the two namespaces match.
+      ## Its lines go to stdout, which the redirect below turns into run.log.
       func = function(args, payload_path) {
+        args$on_progress <- asNamespace("arsbridge")$.progress_emit_line
         payload <- do.call(arsbridge::ars_workflow_run, args)
         saveRDS(payload, payload_path)
         payload
@@ -148,7 +163,60 @@ ars_workflow <- function(project_dir = NULL) {
       )),
       stdout = paths$run_log, stderr = "2>&1",
       supervise = TRUE),
-    error = function(e) NULL)
+    error = function(e) {
+      shiny::showNotification(
+        paste("Could not start the background build:", conditionMessage(e),
+              "-- building in this process."),
+        type = "warning", duration = 8)
+      NULL
+    })
+}
+
+#' The current progress of a background build, read back from its run log.
+#'
+#' The worker's only channel to the app is the log callr builds from its
+#' stdout, so the state of the build IS the last [progress] line in it. The
+#' raw tail rides along: when something goes wrong, the surrounding output
+#' beats a frozen bar.
+#' @noRd
+.workflow_read_progress <- function(log_path) {
+  if (is.null(log_path) || !file.exists(log_path)) return(NULL)
+  lines <- readLines(log_path, warn = FALSE)
+  tail_lines <- utils::tail(grep("^\\[progress\\] ", lines,
+                                 value = TRUE, invert = TRUE), 3)
+  list(ev = .parse_progress_line(lines), tail = tail_lines)
+}
+
+#' The build panel's progress block, as a tag: bar when an event is known,
+#' spinner while waiting for the first one.
+#' @noRd
+.workflow_progress_ui <- function(info) {
+  ev <- info$ev
+  tail_pre <- if (length(info$tail %||% character()) > 0) {
+    shiny::pre(class = "mb-0 mt-1 small text-muted",
+               paste(info$tail, collapse = "\n"))
+  }
+  if (is.null(ev)) {
+    return(shiny::div(
+      class = "border rounded p-2 small bg-light",
+      shiny::div(class = "spinner-border spinner-border-sm me-2"),
+      shiny::span("Running in a background process..."),
+      tail_pre))
+  }
+  pct <- round(100 * .progress_fraction(ev))
+  detail <- if (!is.na(ev$label %||% NA_character_) && (ev$n %||% 0) > 0) {
+    sprintf(" -- %s (%d/%d)", ev$label, ev$i, ev$n)
+  } else {
+    ""
+  }
+  shiny::div(
+    class = "border rounded p-2 small bg-light",
+    shiny::div(sprintf("%s%s", .progress_stage_label(ev$stage), detail)),
+    shiny::div(
+      class = "progress mt-1", style = "height: 6px;",
+      shiny::div(class = "progress-bar", role = "progressbar",
+                 style = sprintf("width: %d%%;", pct))),
+    tail_pre)
 }
 
 #' What to announce for a finished build's payload.
@@ -232,7 +300,13 @@ ars_workflow <- function(project_dir = NULL) {
     supplement_findings = shiny::reactiveVal(NULL),
     ## The background build: whether one is in flight, and its handle.
     running             = shiny::reactiveVal(FALSE),
-    job                 = shiny::reactiveVal(NULL)
+    job                 = shiny::reactiveVal(NULL),
+    ## The last progress event seen, plus the raw log tail behind it. In
+    ## background mode the poller refreshes it; in-process it is set by the
+    ## callback (for tests and the final state -- live repainting there goes
+    ## through shiny::setProgress, because no reactive flush happens while
+    ## the observer blocks).
+    progress            = shiny::reactiveVal(NULL)
   )
 }
 
@@ -634,25 +708,14 @@ ars_workflow <- function(project_dir = NULL) {
         class = "btn-primary btn-sm")
     })
 
-    ## Progress is the run log, tailed. The background process writes its
-    ## console output to ars/run.log, which doubles as an artifact worth
-    ## archiving beside the deliverable.
+    ## Progress renders from state$progress, which the background poller
+    ## refreshes from run.log. (In-process, no reactive flush happens while
+    ## the build blocks its observer, so this never paints mid-run -- the
+    ## live channel there is shiny::setProgress, which writes the websocket
+    ## immediately. This block is the background mode's display.)
     output$build_progress <- shiny::renderUI({
       if (!isTRUE(state$running())) return(NULL)
-      shiny::invalidateLater(700)
-      paths <- paths_r()
-      tail_lines <- if (!is.null(paths) && file.exists(paths$run_log)) {
-        utils::tail(readLines(paths$run_log, warn = FALSE), 3)
-      } else character()
-      shiny::div(
-        class = "border rounded p-2 small bg-light",
-        shiny::div(class = "spinner-border spinner-border-sm me-2"),
-        shiny::span("Running in a background process..."),
-        if (length(tail_lines)) {
-          shiny::pre(class = "mb-0 mt-1 small",
-                     paste(tail_lines, collapse = "\n"))
-        }
-      )
+      .workflow_progress_ui(state$progress())
     })
 
     shiny::observeEvent(input$run_build, {
@@ -661,18 +724,32 @@ ars_workflow <- function(project_dir = NULL) {
       if (is.null(paths) || is.null(m) || isTRUE(state$running())) return()
 
       dir.create(dirname(paths$run_log), recursive = TRUE, showWarnings = FALSE)
+      state$progress(NULL)   # last run's bar must not front-run this one
       state$running(TRUE)
       handle <- .workflow_start_build(m, paths)
       if (is.null(handle)) {
         ## No background engine available: run in-process rather than refuse.
         ## A frozen UI is worse than a responsive one, but it is much better
-        ## than not being able to build at all.
-        res <- tryCatch(
-          shiny::withProgress(message = "Building (in this process)...",
-                              value = NULL,
-                              suppressMessages(suppressWarnings(
-                                .workflow_run_build(m, paths)))),
-          error = function(e) e)
+        ## than not being able to build at all. Progress flows through
+        ## setProgress: it reaches the browser immediately even from inside
+        ## this blocking observer, which a reactiveVal cannot -- do not
+        ## "simplify" it away in favour of state$progress.
+        res <- tryCatch({
+          progress_cb <- function(ev) {
+            state$progress(list(ev = ev, tail = character()))
+            tryCatch(shiny::setProgress(
+              value = .progress_fraction(ev),
+              message = .progress_stage_label(ev$stage),
+              detail = if (!is.na(ev$label %||% NA_character_) &&
+                             (ev$n %||% 0) > 0) {
+                sprintf("%s (%d/%d)", ev$label, ev$i, ev$n)
+              }), error = function(e) NULL)
+          }
+          shiny::withProgress(
+            message = "Building (in this process)...", value = 0,
+            suppressMessages(suppressWarnings(
+              .workflow_run_build(m, paths, on_progress = progress_cb))))
+        }, error = function(e) e)
         state$running(FALSE)
         .workflow_finish_build(res, state, bump)
         return()
@@ -682,11 +759,17 @@ ars_workflow <- function(project_dir = NULL) {
 
     ## Poll the background process. Nothing about the payload is recomputed
     ## here -- the worker already assembled it, including its diagnostics.
+    ## Each tick also refreshes the progress display from the run log, where
+    ## the worker's [progress] lines land via the stdout redirect.
     shiny::observe({
       if (!isTRUE(state$running())) return()
       handle <- state$job()
       if (is.null(handle)) return()
       shiny::invalidateLater(700)
+      paths <- paths_r()
+      if (!is.null(paths)) {
+        state$progress(.workflow_read_progress(paths$run_log))
+      }
       if (handle$is_alive()) return()
       res <- tryCatch(handle$get_result(), error = function(e) e)
       state$running(FALSE)

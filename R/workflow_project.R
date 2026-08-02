@@ -282,7 +282,7 @@
 #' @noRd
 .workflow_run_build <- function(state, paths, adam_dir = NULL,
                                 use_llm = FALSE, api_key = NULL,
-                                log_path = NULL) {
+                                log_path = NULL, on_progress = NULL) {
   supplement <- if (file.exists(paths$supplement)) paths$supplement else NULL
   payload <- ars_workflow_run(
     shell_path     = state$shell_path,
@@ -293,10 +293,29 @@
     supplement     = supplement,
     use_llm        = use_llm,
     api_key        = api_key,
-    log_path       = log_path %||% NULL
+    log_path       = log_path %||% NULL,
+    on_progress    = on_progress
   )
   saveRDS(payload, paths$payload)
   invisible(payload)
+}
+
+#' The in-process fallback's explanation of a version skew, as one sentence.
+#'
+#' Pure so the wording is testable: the interesting case is `NA` (arsbridge
+#' not installed at all), which `%||%` cannot catch -- `NA_character_` is
+#' neither NULL nor empty, so the old message printed "the installed
+#' arsbridge is NA".
+#' @noRd
+.workflow_skew_message <- function(installed, running) {
+  installed_label <- if (is.null(installed) || is.na(installed)) {
+    "absent (not installed in .libPaths())"
+  } else {
+    installed
+  }
+  sprintf(paste("Running the build in this process: the installed arsbridge",
+                "is %s but this session is %s."),
+          installed_label, running)
 }
 
 #' The stopApp payload that hands the built event to the editor.
