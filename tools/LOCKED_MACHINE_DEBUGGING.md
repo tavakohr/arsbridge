@@ -133,3 +133,34 @@ merges, row order. Failing test first, then the fix, then the standard gate:
 full suite, byte-identical golden diff on the bundled example and the CDSC
 fixture, and — for any change to `R/parse_shell_core.R` — the docx↔xlsx parity
 test plus `tools/parity_check_shell.R` on your own pair.
+
+## When the workbook comes back unfilled
+
+The fill stage keeps a per-cell census with a REASON string for every cell it
+did not fill. The reason strings are arsbridge's own wording -- no study text
+-- so their frequency table is safe to share as-is, and on a run that filled
+nothing its value distribution IS the diagnosis. From a workflow project:
+
+```r
+table(readRDS(file.path(project, "ars", "last_run.rds"))$unfilled_cells$reason)
+```
+
+(For a hand-run pipeline, the same frame is `ars_fill_shell(...)$diagnostics`.
+Read it from the SAME call's return value -- `ars_to_ard()` resets the shared
+diagnostic collector, so nothing upstream survives a re-read.)
+
+What a dominant reason means:
+
+| dominant reason | what happened | first move |
+|---|---|---|
+| `no analysis covers this row` | No annotation was bound to the rows -- a clean shell, or a convention the parser missed. | Look at the shell: if it is unannotated, that is the whole story -- annotate it, or declare the bindings in a reviewed supplement (it can bind a clean shell's rows). If it IS annotated, run the digest diff (Step 1). |
+| `no result in the ARD for this cell` | The rows bound and executed, but the value-to-cell join failed, or the level is absent from the data. | Before 0.1.0.9060, check the column headers for decorations like `(N=XX)` -- the join used the header verbatim. From .9060 they are stripped; a residue of these on scattered cells usually means a level with no data (a zero-count arm), which is left as authored by design. |
+| `the column is not on the output's column axis` | A column never mapped -- historically a blank header cell (an annotation-only stub header) shifting the axis. | Fixed in 0.1.0.9060 (physical column indices). If it persists, send the decision digest: `col_headers` count vs `n_physical_cols` is the tell. |
+| `reserved for manual derivation` | ADR 0002: an inferential cell arsbridge does not compute. | Expected. `ars_manual_worklist()` lists them. |
+| `the placeholder asks for a statistic the analysis does not produce` | The placeholder has more tokens than the method has statistics (e.g. `xx (xx.x)` on a row whose method yields only a count). | Expected today for filter rows (`[VAR = 'value']`); the count fills and the extra token stays. |
+| `the row stands for a repeated block, which needs row expansion` | A template row (`<System Organ Class>`) answered by many levels. | Expected outside listings; report if it appears on a plain data row. |
+| `the output names sheet '...', which is not in the workbook` / `no cell map recorded for this output` | The fill was pointed at a different workbook than the ARS was built from, or the output carried no map. | Fill the exact file `spec_to_ars()` parsed, unrenamed. |
+
+The census is also on screen: the app's Results step renders it as a
+filterable table, and a build that filled nothing says so in its completion
+notification.

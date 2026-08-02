@@ -2,10 +2,10 @@
 ## ---------------------------------------------------------------------------
 ## PRIVACY-SAFE record of what the parser DECIDED about a shell.
 ##
-## tools/shell_structure_digest.R describes the raw geometry of a shell a
-## user is not allowed to share (spans, merges, header flags, text
-## silhouettes). This is its counterpart: the same silhouette rules applied
-## to what parse_shell_docx() concluded -- how many header rows it chose,
+## tools/shell_structure_digest.R (and its _xlsx sibling) describe the raw
+## geometry of a shell a user is not allowed to share (spans, merges, header
+## flags, text silhouettes). This is their counterpart: the same silhouette
+## rules applied to what parse_shell() concluded -- how many header rows it chose,
 ## what its column labels became, what shape the column tree took, how each
 ## stub row was classified. Diffing the two JSONs on the locked machine
 ## pinpoints WHERE the parse diverged from the document without a single
