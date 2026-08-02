@@ -45,7 +45,7 @@ test_that("the bundled Excel shell parses to annotated sections", {
   spec <- parse_adam_spec(arsbridge_example("adam_spec.xlsx"))
   secs <- suppressMessages(suppressWarnings(parse_shell(
     arsbridge_example("annotated_shell.xlsx"), spec_lookup = spec$lookup)))
-  expect_length(secs, 4L)
+  expect_length(secs, 8L)
   expect_true(all(vapply(secs, function(s) nzchar(s$tlf_number %||% ""),
                          logical(1))))
   ## At least the tables carry machine-readable annotations.
@@ -54,6 +54,34 @@ test_that("the bundled Excel shell parses to annotated sections", {
                function(r) isTRUE(r$has_annot), logical(1)))
   }, integer(1)))
   expect_gt(n_annot, 3)
+})
+
+test_that("the two bundled shells are the same study, output for output", {
+  ## The drift this catches: the Excel shell was hand-authored with four of
+  ## the study's eight outputs while the Word one had all eight, and nothing
+  ## compared them -- the bundle advertised "one worksheet per output" and
+  ## was not.
+  ##
+  ## Compared at the OUTPUT level, not cell for cell: the Excel shell is a
+  ## transcription of the same study, not a facsimile of the Word document
+  ## (it leaves out analyses this study's public data cannot support). The
+  ## reader-level lockstep -- every class-1 field, every annotated row -- is
+  ## test-parity_docx_xlsx.R, on fixtures built to be identical.
+  skip_if_not_installed("openxlsx2")
+  spec <- parse_adam_spec(arsbridge_example("adam_spec.xlsx"))
+  read <- function(file) {
+    suppressMessages(suppressWarnings(parse_shell(
+      arsbridge_example(file), spec_lookup = spec$lookup)))
+  }
+  docx <- read("annotated_shell.docx")
+  xlsx <- read("annotated_shell.xlsx")
+
+  for (field in c("tlf_number", "tlf_type", "title")) {
+    expect_identical(
+      vapply(docx, function(s) s[[field]] %||% NA_character_, character(1)),
+      vapply(xlsx, function(s) s[[field]] %||% NA_character_, character(1)),
+      info = field)
+  }
 })
 
 test_that("the bundle demos the whole chain offline: build, execute, fill", {

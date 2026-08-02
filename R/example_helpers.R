@@ -32,10 +32,10 @@
 #'     8 outputs (5 tables, 2 listings, 1 figure), in Word. Uses the
 #'     standard red \code{C00000} run convention for ADaM variable
 #'     references. Roughly 97 KB.}
-#'   \item{`annotated_shell.xlsx`}{The Excel counterpart: one annotated
-#'     worksheet per output (two tables, a listing, a figure). This is the
+#'   \item{`annotated_shell.xlsx`}{The Excel counterpart: the same study,
+#'     one annotated worksheet per output, in the same order. This is the
 #'     shell [ars_fill_shell()] can write back filled, so the bundle demos
-#'     the whole chain offline. Roughly 10 KB.}
+#'     the whole chain offline. Roughly 15 KB.}
 #'   \item{`adam_spec.xlsx`}{ADaM specification workbook covering the 5
 #'     domains the shells reference (ADSL, ADAE, ADEX, ADCM, ADVS; 123
 #'     variables), with labels and types taken from the pharmaverseadam
@@ -43,9 +43,10 @@
 #'     (SEX, AESEV, ASEV, AESER). Roughly 16 KB.}
 #'   \item{`ADaM.zip`}{The five pharmaverseadam datasets as XPT files,
 #'     restricted to the curated variables; ADVS keeps only
-#'     \code{PARAMCD = 'PULSE'}, the one parameter the shells read.
-#'     Roughly 265 KB compressed. Unzip and pass the folder as
-#'     `adam_dir` to [ars_to_ard()].}
+#'     \code{PARAMCD = 'PULSE'}, the one parameter the shells read, and
+#'     ADCM only each subject's first occurrence of a medication, which is
+#'     what its listing shows. Roughly 217 KB compressed. Unzip and pass the
+#'     folder as `adam_dir` to [ars_to_ard()].}
 #' }
 #'
 #' @examples
@@ -91,9 +92,9 @@ arsbridge_example <- function(file = NULL) {
 #'   `"reporting_event.json"` in `tempdir()`.
 #' @param report_path Where to write the spec validation report. Default:
 #'   `"spec_validation_report.xlsx"` in `tempdir()`.
-#' @param shell_format Which bundled shell to read: `"docx"` (default, all
-#'   8 outputs) or `"xlsx"` (the Excel worksheets -- the shell that
-#'   [ars_fill_shell()] can write back filled).
+#' @param shell_format Which bundled shell to read: `"docx"` (default) or
+#'   `"xlsx"` (the Excel worksheets -- the shell that [ars_fill_shell()] can
+#'   write back filled). Both carry the same 8 outputs.
 #' @param ... Additional arguments forwarded to [spec_to_ars()].
 #'
 #' @return Invisibly returns the [spec_to_ars()] result list.

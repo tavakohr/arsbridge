@@ -114,6 +114,14 @@ for (ds in names(CURATED)) {
 datasets$ADVS <- datasets$ADVS[datasets$ADVS$PARAMCD == "PULSE", ,
                                drop = FALSE]
 
+## ADCM is 7,510 records, and the only shell that reads it is a listing --
+## which would then be 7,510 rows in the filled workbook, most of them repeat
+## administrations of the same medication. The bundle keeps each subject's
+## FIRST occurrence of each medication (AOCCPFL), which is what the listing's
+## own row filter asks for, and what makes the filled deliverable openable.
+datasets$ADCM <- datasets$ADCM[!is.na(datasets$ADCM$AOCCPFL) &
+                                 datasets$ADCM$AOCCPFL == "Y", , drop = FALSE]
+
 ## The codelist terms must exist in the data they claim to decode -- a decode
 ## for a value the data never takes silently empties a category at fill time.
 observed <- list(SEX = datasets$ADSL$SEX, AESEV = datasets$ADAE$AESEV,
@@ -254,14 +262,20 @@ invisible(file.copy(docx_src, file.path(bundle_dir, "annotated_shell.docx"),
 ## ---------------------------------------------------------------------------
 ## annotated_shell.xlsx -- the Excel counterpart, generated.
 ##
-## Four worksheets covering one of each output kind, in the same conventions
-## the docx uses: number/title/population banner, red italic in-cell
-## annotations, xx placeholders. The arm headers are the EXACT TRT01A values
-## in the data ("Xanomeline Low Dose", not "Xanomeline Low") -- the fill
-## writer joins ARD group levels to columns by that label, so a paraphrase
-## would leave every cell unfilled. One header carries "(N=XX)" on purpose:
-## the writer strips the decoration before joining, and the bundle should
-## demonstrate that.
+## One worksheet per output, in the Word shell's own order, so the two shells
+## transcribe the SAME study: five tables, two listings, one figure. The
+## conventions are the docx's -- number/title/population banner, red italic
+## in-cell annotations, xx placeholders. The arm headers are the EXACT TRT01A
+## values in the data ("Xanomeline Low Dose", not "Xanomeline Low") -- the
+## fill writer joins ARD group levels to columns by that label, so a
+## paraphrase would leave every cell unfilled. One header carries "(N=XX)" on
+## purpose: the writer strips the decoration before joining, and the bundle
+## should demonstrate that.
+##
+## The Excel sheets are a transcription, not a facsimile: where the Word mock
+## states an analysis this study's public data cannot support (screen-failure
+## counts, an action-taken variable that is empty throughout), the sheet
+## leaves it out rather than shipping a row that can only come back blank.
 ## ---------------------------------------------------------------------------
 
 BLACK <- "FF000000"
@@ -324,7 +338,7 @@ footnote <- function(sheet, row, text, n_cols = 4L) {
 }
 
 ## --- Table 14.1.1: disposition. One arm header keeps its (N=XX). ----------
-banner("Table 14.1.1", "Table 14.1.1", "Summary of Subject Disposition")
+banner("Table 14.1.1", "Table 14.1.1", "Subject Disposition")
 header_row("Table 14.1.1", "Category",
            "[columns -> ADSL.TRT01A; source ADSL]",
            cols = c("Placebo (N=XX)", "Xanomeline Low Dose",
@@ -353,6 +367,74 @@ data_row("Table 14.1.2", 11, "Female")
 data_row("Table 14.1.2", 12, "Male")
 footnote("Table 14.1.2", 14, "Age is at informed consent.")
 
+## --- Table 14.3.1: TEAE overview. Filter rows and a severity block. -------
+## "Any TEAE" and "Serious TEAE" are filters on their own variable displayed
+## as "xx (xx.x)" -- a subject count WITH its percentage. The severity block
+## says once/subject explicitly, because a plain categorical count would
+## count EVENTS: a subject with three mild events must still count once. The
+## flag named there must not be USUBJID -- a subject-key reference anywhere in
+## an annotation reads as "count of subjects" and would take the whole row.
+##
+## No Placebo subject had a serious event, so that cell has no result to
+## write and keeps its placeholder. That is the intended behaviour (ADR 0002:
+## an empty TLF cell reads as zero, so nothing is ever written on a guess),
+## and the bundle is a fair place to see it.
+banner("Table 14.3.1", "Table 14.3.1",
+       "Overview of Treatment-Emergent Adverse Events")
+header_row("Table 14.3.1", "Category",
+           "[columns -> ADAE.TRT01A; source ADAE]")
+data_row("Table 14.3.1", 5, "Any TEAE", "[ADAE.TRTEMFL = 'Y']")
+data_row("Table 14.3.1", 6, "Serious TEAE", "[ADAE.AESER = 'Y']")
+## row 7 blank -- spacer
+data_row("Table 14.3.1", 8, "TEAE by severity, n (%)",
+         "[ADAE.ASEV; once/subject ADAE.AOCCIFL]", value = NULL)
+data_row("Table 14.3.1", 9, "Mild")
+data_row("Table 14.3.1", 10, "Moderate")
+data_row("Table 14.3.1", 11, "Severe")
+footnote("Table 14.3.1", 13,
+         paste("A subject is counted once in each severity they report.",
+               "Percentages are of the safety population."))
+
+## --- Table 14.3.2: AEs by SOC and preferred term, a nested block. ----------
+## The two `<...>` template rows ARE the block: the parent expands to one row
+## per system organ class and the child to its terms underneath. Both levels
+## count distinct subjects.
+banner("Table 14.3.2", "Table 14.3.2",
+       paste("Treatment-Emergent Adverse Events by System Organ Class",
+             "and Preferred Term"))
+header_row("Table 14.3.2", "System Organ Class / Preferred Term",
+           "[columns -> ADAE.TRT01A; source ADAE]")
+data_row("Table 14.3.2", 5, "Subjects with any TEAE",
+         "[ADAE.TRTEMFL = 'Y']")
+## row 6 blank -- spacer
+data_row("Table 14.3.2", 7, "<System Organ Class>", "[ADAE.AESOC]")
+data_row("Table 14.3.2", 8, "<Preferred Term>", "[ADAE.AEDECOD]")
+footnote("Table 14.3.2", 10,
+         "A subject is counted once per system organ class and once per term.")
+
+## --- Table 14.2.1: exposure. Two continuous blocks off ADEX parameters. ---
+## The filter variable is written QUALIFIED ("ADEX.PARAMCD='TDURD'", not
+## "PARAMCD='TDURD'"): unqualified, the subset does not parse and the row is
+## read as a subject count of AVAL instead of a summary of it. TDURD is the
+## overall duration, one record per subject; DURD is per dosing interval and
+## would summarise several records per subject as if they were several
+## subjects.
+banner("Table 14.2.1", "Table 14.2.1", "Study Drug Exposure")
+header_row("Table 14.2.1", "Statistic",
+           "[columns -> ADEX.TRT01A; source ADEX]")
+data_row("Table 14.2.1", 5, "Duration of exposure (days)",
+         "[ADEX.AVAL WHERE ADEX.PARAMCD='TDURD']", value = NULL)
+data_row("Table 14.2.1", 6, "Mean (SD)", value = "xx.x (xx.xx)")
+data_row("Table 14.2.1", 7, "Median", value = "xx.x")
+data_row("Table 14.2.1", 8, "Min, Max", value = "xx, xx")
+## row 9 blank -- spacer
+data_row("Table 14.2.1", 10, "Average daily dose (mg)",
+         "[ADEX.AVAL WHERE ADEX.PARAMCD='AVDDSE']", value = NULL)
+data_row("Table 14.2.1", 11, "Mean (SD)", value = "xx.x (xx.xx)")
+data_row("Table 14.2.1", 12, "Median", value = "xx.x")
+footnote("Table 14.2.1", 14,
+         "Exposure is derived from ADEX; one record per subject per parameter.")
+
 ## --- Listing 16.2.7.1: adverse events. -------------------------------------
 ## The full banner (number / title / population) matters: the layout reader
 ## finds the header band relative to it, and a missing population row slides
@@ -374,6 +456,28 @@ for (j in seq_along(listing_cols)) {
 for (j in seq_along(listing_cols)) {
   wb$add_data(sheet = "Listing 16.2.7.1",
               x = c("xxx-xxxx", "xxxx", "xxxx", "xxxx", "x")[[j]],
+              start_row = 5, start_col = j, col_names = FALSE)
+}
+
+## --- Listing 16.2.4.1: concomitant medications. ----------------------------
+## Restricted to each subject's first occurrence of a medication
+## (ADCM.AOCCPFL): the whole domain is 7,510 records, and a training bundle
+## should stay openable. The row filter is the same second-bracket dialect
+## the AE listing uses.
+banner("Listing 16.2.4.1", "Listing 16.2.4.1",
+       "Listing of Concomitant Medications", n_cols = 5L)
+cm_cols <- c(
+  "Subject"       = "[ADCM.USUBJID]  [row: ADCM.AOCCPFL='Y'; source ADCM]",
+  "Treatment"     = "[ADCM.TRTA]",
+  "Reported term" = "[ADCM.CMTRT]",
+  "WHODrug PT"    = "[ADCM.CMDECOD]",
+  "Indication"    = "[ADCM.CMINDC]")
+for (j in seq_along(cm_cols)) {
+  wb$add_data(sheet = "Listing 16.2.4.1",
+              x = annotated_cell(names(cm_cols)[[j]], cm_cols[[j]]),
+              start_row = 4, start_col = j, col_names = FALSE)
+  wb$add_data(sheet = "Listing 16.2.4.1",
+              x = c("xxx-xxxx", "xxxx", "xxxx", "xxxx", "xxxx")[[j]],
               start_row = 5, start_col = j, col_names = FALSE)
 }
 
@@ -422,14 +526,15 @@ readme <- c(
   paste0("| `annotated_shell.docx` | annotated TLF shell, Word: 5 tables, ",
          "2 listings, 1 figure | ",
          size_kb(file.path(bundle_dir, "annotated_shell.docx")), " |"),
-  paste0("| `annotated_shell.xlsx` | annotated TLF shell, Excel: one ",
-         "worksheet per output, fillable by `ars_fill_shell()` | ",
+  paste0("| `annotated_shell.xlsx` | annotated TLF shell, Excel: the same ",
+         "study, one worksheet per output, fillable by `ars_fill_shell()` | ",
          size_kb(xlsx_path), " |"),
   paste0("| `adam_spec.xlsx` | ADaM specification: 5 domains, ",
          "pharmaverseadam labels/types, codelists | ",
          size_kb(spec_bundle), " |"),
   paste0("| `ADaM.zip` | 5 XPT datasets (adsl, adae, adex, adcm, advs; ",
-         "ADVS restricted to PARAMCD='PULSE') | ", size_kb(zip_path), " |"),
+         "ADVS restricted to PARAMCD='PULSE', ADCM to first occurrences) | ",
+         size_kb(zip_path), " |"),
   "",
   "Access from R with `arsbridge_example()`; run the whole study with",
   "`spec_to_ars_example()`. The Excel shell demos the full chain offline:",

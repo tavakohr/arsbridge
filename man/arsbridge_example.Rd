@@ -31,10 +31,10 @@ Files currently in the bundle:
 8 outputs (5 tables, 2 listings, 1 figure), in Word. Uses the
 standard red \code{C00000} run convention for ADaM variable
 references. Roughly 97 KB.}
-\item{\code{annotated_shell.xlsx}}{The Excel counterpart: one annotated
-worksheet per output (two tables, a listing, a figure). This is the
+\item{\code{annotated_shell.xlsx}}{The Excel counterpart: the same study,
+one annotated worksheet per output, in the same order. This is the
 shell \code{\link[=ars_fill_shell]{ars_fill_shell()}} can write back filled, so the bundle demos
-the whole chain offline. Roughly 10 KB.}
+the whole chain offline. Roughly 15 KB.}
 \item{\code{adam_spec.xlsx}}{ADaM specification workbook covering the 5
 domains the shells reference (ADSL, ADAE, ADEX, ADCM, ADVS; 123
 variables), with labels and types taken from the pharmaverseadam
@@ -42,9 +42,10 @@ column metadata, plus codelists for the decoded categories
 (SEX, AESEV, ASEV, AESER). Roughly 16 KB.}
 \item{\code{ADaM.zip}}{The five pharmaverseadam datasets as XPT files,
 restricted to the curated variables; ADVS keeps only
-\code{PARAMCD = 'PULSE'}, the one parameter the shells read.
-Roughly 265 KB compressed. Unzip and pass the folder as
-\code{adam_dir} to \code{\link[=ars_to_ard]{ars_to_ard()}}.}
+\code{PARAMCD = 'PULSE'}, the one parameter the shells read, and
+ADCM only each subject's first occurrence of a medication, which is
+what its listing shows. Roughly 217 KB compressed. Unzip and pass the
+folder as \code{adam_dir} to \code{\link[=ars_to_ard]{ars_to_ard()}}.}
 }
 }
 \examples{
