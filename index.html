@@ -24,7 +24,7 @@
 
     <a class="navbar-brand me-2" href="index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9062</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9065</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -563,6 +563,7 @@
 <li>
 <strong><code>strip_annotations = FALSE</code></strong> keeps the red annotations next to the numbers, which is useful while reviewing and wrong for a deliverable.</li>
 </ul>
+<p>A column header written <code>Placebo (N=XX)</code> is answered too: each result column’s header takes the denominator its own percentages are computed against, so <code>Placebo (N=86)</code> can be checked against the cells beneath it. A column whose analyses disagree about their denominator — and one showing no percentage at all — keeps the placeholder rather than stating a population the table cannot be read against.</p>
 <p>A listing is filled differently from a table, because its shell states <strong>one</strong> template row standing for however many rows the data has. Filling it inserts rows — and everything below, including a footnote and its merge, moves down to make room. The rows written inherit the template row’s own fonts and alignment.</p>
 <p>A figure sheet has no analyses at all: the shell states the plot as prose (<code>Y axis -&gt; mean of ADVS.AVAL</code>, <code>Series (colour) -&gt; ADVS.TRTA</code>, <code>Filter -&gt; ADVS.PARAMCD='PULSE'</code>). <code><a href="reference/ars_fill_shell.html">ars_fill_shell()</a></code> computes that series from the datasets and writes it as a data block — one row per series and x-value, with <code>n</code>, the mean and its standard error — where the annotation block was. The numbers go in as numbers, not rounded text, because a programmer picks them up to draw the chart. The chart object itself stays whatever the author made it; drawing into someone else’s workbook is a different job from filling one in.</p>
 <p>Both need <code>adam_dir</code>, since a listing’s rows <em>are</em> the subject-level data and a figure’s series is computed from it. Tables need only the ARD.</p>
@@ -804,6 +805,11 @@ Table 14.1.1 Demographics - Screened Subjects ADSL.SCRNFL='Y' [PROGRAMMING DATAS
 <td><code>MTH_SUBJECT_COUNT</code></td>
 <td>
 <code><a href="https://rdrr.io/pkg/cards/man/ard_total_n.html" class="external-link">cards::ard_total_n()</a></code> or <code><a href="https://rdrr.io/pkg/cards/man/deprecated.html" class="external-link">cards::ard_categorical()</a></code>
+</td>
+</tr>
+<tr>
+<td><code>MTH_SUBJECT_COUNT_PCT</code></td>
+<td>Distinct-subject dedup, then <code><a href="https://rdrr.io/pkg/cards/man/deprecated.html" class="external-link">cards::ard_categorical()</a></code>
 </td>
 </tr>
 <tr>

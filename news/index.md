@@ -2,6 +2,69 @@
 
 ## arsbridge (development version)
 
+- **A `(N=XX)` column header is now filled, not only stripped.** The
+  decoration was removed before matching a column to the ARD and then
+  discarded, so every filled workbook shipped with `Placebo (N=XX)`
+  above real numbers. Each result column’s header now gets the
+  denominator its own percentages are computed against –
+  `Placebo (N=86)` in the bundled example – written as an ordinary cell
+  edit, so the arm’s name, its font and the author’s spacing inside the
+  brackets are untouched, and the write is counted and reported like any
+  other.
+
+  Where the number comes from is deliberate and narrow: the `N` of the
+  analyses **this column shows a percentage for**, so a reader can check
+  the header against the cells beneath it. A column whose analyses
+  disagree, and a column showing no percentage at all, keep their
+  placeholder – `N` on a continuous analysis is {cards}’ count of
+  non-missing values, a different quantity wearing the same name, and a
+  header is not the place to guess.
+
+- **The bundled Excel shell is now the whole study, not half of it.** It
+  carried four of CDSC-ALZ-201’s eight outputs while the Word shell
+  carried all eight – and the bundle’s own README advertised “one
+  worksheet per output”. The generator now authors the missing four: the
+  TEAE overview (14.3.1), adverse events by system organ class and
+  preferred term (14.3.2), study drug exposure (14.2.1), and the
+  concomitant-medications listing (16.2.4.1), in the Word shell’s order.
+  `spec_to_ars_example(shell_format = "xlsx")` reports 8 outputs, and a
+  new test compares the two shells output for output, so the drift
+  cannot come back unnoticed.
+
+  The example run fills 59 cells and leaves 7: the six cells of 14.3.2’s
+  `<System Organ Class>` / `<Preferred Term>` template rows, which the
+  Excel writer does not expand, and one Serious-TEAE cell for an arm
+  that had no serious event – a cell with no result keeps its
+  placeholder rather than being written as a zero. It reports no
+  diagnostics, and takes about 30 seconds end to end.
+
+  `ADaM.zip` shrinks to 217 KB: ADCM keeps each subject’s first
+  occurrence of a medication, which is what its listing shows – the full
+  7,510 records would have made the filled workbook a listing of repeat
+  administrations.
+
+- **A count row that shows a percentage now declares one.** A row
+  annotated as a filter on its own variable – “Completed study
+  `[ADSL.EOSSTT = 'COMPLETED']`” – was always typed `MTH_SUBJECT_COUNT`,
+  which declares the count and nothing else. Shells write those rows as
+  `xx (xx.x)`, so the second number had no statistic to fetch and the
+  cell shipped as `58 (xx.x)` with a warning, even though the engine had
+  computed the percentage all along. The method inference now reads what
+  the row actually displays – from the cell grid in an Excel shell, from
+  the row’s own data cells in a Word one, so both formats still build
+  the same ARS – and types a two-number row as the new
+  `MTH_SUBJECT_COUNT_PCT`.
+
+  That method is Subject Count’s arithmetic (one row per subject, then
+  counted) with the percentage and denominator declared alongside,
+  rather than Count and Percentage, which counts RECORDS: on a
+  record-level dataset (`[ADAE.TRTEMFL = 'Y']`) borrowing that method
+  would have turned a subject count into an event count without saying
+  so. The executor is shared with `MTH_SUBJECT_COUNT`, so no number
+  changes – only which of them the ARS says the output shows. The
+  example study’s disposition rows now fill as `58 (67.4)` /
+  `28 (32.6)`, and its run reports no diagnostics at all.
+
 - **A filled listing no longer opens in Excel with its columns empty.**
   Every cell arsbridge added to a sheet – the rows a listing’s template
   expands into, the block a figure’s series is written to – was filed

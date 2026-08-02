@@ -588,6 +588,13 @@ Three things are deliberate:
 - **`strip_annotations = FALSE`** keeps the red annotations next to the
   numbers, which is useful while reviewing and wrong for a deliverable.
 
+A column header written `Placebo (N=XX)` is answered too: each result
+column’s header takes the denominator its own percentages are computed
+against, so `Placebo (N=86)` can be checked against the cells beneath
+it. A column whose analyses disagree about their denominator — and one
+showing no percentage at all — keeps the placeholder rather than stating
+a population the table cannot be read against.
+
 A listing is filled differently from a table, because its shell states
 **one** template row standing for however many rows the data has.
 Filling it inserts rows — and everything below, including a footnote and
@@ -832,6 +839,7 @@ The ARS method identifier in each analysis maps to a specific
 | `MTH_COUNT_AND_PERCENTAGE` | [`cards::ard_categorical()`](https://rdrr.io/pkg/cards/man/deprecated.html) |
 | `MTH_AE_FREQUENCY_COUNT` | Distinct-subject dedup, then [`cards::ard_categorical()`](https://rdrr.io/pkg/cards/man/deprecated.html) |
 | `MTH_SUBJECT_COUNT` | [`cards::ard_total_n()`](https://rdrr.io/pkg/cards/man/ard_total_n.html) or [`cards::ard_categorical()`](https://rdrr.io/pkg/cards/man/deprecated.html) |
+| `MTH_SUBJECT_COUNT_PCT` | Distinct-subject dedup, then [`cards::ard_categorical()`](https://rdrr.io/pkg/cards/man/deprecated.html) |
 | `MTH_PROPORTION_CI_EXACT` | [`arsbridge::ard_proportion_ci_exact()`](https://tavakohr.github.io/arsbridge/reference/ard_proportion_ci_exact.md) |
 | `MTH_CMH_TEST` | [`arsbridge::ard_cmh_test()`](https://tavakohr.github.io/arsbridge/reference/ard_cmh_test.md) |
 

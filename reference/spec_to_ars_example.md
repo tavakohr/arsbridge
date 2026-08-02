@@ -32,10 +32,10 @@ spec_to_ars_example(
 
 - shell_format:
 
-  Which bundled shell to read: `"docx"` (default, all 8 outputs) or
-  `"xlsx"` (the Excel worksheets – the shell that
+  Which bundled shell to read: `"docx"` (default) or `"xlsx"` (the Excel
+  worksheets – the shell that
   [`ars_fill_shell()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_shell.md)
-  can write back filled).
+  can write back filled). Both carry the same 8 outputs.
 
 - ...:
 

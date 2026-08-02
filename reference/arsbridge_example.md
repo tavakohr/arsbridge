@@ -39,11 +39,11 @@ Files currently in the bundle:
 
 - `annotated_shell.xlsx`:
 
-  The Excel counterpart: one annotated worksheet per output (two tables,
-  a listing, a figure). This is the shell
+  The Excel counterpart: the same study, one annotated worksheet per
+  output, in the same order. This is the shell
   [`ars_fill_shell()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_shell.md)
   can write back filled, so the bundle demos the whole chain offline.
-  Roughly 10 KB.
+  Roughly 15 KB.
 
 - `adam_spec.xlsx`:
 
@@ -57,8 +57,9 @@ Files currently in the bundle:
 
   The five pharmaverseadam datasets as XPT files, restricted to the
   curated variables; ADVS keeps only `PARAMCD = 'PULSE'`, the one
-  parameter the shells read. Roughly 265 KB compressed. Unzip and pass
-  the folder as `adam_dir` to
+  parameter the shells read, and ADCM only each subject's first
+  occurrence of a medication, which is what its listing shows. Roughly
+  217 KB compressed. Unzip and pass the folder as `adam_dir` to
   [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md).
 
 ## Examples

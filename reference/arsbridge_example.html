@@ -19,7 +19,7 @@ data-raw/build_example_bundle.R in the package source."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9062</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9065</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -91,10 +91,10 @@ standard red <code>C00000</code> run convention for ADaM variable
 references. Roughly 97 KB.</p></dd>
 
 <dt><code>annotated_shell.xlsx</code></dt>
-<dd><p>The Excel counterpart: one annotated
-worksheet per output (two tables, a listing, a figure). This is the
+<dd><p>The Excel counterpart: the same study,
+one annotated worksheet per output, in the same order. This is the
 shell <code><a href="ars_fill_shell.html">ars_fill_shell()</a></code> can write back filled, so the bundle demos
-the whole chain offline. Roughly 10 KB.</p></dd>
+the whole chain offline. Roughly 15 KB.</p></dd>
 
 <dt><code>adam_spec.xlsx</code></dt>
 <dd><p>ADaM specification workbook covering the 5
@@ -106,9 +106,10 @@ column metadata, plus codelists for the decoded categories
 <dt><code>ADaM.zip</code></dt>
 <dd><p>The five pharmaverseadam datasets as XPT files,
 restricted to the curated variables; ADVS keeps only
-<code>PARAMCD = 'PULSE'</code>, the one parameter the shells read.
-Roughly 265 KB compressed. Unzip and pass the folder as
-<code>adam_dir</code> to <code><a href="ars_to_ard.html">ars_to_ard()</a></code>.</p></dd>
+<code>PARAMCD = 'PULSE'</code>, the one parameter the shells read, and
+ADCM only each subject's first occurrence of a medication, which is
+what its listing shows. Roughly 217 KB compressed. Unzip and pass the
+folder as <code>adam_dir</code> to <code><a href="ars_to_ard.html">ars_to_ard()</a></code>.</p></dd>
 
 
 </dl></div>
