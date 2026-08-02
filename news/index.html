@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9061</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9062</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -42,6 +42,10 @@
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="development version" id="arsbridge-development-version">arsbridge (development version)<a class="anchor" aria-label="anchor" href="#arsbridge-development-version"></a></h2>
 <ul><li>
+<p><strong>A filled listing no longer opens in Excel with its columns empty.</strong> Every cell arsbridge added to a sheet – the rows a listing’s template expands into, the block a figure’s series is written to – was filed against openxlsx2’s internal cell key of the row it was CLONED from, not the row it was written to. openxlsx2 serializes cells into <code>&lt;row&gt;</code> elements by that key, so the cells landed inside the wrong row element; Excel treats such a cell as invalid and discards it, while openxlsx2’s own reader goes by the cell reference and shows the sheet as complete. The bundled example’s 1,191-row listing shipped with 4,760 of its 5,963 cells unreadable in Excel and every R-side check green. Rows written past the end of the sheet were dropped outright for a second reason – openxlsx2 writes rows from its row records, and those rows had none – which is what left figure series truncated (the example figure now writes all 36 series rows, not 7).</p>
+<p>Both invariants are now maintained wherever cells move or are added, stated in one place (<code>.cc_problems()</code>), checked on every sheet before the workbook is saved, and asserted against the raw XML by the fill tests – the check that would have caught this the day it appeared.</p>
+</li>
+<li>
 <p><strong>The bundled example study is now CDSC-ALZ-201 – an Alzheimer’s study built entirely from public pharmaverse data.</strong> The invented APX-DRM-301 dermatology bundle retires; its files live on locally under <code>inputs/DRM/</code> (never tracked). The replacement’s datasets are the CDISC pilot Xanomeline data straight from <a href="https://pharmaverse.github.io/pharmaverseadam/" class="external-link">pharmaverseadam</a> (Apache-2.0, no real patient data), and – for the first time – the whole bundle is reproducible: <code>data-raw/build_example_bundle.R</code> generates every file from one curated variable list. The old bundle had no generator at all; it was committed as opaque binaries nobody could rebuild.</p>
 <p>The bundle also gains what the old one never had: an annotated <strong>Excel</strong> shell (<code>annotated_shell.xlsx</code>), so the example now demos the package’s headline end to end, offline – build the ARS, execute it, and write the shell back filled with the study’s real numbers. A permanent test pins that chain with pharmaverseadam itself as the oracle (86 / 96 / 72 safety subjects landing under their own arm headers). <code><a href="../reference/spec_to_ars_example.html">spec_to_ars_example()</a></code> gains <code>shell_format = c("docx", "xlsx")</code>, runs deterministically in seconds (8 TLFs), and stamps the new study identity. The ADaM spec – pharmaverseadam labels and types, plus codelists for the decoded categories – is also written to <code>inputs/adam_spec_CDSC-ALZ-201.xlsx</code> for hands-on use.</p>
 </li>

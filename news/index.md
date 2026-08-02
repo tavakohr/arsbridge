@@ -2,6 +2,26 @@
 
 ## arsbridge (development version)
 
+- **A filled listing no longer opens in Excel with its columns empty.**
+  Every cell arsbridge added to a sheet – the rows a listing’s template
+  expands into, the block a figure’s series is written to – was filed
+  against openxlsx2’s internal cell key of the row it was CLONED from,
+  not the row it was written to. openxlsx2 serializes cells into `<row>`
+  elements by that key, so the cells landed inside the wrong row
+  element; Excel treats such a cell as invalid and discards it, while
+  openxlsx2’s own reader goes by the cell reference and shows the sheet
+  as complete. The bundled example’s 1,191-row listing shipped with
+  4,760 of its 5,963 cells unreadable in Excel and every R-side check
+  green. Rows written past the end of the sheet were dropped outright
+  for a second reason – openxlsx2 writes rows from its row records, and
+  those rows had none – which is what left figure series truncated (the
+  example figure now writes all 36 series rows, not 7).
+
+  Both invariants are now maintained wherever cells move or are added,
+  stated in one place (`.cc_problems()`), checked on every sheet before
+  the workbook is saved, and asserted against the raw XML by the fill
+  tests – the check that would have caught this the day it appeared.
+
 - **The bundled example study is now CDSC-ALZ-201 – an Alzheimer’s study
   built entirely from public pharmaverse data.** The invented
   APX-DRM-301 dermatology bundle retires; its files live on locally
