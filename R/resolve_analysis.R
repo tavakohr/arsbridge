@@ -18,6 +18,24 @@
   as.character(val[1])
 }
 
+## groupingId -> the DATASET its grouping variable comes from, when the ARS
+## says. A column axis on a domain variable (ADCM.TRTA) rather than an ADSL one
+## needs that variable carried onto the denominator, and this is the fact that
+## says so -- knowable from the spec alone, so the emitted script and the
+## executor decide it the same way. See .denom_join_expr() / .denominator_by_subject().
+#' @noRd
+.build_grouping_ds_map <- function(spec) {
+  out <- list()
+  for (gf in spec[["analysisGroupings"]]) {
+    gf_id <- .as_scalar_char(gf[["id"]])
+    if (is.null(gf_id)) next
+    gv <- gf[["groupingVariable"]]
+    ds <- if (is.list(gv)) .as_scalar_char(gv[["dataset"]]) else NULL
+    if (!is.null(ds) && nzchar(ds)) out[[gf_id]] <- toupper(ds)
+  }
+  out
+}
+
 ## groupingId -> grouping variable name, built once from the ARS spec.
 #' @noRd
 .build_grouping_map <- function(spec) {
@@ -235,12 +253,17 @@ resolve_analysis <- function(ana, spec, subject_key = "USUBJID",
   ## clean them against the actual dataset columns (a `.`-qualified name like
   ## ADSL.TRT01A only resolves once the data frame is known).
   by <- character(0)
+  by_datasets <- character(0)
   group_defs <- list()
+  grouping_ds <- .build_grouping_ds_map(spec)
   for (grp in ana[["orderedGroupings"]] %||% list()) {
     gf_id <- .as_scalar_char(grp[["groupingId"]])
     if (is.null(gf_id)) next
     gf_var <- grouping_map[[gf_id]]
-    if (!is.null(gf_var) && nzchar(gf_var)) by <- c(by, gf_var)
+    if (!is.null(gf_var) && nzchar(gf_var)) {
+      by <- c(by, gf_var)
+      by_datasets <- c(by_datasets, grouping_ds[[gf_id]] %||% NA_character_)
+    }
     ## Condition-defined levels ride along keyed by the variable name, so
     ## the executor/emitter can derive the display grouping in-memory.
     entry <- grouping_groups[[gf_id]]
@@ -296,6 +319,9 @@ resolve_analysis <- function(ana, spec, subject_key = "USUBJID",
     dataset         = dataset,
     variable        = variable,
     by              = by,
+    ## Parallel to `by`: the dataset each grouping variable comes from, when
+    ## the ARS says. Drives the denominator join -- see .denom_join_expr().
+    by_datasets     = by_datasets,
     pop_where       = pop_where,
     subset_where    = subset_where,
     include_total   = include_total,
