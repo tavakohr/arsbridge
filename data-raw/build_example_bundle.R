@@ -399,6 +399,13 @@ footnote("Table 14.3.1", 13,
 ## The two `<...>` template rows ARE the block: the parent expands to one row
 ## per system organ class and the child to its terms underneath. Both levels
 ## count distinct subjects.
+##
+## Each token row carries the treatment-emergent filter itself. Nothing
+## propagates the "Subjects with any TEAE" row's filter down the block, so
+## without it the table counts every adverse event under a title that says
+## treatment-emergent -- 29 subjects with a psychiatric event where 28 had a
+## treatment-emergent one. The filter variable is qualified for the same
+## reason it is on Table 14.2.1: unqualified, the subset does not parse.
 banner("Table 14.3.2", "Table 14.3.2",
        paste("Treatment-Emergent Adverse Events by System Organ Class",
              "and Preferred Term"))
@@ -407,8 +414,10 @@ header_row("Table 14.3.2", "System Organ Class / Preferred Term",
 data_row("Table 14.3.2", 5, "Subjects with any TEAE",
          "[ADAE.TRTEMFL = 'Y']")
 ## row 6 blank -- spacer
-data_row("Table 14.3.2", 7, "<System Organ Class>", "[ADAE.AESOC]")
-data_row("Table 14.3.2", 8, "<Preferred Term>", "[ADAE.AEDECOD]")
+data_row("Table 14.3.2", 7, "<System Organ Class>",
+         "[ADAE.AESOC WHERE ADAE.TRTEMFL='Y']")
+data_row("Table 14.3.2", 8, "<Preferred Term>",
+         "[ADAE.AEDECOD WHERE ADAE.TRTEMFL='Y']")
 footnote("Table 14.3.2", 10,
          "A subject is counted once per system organ class and once per term.")
 
