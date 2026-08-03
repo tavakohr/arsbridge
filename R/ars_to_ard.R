@@ -271,6 +271,115 @@
   out
 }
 
+#' Carry the column variable onto the denominator frame, by subject.
+#'
+#' Percentages are computed against a population frame -- ADSL under the
+#' analysis set's filter -- and {cards} splits that frame by the same `by`
+#' variable the analysis uses. When the frame does not HAVE that variable,
+#' cards says nothing and uses the whole frame for every column:
+#'
+#'   ard_categorical(cm, variables = "CMCLAS", by = "TRTA", denominator = adsl)
+#'   #  A: n=2 N=10 p=0.2      <- N is the whole study, both columns
+#'   #  B: n=1 N=10 p=0.1
+#'
+#' Every percentage in the table is then out of the study rather than out of
+#' its own arm, and nothing in the deliverable says so. It is the ordinary
+#' shape of a conmeds or medical-history table: those domains carry `TRTA`,
+#' and ADSL carries `TRT01A`.
+#'
+#' Only the COLUMN axis is repaired -- `by_arg[[1]]`, the first ordered
+#' grouping, which `.build_analysis()` guarantees is a column grouping and
+#' `.ard_index()` already reads as the column. A row grouping (the parent
+#' level of a nested block) is appended after it and must NOT key the
+#' denominator: a preferred term's percentage is out of its arm, not out of
+#' its system organ class.
+#'
+#' The variable is subject-level, so it can be learned from the domain and
+#' joined on: one row per subject, from the domain under the POPULATION filter
+#' only -- a data subset selects events, not subjects, and must never shrink a
+#' denominator.
+#'
+#' Two things are refused rather than guessed:
+#'   * a subject carrying two different values -- that is a data problem, and
+#'     averaging it away would silently pick one arm for them;
+#'   * a population subject with no record in the domain -- their column is
+#'     unknowable from the domain, and inventing a treatment mapping ("TRTA
+#'     must be TRT01A") is exactly the silent wrongness this exists to
+#'     prevent. Joining anyway would swap one wrong denominator for another:
+#'     each column's N would become "subjects with a record in this domain",
+#'     which is neither the population nor the study. So the join is refused
+#'     whole, the numbers are left as they were, and the diagnostic says what
+#'     the percentages ARE out of and how to fix the shell.
+#'
+#' @return list(data = the population frame with the variable joined on where
+#'   it could be, joined = the variables that were).
+#' @noRd
+.denominator_by_subject <- function(df_population, df_domain, by_arg,
+                                    subject_key, analysis_id = NA_character_,
+                                    analysis_ds = NA_character_) {
+  none <- list(data = df_population, joined = character())
+  if (is.null(df_population) || is.null(df_domain)) return(none)
+  if (length(by_arg %||% character()) == 0) return(none)
+  missing_vars <- setdiff(by_arg[[1]], names(df_population))
+  if (length(missing_vars) == 0) return(none)
+  if (!subject_key %in% names(df_population) ||
+      !subject_key %in% names(df_domain)) {
+    return(none)
+  }
+
+  joined <- character()
+  for (var in missing_vars) {
+    if (!var %in% names(df_domain)) next   # the analysis itself runs ungrouped
+
+    map <- unique(df_domain[!is.na(df_domain[[var]]),
+                            c(subject_key, var), drop = FALSE])
+    per_subject <- table(map[[subject_key]])
+    if (any(per_subject > 1)) {
+      .diag_gap(
+        stage = "execute_ard", severity = "WARN", input = INPUT_DATA,
+        problem = sprintf(
+          "%d subject(s) carry more than one %s in %s, so it cannot key the denominator.",
+          sum(per_subject > 1), var, analysis_ds %||% "the analysis dataset"),
+        why = paste("Percentages would be out of the whole population instead",
+                    "of each column's own."),
+        fix = paste0("Resolve the duplicate ", var, " values, or point the ",
+                     "shell's column axis at an ADSL variable."),
+        location = analysis_id %||% "")
+      next
+    }
+
+    with_var <- merge(df_population, map, by = subject_key, all.x = TRUE,
+                      sort = FALSE)
+    unmapped <- sum(is.na(with_var[[var]]))
+    if (unmapped > 0) {
+      .diag_gap(
+        stage = "execute_ard", severity = "WARN", input = INPUT_DATA,
+        problem = sprintf(
+          "%d of %d population subjects have no %s record, so their %s is unknown.",
+          unmapped, nrow(df_population), analysis_ds %||% "domain", var),
+        why = paste0("Every percentage in this analysis is therefore out of ",
+                     "the whole population, not out of its own column -- ",
+                     "keying the denominator on ", var, " would count only ",
+                     "the subjects ", analysis_ds %||% "the dataset",
+                     " knows, which is narrower still."),
+        fix = paste0("Point the shell's column axis at an ADSL variable ",
+                     "(the arm every subject has), rather than ", var, "."),
+        location = analysis_id %||% "")
+      next
+    } else {
+      diag_add(
+        stage = "execute_ard", severity = "INFO",
+        problem = sprintf("Denominator keyed by %s, taken from %s per subject",
+                          var, analysis_ds %||% "the analysis dataset"),
+        location = analysis_id %||% "",
+        action = "Percentages are out of each column's own population")
+    }
+    df_population <- with_var
+    joined <- c(joined, var)
+  }
+  list(data = df_population, joined = joined)
+}
+
 ## Build one keyed, value-less stub ARD row from a prototype row.
 #' @noRd
 .stub_ard_row <- function(proto, variable, stat_name, by_var, by_level) {
@@ -690,6 +799,11 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       df_population <- df_filtered
     }
 
+    ## The frame a missing column variable can be learned from: the domain
+    ## under the population filter, BEFORE the data subset. See
+    ## .denominator_by_subject() -- a subset selects events, not subjects.
+    df_domain <- df_filtered
+
     if (!is.null(subset_where)) {
       df_filtered <- apply_where_clause(analysis_ds, subset_where)
     }
@@ -724,6 +838,16 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     }
     grouping_vars <- grouping_vars[grouping_vars %in% names(df_filtered)]
     by_arg <- if (length(grouping_vars) > 0) grouping_vars else NULL
+
+    ## A column variable the denominator frame lacks -- ADCM.TRTA against an
+    ## ADSL that carries TRT01A -- makes every percentage come out of the whole
+    ## study, silently. Carry it over by subject before anything divides by it.
+    denom_fix <- .denominator_by_subject(
+      df_population, df_domain, by_arg, subject_key, analysis_id, analysis_ds)
+    df_population <- denom_fix$data
+    ## The emitted block must do the same join, or emitted stops equalling
+    ## executed -- .denom_join_expr() writes down what was decided here.
+    res$denom_by_subject <- denom_fix$joined
 
     ## Annotation-defined column groups: the shell's header cells carried one
     ## condition per column ("Cohort A ... ADSL.COHORTN=1", "... is missing").

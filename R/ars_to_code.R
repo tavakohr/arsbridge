@@ -215,7 +215,44 @@
   ## a subtotal's N is the parent-condition count, the grand total's N the
   ## analysis-set count.
   e <- .apply_where_expr(e, "ADSL", res$path_where, res$subject_key)
-  paste0(e, .group_mutate_expr(res))
+  paste0(e, .denom_join_expr(res), .group_mutate_expr(res))
+}
+
+## A column variable ADSL does not carry (ADCM.TRTA, ADMH.TRTA) joined onto the
+## denominator by subject, so each column's percentages come out of its own
+## population instead of the whole study. The executor does the same join --
+## see .denominator_by_subject() in ars_to_ard.R, which also decides WHETHER it
+## is safe to; this only writes down what it decided.
+#' @noRd
+.denom_join_expr <- function(res) {
+  by <- res$by %||% character()
+  ds <- res$by_datasets %||% character()
+  ## The COLUMN axis only -- a row grouping is appended after it and must not
+  ## key the denominator (a term's percentage is out of its arm, not out of
+  ## its class). Decided from the spec, not from the data, so this script and
+  ## the executor reach the same answer on any cut.
+  if (length(by) == 0 || length(ds) == 0) return("")
+  col_ds <- ds[[1]]
+  if (is.na(col_ds) || !nzchar(col_ds) || identical(toupper(col_ds), "ADSL")) {
+    return("")
+  }
+  var <- .clean_emit_name(by[[1]])
+  if (is.null(var) || !nzchar(var %||% "")) return("")
+  sk <- res$subject_key
+  ## The guard is the refusal, written out: join only when the variable is one
+  ## per subject and every population subject is covered. Otherwise the
+  ## denominator stays the whole population -- a partial join would make each
+  ## column N mean "subjects with a record in this domain", which is neither
+  ## the population nor the study. ars_to_ard() reports which case applied.
+  sprintf(paste0(
+    " |>\n    (\\(.pop) {\n",
+    "      .lvl <- dplyr::distinct(%s, %s, %s)\n",
+    "      if (nrow(.lvl) == dplyr::n_distinct(.lvl$%s) &&\n",
+    "          all(.pop$%s %%in%% .lvl$%s)) {\n",
+    "        dplyr::left_join(.pop, .lvl, by = %s)\n",
+    "      } else .pop\n",
+    "    })()"),
+    res$dataset, sk, .bt(var), sk, sk, sk, encodeString(sk, quote = "\""))
 }
 
 ## ---- per-method block emission --------------------------------------------

@@ -509,3 +509,163 @@ test_that("a continuous summary is never completed with zeros", {
   expect_equal(unique(arms[!is.na(arms)]), "Drug A")
   expect_false("Placebo" %in% arms)
 })
+
+# ---- the denominator's column variable -------------------------------------
+
+## Percentages are computed against ADSL under the analysis set's filter, and
+## {cards} splits that frame by the analysis' `by` variable. When the frame
+## does not HAVE that variable it says nothing and uses the whole frame for
+## every column -- so a conmeds or medical-history table, whose domains carry
+## TRTA where ADSL carries TRT01A, reports every percentage out of the study.
+## See .denominator_by_subject().
+
+.denom_adam <- function(covered = TRUE, one_per_subject = TRUE,
+                        envir = parent.frame()) {
+  dir <- withr::local_tempdir(.local_envir = envir)
+  adsl <- data.frame(
+    USUBJID = sprintf("S%02d", 1:10),
+    TRT01A  = rep(c("A", "B"), each = 5), SAFFL = "Y",
+    stringsAsFactors = FALSE)
+  ## The domain names the arm TRTA -- the same values under another name.
+  subj <- if (covered) adsl$USUBJID else adsl$USUBJID[1:6]
+  adex <- data.frame(
+    USUBJID = subj,
+    ## Both spellings of the arm, as a real domain has: its own TRTA, and the
+    ## ADSL one carried along.
+    TRTA    = adsl$TRT01A[match(subj, adsl$USUBJID)],
+    TRT01A  = adsl$TRT01A[match(subj, adsl$USUBJID)],
+    PARAMCD = "DOSE",
+    AVALC   = ifelse(subj %in% c("S01", "S02", "S06"), "Y", "N"),
+    stringsAsFactors = FALSE)
+  if (!one_per_subject) {
+    ## One subject recorded under two arms: a data problem, not something to
+    ## resolve by picking one.
+    adex <- rbind(adex, transform(adex[1, , drop = FALSE], TRTA = "B"))
+  }
+  utils::write.csv(adsl, file.path(dir, "ADSL.csv"), row.names = FALSE)
+  utils::write.csv(adex, file.path(dir, "ADEX.csv"), row.names = FALSE)
+  dir
+}
+
+.denom_spec <- function(grouping_ds = "ADEX", grouping_var = "TRTA") {
+  list(
+    id = "S", name = "S", version = "1",
+    analysisSets = list(list(id = "AS_SAF", name = "Safety",
+      condition = list(dataset = "ADSL", variable = "SAFFL",
+                       comparator = "EQ", value = list("Y")))),
+    analysisGroupings = list(list(id = "GF_COL", name = grouping_var,
+      groupingVariable = list(dataset = grouping_ds, variable = grouping_var))),
+    methods = list(list(id = "MTH_COUNT_AND_PERCENTAGE",
+                        name = "Count and Percentage")),
+    analyses = list(list(id = "AN_C", methodId = "MTH_COUNT_AND_PERCENTAGE",
+      analysisSetId = "AS_SAF",
+      analysisVariable = list(dataset = "ADEX", variable = "AVALC"),
+      orderedGroupings = list(list(order = 1, groupingId = "GF_COL",
+                                   resultsByGroup = TRUE)))),
+    outputs = list(list(id = "T_C", name = "T-C",
+                        referencedAnalysisIds = list("AN_C"))))
+}
+
+.denom_stats <- function(ard, level = "Y") {
+  chr <- function(col) vapply(col, function(x) {
+    if (length(x) == 0 || is.null(x[[1]]) || is.function(x[[1]])) NA_character_
+    else as.character(x[[1]])[[1]]
+  }, character(1))
+  rows <- chr(ard$variable_level) == level
+  split(stats::setNames(as.numeric(chr(ard$stat)[rows]),
+                        as.character(ard$stat_name)[rows]),
+        chr(ard$group1_level)[rows])
+}
+
+test_that("a column variable ADSL lacks is carried onto the denominator by subject", {
+  skip_if_not_installed("cards")
+  diag_reset()
+  ard <- suppressMessages(suppressWarnings(
+    ars_to_ard(.edge_write(.denom_spec()), .denom_adam())))
+
+  ## Each arm's N is its own 5 subjects, not the study's 10.
+  stats <- .denom_stats(ard)
+  expect_equal(unname(stats$A[["N"]]), 5)
+  expect_equal(unname(stats$B[["N"]]), 5)
+  expect_equal(unname(stats$A[["n"]]), 2)
+  expect_equal(unname(stats$A[["p"]]), 0.4)
+
+  ## And it says so, because a denominator that changed silently is the
+  ## problem this fixes.
+  d <- ars_diagnostics()
+  expect_true(any(d$severity == "INFO" &
+                    grepl("Denominator keyed by TRTA", d$problem)))
+  diag_reset()
+})
+
+test_that("an ADSL column variable is left exactly as it was", {
+  ## The regression guard: every existing table groups on an ADSL variable,
+  ## and none of them may change.
+  skip_if_not_installed("cards")
+  diag_reset()
+  ard <- suppressMessages(suppressWarnings(
+    ars_to_ard(.edge_write(.denom_spec(grouping_ds = "ADSL",
+                                       grouping_var = "TRT01A")),
+               .denom_adam())))
+  stats <- .denom_stats(ard)
+  expect_equal(unname(stats$A[["N"]]), 5)
+  expect_false(any(grepl("Denominator keyed", ars_diagnostics()$problem)))
+  diag_reset()
+})
+
+test_that("an incomplete domain refuses the join and says what the percentages are out of", {
+  ## Four of the ten population subjects have no ADEX record, so their column
+  ## is unknowable. Joining anyway would make each N mean "subjects with a
+  ## record", which is neither the population nor the study -- so the join is
+  ## refused whole and the numbers are left as they were.
+  skip_if_not_installed("cards")
+  diag_reset()
+  ard <- suppressMessages(suppressWarnings(
+    ars_to_ard(.edge_write(.denom_spec()), .denom_adam(covered = FALSE))))
+
+  stats <- .denom_stats(ard)
+  expect_equal(unname(stats$A[["N"]]), 10)   # unchanged: the whole population
+
+  d <- ars_diagnostics()
+  hit <- d$severity == "WARN" & grepl("have no ADEX record", d$problem)
+  expect_true(any(hit))
+  expect_match(d$problem[hit][[1]], "out of the whole population")
+  expect_match(d$action[hit][[1]], "ADSL variable")
+  diag_reset()
+})
+
+test_that("a subject under two arms refuses the join rather than picking one", {
+  skip_if_not_installed("cards")
+  diag_reset()
+  ard <- suppressMessages(suppressWarnings(
+    ars_to_ard(.edge_write(.denom_spec()),
+               .denom_adam(one_per_subject = FALSE))))
+  expect_equal(unname(.denom_stats(ard)$A[["N"]]), 10)
+
+  d <- ars_diagnostics()
+  expect_true(any(d$severity == "WARN" &
+                    grepl("more than one TRTA", d$problem)))
+  diag_reset()
+})
+
+test_that("the emitted script decides the join the same way, from the spec alone", {
+  ## ars_to_ard() sources the emitted block, and a user can take that script
+  ## away and run it. Both must reach the same denominator on any data cut --
+  ## so the emitter decides from the ARS (is the column axis on a non-ADSL
+  ## dataset?) and writes the refusal out as a runtime guard.
+  code_dir <- withr::local_tempdir()
+  write_tlf_code(.edge_write(.denom_spec()), code_dir = code_dir)
+  script <- readLines(list.files(code_dir, "\\.R$", full.names = TRUE)[[1]],
+                      warn = FALSE)
+  expect_true(any(grepl("dplyr::left_join(.pop, .lvl", script, fixed = TRUE)))
+  expect_true(any(grepl("dplyr::n_distinct(.lvl$USUBJID)", script, fixed = TRUE)))
+
+  ## An ADSL column axis needs no join, and must not get one.
+  code_dir2 <- withr::local_tempdir()
+  write_tlf_code(.edge_write(.denom_spec(grouping_ds = "ADSL",
+                                         grouping_var = "TRT01A")),
+                 code_dir = code_dir2)
+  script2 <- readLines(list.files(code_dir2, "\\.R$", full.names = TRUE)[[1]],
+                       warn = FALSE)
+  expect_false(any(grepl("left_join(.pop", script2, fixed = TRUE)))
+})

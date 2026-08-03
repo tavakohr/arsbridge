@@ -1,5 +1,39 @@
 # arsbridge (development version)
 
+* **A column axis on a domain variable no longer computes every percentage out
+  of the whole study.** Percentages divide by a population frame -- ADSL under
+  the analysis set's filter -- and {cards} splits that frame by the analysis'
+  own `by` variable. When the frame does not carry that variable, cards says
+  nothing and uses the whole frame for every column:
+
+  ``` r
+  ard_categorical(cm, variables = "CMCLAS", by = "TRTA", denominator = adsl)
+  #  A: n=2 N=10 p=0.2    <- N is the whole study, in both columns
+  #  B: n=1 N=10 p=0.1
+  ```
+
+  That is the ordinary shape of a conmeds or medical-history table: those
+  domains carry `TRTA`, ADSL carries `TRT01A`. The variable is subject-level,
+  so it is now carried onto the denominator by subject -- from the domain under
+  the **population** filter only, since a data subset selects events, not
+  subjects, and must never shrink a denominator. Only the column axis is
+  touched: a nested block's row grouping is appended after it and must not key
+  the denominator, or a preferred term's percentage would come out of its
+  system organ class instead of its arm.
+
+  Two cases are refused rather than guessed, both with a diagnostic that says
+  what the percentages are out of and how to fix the shell: a subject carrying
+  two different values (a data problem, not something to resolve by picking
+  one), and a population subject with no record in the domain -- joining anyway
+  would make each column's N mean "subjects with a record in this domain",
+  which is neither the population nor the study. arsbridge never infers that
+  `TRTA` must be `TRT01A`.
+
+  The emitted script decides it the same way, from the ARS alone (is the column
+  axis on a non-ADSL dataset?), and writes the refusal out as a runtime guard --
+  so a script taken away and run by hand reaches the same denominator as the
+  engine did.
+
 * **The bundled example's AE table counts treatment-emergent events, as its
   title says.** Its `<System Organ Class>` / `<Preferred Term>` rows carried no
   filter, so the block counted every adverse event under a table headed
