@@ -239,8 +239,9 @@
     return(fill)
   }
 
-  fill$cells <- .build_table_cells(section, shell_layout, analyses, methods,
-                                   fill$columns, grid)
+  fill$cells  <- .build_table_cells(section, shell_layout, analyses, methods,
+                                    fill$columns, grid)
+  fill$nested <- .build_nested_fill(shell_layout)
   fill
 }
 
@@ -461,6 +462,50 @@
     )
   }
   out
+}
+
+#' A nested block's fill plan: the two authored token rows that stand for a
+#' whole SOC-and-its-PTs presentation.
+#'
+#' The shell writes the block as a pair -- `<System Organ Class>` over
+#' `<Preferred Term>` -- and means "repeat this per system organ class". The
+#' rows are template examples, not rows: filling them means expanding the
+#' pair into one line per level and per term underneath it, which is a change
+#' of shape, so it is planned separately from the fixed cells.
+#'
+#' Only a pair whose rows are adjacent is planned. A parent and child with
+#' anything authored between them is not the pattern this expands (the block
+#' inserts as one run of rows), and the cells stay pending with their reason.
+#'
+#' @return list(parent, child) or NULL when the sheet has no nested block.
+#' @noRd
+.build_nested_fill <- function(shell_layout) {
+  entries <- Filter(function(e) !is.null(e$sheet_row), shell_layout %||% list())
+  parents <- Filter(function(e) identical(e$kind, "nested_parent"), entries)
+  if (length(parents) == 0) return(NULL)
+
+  for (parent in parents) {
+    kids <- Filter(function(e) {
+      identical(e$kind, "nested_child") &&
+        identical(e$parent_order %||% NA_integer_, parent$order)
+    }, entries)
+    if (length(kids) != 1) next
+    child <- kids[[1]]
+    if (!identical(as.integer(child$sheet_row), as.integer(parent$sheet_row) + 1L)) next
+
+    return(list(
+      parent = list(row         = as.integer(parent$sheet_row),
+                    analysis_id = parent$analysis_id %||% NA_character_,
+                    label       = parent$label %||% ""),
+      child  = list(row         = as.integer(child$sheet_row),
+                    analysis_id = child$analysis_id %||% NA_character_,
+                    label       = child$label %||% ""),
+      ## The authored "sort:" clause travels on the parent row, and the fill
+      ## writer orders levels with it through the same function the renderer
+      ## uses -- see .nested_level_order().
+      sort = parent$sort %||% NA_character_))
+  }
+  NULL
 }
 
 #' A listing's fill plan: where the header is, which row is the template to

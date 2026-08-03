@@ -140,10 +140,24 @@
     .ard_chr(ard[["group1_level"]])
   }
 
+  ## The row grouping a nested child carries: its parent's level (the system
+  ## organ class a preferred term sits under). It is the group level that is
+  ## NOT the column axis, which for a nested block is always the one after it
+  ## -- the column grouping is authored first and the row grouping appended.
+  nest_cols <- setdiff(grep("^group[0-9]+_level$", names(ard), value = TRUE),
+                       "group1_level")
+  nest_level <- rep(NA_character_, nrow(ard))
+  for (col in nest_cols) {
+    v <- .ard_chr(ard[[col]])
+    take <- is.na(nest_level) & !is.na(v)
+    nest_level[take] <- v[take]
+  }
+
   data.frame(
     analysis_id    = analysis_id,
     group_level    = group_level %||% NA_character_,
     variable_level = .ard_chr(ard[["variable_level"]]) %||% NA_character_,
+    nest_level     = nest_level,
     stat_name      = stat_name,
     value          = value,
     status         = status,
@@ -178,13 +192,20 @@
 #'   Only "computed" is ever written.
 #' @noRd
 .ard_value <- function(index, analysis_id, group_level, variable_level,
-                       stat_name) {
+                       stat_name, nest_level = NA_character_) {
   none <- function(status) list(value = NA_real_, status = status)
   if (is.null(index) || is.na(stat_name %||% NA_character_)) {
     return(none("no_row"))
   }
 
   rows <- index$analysis_id %in% analysis_id & index$stat_name %in% stat_name
+
+  ## A nested child's cell names one term UNDER one parent level; the same
+  ## term can appear under two parents, so the parent has to be part of the
+  ## key or the two would answer each other's cells.
+  if (!is.na(nest_level %||% NA_character_) && "nest_level" %in% names(index)) {
+    rows <- rows & !is.na(index$nest_level) & index$nest_level %in% nest_level
+  }
 
   ## A group level of NA means the analysis is not reported by column, so
   ## every column shows the same value and the level must not be matched on.
@@ -770,7 +791,8 @@
 #' @return list(values, statuses) -- one entry per slot, values as formatted
 #'   text and NA where the slot did not resolve.
 #' @noRd
-.resolve_cell <- function(cell, index, decode = character()) {
+.resolve_cell <- function(cell, index, decode = character(),
+                          nest_level = NA_character_) {
   slots <- cell$slots %||% list()
   values <- rep(NA_character_, length(slots))
   statuses <- rep(NA_character_, length(slots))
@@ -790,7 +812,8 @@
       analysis_id    = cell$analysis_id %||% NA_character_,
       group_level    = (cell$group %||% list())$label %||% NA_character_,
       variable_level = level,
-      stat_name      = stat)
+      stat_name      = stat,
+      nest_level     = nest_level)
     statuses[[i]] <- hit$status
     if (identical(hit$status, "computed")) {
       values[[i]] <- .format_value(hit$value, slot$decimals)
@@ -1091,6 +1114,238 @@
     cc <- .cell_set_is(cc, slot, "<is><t/></is>")
   }
   cc
+}
+
+## ---------------------------------------------------------------------------
+## Nested blocks: two authored rows become the whole hierarchy
+## ---------------------------------------------------------------------------
+
+#' The levels of a nested block, in the order both writers present them.
+#'
+#' Parent levels are whatever either analysis observed; a parent's terms are
+#' the child's own levels under it. Ordering goes through
+#' `.nested_level_order()`, which the Word renderer also calls -- a filled
+#' workbook and a rendered document that put system organ classes in a
+#' different order would be two answers to one question.
+#'
+#' @return list of list(level, terms), in presentation order.
+#' @noRd
+.nested_block_levels <- function(index, plan) {
+  parent_rows <- index$analysis_id %in% (plan$parent$analysis_id %||% "")
+  child_rows  <- index$analysis_id %in% (plan$child$analysis_id %||% "")
+  if (!any(child_rows) && !any(parent_rows)) return(list())
+
+  basis <- .nested_sort_basis(plan$sort %||% NA_character_)
+  ## The index has no column labels of its own; the group level IS the column.
+  freq_arg <- function(rows, keys) {
+    .nested_level_freq(keys, index$stat_name[rows], index$value[rows],
+                       index$group_level[rows], basis_col = basis)
+  }
+
+  parents <- unique(c(index$variable_level[parent_rows],
+                      index$nest_level[child_rows]))
+  parent_freq <- freq_arg(child_rows, index$nest_level[child_rows])
+  own <- freq_arg(parent_rows, index$variable_level[parent_rows])
+  if (length(own) > 0) parent_freq[names(own)] <- own
+  parents <- .nested_level_order(parents, parent_freq, plan$sort %||% NA_character_)
+
+  lapply(parents, function(level) {
+    in_block <- child_rows & !is.na(index$nest_level) & index$nest_level == level
+    ## {cards} expands the full parent x child cartesian; a term belongs under
+    ## a parent only where a subject was actually observed, so a term whose
+    ## count is zero everywhere in this block is not part of it.
+    counted <- in_block & index$stat_name %in% "n" & !is.na(index$value) &
+      index$value > 0
+    terms <- unique(index$variable_level[counted])
+    terms <- .nested_level_order(
+      terms, freq_arg(in_block, index$variable_level[in_block]),
+      plan$sort %||% NA_character_)
+    list(level = level, terms = terms)
+  })
+}
+
+#' Expand a nested block's two authored rows into the hierarchy they stand for.
+#'
+#' The shell writes `<System Organ Class>` over `<Preferred Term>` and means
+#' "repeat this per system organ class". Filling it therefore changes the
+#' shape of the sheet, like a listing: rows below move down
+#' (`.shift_rows_down()`), and each written line takes its own template row's
+#' cells, so the author's fonts, indents and number formats carry through the
+#' block.
+#'
+#' The parent's line is written from the parent row's cells, each term's from
+#' the child row's -- which is what keeps a term indented under its class.
+#'
+#' @return list(records) -- one per cell written or declined.
+#' @noRd
+.fill_nested_block <- function(wb, sheet_index, fill, index,
+                               sheet_name = NA_character_) {
+  plan <- fill$nested
+  if (is.null(plan)) return(list(records = list()))
+
+  blocks <- .nested_block_levels(index, plan)
+  record <- list(ref = NA_character_, row = plan$parent$row,
+                 col = NA_integer_,
+                 analysis_id = plan$parent$analysis_id %||% NA_character_)
+  if (length(blocks) == 0) {
+    record$status <- "pending"
+    record$reason <- "the nested block's analyses produced no levels"
+    return(list(records = list(record)))
+  }
+
+  ## The cells the two authored rows carry, by column: the pattern every
+  ## written line follows.
+  cells_of <- function(row) {
+    Filter(function(cell) identical(cell$row, row), fill$cells %||% list())
+  }
+  parent_cells <- cells_of(plan$parent$row)
+  child_cells  <- cells_of(plan$child$row)
+
+  lines <- list()
+  for (block in blocks) {
+    lines[[length(lines) + 1L]] <- list(source = plan$parent$row,
+                                        label = block$level,
+                                        cells = parent_cells,
+                                        variable_level = block$level,
+                                        nest_level = NA_character_)
+    for (term in block$terms) {
+      lines[[length(lines) + 1L]] <- list(source = plan$child$row,
+                                          label = term,
+                                          cells = child_cells,
+                                          variable_level = term,
+                                          nest_level = block$level)
+    }
+  }
+
+  ws <- wb$worksheets[[sheet_index]]
+  extra <- length(lines) - 2L   # the pair already occupies two rows
+
+  ## Refuse rather than half-move, exactly as an expanding listing does.
+  if (extra > 0) {
+    blockers <- .unshiftable_features(ws, plan$child$row + 1L)
+    if (length(blockers) > 0) {
+      .diag_gap(
+        stage = "fill_shell", severity = "FAIL", input = INPUT_SHELL,
+        problem = sprintf(
+          "Nested block on sheet %s cannot be expanded: the sheet carries %s.",
+          sheet_name %||% "?", paste(blockers, collapse = ", ")),
+        why = paste("Expanding the block shifts rows, and those would be left",
+                    "pointing at the wrong ones."),
+        fix = paste("Remove them from the shell, or fill this table by hand.",
+                    "Every other sheet is still filled."),
+        location = sheet_name %||% "")
+      record$status <- "skipped"
+      record$reason <- sprintf("the sheet carries %s, which cannot be shifted",
+                               paste(blockers, collapse = ", "))
+      return(list(records = list(record)))
+    }
+    ws <- .shift_rows_down(ws, from_row = plan$child$row + 1L, by = extra,
+                           template_row = plan$child$row)
+  }
+
+  cc <- ws$sheet_data$cc
+  ## Both authored rows' cells, read BEFORE anything is written: every line
+  ## clones them, and the first two lines overwrite the originals.
+  source_row <- function(row) cc[cc$row_r == as.character(row), , drop = FALSE]
+  source_cells <- list()
+  source_cells[[as.character(plan$parent$row)]] <- source_row(plan$parent$row)
+  source_cells[[as.character(plan$child$row)]]  <- source_row(plan$child$row)
+
+  in_col <- function(template, col) {
+    which(vapply(template$c_r, .xlsx_col_to_num, integer(1)) == col)
+  }
+
+  ## Write one cell, cloning the authored row's own cell when the line is on a
+  ## row the shift opened up -- so a written line carries the template's style
+  ## index, not the workbook default.
+  put <- function(cc, row, col, xml, template) {
+    ref  <- .xlsx_rc_to_a1(row, col)
+    slot <- which(cc$r == ref)
+    if (length(slot) == 1) return(.cell_set_is(cc, slot, xml))
+    hit <- in_col(template, col)
+    proto <- if (length(hit) >= 1) template[hit[[1]], , drop = FALSE] else
+      template[1, , drop = FALSE]
+    proto$is  <- xml
+    proto$c_t <- "inlineStr"
+    proto$v   <- ""
+    .cc_add(cc, proto, row, col)
+  }
+
+  records <- list()
+  for (i in seq_along(lines)) {
+    line <- lines[[i]]
+    target <- plan$parent$row + i - 1L
+
+    ## The stub label: the data level takes the token's place, in the token
+    ## cell's own styling -- which is what indents a term under its class.
+    template <- source_cells[[as.character(line$source)]]
+    if (length(in_col(template, 1L)) >= 1) {
+      cc <- put(cc, target, 1L,
+                sprintf("<is><t xml:space=\"preserve\">%s</t></is>",
+                        .xml_escape(line$label)), template)
+    }
+
+    for (cell in line$cells) {
+      rec <- list(ref = .xlsx_rc_to_a1(target, cell$col), row = target,
+                  col = cell$col,
+                  analysis_id = cell$analysis_id %||% NA_character_)
+      if (!identical(cell$kind, "result")) {
+        rec$status <- "pending"
+        rec$reason <- cell$reason %||% "not bound to an analysis"
+        records[[length(records) + 1L]] <- rec
+        next
+      }
+
+      ## The authored cell's own placeholder is the format, as everywhere
+      ## else: it is re-read from the template so each written line keeps the
+      ## decimals the author chose.
+      hit <- in_col(template, cell$col)
+      xml <- if (length(hit) >= 1) .cell_is_xml(wb, template, hit[[1]]) else NA_character_
+      if (is.na(xml)) {
+        rec$status <- "skipped"
+        rec$reason <- "the cell holds no text to replace"
+        records[[length(records) + 1L]] <- rec
+        next
+      }
+
+      cell$variable_level <- line$variable_level
+      resolved <- .resolve_cell(cell, index, nest_level = line$nest_level)
+      if (!any(resolved$statuses %in% "computed")) {
+        rec$status <- "pending"
+        rec$reason <- .pending_reason(resolved$statuses)
+        records[[length(records) + 1L]] <- rec
+        next
+      }
+
+      doc <- xml2::read_xml(xml)
+      ranges <- list()
+      for (k in seq_along(cell$slots)) {
+        if (is.na(resolved$values[[k]])) next
+        ranges[[length(ranges) + 1L]] <- list(
+          start = cell$slots[[k]]$start, stop = cell$slots[[k]]$stop,
+          text  = resolved$values[[k]])
+      }
+      if (.replace_ranges(doc, ranges)) {
+        cc <- put(cc, target, cell$col, .is_xml(doc), template)
+        rec$status <- "filled"
+        rec$text   <- .is_text(doc)
+        if (any(is.na(resolved$values))) {
+          rec$status <- "partial"
+          rec$reason <- .pending_reason(resolved$statuses)
+        }
+      } else {
+        rec$status <- "skipped"
+        rec$reason <- "the placeholder text could not be located in the cell"
+      }
+      records[[length(records) + 1L]] <- rec
+    }
+  }
+
+  ws$sheet_data$cc <- .cc_sorted(cc)
+  ws <- .ensure_row_records(ws, seq.int(plan$parent$row,
+                                        length.out = length(lines)))
+  wb$worksheets[[sheet_index]] <- ws
+  list(records = records)
 }
 
 ## ---------------------------------------------------------------------------
@@ -1731,13 +1986,25 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
 
     result <- NULL
     cells <- fill$cells %||% list()
+    ## A nested block's two authored rows are not cells to substitute into --
+    ## they are a pattern to expand. They are written by .fill_nested_block()
+    ## instead, and left out here so one row is never reported twice.
+    nested_rows <- if (is.null(fill$nested)) integer() else {
+      c(fill$nested$parent$row, fill$nested$child$row)
+    }
     if (length(cells) > 0) {
-      result <- .fill_table_sheet(wb, sheet_index, cells, index,
+      fixed <- Filter(function(cell) !cell$row %in% nested_rows, cells)
+      result <- .fill_table_sheet(wb, sheet_index, fixed, index,
                                   keep_pending_placeholders, sheet)
-      ## The arm headers, after the body: the denominator written there is
-      ## read out of the same ARD the cells underneath it came from.
-      result$records <- c(result$records,
-                          .fill_header_n(wb, sheet_index, fill, index)$records)
+      ## The block expands AFTER the fixed cells are written: it moves the
+      ## rows below it down, and a cell written before the shift travels with
+      ## its row.
+      result$records <- c(
+        result$records,
+        .fill_nested_block(wb, sheet_index, fill, index, sheet)$records,
+        ## The arm headers last: the denominator written there is read out of
+        ## the same ARD the cells underneath it came from.
+        .fill_header_n(wb, sheet_index, fill, index)$records)
     } else if (!is.null(fill$listing)) {
       result <- .fill_listing_sheet(
         wb, sheet_index, fill$listing,

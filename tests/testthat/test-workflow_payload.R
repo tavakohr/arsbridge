@@ -163,11 +163,29 @@ test_that("a failing stage returns a payload instead of throwing", {
 })
 
 test_that("unfilled workbook cells come back with their reasons", {
+  ## The columns are the contract: a caller on the far side of a process
+  ## boundary renders this frame and cannot recover a missing field. They must
+  ## be there even when nothing is unfilled -- which is this fixture's case
+  ## now that nested blocks expand, so the frame is legitimately empty and the
+  ## test asserts the shape rather than a count it no longer controls.
   p <- payload_run()
   expect_true(all(c("sheet", "ref", "status", "reason") %in%
                     names(p$unfilled_cells)))
-  expect_gt(nrow(p$unfilled_cells), 0)
-  expect_true(all(nzchar(p$unfilled_cells$reason)))
+  expect_equal(p$fill$pending, 0)
+  if (nrow(p$unfilled_cells) > 0) {
+    expect_true(all(nzchar(p$unfilled_cells$reason)))
+  }
+
+  ## The reason text itself is still exercised, on a run that HAS a gap: an
+  ## ARD missing one analysis leaves its cells with nothing to fetch.
+  ard <- readRDS(p$artifacts$ard_rds)
+  gap <- ard[!(as.character(ard$analysis_id) %in% "AN_T_14_1_2_001"), ]
+  res <- suppressMessages(suppressWarnings(ars_fill_shell(
+    shell_path = SHELL_X, ars = p$artifacts$ars_json, ard = gap,
+    output_path = tempfile(fileext = ".xlsx"), adam_dir = ADAM_X,
+    overwrite = TRUE)))
+  expect_gt(nrow(res$diagnostics), 0)
+  expect_true(all(nzchar(res$diagnostics$reason)))
 })
 
 test_that("the payload survives serialization, which is how it travels", {
