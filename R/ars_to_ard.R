@@ -166,6 +166,111 @@
   })
 }
 
+## Methods whose result is a COUNT, so a group with no qualifying records has
+## an answer -- zero -- rather than no answer. A continuous summary is never
+## completed this way: the mean of nothing is not 0, it is nothing.
+.COUNTING_METHODS <- c("MTH_SUBJECT_COUNT", "MTH_SUBJECT_COUNT_PCT",
+                       "MTH_COUNT_AND_PERCENTAGE", "MTH_AE_FREQUENCY_COUNT")
+
+#' Give every treatment group a row, including the ones the filter emptied.
+#'
+#' An analysis's data subset is applied BEFORE the executor runs, so an arm
+#' with no qualifying records is not in the frame {cards} is handed, and
+#' `ard_categorical()` can only report the `by` levels it is given. The arm
+#' then has no row in the ARD at all, and everything downstream -- which
+#' trusts the ARD -- shows nothing: a filled shell leaves the cell reading
+#' "xx (xx.x)", and a blank in a clinical table reads as missing when the
+#' answer is zero. No Placebo subject had a serious adverse event is a
+#' finding; "we did not look" is not.
+#'
+#' Closed here rather than at fill time so every consumer -- the fill writer,
+#' the renderer, an exported ARD -- gets the same complete answer. For each
+#' group the denominator population has and the results do not mention, one
+#' row per statistic the other groups report: `n` = 0, `p` = 0, and `N` = that
+#' group's own denominator, counted the same way the executor counts it.
+#'
+#' Left alone, deliberately: a crossed column axis (two grouping variables,
+#' where "the missing group" is not a single level), a grouping variable the
+#' denominator population does not carry (nothing to count a denominator
+#' from), and every method that is not counting anything.
+#'
+#' @param group_defs The annotation-defined column groups for `by_arg`, when
+#'   the shell declared its columns by condition rather than by the variable's
+#'   own values. The groups are then the LABELS those conditions carry -- the
+#'   population column still holds the raw values, and completing from those
+#'   would invent a column per code.
+#' @return The ARD, with the missing groups' rows appended.
+#' @noRd
+.complete_zero_groups <- function(ard, by_arg, df_population, subject_key,
+                                  group_defs = NULL) {
+  if (is.null(ard) || nrow(ard) == 0) return(ard)
+  if (length(by_arg) != 1L) return(ard)
+  if (!all(c("group1_level", "stat_name", "stat") %in% names(ard))) return(ard)
+  if (is.null(df_population) || !by_arg %in% names(df_population)) return(ard)
+
+  defs <- group_defs[[by_arg]]
+  in_pop <- as.character(df_population[[by_arg]])
+  if (length(defs) > 0) {
+    expected <- vapply(defs, function(d) as.character(d$label %||% ""),
+                       character(1))
+    expected <- unique(expected[nzchar(expected)])
+    ## Each declared column is its own condition over the population.
+    in_group <- function(level) {
+      hit <- Filter(function(d) identical(as.character(d$label %||% ""), level),
+                    defs)
+      if (length(hit) == 0) return(rep(FALSE, length(in_pop)))
+      isTRUE_vec <- eval_where_clause(df_population, hit[[1]]$condition)
+      !is.na(isTRUE_vec) & isTRUE_vec
+    }
+  } else {
+    expected <- unique(in_pop[!is.na(in_pop) & nzchar(in_pop)])
+    in_group <- function(level) !is.na(in_pop) & in_pop == level
+  }
+  reported <- .ard_chr(ard[["group1_level"]])
+  present  <- unique(reported[!is.na(reported)])
+  missing  <- setdiff(expected, present)
+  if (length(missing) == 0 || length(present) == 0) return(ard)
+
+  ## One reported group's rows are the shape every other group takes: the same
+  ## statistics over the same variable levels, formatted the same way. Only
+  ## the three statistics whose zero-value is knowable are carried over --
+  ## anything else the method emits is left absent rather than invented.
+  same_group <- !is.na(reported) & reported == present[[1]]
+  template <- ard[same_group & ard[["stat_name"]] %in% c("n", "N", "p"), ,
+                  drop = FALSE]
+  if (nrow(template) == 0) return(ard)
+
+  denominator <- function(level) {
+    rows <- in_group(level)
+    if (!is.null(subject_key) && subject_key %in% names(df_population)) {
+      length(unique(df_population[[subject_key]][rows]))
+    } else {
+      sum(rows)
+    }
+  }
+
+  as_column <- function(values, like) if (is.list(like)) as.list(values) else values
+
+  added <- lapply(missing, function(level) {
+    rows <- template
+    rows[["group1_level"]] <- as_column(rep(level, nrow(rows)),
+                                        ard[["group1_level"]])
+    values <- ifelse(rows[["stat_name"]] == "N", denominator(level), 0)
+    rows[["stat"]] <- as_column(values, ard[["stat"]])
+    ## The template group's warnings and errors are its own.
+    for (col in intersect(c("warning", "error"), names(rows))) {
+      rows[[col]] <- rep(list(NULL), nrow(rows))
+    }
+    rows
+  })
+
+  out <- dplyr::bind_rows(c(list(ard), added))
+  if (inherits(ard, "card") && !inherits(out, "card")) {
+    class(out) <- union("card", class(out))
+  }
+  out
+}
+
 ## Build one keyed, value-less stub ARD row from a prototype row.
 #' @noRd
 .stub_ard_row <- function(proto, variable, stat_name, by_var, by_level) {
@@ -865,6 +970,15 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
           ard[["variable"]][sel]       <- analysis_var
           ard[["variable_level"]][sel] <- as.list(rep(analysis_id, sum(sel)))
         }
+      }
+
+      ## An arm the subset filter emptied is absent from the executor's
+      ## result, not zero in it. Complete it before the row carries any
+      ## provenance, so a filled-in group is stamped exactly like a computed
+      ## one -- it IS computed, from the same population the percentages use.
+      if (!is_stub && method_id %in% .COUNTING_METHODS) {
+        ard <- .complete_zero_groups(ard, by_arg, df_population, subject_key,
+                                     group_defs)
       }
 
       # Add traceability metadata. analysis_descr carries the analysis's

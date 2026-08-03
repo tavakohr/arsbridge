@@ -1,5 +1,28 @@
 # arsbridge (development version)
 
+* **A treatment arm with no qualifying subject now reads `0 (0.0)`, not a
+  placeholder.** An analysis's data subset is applied before `{cards}` runs, so
+  an arm the filter empties is not in the frame the executor sees --
+  `ard_categorical()` can only report the `by` levels it is given, and the arm
+  ended up with no row in the ARD at all. Everything downstream trusts the ARD,
+  so the filled shell left the cell showing `xx (xx.x)`: a blank where the
+  answer is zero, and a blank in a clinical table reads as missing. "No Placebo
+  subject had a serious adverse event" is a finding; "we did not look" is not.
+
+  For counting methods the ARD is now completed after execution -- one row per
+  statistic the other arms report, with `n = 0`, `p = 0` and that arm's own
+  denominator, counted from the same population the percentages use. It happens
+  in `ars_to_ard()`, so the fill writer, the renderer and an exported ARD all
+  get the same complete answer, and a completed row is stamped `computed` like
+  any other because it is. A continuous summary is never completed this way:
+  the mean of nothing is nothing, and a column axis declared by annotation
+  completes from its declared labels rather than the raw codes underneath them.
+
+  In the bundled example this closes the last fillable gap: Table 14.3.1's
+  Serious TEAE row reads `0 (0.0)` for Placebo, and the run now fills 61 cells
+  with 6 pending -- all six being the `<System Organ Class>` /
+  `<Preferred Term>` block, which needs row expansion.
+
 * **A `(N=XX)` column header is now filled, not only stripped.** The
   decoration was removed before matching a column to the ARD and then
   discarded, so every filled workbook shipped with `Placebo (N=XX)` above real
