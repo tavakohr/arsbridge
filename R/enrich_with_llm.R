@@ -141,6 +141,12 @@ enrich_with_llm <- function(section,
   }
 
   section$analysis_type   <- atype %||% .infer_analysis_type(section)
+  ## The shell's own output number decides whether this is a listing or a
+  ## figure -- parser geometry is truth, and a classifier (heuristic or LLM)
+  ## that says otherwise is wrong about a fact it was not asked to judge.
+  if (section$tlf_type %in% c("LISTING", "FIGURE")) {
+    section$analysis_type <- section$tlf_type
+  }
   section$ars_method_name <- nz(parsed$ars_method_name) %||% .infer_method_name(section$analysis_type)
   ## Capability signal from the LLM (the keyword scan in assess_capability is
   ## the keyless safety net). Default is_supported = TRUE when the field is
@@ -183,6 +189,27 @@ enrich_with_llm <- function(section,
       )
     }
   }
+  ## Deterministic column-axis annotation (ADR 0003 Layer A): a bound
+  ## "Treatment columns -> DS.VAR" shell line is authored ground truth, so it
+  ## takes the outermost grouping slot over any LLM guess.
+  ##
+  ## Resolved BEFORE the fallback chain, because a section whose shell states
+  ## its own column axis is not missing a grouping variable. Reading it
+  ## afterwards meant every deterministic run warned "No grouping variable
+  ## identified" about a state the next line then filled from the shell -- six
+  ## WARNs on the bundled example, one per table, for shells that had said
+  ## exactly what their columns were. It also let the fallback inject a SECOND
+  ## grouping whenever the spec's treatment variable differed from the
+  ## authored one, turning a one-level column axis into a two-level cross.
+  col_ann <- toupper(section$column_annotation %||% "")
+  if (section$analysis_type %in% c("LISTING", "FIGURE")) col_ann <- ""
+  if (nzchar(col_ann) && grepl(".", col_ann, fixed = TRUE)) {
+    parts <- strsplit(col_ann, ".", fixed = TRUE)[[1]]
+    det   <- list(variable = parts[2], dataset = parts[1], in_spec = TRUE)
+    groupings <- c(list(det), Filter(function(g)
+      !identical(toupper(g$variable %||% ""), det$variable), groupings))
+  }
+
   if (length(groupings) == 0 &&
       !section$analysis_type %in% c("LISTING", "FIGURE")) {
     fallback_var <- .default_treatment_var(spec_lookup)
@@ -204,17 +231,6 @@ enrich_with_llm <- function(section,
         action = "Section built UNGROUPED and flagged in _meta.sections_needing_review"
       )
     }
-  }
-  ## Deterministic column-axis annotation (ADR 0003 Layer A): a bound
-  ## "Treatment columns -> DS.VAR" shell line is authored ground truth, so it
-  ## takes the outermost grouping slot over any LLM guess.
-  col_ann <- toupper(section$column_annotation %||% "")
-  if (section$analysis_type %in% c("LISTING", "FIGURE")) col_ann <- ""
-  if (nzchar(col_ann) && grepl(".", col_ann, fixed = TRUE)) {
-    parts <- strsplit(col_ann, ".", fixed = TRUE)[[1]]
-    det   <- list(variable = parts[2], dataset = parts[1], in_spec = TRUE)
-    groupings <- c(list(det), Filter(function(g)
-      !identical(toupper(g$variable %||% ""), det$variable), groupings))
   }
 
   section$groupings     <- groupings
@@ -579,11 +595,15 @@ enrich_with_llm <- function(section,
 #' Deterministic fallback when the LLM is unavailable / parsing fails.
 #' @noRd
 .infer_analysis_type <- function(section) {
+  ## Structure first, prose second. A listing is a listing whatever it is
+  ## called: "Listing of Adverse Events" used to match the AE keyword and come
+  ## back AE_FREQUENCY, which then put the output through the grouping
+  ## fallback and warned that a listing had no treatment columns.
+  if (section$tlf_type == "LISTING") return("LISTING")
+  if (section$tlf_type == "FIGURE")  return("FIGURE")
   title <- tolower(section$title %||% "")
   if (grepl("adverse|teae|safety event|ae ", title)) return("AE_FREQUENCY")
   if (grepl("survival|kaplan|time to event", title)) return("SURVIVAL")
-  if (section$tlf_type == "LISTING") return("LISTING")
-  if (section$tlf_type == "FIGURE")  return("FIGURE")
   if (any(grepl("^(n|mean|sd|median|min|max|q1|q3)$",
                 tolower(vapply(section$stub_rows, function(r) r$label %||% "",
                                character(1)))))) return("CONTINUOUS")

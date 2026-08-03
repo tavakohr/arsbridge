@@ -108,6 +108,16 @@ test_that("the bundle demos the whole chain offline: build, execute, fill", {
   expect_true(payload$status %in% c("success", "partial"))
   expect_gt(payload$fill$filled, 0)
 
+  ## The reference bundle is what users copy, so it runs clean: not one
+  ## warning from any stage. `ars_diagnostics()` would not catch a regression
+  ## here -- it holds only the LAST stage's records -- so the assertion is on
+  ## the payload, which harvests every stage.
+  expect_equal(
+    sum(payload$diagnostics$severity %in% c("WARN", "FAIL")), 0L,
+    info = paste(utils::head(
+      payload$diagnostics$problem[payload$diagnostics$severity %in%
+                                    c("WARN", "FAIL")], 5), collapse = " | "))
+
   book <- xlsx_read_shell_cells(payload$artifacts$filled_workbook)
   cells <- book$sheets[["Table 14.1.1"]]$cells
   cell <- function(ref) cells$text[cells$ref == ref]
