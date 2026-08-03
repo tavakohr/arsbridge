@@ -2,6 +2,39 @@
 
 ## arsbridge (development version)
 
+- **The reference bundle runs without a single warning, and a test keeps
+  it that way.** Three findings, all of them the package complaining
+  about something it had already understood:
+
+  - **The enricher read the shell’s column axis after deciding it had
+    none.** A section whose shell states `[columns -> ADSL.TRT01A]` was
+    run through the “no grouping variable identified” fallback first,
+    warned about, and *then* given the axis the shell had stated all
+    along – six WARNs on the bundled example, one per table. The
+    authored axis is now resolved first, which also closes a latent
+    defect: when the spec’s treatment variable differed from the
+    authored one, the fallback added it *beside* the axis and turned a
+    one-level column into a two-level cross.
+  - **A listing was classified by its title.** “Listing of Adverse
+    Events” matched the AE keyword and came back `AE_FREQUENCY`, so an
+    output with no columns went through the grouping fallback and was
+    warned about for having none. The shell’s own output number decides
+    whether something is a listing or a figure; a classifier – heuristic
+    or LLM – does not overrule it.
+  - **A directive clause was reported as a failed filter.**
+    `once/subject ADAE.AOCCIFL` names a variable and carries text around
+    it, so it looked like an attempted condition to the where-clause
+    parser – but it has its own consumer, and nothing was dropped. The
+    warning told authors to fix an annotation the package reads
+    correctly.
+
+  The example test now asserts zero WARN and zero FAIL across every
+  stage of the payload.
+  [`ars_diagnostics()`](https://tavakohr.github.io/arsbridge/reference/ars_diagnostics.md)
+  would not have caught any of this: it holds only the last stage’s
+  records, which is why a run that reported “no diagnostics” was
+  carrying eight warnings from earlier stages.
+
 - **A shell whose column axis names a domain variable is told so while
   it is still a shell.** Percentages divide by ADSL, and {cards} splits
   that frame by the analysis’ own column variable – so
