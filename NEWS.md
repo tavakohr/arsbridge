@@ -1,5 +1,25 @@
 # arsbridge (development version)
 
+* **A filled Excel shell now expands a nested block into the hierarchy it
+  stands for.** `<System Organ Class>` over `<Preferred Term>` is a pattern,
+  not two rows: it means "repeat this per system organ class". The fill writer
+  had no way to say that -- only a listing could change a sheet's shape -- so
+  the two token rows came back declined, and the bundled example's AE table
+  shipped with placeholders where the study's classes and terms belong. The
+  pair now expands: each class, then its own terms underneath, each line
+  written from its own authored row so fonts, indents and the decimals the
+  placeholder states all carry down the block. Rows below the block, footnotes
+  and their merges included, move down with it.
+
+  The order is the one thing that could quietly go wrong: the Word renderer
+  and the Excel filler now present the same block, and two orderings would
+  mean one study with two answers to "which class comes first". So the
+  ordering is one function both call (`.nested_level_order()`), and the
+  bundled example asserts the filled sheet and the rendered table agree row
+  for row -- 265 lines, in the same order.
+
+  The example study now fills completely: 856 cells, nothing pending.
+
 * **A treatment arm with no qualifying subject now reads `0 (0.0)`, not a
   placeholder.** An analysis's data subset is applied before `{cards}` runs, so
   an arm the filter empties is not in the frame the executor sees --

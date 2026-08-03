@@ -174,6 +174,63 @@ extract_footnotes <- function(out_obj) {
   cand[order(as.integer(sub("^group([0-9]+)_level$", "\\1", cand)))]
 }
 
+## ---------------------------------------------------------------------------
+## The order of a nested block's levels
+## ---------------------------------------------------------------------------
+##
+## Two writers present the same nested block -- the renderer, which builds a
+## Word table from the ARD, and the fill writer, which expands the same block
+## into the author's own worksheet. If they order levels differently, one
+## study yields two tables that disagree about which system organ class comes
+## first, and nothing in either says which is right. So the order is decided
+## here, once, and both call it.
+
+#' Descending frequency, ties alphabetical -- the standard AE/MH/ConMed
+#' presentation -- or plain A-Z when the shell's `sort:` clause asks for it.
+#'
+#' @param levels The level names to order.
+#' @param freq Named numeric: the count each level sorts on. A level with no
+#'   entry sorts last, which is what an unobserved level deserves.
+#' @param sort_spec The authored clause: "alphabetical", "desc-freq",
+#'   "desc-freq:<column>", or NA for the default.
+#' @noRd
+.nested_level_order <- function(levels, freq, sort_spec = NA_character_) {
+  levels <- unique(levels[!is.na(levels)])
+  if (length(levels) == 0) return(character())
+  if (identical(sort_spec, "alphabetical")) return(sort(levels))
+  f <- as.numeric(freq[levels])
+  f[is.na(f)] <- -Inf
+  levels[order(-f, levels)]
+}
+
+#' The frequency each level sorts on: its summed `n` across the columns that
+#' count. A `desc-freq:<column>` clause narrows that to one column -- unless
+#' the data never saw that column, which means the clause names a column the
+#' shell does not have, and every column counts again.
+#'
+#' @param keys One level name per row of the statistics vectors.
+#' @param basis_col The column named by a `desc-freq:<column>` clause, or NULL.
+#' @noRd
+.nested_level_freq <- function(keys, stat_name, stat, colv,
+                               basis_col = NULL, keep = NULL) {
+  ok <- !is.na(keys) & stat_name %in% "n" & !is.na(stat)
+  if (!is.null(keep)) ok <- ok & keep
+  if (!is.null(basis_col)) {
+    in_col <- ok & toupper(colv) == toupper(basis_col)
+    if (any(in_col)) ok <- in_col
+  }
+  if (!any(ok)) return(stats::setNames(numeric(0), character(0)))
+  tapply(stat[ok], keys[ok], sum)
+}
+
+#' The column a `desc-freq:<column>` clause names, or NULL.
+#' @noRd
+.nested_sort_basis <- function(sort_spec) {
+  if (is.null(sort_spec) || is.na(sort_spec)) return(NULL)
+  if (!startsWith(sort_spec, "desc-freq:")) return(NULL)
+  sub("^desc-freq:", "", sort_spec)
+}
+
 ## Detect the column variable (treatment groups). Returns one ARD column name.
 detect_col_var <- function(ard, spec) {
   nms      <- names(ard)
@@ -740,30 +797,16 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
       cdat <- flat[!is.na(flat$analysis_id) &
                      flat$analysis_id %in% child_ids, , drop = FALSE]
 
+      ## Ordering is shared with the fill writer -- see .nested_level_order().
       sort_spec <- if ("sort" %in% names(layout)) le$sort else NA_character_
-      alpha <- identical(sort_spec, "alphabetical")
-      basis_col <- NULL
-      if (!is.na(sort_spec) && startsWith(sort_spec, "desc-freq:")) {
-        basis_col <- sub("^desc-freq:", "", sort_spec)
-      }
+      basis_col <- .nested_sort_basis(sort_spec)
 
-      ## Summed "n" per level (keys), the frequency each level sorts on.
-      ## When the clause names a column, only that column counts -- unless
-      ## the data never saw it (an authoring typo), then all columns do.
       freq_of <- function(dat, keys, sel = rep(TRUE, nrow(dat))) {
-        ok <- sel & !is.na(keys) & dat$stat_name == "n" & !is.na(dat$stat)
-        if (!is.null(basis_col)) {
-          in_col <- ok & toupper(dat$colv) == toupper(basis_col)
-          if (any(in_col)) ok <- in_col
-        }
-        if (!any(ok)) return(stats::setNames(numeric(0), character(0)))
-        tapply(dat$stat[ok], keys[ok], sum)
+        .nested_level_freq(keys, dat$stat_name, dat$stat, dat$colv,
+                           basis_col = basis_col, keep = sel)
       }
       by_freq <- function(levels, freq) {
-        if (alpha || length(levels) == 0) return(sort(levels))
-        f <- as.numeric(freq[levels])
-        f[is.na(f)] <- -Inf
-        levels[order(-f, levels)]
+        .nested_level_order(levels, freq, sort_spec)
       }
 
       parent_levels <- unique(c(

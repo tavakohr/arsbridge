@@ -361,24 +361,53 @@ test_that("quartile lines take the statistic the label names, in order", {
                sprintf("%.0f, %.0f", pick("p25"), pick("p75")))
 })
 
-test_that("a template row is left alone rather than given one level's value", {
+test_that("a token row becomes its own levels, never one level's value", {
+  ## "<System Organ Class>" stands for however many classes the data has.
+  ## Writing the first one's number into it would hide a whole block, so the
+  ## pair expands instead: each class, then its own terms underneath.
   run <- filled_run()
-  ## "<System Organ Class>" needs row expansion, which the writer does not do.
-  expect_match(cell_text(run$book, "Table 14.3.1", "B7"), "^x+ \\(x+\\.x+\\)$")
-  reasons <- run$res$diagnostics$reason[run$res$diagnostics$sheet == "Table 14.3.1"]
-  expect_true(any(grepl("repeated block", reasons)))
+  sheet <- run$book$sheets[["Table 14.3.1"]]
+  stub <- sheet$cells[sheet$cells$col == 1 & sheet$cells$row >= 7, , drop = FALSE]
+  labels <- stub$text[order(stub$row)]
+  labels <- labels[!grepl("^A subject is counted", labels)]
+
+  ## The authored tokens themselves never survive into the deliverable.
+  expect_false(any(grepl("^<", labels)))
+  expect_equal(labels, c("Nervous system disorders", "Headache", "Dizziness",
+                         "Gastrointestinal disorders", "Nausea",
+                         "Skin and subcutaneous tissue disorders", "Rash"))
+
+  ## Each line carries its own numbers -- a class's count is not its first
+  ## term's. Two subjects have a nervous system event, but only in Drug 20 mg
+  ## do the class and its leading term differ.
+  expect_equal(cell_text(run$book, "Table 14.3.1", "D7"), "3 (75.0)")
+  expect_equal(cell_text(run$book, "Table 14.3.1", "D8"), "2 (50.0)")
+
+  ## Nothing on the sheet is left pending: the block is the whole table.
+  expect_false(any(run$res$diagnostics$sheet == "Table 14.3.1"))
 })
 
 test_that("an unfillable cell keeps its placeholder and is reported", {
+  ## The fixture fills completely, so the pending case is provoked: an ARD
+  ## missing one analysis leaves its cells with nothing to fetch. The
+  ## placeholder stays, because an empty cell in a clinical table reads as a
+  ## zero, and the cell is reported rather than silently skipped.
   run <- filled_run()
-  ## The repeated block is the honest example of "not computed": the row
-  ## stands for however many system organ classes the data has, and no single
-  ## number answers it. An empty cell would read as a zero.
-  expect_match(cell_text(run$book, "Table 14.3.1", "B7"), "x")
-  expect_true(any(run$res$diagnostics$ref == "B7" &
-                    run$res$diagnostics$sheet == "Table 14.3.1"))
-  expect_gt(run$res$pending, 0)
-  expect_equal(run$res$skipped, 0)
+  gap <- run$ard[!(as.character(run$ard$analysis_id) %in% "AN_T_14_1_2_001"), ]
+  out <- tempfile(fileext = ".xlsx")
+  res <- suppressMessages(suppressWarnings(ars_fill_shell(
+    shell_path = SHELL, ars = run$ars, ard = gap, output_path = out,
+    adam_dir = ADAM, overwrite = TRUE)))
+
+  book <- xlsx_read_shell_cells(out)
+  expect_match(cell_text(book, "Table 14.1.2", "B6"), "x")
+  expect_true(any(res$diagnostics$ref == "B6" &
+                    res$diagnostics$sheet == "Table 14.1.2"))
+  expect_gt(res$pending, 0)
+  expect_equal(res$skipped, 0)
+
+  ## And the whole run is not lost with it: the other tables still fill.
+  expect_equal(cell_text(book, "Table 14.1.1", "B5"), "4")
 })
 
 test_that("an arm the filter emptied is filled with zero, not left blank", {
@@ -443,12 +472,19 @@ test_that("the author's layout comes through untouched", {
     stats::setNames(xml2::xml_attr(rows, "ht"), xml2::xml_attr(rows, "r"))
   }
 
-  ## A listing legitimately changes shape -- its template row becomes N rows,
-  ## and everything below moves down -- so the strict "nothing moved" check
-  ## applies to the sheets that keep their shape. The listing's own invariant
-  ## is checked below.
-  unchanged <- setdiff(names(before$sheets),
-                       grep("^Listing", names(before$sheets), value = TRUE))
+  ## Two kinds of sheet legitimately change shape: a listing, whose template
+  ## row becomes one row per record, and a table carrying a nested block,
+  ## whose authored pair becomes one line per level and per term. Everything
+  ## below either moves down. The strict "nothing moved" check therefore
+  ## applies to the sheets that keep their shape; the expanding sheets' own
+  ## invariants are checked below and in their own tests.
+  spec <- jsonlite::fromJSON(run$ars, simplifyVector = FALSE)
+  expands <- unlist(lapply(spec$outputs, function(o) {
+    fill <- o$`_meta`$shell_fill
+    if (is.null(fill$nested)) NULL else fill$source$sheet
+  }))
+  expands <- c(expands, grep("^Listing", names(before$sheets), value = TRUE))
+  unchanged <- setdiff(names(before$sheets), expands)
   for (name in unchanged) {
     b <- before$sheets[[name]]
     a <- run$book$sheets[[name]]
@@ -465,13 +501,16 @@ test_that("the author's layout comes through untouched", {
   }
 
   ## Column widths are a property of the sheet, not of its rows, so they must
-  ## survive an expansion too.
-  for (name in grep("^Listing", names(before$sheets), value = TRUE)) {
+  ## survive an expansion too -- and an expanded sheet only ever gains cells.
+  for (name in expands) {
     b <- before$sheets[[name]]
     a <- run$book$sheets[[name]]
     expect_identical(attrs(db, b$part, "col", "width"),
                      attrs(da, a$part, "col", "width"), info = name)
     expect_gte(nrow(a$cells), nrow(b$cells))
+    ## The footnote below the block moved down with it, merge and all -- the
+    ## same count of merges, none of them left behind mid-table.
+    expect_equal(length(a$merges$ref), length(b$merges$ref), info = name)
   }
 })
 
@@ -499,17 +538,19 @@ test_that("the filled workbook still opens", {
 })
 
 test_that("pending placeholders can be cleared when the workbook is going out for manual entry", {
+  ## Provoked the same way as the pending test above: the fixture fills
+  ## completely, so a cell that stays pending has to be made to.
   run <- filled_run()
+  gap <- run$ard[!(as.character(run$ard$analysis_id) %in% "AN_T_14_1_2_001"), ]
   out <- tempfile(fileext = ".xlsx")
   suppressMessages(suppressWarnings(ars_fill_shell(
-    shell_path = SHELL, ars = run$ars, ard = run$ard, output_path = out,
-    keep_pending_placeholders = FALSE, overwrite = TRUE)))
+    shell_path = SHELL, ars = run$ars, ard = gap, output_path = out,
+    adam_dir = ADAM, keep_pending_placeholders = FALSE, overwrite = TRUE)))
   book <- xlsx_read_shell_cells(out)
-  ## The repeated-block row is the pending one: it is blanked.
-  expect_equal(cell_text(book, "Table 14.3.1", "B7") %||% "", "")
+  expect_equal(cell_text(book, "Table 14.1.2", "B6") %||% "", "")
   ## A filled cell is still filled -- including a zero, which is a result.
-  expect_match(cell_text(book, "Table 14.1.2", "B6"), "^66")
   expect_equal(cell_text(book, "Table 14.1.1", "B7"), "0 (0.0)")
+  expect_equal(cell_text(book, "Table 14.1.1", "B5"), "4")
 })
 
 test_that("annotations can be kept for review", {
@@ -583,6 +624,80 @@ test_that("a header N is the denominator its own column's percentages use", {
   expect_equal(.column_denominator(index, character(), "Placebo")$status,
                "pending")
   expect_equal(.column_denominator(index, "AN9", "Placebo")$status, "pending")
+})
+
+## ---------------------------------------------------------------------------
+## Nested blocks: the order both writers present
+## ---------------------------------------------------------------------------
+
+test_that("levels order by descending frequency, ties alphabetical", {
+  freq <- c(Skin = 1, Nervous = 3, Gastro = 3)
+  expect_equal(
+    .nested_level_order(c("Skin", "Nervous", "Gastro"), freq),
+    c("Gastro", "Nervous", "Skin"))
+
+  ## An authored clause overrides.
+  expect_equal(
+    .nested_level_order(c("Skin", "Nervous", "Gastro"), freq, "alphabetical"),
+    c("Gastro", "Nervous", "Skin"))
+  expect_equal(
+    .nested_level_order(c("Zeta", "Alpha"), c(Zeta = 9, Alpha = 1),
+                        "alphabetical"),
+    c("Alpha", "Zeta"))
+
+  ## A level nothing counted sorts last rather than dropping out.
+  expect_equal(
+    .nested_level_order(c("Seen", "Unseen"), c(Seen = 1)),
+    c("Seen", "Unseen"))
+  expect_equal(.nested_level_order(character(), numeric()), character())
+})
+
+test_that("a level's frequency is its summed n, or one column's when the shell says so", {
+  keys  <- c("A", "A", "B", "B")
+  stat_name <- c("n", "n", "n", "n")
+  stat  <- c(2, 3, 10, 1)
+  colv  <- c("Placebo", "Drug", "Placebo", "Drug")
+
+  all_cols <- .nested_level_freq(keys, stat_name, stat, colv)
+  expect_equal(as.numeric(all_cols[c("A", "B")]), c(5, 11))
+
+  one_col <- .nested_level_freq(keys, stat_name, stat, colv,
+                                basis_col = "Drug")
+  expect_equal(as.numeric(one_col[c("A", "B")]), c(3, 1))
+
+  ## A clause naming a column the shell does not have falls back to all of
+  ## them rather than ordering on nothing.
+  typo <- .nested_level_freq(keys, stat_name, stat, colv, basis_col = "Nope")
+  expect_equal(as.numeric(typo[c("A", "B")]), c(5, 11))
+
+  expect_equal(.nested_sort_basis("desc-freq:Placebo"), "Placebo")
+  expect_null(.nested_sort_basis("alphabetical"))
+  expect_null(.nested_sort_basis(NA_character_))
+})
+
+test_that("a nested block reads its levels and terms out of the ARD", {
+  index <- data.frame(
+    analysis_id = c(rep("AN_SOC", 2), rep("AN_PT", 4)),
+    group_level = rep("Placebo", 6),
+    variable_level = c("Nervous", "Gastro", "Headache", "Dizziness",
+                       "Nausea", "Absent"),
+    nest_level = c(NA, NA, "Nervous", "Nervous", "Gastro", "Gastro"),
+    stat_name = rep("n", 6),
+    value = c(3, 2, 3, 1, 2, 0),
+    status = rep("computed", 6),
+    stringsAsFactors = FALSE)
+
+  blocks <- .nested_block_levels(index, list(
+    parent = list(analysis_id = "AN_SOC"),
+    child  = list(analysis_id = "AN_PT")))
+
+  expect_equal(vapply(blocks, function(b) b$level, character(1)),
+               c("Nervous", "Gastro"))
+  expect_equal(blocks[[1]]$terms, c("Headache", "Dizziness"))
+  ## A term whose count is zero everywhere in the block is not part of it --
+  ## {cards} expands the full parent x term cartesian, and a row of zeros
+  ## under a class no subject reported it in is not a finding.
+  expect_equal(blocks[[2]]$terms, "Nausea")
 })
 
 ## ---------------------------------------------------------------------------

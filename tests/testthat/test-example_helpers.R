@@ -119,6 +119,35 @@ test_that("the bundle demos the whole chain offline: build, execute, fill", {
   ## the same 86 the column's percentages are computed against.
   expect_equal(cell("B4"), "Placebo (N=86)")
 
+  ## The nested block: two authored token rows become the study's own system
+  ## organ classes, each followed by its own preferred terms. The tokens
+  ## themselves must not survive, and the block must present the SAME rows in
+  ## the SAME order as the Word renderer would print from this very ARD --
+  ## one study cannot have two answers to "which SOC comes first".
+  nested <- book$sheets[["Table 14.3.2"]]$cells
+  stub <- nested[nested$col == 1 & nested$row >= 7, , drop = FALSE]
+  filled_lines <- stub$text[order(stub$row)]
+  filled_lines <- filled_lines[!grepl("^A subject is counted", filled_lines)]
+  expect_gt(length(filled_lines), 20)
+  expect_false(any(grepl("^<", filled_lines)))
+
+  ard <- readRDS(payload$artifacts$ard_rds)
+  tf <- suppressMessages(suppressWarnings(
+    ars_to_tfrmt(payload$artifacts$ars_json, ard, "T_14_3_2")))
+  prepped <- .tfrmt_prep_ard_layout(
+    ard, "T_14_3_2", attr(tf, "arsbridge_layout"),
+    attr(tf, "arsbridge_col_var"), attr(tf, "arsbridge_keep_params"),
+    col_levels = attr(tf, "arsbridge_col_levels"),
+    fixed_vars = attr(tf, "arsbridge_fixed_vars"),
+    params_map = attr(tf, "arsbridge_params_map") %||% list())
+  ords <- sort(unique(prepped[[.ARS_SHELL_ORD]]))
+  rendered_lines <- vapply(ords, function(o) {
+    unique(prepped[[.ARS_SHELL_LBL]][prepped[[.ARS_SHELL_ORD]] == o])[1]
+  }, character(1))
+  ## The rendered table opens with the authored "Subjects with any TEAE" row;
+  ## the block itself is everything after it.
+  expect_equal(as.character(filled_lines), as.character(rendered_lines[-1]))
+
   ## The bundle is the only place a listing of this size is written -- 1,191
   ## rows, five columns -- and a listing that reads back perfectly in R can
   ## still open in Excel with four of its columns empty. Checked against the
