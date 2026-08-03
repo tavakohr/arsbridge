@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9067</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9068</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -41,7 +41,8 @@
 
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="development version" id="arsbridge-development-version">arsbridge (development version)<a class="anchor" aria-label="anchor" href="#arsbridge-development-version"></a></h2>
-<ul><li>
+<ul><li><p><strong>The bundled example’s AE table counts treatment-emergent events, as its title says.</strong> Its <code>&lt;System Organ Class&gt;</code> / <code>&lt;Preferred Term&gt;</code> rows carried no filter, so the block counted every adverse event under a table headed “Treatment-Emergent Adverse Events” – 12 Placebo subjects with a nervous system event where 8 had a treatment-emergent one. Nothing propagates the “Subjects with any TEAE” row’s filter down a block, so each token row now carries <code>WHERE ADAE.TRTEMFL='Y'</code> itself, and the bundle test checks the numbers against the raw dataset rather than against the pipeline that produced them. An authoring fix, not an engine one: the shell said something it did not mean.</p></li>
+<li>
 <p><strong>A filled Excel shell now expands a nested block into the hierarchy it stands for.</strong> <code>&lt;System Organ Class&gt;</code> over <code>&lt;Preferred Term&gt;</code> is a pattern, not two rows: it means “repeat this per system organ class”. The fill writer had no way to say that – only a listing could change a sheet’s shape – so the two token rows came back declined, and the bundled example’s AE table shipped with placeholders where the study’s classes and terms belong. The pair now expands: each class, then its own terms underneath, each line written from its own authored row so fonts, indents and the decimals the placeholder states all carry down the block. Rows below the block, footnotes and their merges included, move down with it.</p>
 <p>The order is the one thing that could quietly go wrong: the Word renderer and the Excel filler now present the same block, and two orderings would mean one study with two answers to “which class comes first”. So the ordering is one function both call (<code>.nested_level_order()</code>), and the bundled example asserts the filled sheet and the rendered table agree row for row – 265 lines, in the same order.</p>
 <p>The example study now fills completely: 856 cells, nothing pending.</p>
