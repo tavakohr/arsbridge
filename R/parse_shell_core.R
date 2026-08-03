@@ -821,6 +821,69 @@ bind_annotations <- function(sec) {
   sec
 }
 
+#' Warn when the column axis is a domain variable the denominator cannot use.
+#'
+#' Percentages divide by ADSL under the analysis set's filter, and {cards}
+#' splits that frame by the analysis' own column variable. So a column axis
+#' named on a domain -- "[columns -> ADCM.TRTA]" -- only works when ADSL
+#' carries a variable of that name too:
+#'
+#'   * ADSL has no such variable (ADCM.TRTA against an ADSL with TRT01A):
+#'     the denominator cannot be split at all, and every percentage in the
+#'     table comes out of the whole study. WARN -- the numbers will be wrong.
+#'   * ADSL has one (ADAE.TRT01A): the numbers come out right, but the
+#'     numerator's arm is read from the domain and the denominator's from
+#'     ADSL. INFO -- worth naming the ADSL variable, not worth a warning on
+#'     an authoring style that produces correct results.
+#'
+#' Checked here rather than at execution because it is a property of the
+#' SHELL, and the author is the one who can fix it. `ars_to_ard()` refuses to
+#' repair it by inference: TRTA and TRT01A are not interchangeable in a
+#' crossover or multi-period design, and a treatment mapping the engine
+#' guessed is not one anybody can review.
+#' @noRd
+.check_column_axis_dataset <- function(sec, spec_lookup = NULL) {
+  ## Tables only: a listing shows records, not percentages, so it has no
+  ## denominator to split.
+  if (!identical(sec$tlf_type, "TABLE")) return(invisible(NULL))
+  axis <- toupper(as.character(sec$column_annotation %||% ""))
+  if (!nzchar(axis) || !grepl(".", axis, fixed = TRUE)) return(invisible(NULL))
+  if (is.null(spec_lookup) || length(spec_lookup) == 0) return(invisible(NULL))
+
+  dataset  <- sub("\\..*$", "", axis)
+  variable <- sub("^.*\\.", "", axis)
+  if (identical(dataset, "ADSL")) return(invisible(NULL))
+
+  in_adsl <- paste0("ADSL.", variable) %in% toupper(names(spec_lookup))
+  if (in_adsl) {
+    diag_add(
+      stage = "parse_shell", severity = "INFO", input = INPUT_SHELL,
+      problem = sprintf(
+        "Column axis names %s, though ADSL.%s exists", axis, variable),
+      tlf_number = sec$tlf_number, location = sec$title %||% "",
+      action = sprintf(
+        paste("Percentages are correct either way, but the columns and their",
+              "denominators then come from two datasets -- consider",
+              "'[columns -> ADSL.%s]'"), variable)
+    )
+    return(invisible(NULL))
+  }
+
+  .diag_gap(
+    stage = "parse_shell", severity = "WARN", input = INPUT_SHELL,
+    problem = sprintf(
+      "Column axis %s comes from %s, and the ADaM spec has no ADSL.%s.",
+      axis, dataset, variable),
+    why = paste("Percentages are computed against ADSL, which cannot be split",
+                "by a variable it does not carry -- every percentage in this",
+                "table would come out of the whole study rather than out of",
+                "its own column."),
+    fix = paste0("Point the column axis at the ADSL treatment variable ",
+                 "(e.g. '[columns -> ADSL.TRT01A]'), which every subject has."),
+    tlf_number = sec$tlf_number, location = sec$title %||% "")
+  invisible(NULL)
+}
+
 #' Resolve deferred listing-header detection now that the section is complete.
 #'
 #' By the time a section is pushed to `sections`, the entire body of the TLF
@@ -1213,6 +1276,9 @@ bind_annotations <- function(sec) {
   ## per-section "no annotations detected" diagnostic and everything
   ## downstream see the bound rows (ADR 0003 Layer A).
   sec <- bind_annotations(sec)
+  ## The column axis is settled by now (in-cell headers, the column tree, or
+  ## the arrow-line fallback inside bind_annotations, in that order).
+  .check_column_axis_dataset(sec, spec_lookup)
   pending <- sec$.pending_header_cells
   if (length(pending %||% list()) == 0) return(sec)
   if (!identical(sec$tlf_type, "LISTING")) {

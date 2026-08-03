@@ -274,3 +274,85 @@ test_that("a custom heading pattern reaches the sheet names", {
   expect_length(secs, 1L)
   expect_equal(secs[[1]]$tlf_number, "T-3-1")
 })
+
+## ---------------------------------------------------------------------------
+## The column axis and the denominator it will be divided by
+## ---------------------------------------------------------------------------
+
+## Percentages divide by ADSL, and {cards} splits that frame by the column
+## variable. A column axis on a domain variable ADSL does not carry -- the
+## ordinary shape of a conmeds or medical-history shell, where the domain says
+## TRTA and ADSL says TRT01A -- therefore reports every percentage out of the
+## whole study. It is a property of the SHELL, so the author hears about it at
+## parse time; the engine will not repair it by guessing that TRTA means
+## TRT01A (they are not interchangeable in a crossover or multi-period study).
+
+.axis_shell <- function(axis, envir = parent.frame()) {
+  wb <- openxlsx2::wb_workbook()$add_worksheet("Table 14.4.1")
+  put <- function(x, row, col = 1L) {
+    wb$add_data(sheet = "Table 14.4.1", x = x, start_row = row,
+                start_col = col, col_names = FALSE)
+  }
+  black <- openxlsx2::wb_color(hex = "FF000000")
+  red   <- openxlsx2::wb_color(hex = "FFC00000")
+  annotated <- function(label, annotation) {
+    openxlsx2::fmt_txt(label, color = black, size = 10) +
+      openxlsx2::fmt_txt(paste0("\n", annotation), color = red, size = 8,
+                         italic = TRUE)
+  }
+  put("Table 14.4.1", 1)
+  put("Concomitant Medications by Class", 2)
+  put(annotated("Safety Population ", "(ADSL.SAFFL='Y')"), 3)
+  for (r in 1:3) {
+    wb$merge_cells(sheet = "Table 14.4.1", dims = sprintf("A%d:D%d", r, r))
+  }
+  put(annotated("Medication Class",
+                sprintf("[columns -> %s; source ADCM]", axis)), 4)
+  for (j in seq_along(c("Placebo", "Drug A", "Drug B"))) {
+    put(c("Placebo", "Drug A", "Drug B")[[j]], 4, j + 1L)
+  }
+  put(annotated("Any medication", "[ADCM.CMCLAS]"), 5)
+  for (j in 1:3) put("xx (xx.x)", 5, j + 1L)
+  path <- withr::local_tempfile(fileext = ".xlsx", .local_envir = envir)
+  wb$save(path)
+  path
+}
+
+.axis_lookup <- list(
+  "ADSL.SAFFL"  = list(dataset = "ADSL", variable = "SAFFL"),
+  "ADSL.TRT01A" = list(dataset = "ADSL", variable = "TRT01A"),
+  "ADCM.TRTA"   = list(dataset = "ADCM", variable = "TRTA"),
+  "ADCM.CMCLAS" = list(dataset = "ADCM", variable = "CMCLAS")
+)
+
+.axis_findings <- function(axis) {
+  diag_reset()
+  invisible(suppressMessages(suppressWarnings(
+    parse_shell_xlsx(.axis_shell(axis), spec_lookup = .axis_lookup))))
+  recs <- diag_records()
+  recs[grepl("Column axis", recs$problem), , drop = FALSE]
+}
+
+test_that("a column axis ADSL cannot answer is reported at parse time", {
+  found <- .axis_findings("ADCM.TRTA")
+  expect_equal(nrow(found), 1L)
+  expect_equal(found$severity, "WARN")
+  expect_match(found$problem, "no ADSL.TRTA")
+  expect_match(found$problem, "out of the whole study")
+  ## The advice is the fix the author can actually make.
+  expect_match(found$action, "ADSL.TRT01A", fixed = TRUE)
+})
+
+test_that("a domain copy of an ADSL variable is noted, not warned about", {
+  ## ADAE.TRT01A and its kin produce correct percentages -- ADSL carries
+  ## TRT01A, so the denominator splits. Worth saying, not worth a warning on
+  ## an authoring style that is right.
+  found <- .axis_findings("ADCM.TRT01A")
+  expect_equal(nrow(found), 1L)
+  expect_equal(found$severity, "INFO")
+  expect_match(found$action, "columns -> ADSL.TRT01A", fixed = TRUE)
+})
+
+test_that("an ADSL column axis says nothing at all", {
+  expect_equal(nrow(.axis_findings("ADSL.TRT01A")), 0L)
+})
