@@ -31,7 +31,7 @@ to its source.
 | **Native ARD execution** | Run ARS JSON directly against `.xpt` or `.csv` datasets using [cards](https://github.com/insightsengineering/cards), with no dataset-loading boilerplate. |
 | **Codelist-decoded categories** | A coded categorical variable (e.g. a numeric `DCSREASN`) is decoded through the ADaM spec’s codelist: the ARD and rendered table show `DEATH`, not `1`, in codelist order, with unobserved terms reported as n = 0. Unannotated coded column axes get their column labels from the codelist too. |
 | **Publication-ready tables** | [`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md) builds a formatted GT table: treatment columns detected, percentages rescaled, row groups labelled, ARS footnotes carried through. |
-| **The filled shell, back in Excel** | For an Excel shell, [`ars_fill_shell()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_shell.md) returns the author’s own workbook with the results in it and the red annotations gone. Tables, listings and figures: a listing’s one template row expands into a row per record, with the footnote below it moved down; a figure’s series is computed from the prose the shell states it in. The layout, labels, merges, fonts and footnotes are never rebuilt — only left alone — and each placeholder’s own `xx.x` decides how its number is formatted. A cell whose result does not exist keeps its placeholder and is reported, because a blank cell in a clinical table reads as a zero. |
+| **The filled shell, back in Excel** | For an Excel shell, [`ars_fill_shell()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_shell.md) returns the author’s own workbook with the results in it and the red annotations gone. Tables, listings and figures: a listing’s one template row expands into a row per record, with the footnote below it moved down; a figure’s series is computed from the prose the shell states it in. The layout, labels, merges, fonts and footnotes are never rebuilt — only left alone — and each placeholder’s own `xx.x` decides how its number is formatted. A cell whose result does not exist keeps its placeholder and is reported, because a blank cell in a clinical table reads as a zero — while an arm with no qualifying subject reads `0 (0.0)`, since that is a result. Column headers written `Placebo (N=XX)` are answered with the denominator their own percentages use. |
 | **Partial tables, full traceability** | Statistics arsbridge cannot yet compute are reserved as keyed `manual_pending` rows. Each shows a `[‡ manual]` marker in the table until a programmer fills it with a validated script. Nothing is ever an orphan number. |
 
 ------------------------------------------------------------------------
@@ -584,7 +584,10 @@ Three things are deliberate:
   manual derivation, or a row that stands for a repeated block. An empty
   cell in a clinical table reads as a zero. Pass
   `keep_pending_placeholders = FALSE` to blank them instead, for a
-  workbook going to someone who will complete it by hand.
+  workbook going to someone who will complete it by hand. An arm with no
+  qualifying subject is *not* one of these cases: it is filled with
+  `0 (0.0)`, because that is the result — see the ARD’s zero-group
+  completion above.
 - **`strip_annotations = FALSE`** keeps the red annotations next to the
   numbers, which is useful while reviewing and wrong for a deliverable.
 
@@ -829,6 +832,15 @@ runs, it:
     `USUBJID`, intersecting the population with the analysis dataset.
 4.  Applies data subset filters within the analysis dataset, supporting
     recursive `AND` / `OR` compound expressions.
+5.  Completes the zero-count groups a filter emptied. A subset is
+    applied *before*
+    [cards](https://github.com/insightsengineering/cards) runs, so a
+    treatment arm with no qualifying record is simply absent from its
+    input and gets no row at all. For a counting method that arm’s
+    answer is 0, not “unknown”, so the ARD is completed with `n = 0`,
+    `p = 0` and that arm’s own denominator — once, where every consumer
+    sees it. A continuous summary is never completed this way: the mean
+    of nothing is nothing.
 
 The ARS method identifier in each analysis maps to a specific
 [cards](https://github.com/insightsengineering/cards) function:

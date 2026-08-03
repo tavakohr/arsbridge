@@ -24,7 +24,7 @@
 
     <a class="navbar-brand me-2" href="index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9065</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9066</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -122,7 +122,7 @@
 </tr>
 <tr>
 <td><strong>The filled shell, back in Excel</strong></td>
-<td>For an Excel shell, <code><a href="reference/ars_fill_shell.html">ars_fill_shell()</a></code> returns the author’s own workbook with the results in it and the red annotations gone. Tables, listings and figures: a listing’s one template row expands into a row per record, with the footnote below it moved down; a figure’s series is computed from the prose the shell states it in. The layout, labels, merges, fonts and footnotes are never rebuilt — only left alone — and each placeholder’s own <code>xx.x</code> decides how its number is formatted. A cell whose result does not exist keeps its placeholder and is reported, because a blank cell in a clinical table reads as a zero.</td>
+<td>For an Excel shell, <code><a href="reference/ars_fill_shell.html">ars_fill_shell()</a></code> returns the author’s own workbook with the results in it and the red annotations gone. Tables, listings and figures: a listing’s one template row expands into a row per record, with the footnote below it moved down; a figure’s series is computed from the prose the shell states it in. The layout, labels, merges, fonts and footnotes are never rebuilt — only left alone — and each placeholder’s own <code>xx.x</code> decides how its number is formatted. A cell whose result does not exist keeps its placeholder and is reported, because a blank cell in a clinical table reads as a zero — while an arm with no qualifying subject reads <code>0 (0.0)</code>, since that is a result. Column headers written <code>Placebo (N=XX)</code> are answered with the denominator their own percentages use.</td>
 </tr>
 <tr>
 <td><strong>Partial tables, full traceability</strong></td>
@@ -559,7 +559,7 @@
 <li>
 <strong>The placeholder is the format.</strong> <code>xx.x (xx.xx)</code> writes one decimal then two, and keeps the parentheses. Nothing else in the pipeline carries that decision, because the shell’s author already made it.</li>
 <li>
-<strong>An unfillable cell keeps its placeholder</strong> and appears in <code>res$diagnostics</code> with the reason — no result in the ARD, reserved for manual derivation, or a row that stands for a repeated block. An empty cell in a clinical table reads as a zero. Pass <code>keep_pending_placeholders = FALSE</code> to blank them instead, for a workbook going to someone who will complete it by hand.</li>
+<strong>An unfillable cell keeps its placeholder</strong> and appears in <code>res$diagnostics</code> with the reason — no result in the ARD, reserved for manual derivation, or a row that stands for a repeated block. An empty cell in a clinical table reads as a zero. Pass <code>keep_pending_placeholders = FALSE</code> to blank them instead, for a workbook going to someone who will complete it by hand. An arm with no qualifying subject is <em>not</em> one of these cases: it is filled with <code>0 (0.0)</code>, because that is the result — see the ARD’s zero-group completion above.</li>
 <li>
 <strong><code>strip_annotations = FALSE</code></strong> keeps the red annotations next to the numbers, which is useful while reviewing and wrong for a deliverable.</li>
 </ul>
@@ -776,6 +776,7 @@ Table 14.1.1 Demographics - Screened Subjects ADSL.SCRNFL='Y' [PROGRAMMING DATAS
 <li>Caches each dataset in memory so repeated analyses run fast.</li>
 <li>Applies analysis set (population) filters at the subject level via <code>USUBJID</code>, intersecting the population with the analysis dataset.</li>
 <li>Applies data subset filters within the analysis dataset, supporting recursive <code>AND</code> / <code>OR</code> compound expressions.</li>
+<li>Completes the zero-count groups a filter emptied. A subset is applied <em>before</em> <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> runs, so a treatment arm with no qualifying record is simply absent from its input and gets no row at all. For a counting method that arm’s answer is 0, not “unknown”, so the ARD is completed with <code>n = 0</code>, <code>p = 0</code> and that arm’s own denominator — once, where every consumer sees it. A continuous summary is never completed this way: the mean of nothing is nothing.</li>
 </ol>
 <p>The ARS method identifier in each analysis maps to a specific <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> function:</p>
 <table class="table">
