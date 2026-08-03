@@ -276,6 +276,16 @@ invisible(file.copy(docx_src, file.path(bundle_dir, "annotated_shell.docx"),
 ## states an analysis this study's public data cannot support (screen-failure
 ## counts, an action-taken variable that is empty throughout), the sheet
 ## leaves it out rather than shipping a row that can only come back blank.
+##
+## Every column axis names the ADSL treatment variable, whatever domain the
+## table's own data comes from. Percentages divide by ADSL, and {cards} splits
+## that frame by the axis variable -- so naming the domain's copy
+## ("[columns -> ADAE.TRT01A]") reads the columns from one dataset and their
+## denominators from another. It happens to give the same numbers here, since
+## ADAE and ADEX carry TRT01A with ADSL's values; the parser says so as an
+## INFO, and the bundle should show the form it recommends. Note this only
+## works because those domains DO carry TRT01A -- ADCM does not, which is why
+## its listing still reads ADCM.TRTA (a listing has no denominator to split).
 ## ---------------------------------------------------------------------------
 
 BLACK <- "FF000000"
@@ -382,7 +392,7 @@ footnote("Table 14.1.2", 14, "Age is at informed consent.")
 banner("Table 14.3.1", "Table 14.3.1",
        "Overview of Treatment-Emergent Adverse Events")
 header_row("Table 14.3.1", "Category",
-           "[columns -> ADAE.TRT01A; source ADAE]")
+           "[columns -> ADSL.TRT01A; source ADAE]")
 data_row("Table 14.3.1", 5, "Any TEAE", "[ADAE.TRTEMFL = 'Y']")
 data_row("Table 14.3.1", 6, "Serious TEAE", "[ADAE.AESER = 'Y']")
 ## row 7 blank -- spacer
@@ -410,7 +420,7 @@ banner("Table 14.3.2", "Table 14.3.2",
        paste("Treatment-Emergent Adverse Events by System Organ Class",
              "and Preferred Term"))
 header_row("Table 14.3.2", "System Organ Class / Preferred Term",
-           "[columns -> ADAE.TRT01A; source ADAE]")
+           "[columns -> ADSL.TRT01A; source ADAE]")
 data_row("Table 14.3.2", 5, "Subjects with any TEAE",
          "[ADAE.TRTEMFL = 'Y']")
 ## row 6 blank -- spacer
@@ -430,7 +440,7 @@ footnote("Table 14.3.2", 10,
 ## subjects.
 banner("Table 14.2.1", "Table 14.2.1", "Study Drug Exposure")
 header_row("Table 14.2.1", "Statistic",
-           "[columns -> ADEX.TRT01A; source ADEX]")
+           "[columns -> ADSL.TRT01A; source ADEX]")
 data_row("Table 14.2.1", 5, "Duration of exposure (days)",
          "[ADEX.AVAL WHERE ADEX.PARAMCD='TDURD']", value = NULL)
 data_row("Table 14.2.1", 6, "Mean (SD)", value = "xx.x (xx.xx)")

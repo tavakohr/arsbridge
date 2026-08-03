@@ -20,6 +20,12 @@
   design, and a treatment mapping the engine guessed is not one anybody can
   review.
 
+  The bundled example follows its own advice: every table's column axis now
+  names `ADSL.TRT01A`, whatever domain the table's data comes from, so the
+  reference shell shows the recommended form and parses without a finding. The
+  numbers are unchanged -- ADAE and ADEX carry `TRT01A` with ADSL's values,
+  which is exactly why that case was an INFO and not a WARN.
+
 * **A column axis on a domain variable no longer computes every percentage out
   of the whole study.** Percentages divide by a population frame -- ADSL under
   the analysis set's filter -- and {cards} splits that frame by the analysis'
