@@ -72,3 +72,59 @@ test_that("an out-of-spec grouping proposal is ignored with a WARN", {
                  out$column_tree$nodes)[[1]]
   expect_identical(mild$grouping_ref, "ADSL.SEVGR1N")
 })
+
+## ---------------------------------------------------------------------------
+## What the shell already said
+## ---------------------------------------------------------------------------
+
+.ech_plain_section <- function(tlf_type = "TABLE", tlf_number = "T-14-1-1",
+                               title = "Demographics", column_annotation = NULL) {
+  sec <- .new_section(tlf_number = tlf_number, tlf_type = tlf_type)
+  sec$title <- title
+  sec$stub_rows <- list(list(label = "Age (years)", annotation = "ADSL.AGE",
+                             has_annot = TRUE))
+  sec$column_annotation <- column_annotation
+  sec
+}
+
+test_that("a shell that states its column axis is not 'missing a grouping variable'", {
+  ## The axis was read AFTER the fallback chain, so every deterministic run
+  ## warned about a state the next line filled from the shell -- six WARNs on
+  ## the bundled example, one per table.
+  diag_reset()
+  out <- suppressMessages(suppressWarnings(enrich_with_llm(
+    .ech_plain_section(column_annotation = "ADSL.TRT01A"),
+    spec_lookup = .ech_lookup, offline = TRUE)))
+  expect_equal(out$by_variable, "TRT01A")
+  expect_false(any(grepl("No grouping variable identified", diag_records()$problem)))
+  ## One grouping, not the authored one plus a fallback beside it.
+  expect_length(out$groupings, 1L)
+  diag_reset()
+})
+
+test_that("a shell that states nothing still gets the fallback, and says so", {
+  ## The warning is not gone -- it now fires only when it is true.
+  lookup <- c(.ech_lookup, list(ADSL.TRT01A = list()))
+  diag_reset()
+  out <- suppressMessages(suppressWarnings(enrich_with_llm(
+    .ech_plain_section(), spec_lookup = lookup, offline = TRUE)))
+  expect_true(any(grepl("No grouping variable identified", diag_records()$problem)))
+  expect_equal(out$by_variable, "TRT01A")
+  diag_reset()
+})
+
+test_that("a listing is a listing whatever its title says", {
+  ## "Listing of Adverse Events" matched the AE keyword and came back
+  ## AE_FREQUENCY, which put the output through the grouping fallback and
+  ## warned that a listing had no treatment columns. The output number is
+  ## parser truth; a classifier does not overrule it.
+  diag_reset()
+  out <- suppressMessages(suppressWarnings(enrich_with_llm(
+    .ech_plain_section(tlf_type = "LISTING", tlf_number = "L-16-2-7-1",
+                       title = "Listing of Adverse Events"),
+    spec_lookup = .ech_lookup, offline = TRUE)))
+  expect_equal(out$analysis_type, "LISTING")
+  expect_length(out$groupings, 0L)
+  expect_false(any(grepl("No grouping variable identified", diag_records()$problem)))
+  diag_reset()
+})

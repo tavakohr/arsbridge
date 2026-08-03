@@ -146,7 +146,15 @@ parse_where_clause <- function(expr) {
     rest <- sub(paste0(.ADAM_DS, "\\.", .ADAM_VAR), "", s, perl = TRUE)
     nzchar(trimws(rest))
   }
+  ## A clause that is a DIRECTIVE, not a condition. "once/subject ADAE.AOCCIFL"
+  ## names a variable and carries text around it, so it looks like an attempted
+  ## filter -- but it has its own consumer (.once_per_subject_var(), which
+  ## routes the row to the distinct-subject method) and nothing was dropped.
+  ## Warning about it told the author to fix an annotation the package
+  ## understood perfectly.
+  is_directive <- function(s) !is.null(.once_per_subject_var(s))
   for (u in unparsed) {
+    if (is_directive(u)) next
     if (grepl(paste0(.ADAM_DS, "\\.", .ADAM_VAR), u, perl = TRUE) && is_attempt(u)) {
       diag_add(
         stage = "where_clause", severity = "WARN",

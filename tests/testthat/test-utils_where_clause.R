@@ -116,3 +116,23 @@ test_that("!= is not mangled by the ==-normalisation", {
   wc <- parse_where_clause("ADSL.DCSREAS not missing")
   expect_equal(wc$condition$comparator, "NE")
 })
+
+test_that("a directive clause is not reported as a failed condition", {
+  ## "once/subject ADAE.AOCCIFL" names a variable and carries text around it,
+  ## so it has the shape of an attempted filter -- but it is a directive with
+  ## its own consumer (.once_per_subject_var(), which routes the row to the
+  ## distinct-subject method). Nothing is dropped, so nothing is reported:
+  ## the bundled example raised two of these against an annotation the
+  ## package understood perfectly.
+  diag_reset()
+  parse_where_clause("ADAE.ASEV; once/subject ADAE.AOCCIFL")
+  recs <- diag_records()
+  expect_false(any(recs$stage == "where_clause"))
+
+  ## A genuinely unparseable condition still is.
+  diag_reset()
+  parse_where_clause("ADSL.AGE like 'x'")
+  recs <- diag_records()
+  expect_true(any(recs$stage == "where_clause" & recs$severity == "WARN"))
+  diag_reset()
+})
