@@ -1,5 +1,16 @@
 # arsbridge (development version)
 
+* **The bundled example's AE table counts treatment-emergent events, as its
+  title says.** Its `<System Organ Class>` / `<Preferred Term>` rows carried no
+  filter, so the block counted every adverse event under a table headed
+  "Treatment-Emergent Adverse Events" -- 12 Placebo subjects with a nervous
+  system event where 8 had a treatment-emergent one. Nothing propagates the
+  "Subjects with any TEAE" row's filter down a block, so each token row now
+  carries `WHERE ADAE.TRTEMFL='Y'` itself, and the bundle test checks the
+  numbers against the raw dataset rather than against the pipeline that
+  produced them. An authoring fix, not an engine one: the shell said something
+  it did not mean.
+
 * **A filled Excel shell now expands a nested block into the hierarchy it
   stands for.** `<System Organ Class>` over `<Preferred Term>` is a pattern,
   not two rows: it means "repeat this per system organ class". The fill writer

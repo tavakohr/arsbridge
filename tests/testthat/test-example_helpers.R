@@ -131,6 +131,26 @@ test_that("the bundle demos the whole chain offline: build, execute, fill", {
   expect_gt(length(filled_lines), 20)
   expect_false(any(grepl("^<", filled_lines)))
 
+  ## The block counts TREATMENT-EMERGENT events, as its title says. Nothing
+  ## propagates the "Subjects with any TEAE" row's filter down the block, so
+  ## each token row carries it; without it the table counts every adverse
+  ## event under a treatment-emergent title. Nervous system disorders is the
+  ## row that shows the difference: 12/22/25 subjects over all AEs, 8/22/23
+  ## over treatment-emergent ones. The oracle is the raw dataset.
+  adae <- haven::read_xpt(file.path(adam_dir, "adae.xpt"))
+  teae <- adae[adae$TRTEMFL == "Y", ]
+  soc_row <- nested$row[nested$col == 1 &
+                          nested$text == "NERVOUS SYSTEM DISORDERS"]
+  expect_length(soc_row, 1L)
+  for (arm in list(c("B", "Placebo"), c("C", "Xanomeline Low Dose"),
+                   c("D", "Xanomeline High Dose"))) {
+    subjects <- unique(teae$USUBJID[teae$AESOC == "NERVOUS SYSTEM DISORDERS" &
+                                      teae$TRT01A == arm[[2]]])
+    expect_match(
+      nested$text[nested$ref == paste0(arm[[1]], soc_row)],
+      paste0("^", length(subjects), " \\("), info = arm[[2]])
+  }
+
   ard <- readRDS(payload$artifacts$ard_rds)
   tf <- suppressMessages(suppressWarnings(
     ars_to_tfrmt(payload$artifacts$ars_json, ard, "T_14_3_2")))
