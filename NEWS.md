@@ -1,5 +1,31 @@
 # arsbridge (development version)
 
+* **A shell whose column axis names a domain variable is told so while it is
+  still a shell.** Percentages divide by ADSL, and {cards} splits that frame by
+  the analysis' own column variable -- so `[columns -> ADCM.TRTA]` against an
+  ADSL that carries `TRT01A` cannot be split at all, and every percentage in
+  the table comes out of the whole study. The parser now checks the resolved
+  column axis against the ADaM spec and reports it:
+
+  * **WARN** when the spec has no ADSL variable of that name -- the numbers
+    will be wrong, and the message says what they would be out of and to point
+    the axis at `ADSL.TRT01A`.
+  * **INFO** when ADSL carries the same name (`ADAE.TRT01A`): the numbers are
+    right, but the columns and their denominators then come from two datasets,
+    which is worth saying and not worth warning about.
+
+  Reported at parse time because it is a property of the shell and the author
+  is who can fix it. `ars_to_ard()` still refuses to repair it by inference:
+  `TRTA` and `TRT01A` are not interchangeable in a crossover or multi-period
+  design, and a treatment mapping the engine guessed is not one anybody can
+  review.
+
+  The bundled example follows its own advice: every table's column axis now
+  names `ADSL.TRT01A`, whatever domain the table's data comes from, so the
+  reference shell shows the recommended form and parses without a finding. The
+  numbers are unchanged -- ADAE and ADEX carry `TRT01A` with ADSL's values,
+  which is exactly why that case was an INFO and not a WARN.
+
 * **A column axis on a domain variable no longer computes every percentage out
   of the whole study.** Percentages divide by a population frame -- ADSL under
   the analysis set's filter -- and {cards} splits that frame by the analysis'
