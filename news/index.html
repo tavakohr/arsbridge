@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9066</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9067</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -42,6 +42,11 @@
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="development version" id="arsbridge-development-version">arsbridge (development version)<a class="anchor" aria-label="anchor" href="#arsbridge-development-version"></a></h2>
 <ul><li>
+<p><strong>A filled Excel shell now expands a nested block into the hierarchy it stands for.</strong> <code>&lt;System Organ Class&gt;</code> over <code>&lt;Preferred Term&gt;</code> is a pattern, not two rows: it means “repeat this per system organ class”. The fill writer had no way to say that – only a listing could change a sheet’s shape – so the two token rows came back declined, and the bundled example’s AE table shipped with placeholders where the study’s classes and terms belong. The pair now expands: each class, then its own terms underneath, each line written from its own authored row so fonts, indents and the decimals the placeholder states all carry down the block. Rows below the block, footnotes and their merges included, move down with it.</p>
+<p>The order is the one thing that could quietly go wrong: the Word renderer and the Excel filler now present the same block, and two orderings would mean one study with two answers to “which class comes first”. So the ordering is one function both call (<code>.nested_level_order()</code>), and the bundled example asserts the filled sheet and the rendered table agree row for row – 265 lines, in the same order.</p>
+<p>The example study now fills completely: 856 cells, nothing pending.</p>
+</li>
+<li>
 <p><strong>A treatment arm with no qualifying subject now reads <code>0 (0.0)</code>, not a placeholder.</strong> An analysis’s data subset is applied before <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> runs, so an arm the filter empties is not in the frame the executor sees – <code>ard_categorical()</code> can only report the <code>by</code> levels it is given, and the arm ended up with no row in the ARD at all. Everything downstream trusts the ARD, so the filled shell left the cell showing <code>xx (xx.x)</code>: a blank where the answer is zero, and a blank in a clinical table reads as missing. “No Placebo subject had a serious adverse event” is a finding; “we did not look” is not.</p>
 <p>For counting methods the ARD is now completed after execution – one row per statistic the other arms report, with <code>n = 0</code>, <code>p = 0</code> and that arm’s own denominator, counted from the same population the percentages use. It happens in <code><a href="../reference/ars_to_ard.html">ars_to_ard()</a></code>, so the fill writer, the renderer and an exported ARD all get the same complete answer, and a completed row is stamped <code>computed</code> like any other because it is. A continuous summary is never completed this way: the mean of nothing is nothing, and a column axis declared by annotation completes from its declared labels rather than the raw codes underneath them.</p>
 <p>In the bundled example this closes the last fillable gap: Table 14.3.1’s Serious TEAE row reads <code>0 (0.0)</code> for Placebo, and the run now fills 61 cells with 6 pending – all six being the <code>&lt;System Organ Class&gt;</code> / <code>&lt;Preferred Term&gt;</code> block, which needs row expansion.</p>

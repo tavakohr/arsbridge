@@ -24,7 +24,7 @@
 
     <a class="navbar-brand me-2" href="index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9066</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9067</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -559,12 +559,13 @@
 <li>
 <strong>The placeholder is the format.</strong> <code>xx.x (xx.xx)</code> writes one decimal then two, and keeps the parentheses. Nothing else in the pipeline carries that decision, because the shell’s author already made it.</li>
 <li>
-<strong>An unfillable cell keeps its placeholder</strong> and appears in <code>res$diagnostics</code> with the reason — no result in the ARD, reserved for manual derivation, or a row that stands for a repeated block. An empty cell in a clinical table reads as a zero. Pass <code>keep_pending_placeholders = FALSE</code> to blank them instead, for a workbook going to someone who will complete it by hand. An arm with no qualifying subject is <em>not</em> one of these cases: it is filled with <code>0 (0.0)</code>, because that is the result — see the ARD’s zero-group completion above.</li>
+<strong>An unfillable cell keeps its placeholder</strong> and appears in <code>res$diagnostics</code> with the reason — no result in the ARD, or reserved for manual derivation. An empty cell in a clinical table reads as a zero. Pass <code>keep_pending_placeholders = FALSE</code> to blank them instead, for a workbook going to someone who will complete it by hand. An arm with no qualifying subject is <em>not</em> one of these cases: it is filled with <code>0 (0.0)</code>, because that is the result — see the ARD’s zero-group completion above.</li>
 <li>
 <strong><code>strip_annotations = FALSE</code></strong> keeps the red annotations next to the numbers, which is useful while reviewing and wrong for a deliverable.</li>
 </ul>
 <p>A column header written <code>Placebo (N=XX)</code> is answered too: each result column’s header takes the denominator its own percentages are computed against, so <code>Placebo (N=86)</code> can be checked against the cells beneath it. A column whose analyses disagree about their denominator — and one showing no percentage at all — keeps the placeholder rather than stating a population the table cannot be read against.</p>
 <p>A listing is filled differently from a table, because its shell states <strong>one</strong> template row standing for however many rows the data has. Filling it inserts rows — and everything below, including a footnote and its merge, moves down to make room. The rows written inherit the template row’s own fonts and alignment.</p>
+<p>A nested block — <code>&lt;System Organ Class&gt;</code> over <code>&lt;Preferred Term&gt;</code> — expands the same way: the authored pair becomes one line per system organ class followed by its own preferred terms, each line written from its own authored row, so a term keeps the indent the author gave it. Classes and terms are ordered by descending incidence (an authored <code>sort: alphabetical</code> or <code>sort: desc-freq(&lt;column&gt;)</code> overrides), through the same function the Word renderer uses — a study rendered and the same study filled cannot disagree about which class comes first.</p>
 <p>A figure sheet has no analyses at all: the shell states the plot as prose (<code>Y axis -&gt; mean of ADVS.AVAL</code>, <code>Series (colour) -&gt; ADVS.TRTA</code>, <code>Filter -&gt; ADVS.PARAMCD='PULSE'</code>). <code><a href="reference/ars_fill_shell.html">ars_fill_shell()</a></code> computes that series from the datasets and writes it as a data block — one row per series and x-value, with <code>n</code>, the mean and its standard error — where the annotation block was. The numbers go in as numbers, not rounded text, because a programmer picks them up to draw the chart. The chart object itself stays whatever the author made it; drawing into someone else’s workbook is a different job from filling one in.</p>
 <p>Both need <code>adam_dir</code>, since a listing’s rows <em>are</em> the subject-level data and a figure’s series is computed from it. Tables need only the ARD.</p>
 <hr>

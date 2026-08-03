@@ -580,13 +580,12 @@ Three things are deliberate:
   then two, and keeps the parentheses. Nothing else in the pipeline
   carries that decision, because the shell’s author already made it.
 - **An unfillable cell keeps its placeholder** and appears in
-  `res$diagnostics` with the reason — no result in the ARD, reserved for
-  manual derivation, or a row that stands for a repeated block. An empty
-  cell in a clinical table reads as a zero. Pass
-  `keep_pending_placeholders = FALSE` to blank them instead, for a
-  workbook going to someone who will complete it by hand. An arm with no
-  qualifying subject is *not* one of these cases: it is filled with
-  `0 (0.0)`, because that is the result — see the ARD’s zero-group
+  `res$diagnostics` with the reason — no result in the ARD, or reserved
+  for manual derivation. An empty cell in a clinical table reads as a
+  zero. Pass `keep_pending_placeholders = FALSE` to blank them instead,
+  for a workbook going to someone who will complete it by hand. An arm
+  with no qualifying subject is *not* one of these cases: it is filled
+  with `0 (0.0)`, because that is the result — see the ARD’s zero-group
   completion above.
 - **`strip_annotations = FALSE`** keeps the red annotations next to the
   numbers, which is useful while reviewing and wrong for a deliverable.
@@ -603,6 +602,15 @@ A listing is filled differently from a table, because its shell states
 Filling it inserts rows — and everything below, including a footnote and
 its merge, moves down to make room. The rows written inherit the
 template row’s own fonts and alignment.
+
+A nested block — `<System Organ Class>` over `<Preferred Term>` —
+expands the same way: the authored pair becomes one line per system
+organ class followed by its own preferred terms, each line written from
+its own authored row, so a term keeps the indent the author gave it.
+Classes and terms are ordered by descending incidence (an authored
+`sort: alphabetical` or `sort: desc-freq(<column>)` overrides), through
+the same function the Word renderer uses — a study rendered and the same
+study filled cannot disagree about which class comes first.
 
 A figure sheet has no analyses at all: the shell states the plot as
 prose (`Y axis -> mean of ADVS.AVAL`, `Series (colour) -> ADVS.TRTA`,
