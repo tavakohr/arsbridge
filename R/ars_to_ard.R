@@ -425,6 +425,42 @@
   cards::bind_ard(!!!rows)
 }
 
+#' The group levels an ARD frame carries, as plain text.
+#'
+#' `group1_level` is a LIST column in a cards ARD -- one element per row -- so
+#' it needs flattening before it can be compared with a label.
+#' @noRd
+.ard_group_levels <- function(ard) {
+  if (is.null(ard) || !"group1_level" %in% names(ard)) return(character())
+  levels <- vapply(ard[["group1_level"]], function(x) {
+    value <- as.character(x)
+    if (length(value) == 0) NA_character_ else value[[1]]
+  }, character(1))
+  unique(levels[!is.na(levels)])
+}
+
+#' Did the overall column the metadata promised actually produce rows?
+#'
+#' Guidance rule 2. `includeTotal` says a Total column will be computed; this
+#' is the only place that checks it was. Silent otherwise -- an analysis with
+#' no overall column has nothing to deliver.
+#' @noRd
+.check_total_delivered <- function(ard, res, analysis_id) {
+  label <- res$total_label %||% ""
+  if (!isTRUE(res$include_total) || !nzchar(label)) return(invisible(NULL))
+  if (label %in% .ard_group_levels(ard)) return(invisible(NULL))
+
+  .diag_gap(
+    stage = "execute_ard", severity = "WARN", input = INPUT_ARS,
+    problem = sprintf(
+      "Analysis %s declares an overall column (%s) but produced no result for it.",
+      analysis_id, label),
+    why = "The column is displayed, so its cells stay on their placeholder while the columns beside them fill.",
+    fix = "Check the Total header's annotation -- a scope that matches no subjects yields no rows.",
+    location = analysis_id)
+  invisible(NULL)
+}
+
 #' Execute ARS JSON and return an ARD object using 'cards'
 #'
 #' Reads a CDISC ARS JSON specification and executes the analyses defined within
@@ -1158,6 +1194,14 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
                           "script and fill the reserved ARD rows -- see ",
                           "ars_manual_worklist()"))
       }
+
+      ## Guidance rule 2: a Total the metadata PROMISED must be a Total the
+      ## ARD actually carries. The promise is kept in the reporting event
+      ## (includeTotal) and the delivery is one group level in this frame;
+      ## nothing else compares the two, so an overall pass that silently
+      ## produced nothing reaches the workbook as a column of placeholders
+      ## with every column beside it full.
+      .check_total_delivered(ard, res, analysis_id)
 
       ard_list[[length(ard_list) + 1L]] <- ard
     }

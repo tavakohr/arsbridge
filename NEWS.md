@@ -1,5 +1,28 @@
 # arsbridge (development version)
 
+* **A promised Total must arrive, and a displayed column must receive
+  something.** The remaining two checks from the guidance document, both aimed
+  at the same field failure from the other end: three cohort columns full of
+  numbers, a Total column of placeholders, and a build that reported success.
+
+  * **Rule 2, at execution.** `includeTotal` says an overall column *will* be
+    computed. `ars_to_ard()` now checks it was: an analysis that declares one
+    and produces no result for it is a WARN naming the analysis and the
+    column. Nothing else compared the promise with the delivery, so an overall
+    pass that silently produced nothing reached the workbook unremarked.
+  * **Rule 6, at fill.** A display column whose every cell kept its
+    placeholder *while other columns filled* is a WARN naming the column and
+    how many did fill. The per-cell census already recorded each unfilled
+    cell, but a reader had to notice that all of one column's cells happened
+    to share a reason -- and a whole lost column is a different finding from a
+    scattering of pending cells.
+
+  Both stay quiet where they should. A partly filled column ("58.0 (xx.xx)")
+  is a column that received results, not a lost one. A table where *nothing*
+  filled has a different problem, already reported, and repeating it once per
+  column would bury it. A column the cell map never reached is not a fill
+  failure. The bundled example still runs with zero WARN and zero FAIL.
+
 * **A Total column the shell displays must be a Total column the metadata can
   produce.** The delivered workbook that prompted the previous entry had
   numbers in every cohort column, placeholders in every Total cell, and *not

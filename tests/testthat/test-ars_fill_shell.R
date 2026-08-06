@@ -1137,3 +1137,67 @@ test_that("an index built by hand is still answered, just more slowly", {
   expect_equal(.ard_value(by_hand, "AN1", "Drug 10 mg Week 12",
                           NA_character_, "n")$value, 7)
 })
+
+## ---------------------------------------------------------------------------
+## A whole display column that received nothing
+##
+## Guidance rule 6. The per-cell census already records every unfilled cell,
+## but a reader has to notice that all of one column's cells happen to share a
+## reason -- and the field failure was exactly that shape: three cohort
+## columns full of numbers, a Total column of placeholders, and nothing
+## anywhere saying a whole column had been lost.
+## ---------------------------------------------------------------------------
+
+.ccov_columns <- list(list(col = 2L, order = 1L, label = "Cohort A"),
+                      list(col = 3L, order = 2L, label = "Cohort B"),
+                      list(col = 4L, order = 3L, label = "Total"))
+
+.ccov_records <- function(total_status) {
+  list(
+    list(col = 2L, ref = "B5", status = "filled"),
+    list(col = 3L, ref = "C5", status = "filled"),
+    list(col = 4L, ref = "D5", status = total_status),
+    list(col = 4L, ref = "D6", status = total_status)
+  )
+}
+
+test_that("a display column that filled nothing while its siblings did is reported", {
+  diag_reset()
+  .check_column_coverage("T_14_1_1", .ccov_columns, .ccov_records("pending"),
+                         "Table 14.1.1")
+
+  found <- diag_records()
+  found <- found[found$severity == "WARN", , drop = FALSE]
+  expect_equal(nrow(found), 1L)
+  expect_match(found$problem[[1]], "Total", fixed = TRUE)
+  expect_match(found$problem[[1]], "T_14_1_1", fixed = TRUE)
+  ## It says how many columns DID fill, which is what makes a lost column
+  ## legible rather than looking like a table that computed nothing.
+  expect_match(found$problem[[1]], "2 other column", fixed = TRUE)
+})
+
+test_that("a partly filled column is a filled column", {
+  ## "58.0 (xx.xx)" is a column that received results. It has its own
+  ## per-cell reason; it is not a lost column.
+  diag_reset()
+  .check_column_coverage("T_14_1_1", .ccov_columns, .ccov_records("partial"),
+                         "Table 14.1.1")
+  expect_equal(nrow(diag_records()), 0L)
+})
+
+test_that("a table where nothing filled at all is not reported column by column", {
+  ## A different problem, reported elsewhere. Repeating it once per column
+  ## would bury the finding that matters.
+  diag_reset()
+  none <- lapply(.ccov_records("pending"), function(r) {
+    r$status <- "pending"; r
+  })
+  .check_column_coverage("T_14_1_1", .ccov_columns, none, "Table 14.1.1")
+  expect_equal(nrow(diag_records()), 0L)
+
+  ## And a column the map never reached is not a fill failure.
+  diag_reset()
+  unmapped <- .ccov_records("filled")[1:2]
+  .check_column_coverage("T_14_1_1", .ccov_columns, unmapped, "Table 14.1.1")
+  expect_equal(nrow(diag_records()), 0L)
+})

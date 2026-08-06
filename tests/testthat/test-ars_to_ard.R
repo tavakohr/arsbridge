@@ -669,3 +669,55 @@ test_that("the emitted script decides the join the same way, from the spec alone
                        warn = FALSE)
   expect_false(any(grepl("left_join(.pop", script2, fixed = TRUE)))
 })
+
+## ---------------------------------------------------------------------------
+## A promised Total that never arrived
+##
+## Guidance rule 2. includeTotal says a Total column WILL be computed; this is
+## the only place that checks it was. Without it an overall pass that silently
+## produced nothing reaches the workbook as a column of placeholders with
+## every column beside it full -- and the build reports success.
+## ---------------------------------------------------------------------------
+
+.tot_ard <- function(levels) {
+  data.frame(analysis_id = rep("AN1", length(levels)),
+             stat_name   = rep("n", length(levels)),
+             stringsAsFactors = FALSE) |>
+    (\(d) { d$group1_level <- as.list(levels); d })()
+}
+
+test_that("a declared overall column that produced no rows is reported", {
+  diag_reset()
+  .check_total_delivered(.tot_ard(c("Cohort A", "Cohort B")),
+                         list(include_total = TRUE, total_label = "Total"),
+                         "AN_T_14_1_1_001")
+
+  found <- diag_records()
+  expect_equal(nrow(found), 1L)
+  expect_equal(found$severity[[1]], "WARN")
+  expect_match(found$problem[[1]], "Total", fixed = TRUE)
+  expect_match(found$problem[[1]], "AN_T_14_1_1_001", fixed = TRUE)
+})
+
+test_that("a Total that did arrive, and an analysis with none, are both silent", {
+  diag_reset()
+  .check_total_delivered(.tot_ard(c("Cohort A", "Cohort B", "Total")),
+                         list(include_total = TRUE, total_label = "Total"),
+                         "AN1")
+  ## No overall column declared: nothing was promised, nothing to check.
+  .check_total_delivered(.tot_ard(c("Cohort A")),
+                         list(include_total = FALSE, total_label = ""), "AN2")
+  ## Declared but unnamed -- the label is what ties an ARD row to a display
+  ## column, so without one there is nothing to look for.
+  .check_total_delivered(.tot_ard(c("Cohort A")),
+                         list(include_total = TRUE, total_label = ""), "AN3")
+  expect_equal(nrow(diag_records()), 0L)
+})
+
+test_that("group levels flatten out of the ARD's list column", {
+  ## group1_level is a LIST column in a cards ARD; comparing it to a label
+  ## without flattening silently never matches.
+  expect_equal(.ard_group_levels(.tot_ard(c("A", "B", "A"))), c("A", "B"))
+  expect_equal(.ard_group_levels(NULL), character())
+  expect_equal(.ard_group_levels(data.frame(x = 1)), character())
+})
