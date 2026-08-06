@@ -1,5 +1,29 @@
 # arsbridge (development version)
 
+* **A build in the workflow app can always be left.** The same field run
+  reported the second half of the problem: a `supplement.json` was dropped
+  into the project, the Build panel correctly flipped its mode line to
+  *supplement* -- and there was no way to build with it, because the button
+  was a disabled "Building..." that never came back.
+
+  `running` had exactly one exit: the poller watching the worker process die.
+  A build that outlived the user's patience had no way out, and a poll that
+  threw was worse -- a Shiny observer that throws is destroyed, taking the
+  only thing that would ever clear the flag with it, for the rest of the
+  session.
+
+  * A **Cancel** button sits beside "Building..." for the whole of a
+    background build. It kills the worker and its children and hands the
+    panel straight back, so the next build -- with the supplement, if there
+    is one -- is available immediately.
+  * The poller no longer dies on a failed poll. `readLines()` on a file the
+    worker is writing can fail; that now costs one skipped tick instead of
+    the build panel.
+  * `running` with no worker to wait for self-heals rather than sitting
+    there. It should be unreachable; it was also unrecoverable.
+  * A worker that dies without returning a result now names its run log, so
+    "callr subprocess failed" comes with somewhere to look.
+
 * **The workflow app's progress bar stops going quiet before the run ends.**
   A field run reported it stuck on `Filling the workbook -- T_14_1_5 (4/4)`,
   full bar, nothing moving. Nothing was wrong with the build: the ticks only
