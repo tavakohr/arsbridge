@@ -20,6 +20,15 @@ skip_if_not_installed("DT")
   arsbridge:::.ars_workflow_app(project_dir)
 }
 
+## Step 1's markup. A shinyApp() keeps no handle on its UI, so the panel is
+## built directly -- which is why it is its own function.
+.wfa_panel_html <- function(project_dir = NULL,
+                            pickers = arsbridge:::.workflow_pickers_available()) {
+  panel <- arsbridge:::.workflow_project_panel(
+    project_dir, arsbridge:::.workflow_read_state(project_dir %||% ""), pickers)
+  paste(as.character(panel), collapse = "\n")
+}
+
 ## Builds run in-process here. testServer drives a virtual clock, so the
 ## background poller would never fire and the test would assert on a run that
 ## has not finished -- it would be testing the harness, not the app.
@@ -303,6 +312,103 @@ test_that("the panel says how long the build has been going, and when it went qu
 
   ## No build in flight, nothing to say.
   expect_null(arsbridge:::.workflow_liveness_ui(info, started = NULL, now = now))
+})
+
+## ---------------------------------------------------------------------------
+## Step 1 arrives filled in
+## ---------------------------------------------------------------------------
+
+test_that("reopening a project brings its paths back, and says that it did", {
+  ## The complaint: ars_workflow() asked for everything again, with every box
+  ## empty, even when the project it had just been used on was right there.
+  td <- withr::local_tempdir()
+  project <- file.path(td, "study")
+  inputs <- .wfa_inputs()
+  arsbridge:::.workflow_init(project, inputs$shell, inputs$spec,
+                             study_id = "APX-DRM-301")
+
+  shiny::testServer(.wfa_server(project), {
+    session$flushReact()
+    html <- as.character(output$project_resumed$html)
+    expect_match(html, "Resuming")
+    expect_match(html, arsbridge:::.WORKFLOW_STATE_FILE, fixed = TRUE)
+  })
+
+  ## The values themselves come from the panel, which is built from the
+  ## state file rather than from anything the session remembers.
+  panel <- .wfa_panel_html(project)
+  expect_match(panel, basename(inputs$shell), fixed = TRUE)
+  expect_match(panel, basename(inputs$spec), fixed = TRUE)
+  expect_match(panel, "APX-DRM-301", fixed = TRUE)
+})
+
+test_that("a first run has nothing to resume and says nothing", {
+  shiny::testServer(.wfa_server(NULL), {
+    session$flushReact()
+    expect_null(output$project_resumed)
+  })
+})
+
+test_that("switching to a remembered project repopulates every field", {
+  td <- withr::local_tempdir()
+  store <- withr::local_tempfile(fileext = ".json")
+  withr::local_options(list(arsbridge.recent_projects = store))
+
+  inputs <- .wfa_inputs()
+  other <- file.path(td, "other_study")
+  arsbridge:::.workflow_init(other, inputs$shell, inputs$spec,
+                             study_id = "OTHER-001")
+  arsbridge:::.workflow_remember_project(other)
+
+  current <- file.path(td, "current")
+  arsbridge:::.workflow_init(current, inputs$shell, inputs$spec)
+
+  shiny::testServer(.wfa_server(current), {
+    session$flushReact()
+    ## The other project is on offer; the one already open is not.
+    picker <- as.character(output$recent_projects$html)
+    expect_match(picker, normalizePath(other), fixed = TRUE)
+
+    session$setInputs(recent_project = normalizePath(other))
+    expect_equal(state$project_dir(), normalizePath(other))
+    expect_equal(meta()$study_id, "OTHER-001")
+  })
+})
+
+test_that("a remembered project that has since been emptied is refused, not opened", {
+  td <- withr::local_tempdir()
+  store <- withr::local_tempfile(fileext = ".json")
+  withr::local_options(list(arsbridge.recent_projects = store))
+  inputs <- .wfa_inputs()
+  project <- file.path(td, "study")
+  arsbridge:::.workflow_init(project, inputs$shell, inputs$spec)
+
+  shiny::testServer(.wfa_server(project), {
+    gone <- file.path(td, "vanished")
+    dir.create(gone)
+    session$setInputs(recent_project = gone)
+    ## The app stays where it was rather than switching to nothing.
+    expect_equal(state$project_dir(), project)
+  })
+})
+
+test_that("the setup panel offers a browser when it can", {
+  skip_if_not_installed("shinyFiles")
+  panel <- .wfa_panel_html(NULL, pickers = TRUE)
+  for (id in c("pick_project_dir", "pick_shell", "pick_spec",
+               "pick_adam_dir")) {
+    expect_match(panel, id, fixed = TRUE)
+  }
+})
+
+test_that("without shinyFiles the panel still opens, and says what would help", {
+  ## The app must never need a Suggests in order to open: the fields are what
+  ## they always were, a text box you type into.
+  panel <- .wfa_panel_html(NULL, pickers = FALSE)
+  expect_match(panel, "shinyFiles", fixed = TRUE)
+  expect_no_match(panel, "pick_shell", fixed = TRUE)
+  ## And either way the text inputs remain the one place a path lives.
+  expect_match(panel, "shell_path", fixed = TRUE)
 })
 
 ## ---------------------------------------------------------------------------

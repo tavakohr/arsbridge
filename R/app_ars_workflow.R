@@ -24,7 +24,9 @@
 #' 1. **Project setup** -- pick a project folder and name the annotated shell
 #'    (`.docx` or `.xlsx`), the ADaM spec (`.xlsx`/`.xml`), and a study id. The
 #'    folder gets a fixed layout (`copilot/`, `ars/`) and a
-#'    small `arsbridge_project.json` state file.
+#'    small `arsbridge_project.json` state file. With `shinyFiles` installed
+#'    each path comes with a Browse button; without it they are text fields,
+#'    as before.
 #' 2. **Instruction files** -- writes the two-phase Copilot instructions and
 #'    the supplement JSON schema into `copilot/` (see
 #'    [ars_copilot_instructions()]).
@@ -48,8 +50,13 @@
 #' exactly where the files stand. Steps 3 and 4 are skippable -- without a
 #' supplement the build runs in deterministic mode.
 #'
-#' @param project_dir Path to the project folder. `NULL` (default) starts on
-#'   the project-setup step; an existing project resumes.
+#' @param project_dir Path to the project folder. `NULL` (default) works out
+#'   which project you meant: the working directory if you are standing in a
+#'   project, otherwise the last project opened. Only a genuine first run
+#'   starts on an empty setup form. Projects opened before are also offered in
+#'   a dropdown, so switching between studies does not mean retyping four
+#'   paths; that list is kept in `tools::R_user_dir("arsbridge", "config")`
+#'   and holds folder paths and nothing else.
 #'
 #' @return Invisibly, the project directory.
 #'
@@ -63,8 +70,12 @@
 ars_workflow <- function(project_dir = NULL) {
   rlang::check_installed(c("shiny", "bslib", "DT"),
                          reason = "to open the arsbridge workflow")
+  ## No argument does not mean "start from nothing": if you are standing in a
+  ## project, or opened one last time, that is the one you meant.
+  project_dir <- .workflow_resolve_project(project_dir)
   if (!is.null(project_dir) && nzchar(project_dir) && dir.exists(project_dir)) {
     project_dir <- normalizePath(project_dir)
+    .workflow_remember_project(project_dir)
   }
 
   repeat {
@@ -422,6 +433,102 @@ ars_workflow <- function(project_dir = NULL) {
   }
 }
 
+#' Can this session offer a file browser?
+#'
+#' shinyFiles is a Suggests. Without it every path field is what it always
+#' was, a text box you type into -- the app must not need a package it does
+#' not depend on in order to open.
+#' @noRd
+.workflow_pickers_available <- function() {
+  requireNamespace("shinyFiles", quietly = TRUE)
+}
+
+#' The roots a picker may browse from.
+#'
+#' Home first, because it is where a study folder almost always is, then
+#' whatever the platform calls its volumes -- drive letters on Windows,
+#' mounted volumes on macOS. `getVolumes()` returns a FUNCTION, hence the
+#' second pair of parentheses.
+#' @noRd
+.workflow_picker_roots <- function() {
+  volumes <- tryCatch(shinyFiles::getVolumes()(), error = function(e) NULL)
+  roots <- c(Home = path.expand("~"), volumes %||% character())
+  roots[!duplicated(names(roots))]
+}
+
+#' A path field, with a Browse button beside it when there is one.
+#' @noRd
+.workflow_path_field <- function(field, button = NULL) {
+  if (is.null(button)) return(field)
+  shiny::div(
+    class = "d-flex gap-2 align-items-end",
+    shiny::div(class = "flex-grow-1", field),
+    ## The margin matches the text input's, so the button sits on its
+    ## baseline rather than below it.
+    shiny::div(class = "mb-3", button))
+}
+
+#' Step 1, as a tag.
+#'
+#' Its own function because it is the one panel whose CONTENT is the thing
+#' being got right -- every field arrives carrying the project's recorded
+#' value, and each path field carries a Browse button when there is one to
+#' give it. A tag is testable; the panel inside a `shinyApp()` is not.
+#' @noRd
+.workflow_project_panel <- function(project_dir, initial_state, pickers) {
+  browse_dir <- function(id, title) {
+    if (!pickers) return(NULL)
+    shinyFiles::shinyDirButton(id, "Browse", title,
+                               class = "btn-outline-secondary btn-sm")
+  }
+  browse_file <- function(id, title) {
+    if (!pickers) return(NULL)
+    shinyFiles::shinyFilesButton(id, "Browse", title, multiple = FALSE,
+                                 class = "btn-outline-secondary btn-sm")
+  }
+
+  bslib::accordion_panel(
+    title = "1. Project setup", value = "panel_project",
+    shiny::uiOutput("badge_project"),
+    shiny::uiOutput("project_resumed"),
+    shiny::uiOutput("recent_projects"),
+    .workflow_path_field(
+      shiny::textInput("project_dir", "Project folder",
+                       value = project_dir %||% "", width = "100%"),
+      browse_dir("pick_project_dir", "Choose the project folder")),
+    .workflow_path_field(
+      shiny::textInput("shell_path", "Annotated TLF shell (.docx or .xlsx)",
+                       value = initial_state$shell_path %||% "",
+                       width = "100%"),
+      browse_file("pick_shell", "Choose the annotated TLF shell")),
+    .workflow_path_field(
+      shiny::textInput("spec_path", "ADaM specification (.xlsx / .xml)",
+                       value = initial_state$adam_spec_path %||% "",
+                       width = "100%"),
+      browse_file("pick_spec", "Choose the ADaM specification")),
+    .workflow_path_field(
+      shiny::textInput("adam_dir", "ADaM dataset folder (optional)",
+                       value = initial_state$adam_dir %||% "",
+                       width = "100%"),
+      browse_dir("pick_adam_dir", "Choose the ADaM dataset folder")),
+    shiny::textInput("study_id", "Study id",
+                     value = initial_state$study_id %||% "STUDY-001"),
+    shiny::actionButton("init_project", "Create / update project",
+                        class = "btn-primary btn-sm"),
+    shiny::div(class = "text-muted small mt-2",
+               "The folder gets supplement/ and ars/ subfolders plus ",
+               "arsbridge_project.json. Reopening the same folder ",
+               "resumes where the files say the work stands. Without an ",
+               "ADaM folder the reporting event is still built; the ",
+               "results and the filled workbook are not."),
+    if (!pickers) {
+      shiny::div(class = "text-muted small mt-1",
+                 "Install ", shiny::tags$code("shinyFiles"),
+                 " to browse for these paths instead of typing them.")
+    }
+  )
+}
+
 #' A copyable checklist of files to upload to the chat assistant.
 #' @noRd
 .workflow_upload_list <- function(title, paths) {
@@ -444,6 +551,12 @@ ars_workflow <- function(project_dir = NULL) {
   initial_status <- if (!is.null(initial_state)) {
     .workflow_status(project_dir)
   }
+  ## Decided once, at build time: the UI and the server must agree on whether
+  ## the picker inputs exist at all.
+  pickers <- .workflow_pickers_available()
+  ## What the app can offer to reopen, read before the session starts so the
+  ## list does not shift under a select input mid-use.
+  recent <- .workflow_recent_projects()
   first_open <- if (is.null(initial_status)) {
     "project"
   } else {
@@ -477,31 +590,7 @@ ars_workflow <- function(project_dir = NULL) {
       open = paste0("panel_", first_open),
       multiple = FALSE,
 
-      bslib::accordion_panel(
-        title = "1. Project setup", value = "panel_project",
-        shiny::uiOutput("badge_project"),
-        shiny::textInput("project_dir", "Project folder",
-                         value = project_dir %||% "", width = "100%"),
-        shiny::textInput("shell_path", "Annotated TLF shell (.docx or .xlsx)",
-                         value = initial_state$shell_path %||% "",
-                         width = "100%"),
-        shiny::textInput("spec_path", "ADaM specification (.xlsx / .xml)",
-                         value = initial_state$adam_spec_path %||% "",
-                         width = "100%"),
-        shiny::textInput("adam_dir", "ADaM dataset folder (optional)",
-                         value = initial_state$adam_dir %||% "",
-                         width = "100%"),
-        shiny::textInput("study_id", "Study id",
-                         value = initial_state$study_id %||% "STUDY-001"),
-        shiny::actionButton("init_project", "Create / update project",
-                            class = "btn-primary btn-sm"),
-        shiny::div(class = "text-muted small mt-2",
-                   "The folder gets supplement/ and ars/ subfolders plus ",
-                   "arsbridge_project.json. Reopening the same folder ",
-                   "resumes where the files say the work stands. Without an ",
-                   "ADaM folder the reporting event is still built; the ",
-                   "results and the filled workbook are not.")
-      ),
+      .workflow_project_panel(project_dir, initial_state, pickers),
 
       bslib::accordion_panel(
         title = "2. Build", value = "panel_build",
@@ -612,6 +701,95 @@ ars_workflow <- function(project_dir = NULL) {
     }
 
     ## --- step 1: project ------------------------------------------------
+    ##
+    ## The boxes below arrive filled whenever the app could work out which
+    ## project you meant. Saying so matters: a form that fills itself in and
+    ## does not explain why is a form you re-read every field of.
+    output$project_resumed <- shiny::renderUI({
+      if (is.null(initial_state)) return(NULL)
+      shiny::div(
+        class = "alert alert-info py-1 px-2 small",
+        "Resuming ", shiny::tags$code(project_dir),
+        " -- the paths below were read from its ",
+        shiny::tags$code(.WORKFLOW_STATE_FILE),
+        ". Change any of them and press Create / update project.")
+    })
+
+    output$recent_projects <- shiny::renderUI({
+      others <- setdiff(recent, project_dir %||% "")
+      if (length(others) == 0) return(NULL)
+      shiny::selectInput(
+        "recent_project", "Switch to a project you opened before",
+        choices = c("Choose a project" = "", stats::setNames(others, others)),
+        width = "100%")
+    })
+
+    shiny::observeEvent(input$recent_project, {
+      dir <- trimws(input$recent_project %||% "")
+      if (!nzchar(dir)) return()
+      chosen <- .workflow_read_state(dir)
+      if (is.null(chosen)) {
+        shiny::showNotification(
+          paste0("No readable project in ", dir, " any more."),
+          type = "warning", duration = 6)
+        return()
+      }
+      shiny::updateTextInput(session, "project_dir", value = dir)
+      shiny::updateTextInput(session, "shell_path",
+                             value = chosen$shell_path %||% "")
+      shiny::updateTextInput(session, "spec_path",
+                             value = chosen$adam_spec_path %||% "")
+      shiny::updateTextInput(session, "adam_dir",
+                             value = chosen$adam_dir %||% "")
+      shiny::updateTextInput(session, "study_id",
+                             value = chosen$study_id %||% "STUDY-001")
+      state$project_dir(normalizePath(dir))
+      .workflow_remember_project(dir)
+      bump()
+      shiny::showNotification(paste("Switched to", dir), type = "message",
+                              duration = 5)
+    })
+
+    ## --- the file pickers -------------------------------------------------
+    ##
+    ## Only wired when shinyFiles is installed; without it the fields above
+    ## are plain text inputs and everything below still works. The chosen
+    ## path is written back into the text input rather than kept beside it,
+    ## so the text field stays the one place a path lives and nothing
+    ## downstream has to know a picker exists.
+    if (pickers) {
+      roots <- .workflow_picker_roots()
+      shinyFiles::shinyDirChoose(input, "pick_project_dir", roots = roots)
+      shinyFiles::shinyDirChoose(input, "pick_adam_dir", roots = roots)
+      shinyFiles::shinyFileChoose(input, "pick_shell", roots = roots,
+                                  filetypes = c("docx", "xlsx"))
+      shinyFiles::shinyFileChoose(input, "pick_spec", roots = roots,
+                                  filetypes = c("xlsx", "xml"))
+
+      observe_dir_pick <- function(pick_id, field_id) {
+        shiny::observeEvent(input[[pick_id]], {
+          picked <- shinyFiles::parseDirPath(roots, input[[pick_id]])
+          if (length(picked) == 1 && nzchar(picked)) {
+            shiny::updateTextInput(session, field_id,
+                                   value = as.character(picked))
+          }
+        })
+      }
+      observe_file_pick <- function(pick_id, field_id) {
+        shiny::observeEvent(input[[pick_id]], {
+          picked <- shinyFiles::parseFilePaths(roots, input[[pick_id]])
+          if (nrow(picked) == 1) {
+            shiny::updateTextInput(session, field_id,
+                                   value = as.character(picked$datapath[[1]]))
+          }
+        })
+      }
+      observe_dir_pick("pick_project_dir", "project_dir")
+      observe_dir_pick("pick_adam_dir", "adam_dir")
+      observe_file_pick("pick_shell", "shell_path")
+      observe_file_pick("pick_spec", "spec_path")
+    }
+
     shiny::observeEvent(input$init_project, {
       dir <- trimws(input$project_dir %||% "")
       if (!nzchar(dir)) {
@@ -629,6 +807,7 @@ ars_workflow <- function(project_dir = NULL) {
         return()
       }
       state$project_dir(normalizePath(dir))
+      .workflow_remember_project(dir)
       bump()
       shiny::showNotification("Project ready.", type = "message", duration = 4)
       bslib::accordion_panel_open("wizard", "panel_build")

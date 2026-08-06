@@ -147,6 +147,93 @@
   .workflow_write_state(project_dir, state)
 }
 
+## --- remembering which projects exist --------------------------------------
+##
+## Everything above derives a project's state from its own folder, which is
+## right: the folder IS the state. What it cannot do is tell you WHICH folder,
+## and that gap was the whole of a usability complaint -- `ars_workflow()` with
+## no argument opened on five empty boxes every time, so a study you had set up
+## the day before had to be typed out again from memory.
+##
+## So one small thing is remembered outside the project: the list of project
+## folders that have been opened. It lives in the user's config directory,
+## alongside the editor's autosaves in `tools::R_user_dir("arsbridge", ...)`,
+## and it holds paths and nothing else -- no study data leaves the project.
+
+.WORKFLOW_RECENT_FILE <- "recent_projects.json"
+.WORKFLOW_RECENT_MAX  <- 8L
+
+#' Where the recent-projects list lives.
+#'
+#' Behind an option so a test suite never writes into the real user
+#' directory; `tests/testthat/setup.R` points it at a temporary file.
+#' @noRd
+.workflow_recent_path <- function() {
+  getOption("arsbridge.recent_projects",
+            file.path(tools::R_user_dir("arsbridge", "config"),
+                      .WORKFLOW_RECENT_FILE))
+}
+
+#' The list exactly as stored, folders that are gone included.
+#' @noRd
+.workflow_recent_stored <- function(path = .workflow_recent_path()) {
+  if (!file.exists(path)) return(character())
+  dirs <- tryCatch(jsonlite::fromJSON(path, simplifyVector = TRUE),
+                   error = function(e) NULL)
+  if (!is.character(dirs)) return(character())
+  unique(dirs[nzchar(dirs)])
+}
+
+#' Projects opened before, most recent first, ones that are no longer there
+#' left out.
+#'
+#' The filtering happens on the way OUT rather than on the way in: a project
+#' on a network share or an unplugged drive is not gone, it is unreachable,
+#' and it comes back on the list when the drive does.
+#' @noRd
+.workflow_recent_projects <- function(path = .workflow_recent_path()) {
+  dirs <- .workflow_recent_stored(path)
+  dirs[file.exists(file.path(dirs, .WORKFLOW_STATE_FILE))]
+}
+
+#' Record a project as the most recently opened one.
+#' @noRd
+.workflow_remember_project <- function(project_dir,
+                                       path = .workflow_recent_path()) {
+  if (is.null(project_dir) || !nzchar(project_dir %||% "")) {
+    return(invisible(character()))
+  }
+  full <- normalizePath(project_dir, mustWork = FALSE)
+  dirs <- utils::head(c(full, setdiff(.workflow_recent_stored(path), full)),
+                      .WORKFLOW_RECENT_MAX)
+  ## Remembering is a convenience, so it fails quietly and completely: a
+  ## read-only config directory must not be the reason a project cannot be
+  ## opened, nor the source of a warning about one.
+  written <- suppressWarnings(tryCatch({
+    dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+    .write_text(jsonlite::toJSON(dirs, pretty = TRUE), path,
+                "the recent-projects list", useBytes = TRUE)
+    TRUE
+  }, error = function(e) FALSE))
+  if (!isTRUE(written)) return(invisible(character()))
+  invisible(dirs)
+}
+
+#' The project to open when the caller named none.
+#'
+#' In order: what the caller asked for; the working directory, if you are
+#' standing in a project (the strongest signal there is); then the last
+#' project opened. `NULL` only when none of those holds, which is the genuine
+#' first-run case the empty setup form is for.
+#' @noRd
+.workflow_resolve_project <- function(project_dir = NULL, wd = getwd(),
+                                      recent = .workflow_recent_projects()) {
+  if (!is.null(project_dir) && nzchar(project_dir)) return(project_dir)
+  if (file.exists(file.path(wd, .WORKFLOW_STATE_FILE))) return(wd)
+  if (length(recent) > 0) return(recent[[1]])
+  NULL
+}
+
 ## The step ids, in journey order.
 ##
 ## One phase, not two. The old flow made a user carry a blueprint out to a
