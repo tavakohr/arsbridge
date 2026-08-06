@@ -2126,7 +2126,17 @@ build_ars_json <- function(sections,
     ## Extension field: TRUE when the shell carries an overall/Total column
     ## in addition to the per-group columns. The executor then also
     ## computes an ungrouped pass and binds it into the ARD.
-    includeTotal                 = isTRUE(section$include_total)
+    includeTotal                 = isTRUE(section$include_total),
+    ## What that overall column is scoped to, and what the shell calls it.
+    ##
+    ## totalWhere is the Total column's own WhereClause when the shell
+    ## annotated one ("Total [ADSL.COHORTN IN (1,2)]" -- which may deliberately
+    ## exclude a displayed column), otherwise the union of the group columns.
+    ## Absent means the analysis set alone scopes it. totalLabel is the
+    ## header's own text, which the ARD row must carry for the fill to find
+    ## the physical column it belongs to.
+    totalWhere                   = section$total_condition,
+    totalLabel                   = section$total_label
   )
 }
 

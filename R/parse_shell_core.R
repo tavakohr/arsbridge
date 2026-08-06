@@ -892,6 +892,52 @@ bind_annotations <- function(sec) {
 #' on the saved header cells, attach `header_rows`, and append annotated
 #' headers to `stub_rows` for uniform downstream processing.
 #'
+#' Does this header label name the overall column?
+#'
+#' "Total", "Total (N=XX)", "Overall" -- the column that spans the ones beside
+#' it rather than being one of them.
+#' @noRd
+.is_overall_label <- function(label) {
+  grepl("(?i)^(total|overall)\\b", .strip_n_placeholder(label %||% ""),
+        perl = TRUE)
+}
+
+#' Record the overall column on a section: whether it exists, and its scope.
+#'
+#' `candidates` are the annotated headers, `bare_labels` the unannotated ones,
+#' and `groups` the column-group levels already resolved. Returns `sec` with
+#' `include_total_hint` and, when a scope is known, `total_condition`.
+#' @noRd
+.resolve_overall_column <- function(sec, candidates, bare_labels, groups) {
+  overall <- Filter(function(cand) .is_overall_label(cand$label), candidates)
+  bare_overall <- Filter(.is_overall_label, as.character(bare_labels))
+  if (length(overall) == 0 && length(bare_overall) == 0) return(sec)
+
+  sec$include_total_hint <- TRUE
+  ## The header's own words. The fill matches a physical column to an ARD row
+  ## by label, so the overall pass has to carry the label the shell prints --
+  ## "Total", not a name of our choosing.
+  sec$total_label <- .strip_n_placeholder(
+    if (length(overall) > 0) overall[[1]]$label else bare_overall[[1]])
+
+  ## The column's own annotation, when it parsed into one.
+  authored <- Filter(function(cand) !is.null(cand$condition), overall)
+  if (length(authored) > 0) {
+    sec$total_condition <- authored[[1]]$condition
+    return(sec)
+  }
+
+  ## Nothing authored: the union of the group columns. NULL when there are no
+  ## group conditions to union, which leaves the pass scoped by the analysis
+  ## set alone -- the only remaining meaning of "Total".
+  level_conditions <- lapply(groups, function(g) {
+    parse_where_clause(g$annotation %||% "")
+  })
+  sec$total_condition <- do.call(
+    combine_conditions, c(level_conditions, list(operator = "OR")))
+  sec
+}
+
 #' Resolve per-column header annotations into column-group definitions.
 #'
 #' A sponsor can define the column axis of a summary table entirely in the
@@ -974,9 +1020,15 @@ bind_annotations <- function(sec) {
     axis_var <- qualifying[[1]]
   }
 
+  ## A Total/Overall column is never one of the group LEVELS, however it is
+  ## annotated. Its scope overlaps the levels by construction, and the emitted
+  ## grouping is a first-match-wins case_when factor -- so a Total level would
+  ## be shadowed by the very columns it is meant to total and report zero.
+  ## It becomes the overall-column pass instead, below.
   groups <- list()
   for (cand in conditioned) {
     if (!identical(cand$variable, axis_var)) next
+    if (.is_overall_label(cand$label)) next
     ## Display level label: the header text without its (N=XX) placeholder.
     level_label <- .strip_n_placeholder(cand$label)
     groups[[length(groups) + 1L]] <- list(
@@ -989,8 +1041,8 @@ bind_annotations <- function(sec) {
   ## did not parse into a condition is a display column silently lost from the
   ## column axis. Surface the shortfall so a shell whose (e.g.) missing-value
   ## header uses an unsupported form is caught rather than quietly narrowed.
-  axis_headers <- Filter(function(cand) identical(cand$variable, axis_var),
-                         candidates)
+  axis_headers <- Filter(function(cand) identical(cand$variable, axis_var) &&
+                           !.is_overall_label(cand$label), candidates)
   dropped <- length(axis_headers) - length(groups)
   if (dropped > 0) {
     diag_add(
@@ -1043,17 +1095,19 @@ bind_annotations <- function(sec) {
   ## supplement fallbacks both defer to an existing value.
   sec$column_annotation <- axis_var
 
-  ## A leftover "Total (N=XX) ..." header (excluded from the groups because
-  ## it filters a different variable, or none) marks the overall column.
-  non_axis <- Filter(function(cand) !identical(cand$variable, axis_var),
-                     candidates)
-  total_labels <- c(
-    vapply(non_axis, function(cand) cand$label, character(1)),
-    labels[!has_annot]
-  )
-  if (any(grepl("(?i)^total\\b", total_labels, perl = TRUE))) {
-    sec$include_total_hint <- TRUE
-  }
+  ## The overall column, and what it is scoped to.
+  ##
+  ## The rule, in order: the annotation ON the column wins. "Total (N=XX)
+  ## [ADSL.COHORTN IN (1,2)]" says exactly which subjects Total covers, and
+  ## that is what gets computed -- even when, as here, it deliberately
+  ## excludes a displayed column (an Unknown cohort) and so does not equal the
+  ## sum of the columns beside it.
+  ##
+  ## Only when the column carries no usable annotation is its scope DERIVED,
+  ## as the union of the group columns. That is what an unannotated "Total"
+  ## can only mean, and it is narrower than "the analysis set" whenever the
+  ## groups do not cover the whole population.
+  sec <- .resolve_overall_column(sec, candidates, labels[!has_annot], groups)
 
   diag_add(
     stage = "parse_shell", severity = "INFO", input = INPUT_SHELL,

@@ -93,6 +93,13 @@ test_that("the numeric IN list is a recognised annotation form", {
 
 ## --- the neutral fixture, end to end ----------------------------------------
 
+no_llm_keys_rwb <- function(code) {
+  withr::with_envvar(
+    c(ANTHROPIC_API_KEY = "", OPENAI_API_KEY = "", GEMINI_API_KEY = "",
+      GLM_API_KEY = "", ARS_LLM_PROVIDER = ""),
+    code)
+}
+
 .rwb_secs <- function() {
   parse_shell_docx(test_path("fixtures/annotated_shell_rwb_bracket.docx"))
 }
@@ -253,4 +260,46 @@ test_that("a continuation table's rows join the display above it", {
   expect_equal(nrow(hit), 1)
   expect_equal(hit$severity, "INFO")
   expect_match(hit$problem, "2 more row")
+})
+
+test_that("the Total column counts what the shell annotated, not everybody", {
+  ## The defect this pins, end to end. The fixture heads its fourth column
+  ## "Total (N=XX) [ADSL.COHORTN IN (1,2)]" beside an Unknown cohort, so Total
+  ## deliberately excludes a displayed column. Two wrong answers are possible
+  ## and the counts are chosen so neither can be mistaken for the right one:
+  ##   40 + 30 = 70  the annotated scope
+  ##   40 + 30 + 7 = 77  "the whole analysis set", what include_total used to
+  ##                     mean, and what an unscoped total pass would report
+  ##   0             a Total treated as a fourth level of the grouping factor,
+  ##                 shadowed by the columns it totals
+  n1 <- 40L; n2 <- 30L; nu <- 7L
+  adam <- withr::local_tempdir()
+  haven::write_xpt(
+    data.frame(
+      STUDYID = "S-RWB",
+      USUBJID = sprintf("S-%03d", seq_len(n1 + n2 + nu)),
+      COHORTN = c(rep(1, n1), rep(2, n2), rep(99, nu)),
+      SCRNFL  = "Y", SCRNFN = 1, COMPLFL = "Y",
+      stringsAsFactors = FALSE),
+    file.path(adam, "adsl.xpt"))
+
+  out <- withr::local_tempdir()
+  ard <- no_llm_keys_rwb({
+    suppressMessages(suppressWarnings(spec_to_ars(
+      shell_path     = test_path("fixtures/annotated_shell_rwb_bracket.docx"),
+      adam_spec_path = test_path("fixtures/adam_spec_rwe.xlsx"),
+      output_path    = file.path(out, "re.json"), study_id = "S-RWB",
+      code_dir       = file.path(out, "code"), verbose = FALSE)))
+    suppressMessages(suppressWarnings(
+      ars_to_ard(file.path(out, "re.json"), adam)))
+  })
+
+  skip_if(is.null(ard), "no analyses executed against the synthetic ADSL")
+  levels <- vapply(ard$group1_level, function(x) as.character(x)[[1]],
+                   character(1))
+  totals <- unlist(ard$stat)[levels %in% "Total" & ard$stat_name %in% "n"]
+  expect_gt(length(totals), 0)
+  expect_true(all(totals == n1 + n2))
+  expect_false(any(totals == n1 + n2 + nu))
+  expect_false(any(totals == 0))
 })

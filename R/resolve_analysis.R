@@ -273,6 +273,11 @@ resolve_analysis <- function(ana, spec, subject_key = "USUBJID",
   }
 
   include_total <- isTRUE(as.logical(unlist(ana[["includeTotal"]])[1] %||% FALSE))
+  ## The overall column's scope and display label (see .build_analysis()).
+  ## A NULL total_where leaves the pass scoped by the analysis set, which is
+  ## what "Total" meant before a shell could say otherwise.
+  total_where <- ana[["totalWhere"]]
+  total_label <- .as_scalar_char(ana[["totalLabel"]])
 
   ## Stratification operand for stratified methods (e.g. CMH). An arsbridge
   ## extension field on the analysis; a bare variable name resolved against the
@@ -325,6 +330,8 @@ resolve_analysis <- function(ana, spec, subject_key = "USUBJID",
     pop_where       = pop_where,
     subset_where    = subset_where,
     include_total   = include_total,
+    total_where     = total_where,
+    total_label     = total_label,
     strata          = strata,
     group_defs      = group_defs,
     decode          = decode,

@@ -1,5 +1,43 @@
 # arsbridge (development version)
 
+* **A shell annotated with double quotes had every condition thrown away, and
+  its Total column never computed.** A field study delivered a workbook whose
+  cohort columns held real numbers -- 482, 441, 27 -- and whose Total column
+  was still `xx` in every row. Three defects, stacked.
+
+  * **The where-clause grammar accepted only `'single'` quotes.** Every string
+    pattern hardcoded `'…'`; not one accepted `"…"`. That study annotates the
+    way its programmers write SAS -- `[ADSL.COMPLFL="Y"]` on the title,
+    `ADMH.MHCAT="GENERAL MEDICAL"` on a row -- so every one of those
+    conditions was dropped, silently, including the population filters. This
+    was never only a Total-column problem: it was a wrong-population problem
+    on every table. Both spellings are now accepted and a test asserts they
+    produce the *identical* WhereClause, not merely that both parse.
+  * **A value list had to be quoted.** `ADSL.RACE IN ('WHITE','ASIAN')`
+    parsed; `ADSL.COHORTN IN (1,2)` -- how a coded column axis is actually
+    written -- did not. Bare numbers are now accepted beside quoted values.
+  * **A Total column had nowhere to go.** `include_total_hint` was only set
+    for a Total header conditioning on a *different* variable than the column
+    axis, so a `Total [ADSL.COHORTN IN (1,2)]` was neither a group nor a
+    total: no metadata, no ARD rows, placeholder in the workbook.
+
+  The rule now, per the shell: **the annotation on the column wins.** A Total
+  column is computed from exactly the condition it carries -- including when,
+  as here, that deliberately excludes a displayed column and so does *not*
+  equal the sum of the columns beside it. Only when the column carries no
+  usable annotation is its scope derived, as the union of the group columns.
+
+  A Total column is never a level of the grouping factor. The emitted grouping
+  is a first-match-wins `case_when`, so a Total level would be shadowed by the
+  very columns it totals and report zero -- a wrong number where there had at
+  least been an honest placeholder. It becomes a scoped overall pass instead,
+  filtered on both the numerator and the denominator so the percentage comes
+  out of the Total column's own N, and stamped with the shell's own header
+  text so the fill can find the column it belongs to.
+
+  Pinned end to end: a shell with cohorts of 40 and 30 beside an unknown
+  cohort of 7 reports Total = 70, not 77 and not 0.
+
 * **The fill was quadratic, and that is what the stuck progress bar was
   showing.** Tracing a full run of the bundled example with a timestamp on
   every progress event put 138 of its 165 seconds inside a single output --

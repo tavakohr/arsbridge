@@ -136,3 +136,67 @@ test_that("a directive clause is not reported as a failed condition", {
   expect_true(any(recs$stage == "where_clause" & recs$severity == "WARN"))
   diag_reset()
 })
+
+## ---------------------------------------------------------------------------
+## Quoting dialects
+##
+## The grammar used to accept only 'single' quotes. A field study annotated
+## every table the way its programmers write SAS -- [ADSL.COMPLFL="Y"] -- and
+## every one of those conditions was dropped without the run failing: wrong
+## populations on every table, and a Total column that never computed. Both
+## spellings must mean the same thing, and "the same thing" is stronger than
+## "both parse": they have to produce the identical WhereClause.
+## ---------------------------------------------------------------------------
+
+test_that("single and double quotes produce the identical where clause", {
+  both_ways <- function(template) {
+    n <- length(gregexpr("%s", template, fixed = TRUE)[[1]])
+    fill <- function(q) do.call(sprintf, c(list(template), as.list(rep(q, n))))
+    list(single = fill("'"), double = fill('"'))
+  }
+
+  templates <- c(
+    "ADSL.SAFFL=%sY%s",
+    "ADSL.SAFFL EQ %sY%s",
+    "ADSL.SAFFL NE %sY%s",
+    "ADSL.RACE IN (%sWHITE%s,%sASIAN%s)",
+    "ADSL.RACE NOT IN (%sWHITE%s,%sASIAN%s)",
+    "ADAE.AETERM contains %srash%s",
+    "ADSL.AGE between %s18%s and %s65%s",
+    ## The exact shape the field shell used, compound and with empty strings.
+    "ADMH.MHDECOD NE %s%s AND ADMH.MHBODSYS=%s%s"
+  )
+
+  for (template in templates) {
+    spelling <- both_ways(template)
+    single <- suppressMessages(parse_where_clause(paste0("[", spelling$single, "]")))
+    double <- suppressMessages(parse_where_clause(paste0("[", spelling$double, "]")))
+    expect_false(is.null(single), label = spelling$single)
+    expect_identical(single, double, label = spelling$double)
+  }
+})
+
+test_that("a value keeps the other quote character when it contains one", {
+  ## Stripping is anchored to a MATCHING pair, so "O'Brien" survives whole.
+  wc <- suppressMessages(parse_where_clause('[ADSL.NAME="O\'Brien"]'))
+  expect_equal(unlist(wc$condition$value), "O'Brien")
+})
+
+test_that("a value list may be bare numbers", {
+  ## "ADSL.COHORTN IN (1,2)" is how a coded column axis is written far more
+  ## often than with quotes round the codes -- and requiring the quotes cost
+  ## one real shell its entire Total column.
+  for (text in c("[ADSL.COHORTN IN (1,2)]", "[ADSL.COHORTN IN (1, 2)]")) {
+    wc <- suppressMessages(parse_where_clause(text))
+    expect_equal(wc$condition$comparator, "IN", info = text)
+    expect_equal(unlist(wc$condition$value), c("1", "2"), info = text)
+  }
+  negated <- suppressMessages(parse_where_clause("[ADSL.COHORTN NOT IN (1,2)]"))
+  expect_equal(negated$condition$comparator, "NOTIN")
+  expect_equal(unlist(negated$condition$value), c("1", "2"))
+})
+
+test_that("a mixed list of numbers and quoted strings parses", {
+  wc <- suppressMessages(parse_where_clause('[ADSL.COHORTN IN (1, "2", \'3\')]'))
+  expect_equal(unlist(wc$condition$value), c("1", "2", "3"))
+})

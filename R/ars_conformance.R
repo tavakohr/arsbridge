@@ -34,7 +34,11 @@
   output_display  = "columns",
   ## The nested analysisVariable duplicates the standard flat dataset/variable
   ## pair; the rest carry shell annotations and executor hints.
+  ## totalWhere/totalLabel travel with includeTotal: the scope of the overall
+  ## column and the shell's own name for it. ARS v1.0 has nowhere to put an
+  ## overall column, so all three are arsbridge extensions.
   analysis        = c("analysisVariable", "annotation", "includeTotal",
+                      "totalWhere", "totalLabel",
                       "sapDescription", "strata", "variableRole"),
   ## The fallback when a population annotation could not be parsed.
   analysis_set    = "annotationText",
