@@ -130,9 +130,12 @@
 #' @param on_progress Optional function called with one progress event at a
 #'   time: a list with `stage`, `stage_idx`, `n_stages`, `i`, `n`, `label`.
 #'   Each stage announces itself with `i = 0`, then ticks once per TLF,
-#'   analysis, or sheet. Errors it raises are swallowed -- a progress bar
-#'   must never take a build down. `NULL` (the default) reports nothing and
-#'   changes nothing.
+#'   analysis, or sheet -- `i` counting the items already FINISHED and `label`
+#'   naming the one now in flight. The work on either side of those loops
+#'   (reading the inputs, writing the reporting event, saving the workbook)
+#'   ticks as a named step with no count, so no stage runs out silent. Errors
+#'   it raises are swallowed -- a progress bar must never take a build down.
+#'   `NULL` (the default) reports nothing and changes nothing.
 #'
 #' @return A list with `status` (`"success"`, `"partial"` or `"error"`),
 #'   `timings`, `artifacts`, `metadata`, `diagnostics` (one row per finding,

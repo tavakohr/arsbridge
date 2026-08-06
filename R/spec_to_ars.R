@@ -351,9 +351,11 @@ spec_to_ars <- function(shell_path,
   ## Spec first: the shell parser uses the spec lookup to validate listing
   ## column-header variable candidates.
   if (verbose) cli::cli_alert_info("Parsing ADaM spec {.path {basename(adam_spec_path)}}...")
+  .progress_tick(0L, 0L, "reading the ADaM spec")
   spec <- parse_adam_spec(adam_spec_path, column_aliases = spec_column_aliases)
 
   if (verbose) cli::cli_alert_info("Parsing annotated shell {.path {basename(shell_path)}}...")
+  .progress_tick(0L, 0L, "reading the shell")
   sections <- parse_shell(shell_path, spec_lookup = spec$lookup,
                           heading_patterns = heading_patterns,
                           progress = verbose)
@@ -446,7 +448,10 @@ spec_to_ars <- function(shell_path,
     if (verbose) {
       cli::cli_alert("  [{i}/{length(sections)}] {.val {sec$tlf_number}}: {substr(sec$title, 1, 60)}")
     }
-    .progress_tick(i, length(sections), sec$tlf_number %||% "?")
+    ## i - 1 sections are finished; this one is the label. Ticking the
+    ## started count instead would put the bar at 100% while the slowest
+    ## section (an LLM call) was still out.
+    .progress_tick(i - 1L, length(sections), sec$tlf_number %||% "?")
     enriched[[i]] <- switch(extraction_mode,
       llm = enrich_with_llm(sec, spec_lookup = spec$lookup,
                             model = model, api_key = api_key,
@@ -530,6 +535,11 @@ spec_to_ars <- function(shell_path,
   }
 
   ## --- Build and write ARS JSON --------------------------------------
+  ## Everything from here to the end of the function -- assembling the event,
+  ## writing the JSON, emitting one .R per output, writing the validation
+  ## report -- used to run with the bar parked on the last enriched section.
+  .progress_tick(length(sections), length(sections),
+                 "writing the reporting event")
   if (verbose) cli::cli_alert_info("Building CDISC ARS v1.0 ReportingEvent...")
   re <- build_ars_json(enriched, study_id = study_id,
                        study_name = study_name %||% study_id,

@@ -712,9 +712,13 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
   n_walked      <- 0L   # progress ticks count every analysis, skips included
   ard_list <- list()
   for (ana in spec[["analyses"]]) {
-    n_walked <- n_walked + 1L
+    ## Finished count, then the label of the analysis now running -- see the
+    ## same pattern in ars_fill_shell(). An analysis reads its ADaM datasets,
+    ## so a single tick can stand for a long wait; counting it as done before
+    ## it ran is what made the bar look finished while it was not.
     .progress_tick(n_walked, length(spec[["analyses"]]),
                    as.character(ana[["id"]] %||% "?"))
+    n_walked <- n_walked + 1L
     res <- resolve_analysis(ana, spec, subject_key, grouping_map,
                             analysis_to_output, grouping_groups, output_paths)
     analysis_id <- res$analysis_id
@@ -1146,6 +1150,10 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       ard_list[[length(ard_list) + 1L]] <- ard
     }
   }
+
+  ## Every analysis has run; what is left is binding the pieces together.
+  .progress_tick(length(spec[["analyses"]]), length(spec[["analyses"]]),
+                 "assembling the results")
 
   ## Surface a one-line execution-quality summary; full records via
   ## ars_diagnostics().

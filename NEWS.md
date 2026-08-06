@@ -1,5 +1,30 @@
 # arsbridge (development version)
 
+* **The workflow app's progress bar stops going quiet before the run ends.**
+  A field run reported it stuck on `Filling the workbook -- T_14_1_5 (4/4)`,
+  full bar, nothing moving. Nothing was wrong with the build: the ticks only
+  ever covered the three per-item LOOPS, so everything on either side of them
+  ran with nothing to say. The longest of those silences is
+  `openxlsx2::wb_save()`, which is the slowest single step of a real fill and
+  runs *after* the last output has been walked.
+
+  * Reading the inputs, writing the reporting event, binding the ARD and
+    saving the workbook now each tick as a named step, so no stage runs out
+    silent. A test asserts every stage's final event is one of them.
+  * The per-item counter counts what is FINISHED rather than what is
+    starting, and the panel says so -- `T_14_1_5 (3 of 4 done)`. The bar
+    reached 100% as the last item *began*, which is most of why the end of a
+    stage looked like a hang.
+  * The panel now shows how long the build has been running and how long
+    since it last reported anything, and says plainly when a build has gone
+    quiet for more than three minutes. Elapsed time keeps moving however long
+    a stage stays silent, which is what separates a slow run from a dead one.
+  * The three log lines under the bar are gone. They were the last three
+    *non*-progress lines, and with `verbose = FALSE` the worker writes nothing
+    after start-up -- so they were pinned forever on the package-attach
+    message from its first second and read as evidence of the hang. The raw
+    log moved behind a "Run log" expander.
+
 * **The reference bundle runs without a single warning, and a test keeps it
   that way.** Three findings, all of them the package complaining about
   something it had already understood:

@@ -49,9 +49,12 @@ at its own log.}
 \item{on_progress}{Optional function called with one progress event at a
 time: a list with \code{stage}, \code{stage_idx}, \code{n_stages}, \code{i}, \code{n}, \code{label}.
 Each stage announces itself with \code{i = 0}, then ticks once per TLF,
-analysis, or sheet. Errors it raises are swallowed -- a progress bar
-must never take a build down. \code{NULL} (the default) reports nothing and
-changes nothing.}
+analysis, or sheet -- \code{i} counting the items already FINISHED and \code{label}
+naming the one now in flight. The work on either side of those loops
+(reading the inputs, writing the reporting event, saving the workbook)
+ticks as a named step with no count, so no stage runs out silent. Errors
+it raises are swallowed -- a progress bar must never take a build down.
+\code{NULL} (the default) reports nothing and changes nothing.}
 }
 \value{
 A list with \code{status} (\code{"success"}, \code{"partial"} or \code{"error"}),
