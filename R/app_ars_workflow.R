@@ -331,6 +331,18 @@ ars_workflow <- function(project_dir = NULL) {
     !is.na(meta$adam_dir %||% NA_character_)
 }
 
+#' Why a background build ended with no result, said with somewhere to look.
+#'
+#' A worker that dies before it can return leaves its reason in the run log
+#' and nowhere else, so a message that does not name the log leaves the user
+#' with "Build failed: callr subprocess failed" and no next step.
+#' @noRd
+.workflow_worker_message <- function(err, log_path) {
+  text <- conditionMessage(err)
+  if (is.null(log_path) || !file.exists(log_path %||% "")) return(text)
+  paste0(text, " The worker's own output is in ", log_path, ".")
+}
+
 #' Common handling for a finished build, however it ran.
 #' @noRd
 .workflow_finish_build <- function(res, state, bump) {
@@ -785,10 +797,19 @@ ars_workflow <- function(project_dir = NULL) {
         return(shiny::div(class = "text-muted small",
                           "Record the shell and the ADaM spec first."))
       }
+      ## A running build always comes with a way out. Without one, `running`
+      ## had a single exit -- the poller watching the process die -- and any
+      ## run that outlived the user's patience, or any poll that threw, left
+      ## the panel showing a disabled "Building..." for the rest of the
+      ## session. A supplement dropped in at that point could never be built
+      ## with, which is the whole point of the supplement loop.
       if (isTRUE(state$running())) {
         return(shiny::div(
+          class = "d-flex gap-2",
           shiny::actionButton("run_build", "Building...", class = "btn-sm",
-                              disabled = TRUE)))
+                              disabled = TRUE),
+          shiny::actionButton("cancel_build", "Cancel",
+                              class = "btn-outline-danger btn-sm")))
       }
       shiny::actionButton(
         "run_build",
@@ -845,6 +866,31 @@ ars_workflow <- function(project_dir = NULL) {
       state$job(handle)
     })
 
+    ## Stop a build that is taking longer than the user is willing to wait,
+    ## or one whose worker has gone quiet for good. The state it leaves is
+    ## the ordinary "not running" one, so Build is immediately available
+    ## again -- including with a supplement dropped in meanwhile.
+    shiny::observeEvent(input$cancel_build, {
+      handle <- state$job()
+      if (!is.null(handle)) {
+        ## The tree, not just the worker: a build can have children (a curl
+        ## for an LLM call, a sourced cards script), and one left behind
+        ## keeps a handle on the workbook it was writing.
+        tryCatch(handle$kill_tree(),
+                 error = function(e) tryCatch(handle$kill(),
+                                              error = function(e) NULL))
+      }
+      state$running(FALSE)
+      state$job(NULL)
+      state$started(NULL)
+      state$progress(NULL)
+      bump()
+      shiny::showNotification(
+        paste("Build cancelled. Whatever it had already written is still on",
+              "disk -- rebuild when you are ready."),
+        type = "message", duration = 6)
+    })
+
     ## Poll the background process. Nothing about the payload is recomputed
     ## here -- the worker already assembled it, including its diagnostics.
     ## Each tick also refreshes the progress display from the run log, where
@@ -852,14 +898,37 @@ ars_workflow <- function(project_dir = NULL) {
     shiny::observe({
       if (!isTRUE(state$running())) return()
       handle <- state$job()
-      if (is.null(handle)) return()
-      shiny::invalidateLater(700)
-      paths <- paths_r()
-      if (!is.null(paths)) {
-        state$progress(.workflow_read_progress(paths$run_log))
+      ## Should be unreachable: run_build sets `running` and `job` in one
+      ## flush. But if it ever happens, the panel shows a disabled
+      ## "Building..." with no process to wait for and nothing that will ever
+      ## clear it. Self-heal rather than sit there.
+      if (is.null(handle)) {
+        state$running(FALSE)
+        state$started(NULL)
+        return()
       }
-      if (handle$is_alive()) return()
-      res <- tryCatch(handle$get_result(), error = function(e) e)
+      ## Registered before anything that can fail, so the next tick is
+      ## already scheduled whatever the rest of this observer does.
+      shiny::invalidateLater(700)
+
+      ## A poll must never be the thing that ends polling. readLines() on a
+      ## file the worker is writing can fail (Windows, most likely), and a
+      ## Shiny observer that throws is DESTROYED -- after which `running`
+      ## stays TRUE for the life of the session and the build panel is dead
+      ## with no way back. Swallow it and try again in 700ms.
+      alive <- tryCatch({
+        paths <- paths_r()
+        if (!is.null(paths)) {
+          state$progress(.workflow_read_progress(paths$run_log))
+        }
+        handle$is_alive()
+      }, error = function(e) NA)
+      if (is.na(alive) || isTRUE(alive)) return()
+
+      log_path <- paths_r()$run_log
+      res <- tryCatch(
+        handle$get_result(),
+        error = function(e) simpleError(.workflow_worker_message(e, log_path)))
       state$running(FALSE)
       state$job(NULL)
       .workflow_finish_build(res, state, bump)

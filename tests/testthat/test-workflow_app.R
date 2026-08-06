@@ -305,6 +305,132 @@ test_that("the panel says how long the build has been going, and when it went qu
   expect_null(arsbridge:::.workflow_liveness_ui(info, started = NULL, now = now))
 })
 
+## ---------------------------------------------------------------------------
+## Never trapped in "Building..."
+##
+## `running` used to have exactly one exit -- the poller watching the worker
+## die -- so a build that outlived the user's patience, or a poll that threw,
+## left the panel showing a disabled "Building..." for the rest of the
+## session. The field report was the sharp end of that: a supplement was
+## dropped in, the mode line flipped to "supplement", and there was no way to
+## build with it.
+## ---------------------------------------------------------------------------
+
+test_that("a running build offers a way out", {
+  td <- withr::local_tempdir()
+  project <- file.path(td, "study")
+  inputs <- .wfa_inputs()
+  arsbridge:::.workflow_init(project, inputs$shell, inputs$spec)
+
+  shiny::testServer(.wfa_server(project), {
+    ## A job as well as the flag: `running` on its own is the state the
+    ## poller self-heals out of, tested separately below.
+    state$job(list(is_alive = function() TRUE))
+    state$running(TRUE)
+    session$flushReact()
+    html <- as.character(output$build_actions$html)
+    expect_match(html, "Cancel")
+    expect_match(html, "Building")
+  })
+})
+
+test_that("cancelling kills the worker and hands the panel back", {
+  td <- withr::local_tempdir()
+  project <- file.path(td, "study")
+  inputs <- .wfa_inputs()
+  arsbridge:::.workflow_init(project, inputs$shell, inputs$spec)
+
+  killed <- FALSE
+  shiny::testServer(.wfa_server(project), {
+    state$job(list(kill_tree = function() killed <<- TRUE))
+    state$running(TRUE)
+    state$started(Sys.time())
+    session$setInputs(cancel_build = 1)
+
+    expect_true(killed)
+    expect_false(state$running())
+    expect_null(state$job())
+    expect_null(state$started())
+    ## And the button is a build button again, not a disabled "Building...".
+    expect_no_match(as.character(output$build_actions$html), "Building")
+  })
+})
+
+test_that("a worker that cannot be killed still releases the panel", {
+  ## kill_tree() is not in every processx, and a process that has already
+  ## gone can throw on either call. Neither is a reason to stay stuck.
+  td <- withr::local_tempdir()
+  project <- file.path(td, "study")
+  inputs <- .wfa_inputs()
+  arsbridge:::.workflow_init(project, inputs$shell, inputs$spec)
+
+  shiny::testServer(.wfa_server(project), {
+    state$job(list(kill_tree = function() stop("no such method"),
+                   kill = function() stop("already gone")))
+    state$running(TRUE)
+    session$setInputs(cancel_build = 1)
+    expect_false(state$running())
+    expect_null(state$job())
+  })
+})
+
+test_that("running with no job to wait for self-heals", {
+  ## Unreachable by design -- run_build sets both in one flush -- but the
+  ## failure mode if it ever happens is a panel that is stuck forever, so the
+  ## poller resets rather than returning into the same state next tick.
+  td <- withr::local_tempdir()
+  project <- file.path(td, "study")
+  inputs <- .wfa_inputs()
+  arsbridge:::.workflow_init(project, inputs$shell, inputs$spec)
+
+  shiny::testServer(.wfa_server(project), {
+    state$running(TRUE)
+    state$job(NULL)
+    session$flushReact()
+    expect_false(state$running())
+  })
+})
+
+test_that("a poll that throws does not end the polling", {
+  ## The defect: readLines() on a file the worker is writing can fail, and a
+  ## Shiny observer that throws is DESTROYED -- taking the only thing that
+  ## ever clears `running` with it.
+  td <- withr::local_tempdir()
+  project <- file.path(td, "study")
+  inputs <- .wfa_inputs()
+  arsbridge:::.workflow_init(project, inputs$shell, inputs$spec)
+
+  shiny::testServer(.wfa_server(project), {
+    state$job(list(is_alive = function() stop("the log is locked")))
+    state$running(TRUE)
+    expect_no_error(session$flushReact())
+    expect_true(state$running())
+
+    ## Still polling: the next tick, on a worker that has finished, finishes
+    ## the build as usual.
+    state$job(list(is_alive = function() FALSE,
+                   get_result = function() stop("the worker died")))
+    session$elapse(700)
+    expect_false(state$running())
+  })
+})
+
+test_that("a worker that died with no result says where to look", {
+  log <- withr::local_tempfile(fileext = ".log")
+  writeLines("Error: cannot open the connection", log)
+  message <- arsbridge:::.workflow_worker_message(
+    simpleError("callr subprocess failed"), log)
+  expect_match(message, "callr subprocess failed")
+  expect_match(message, log, fixed = TRUE)
+
+  ## No log, no promise of one.
+  expect_equal(
+    arsbridge:::.workflow_worker_message(simpleError("boom"), NULL), "boom")
+  expect_equal(
+    arsbridge:::.workflow_worker_message(simpleError("boom"),
+                                         tempfile("gone_")), "boom")
+})
+
 test_that("an in-process build reports progress and leaves the last event", {
   td <- withr::local_tempdir()
   project <- file.path(td, "study")
