@@ -1023,14 +1023,26 @@ build_ars_json <- function(sections,
       if (identical(nested_role, "level_repeat")) {
         ## A mock of the levels the row ABOVE already expands ("<Reason
         ## #2>", "PT#n", a trailing "..."): emitted nowhere, or the shell's
-        ## placeholder text would render as if it were a real level.
+        ## placeholder text would render as if it were a real level. Its
+        ## sheet row is recorded on the parent's layout entry, so the fill
+        ## step knows which rows the block owns when it expands the levels.
+        mock_row <- suppressWarnings(as.integer(row$sheet_row %||% NA_integer_))
+        if (build_layout && !is.na(mock_row) && !is.null(cat_parent) &&
+              !is.null(cat_parent$layout_order)) {
+          parent_entry <- shell_layout[[cat_parent$layout_order]]
+          if (mock_row > (parent_entry$sheet_row %||% 0L)) {
+            parent_entry$template_rows <- c(parent_entry$template_rows,
+                                            mock_row)
+            shell_layout[[cat_parent$layout_order]] <- parent_entry
+          }
+        }
         diag_add(
           stage = "build_ars", severity = "INFO",
           problem = sprintf(
             "Row '%s' illustrates the levels of the row above it -- collapsed into that analysis",
             row$label %||% "?"),
           tlf_number = sec$tlf_number,
-          action = "The categorical analysis above expands every observed level"
+          action = "The categorical analysis above expands every observed level; the row is kept as the block's expansion template"
         )
         next
       }
@@ -1399,7 +1411,10 @@ build_ars_json <- function(sections,
                           nzchar(er$primary_variable %||% "")) {
         list(var = toupper(er$primary_variable),
              ds  = toupper(er$primary_dataset %||% ""),
-             aid = an_obj$id)
+             aid = an_obj$id,
+             ## Where this entry sits in shell_layout (order == index), so a
+             ## collapsed mock row below can record itself on the entry.
+             layout_order = layout_entry$order)
       } else {
         NULL
       }

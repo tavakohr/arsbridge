@@ -341,6 +341,13 @@
                                   vapply(columns, function(c) as.character(c$col),
                                          character(1)))
 
+  ## Sheet rows a categorical parent recorded as its expansion template
+  ## ("<Reason #1>" mock rows): their placeholders stay pending until the
+  ## fill step can expand the block, and the cell map must say so -- an
+  ## orphaned row and a row awaiting expansion are different problems.
+  template_rows <- unlist(lapply(entries, function(e) e$template_rows),
+                          use.names = FALSE)
+
   cells <- list()
   ## Rows whose placeholder asks for more statistics than the analysis
   ## produces -- collected here and reported once per row after the walk.
@@ -367,7 +374,9 @@
     ## filled workbook, and neither is the same as "the number was not
     ## computed".
     if (is.null(binding) || is.null(column)) {
-      record$reason <- if (is.null(column)) {
+      record$reason <- if (grid$row[[i]] %in% template_rows) {
+        "a template row of the categorical block above -- awaiting row expansion"
+      } else if (is.null(column)) {
         "the column is not on the output's column axis"
       } else {
         "no analysis covers this row"

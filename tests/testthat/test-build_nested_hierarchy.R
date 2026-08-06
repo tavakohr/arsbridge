@@ -584,3 +584,73 @@ test_that("bare numbered repeats never become literal label rows", {
   expect_equal(labels[2], "SOC#1")
   expect_equal(labels[3], "PT#1")
 })
+
+
+## --- template-block retention (categorical expansion, PR A) -----------------
+
+test_that("mocks carrying per-level value tails still collapse", {
+  ## A shell authored the other way round: each mock restates the variable
+  ## WITH a level code ("=1", "=2") and closes on the generic "=n". The
+  ## values are illustrations of levels, not filters -- the block collapses
+  ## exactly like the bare dialect.
+  rows <- list(
+    .tok_row("Primary reason for discontinuation, n (%)", "ADSL.DCSREASN"),
+    .tok_row("<Reason #1>", "ADSL.DCSREASN=1"),
+    .tok_row("<Reason #2>", "ADSL.DCSREASN=2"),
+    .tok_row("<Reason #n>", "ADSL.DCSREASN=n")
+  )
+  roles <- .detect_nested_token_blocks(rows, list())
+  expect_equal(roles[1], NA_character_)
+  expect_true(all(roles[2:4] == "level_repeat"))
+})
+
+test_that("collapsed mocks become the block's expansion template", {
+  diag_reset()
+  srow <- function(row, n) { row$sheet_row <- n; row }
+  sec <- .nested_section("T-14-1-1")
+  sec$source_datasets <- "ADSL"
+  sec$stub_rows <- list(
+    srow(.tok_row("Primary reason for discontinuation, n (%)",
+                  "ADSL.DCSREASN"), 10L),
+    srow(.tok_row("<Reason #1>", "ADSL.DCSREASN=1"), 11L),
+    srow(.tok_row("<Reason #2>", "ADSL.DCSREASN=2"), 12L),
+    srow(.tok_row("<Reason #n>", "ADSL.DCSREASN=n"), 13L),
+    srow(.tok_row("..."), 14L)
+  )
+  re <- build_ars_json(list(sec), study_id = "S-TPL")
+
+  ## Still exactly one analysis: the mock values are not filters, and the
+  ## mocks contribute no analyses of their own.
+  expect_length(re$analyses, 1)
+
+  layout <- re$outputs[[1]][["_meta"]][["shell_layout"]]
+  expect_length(layout, 1)
+  entry <- layout[[1]]
+  expect_equal(entry$kind, "categorical")
+  ## The mock rows' sheet rows (the trailing "..." included) ride on the
+  ## parent entry, so the fill step knows which rows the expanded levels
+  ## replace.
+  expect_equal(entry$template_rows, c(11L, 12L, 13L, 14L))
+
+  ## The "=n" tail is an illustration, never a half-parsed filter: the
+  ## collapse is reported as INFO and nothing about the block warns.
+  d <- diag_records()
+  expect_equal(sum(grepl("illustrates the levels", d$problem)), 4)
+  expect_false(any(d$severity == "WARN" & grepl("[Cc]ondition", d$problem)))
+})
+
+test_that("a template block without sheet rows records no template", {
+  ## Word shells carry no cell addresses. The parent entry must not gain an
+  ## empty vector that LOOKS like a recorded template.
+  sec <- .nested_section("T-14-1-1W")
+  sec$source_datasets <- "ADSL"
+  sec$stub_rows <- list(
+    .tok_row("Primary reason for discontinuation, n (%)", "ADSL.DCSREASN"),
+    .tok_row("<Reason #1>", "ADSL.DCSREASN"),
+    .tok_row("<Reason #2>", "ADSL.DCSREASN")
+  )
+  re <- build_ars_json(list(sec), study_id = "S-TPLW")
+  layout <- re$outputs[[1]][["_meta"]][["shell_layout"]]
+  expect_length(layout, 1)
+  expect_null(layout[[1]]$template_rows)
+})
