@@ -13,8 +13,13 @@ ars_workflow(project_dir = NULL)
 
 - project_dir:
 
-  Path to the project folder. `NULL` (default) starts on the
-  project-setup step; an existing project resumes.
+  Path to the project folder. `NULL` (default) works out which project
+  you meant: the working directory if you are standing in a project,
+  otherwise the last project opened. Only a genuine first run starts on
+  an empty setup form. Projects opened before are also offered in a
+  dropdown, so switching between studies does not mean retyping four
+  paths; that list is kept in `tools::R_user_dir("arsbridge", "config")`
+  and holds folder paths and nothing else.
 
 ## Value
 
@@ -25,7 +30,9 @@ Invisibly, the project directory.
 1.  **Project setup** – pick a project folder and name the annotated
     shell (`.docx` or `.xlsx`), the ADaM spec (`.xlsx`/`.xml`), and a
     study id. The folder gets a fixed layout (`copilot/`, `ars/`) and a
-    small `arsbridge_project.json` state file.
+    small `arsbridge_project.json` state file. With `shinyFiles`
+    installed each path comes with a Browse button; without it they are
+    text fields, as before.
 
 2.  **Instruction files** – writes the two-phase Copilot instructions
     and the supplement JSON schema into `copilot/` (see

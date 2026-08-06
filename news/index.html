@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9073</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9074</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -42,6 +42,13 @@
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="development version" id="arsbridge-development-version">arsbridge (development version)<a class="anchor" aria-label="anchor" href="#arsbridge-development-version"></a></h2>
 <ul><li>
+<p><strong>The workflow app knows which project you meant.</strong> <code><a href="../reference/ars_workflow.html">ars_workflow()</a></code> with no argument opened on five empty boxes every time, so a study set up the day before had to be typed out again from memory – four paths, by hand, with no browser anywhere in the package.</p>
+<ul><li>
+<code><a href="../reference/ars_workflow.html">ars_workflow()</a></code> now resolves the project it was given none: the working directory if you are standing in one, otherwise the last project opened. Only a genuine first run gets the empty form, and when a project is resumed the panel says so and where the values came from.</li>
+<li>Projects opened before are offered in a dropdown; choosing one repopulates every field and switches the app to it. The list lives in <code>tools::R_user_dir("arsbridge", "config")</code> and holds folder paths and nothing else – no study data leaves the project folder. A folder that is no longer readable is hidden from the list rather than dropped from it, so a project on an unplugged drive comes back when the drive does.</li>
+<li>With <code>shinyFiles</code> installed (a new <code>Suggests</code>), each of the four path fields comes with a <strong>Browse</strong> button – folder pickers for the project and ADaM directories, file pickers for the shell and the spec, rooted on the home directory and the platform’s volumes. The chosen path is written back into the text field, which stays the one place a path lives. Without the package the panel is exactly what it was, plus a line saying what would make it clickable.</li>
+</ul></li>
+<li>
 <p><strong>A build in the workflow app can always be left.</strong> The same field run reported the second half of the problem: a <code>supplement.json</code> was dropped into the project, the Build panel correctly flipped its mode line to <em>supplement</em> – and there was no way to build with it, because the button was a disabled “Building…” that never came back.</p>
 <p><code>running</code> had exactly one exit: the poller watching the worker process die. A build that outlived the user’s patience had no way out, and a poll that threw was worse – a Shiny observer that throws is destroyed, taking the only thing that would ever clear the flag with it, for the rest of the session.</p>
 <ul><li>A <strong>Cancel</strong> button sits beside “Building…” for the whole of a background build. It kills the worker and its children and hands the panel straight back, so the next build – with the supplement, if there is one – is available immediately.</li>

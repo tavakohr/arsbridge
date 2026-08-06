@@ -2,6 +2,32 @@
 
 ## arsbridge (development version)
 
+- **The workflow app knows which project you meant.**
+  [`ars_workflow()`](https://tavakohr.github.io/arsbridge/reference/ars_workflow.md)
+  with no argument opened on five empty boxes every time, so a study set
+  up the day before had to be typed out again from memory – four paths,
+  by hand, with no browser anywhere in the package.
+
+  - [`ars_workflow()`](https://tavakohr.github.io/arsbridge/reference/ars_workflow.md)
+    now resolves the project it was given none: the working directory if
+    you are standing in one, otherwise the last project opened. Only a
+    genuine first run gets the empty form, and when a project is resumed
+    the panel says so and where the values came from.
+  - Projects opened before are offered in a dropdown; choosing one
+    repopulates every field and switches the app to it. The list lives
+    in `tools::R_user_dir("arsbridge", "config")` and holds folder paths
+    and nothing else – no study data leaves the project folder. A folder
+    that is no longer readable is hidden from the list rather than
+    dropped from it, so a project on an unplugged drive comes back when
+    the drive does.
+  - With `shinyFiles` installed (a new `Suggests`), each of the four
+    path fields comes with a **Browse** button – folder pickers for the
+    project and ADaM directories, file pickers for the shell and the
+    spec, rooted on the home directory and the platform’s volumes. The
+    chosen path is written back into the text field, which stays the one
+    place a path lives. Without the package the panel is exactly what it
+    was, plus a line saying what would make it clickable.
+
 - **A build in the workflow app can always be left.** The same field run
   reported the second half of the problem: a `supplement.json` was
   dropped into the project, the Build panel correctly flipped its mode

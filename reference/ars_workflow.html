@@ -9,7 +9,7 @@ TLF shell to a reviewed CDISC ARS reporting event:"></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9073</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9074</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -57,8 +57,13 @@ TLF shell to a reviewed CDISC ARS reporting event:</p>
 
 
 <dl><dt id="arg-project-dir">project_dir<a class="anchor" aria-label="anchor" href="#arg-project-dir"></a></dt>
-<dd><p>Path to the project folder. <code>NULL</code> (default) starts on
-the project-setup step; an existing project resumes.</p></dd>
+<dd><p>Path to the project folder. <code>NULL</code> (default) works out
+which project you meant: the working directory if you are standing in a
+project, otherwise the last project opened. Only a genuine first run
+starts on an empty setup form. Projects opened before are also offered in
+a dropdown, so switching between studies does not mean retyping four
+paths; that list is kept in <code>tools::R_user_dir("arsbridge", "config")</code>
+and holds folder paths and nothing else.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -71,7 +76,9 @@ the project-setup step; an existing project resumes.</p></dd>
 <ol><li><p><strong>Project setup</strong> – pick a project folder and name the annotated shell
 (<code>.docx</code> or <code>.xlsx</code>), the ADaM spec (<code>.xlsx</code>/<code>.xml</code>), and a study id. The
 folder gets a fixed layout (<code>copilot/</code>, <code>ars/</code>) and a
-small <code>arsbridge_project.json</code> state file.</p></li>
+small <code>arsbridge_project.json</code> state file. With <code>shinyFiles</code> installed
+each path comes with a Browse button; without it they are text fields,
+as before.</p></li>
 <li><p><strong>Instruction files</strong> – writes the two-phase Copilot instructions and
 the supplement JSON schema into <code>copilot/</code> (see
 <code><a href="ars_copilot_instructions.html">ars_copilot_instructions()</a></code>).</p></li>
