@@ -1078,3 +1078,62 @@ test_that("a run that fills nothing warns with the dominant reason", {
       overwrite = TRUE)))
   expect_true(any(grepl("Nothing was filled", warnings)))
 })
+
+## ---------------------------------------------------------------------------
+## Matching a column label must not cost a regex pass per cell
+##
+## A cell whose column heading is punctuated differently from the ARD's is
+## matched by folding both sides. Folding the ARD side inside the per-cell
+## lookup made the whole fill quadratic -- two regex passes over every ARD row,
+## for every cell of every output. Measured on the bundled example it was 94%
+## of the fill's runtime, 138 seconds on one nested AE table: the point at
+## which the workflow app's progress bar looked hung.
+## ---------------------------------------------------------------------------
+
+test_that("the index folds the column axis once, for the whole fill", {
+  ard <- data.frame(
+    analysis_id    = c("AN1", "AN1"),
+    stat_name      = c("n", "n"),
+    stat           = c(1, 2),
+    group1_level   = c("Drug 10 mg > Week 12", "Placebo"),
+    variable_level = c(NA_character_, NA_character_),
+    stringsAsFactors = FALSE)
+
+  index <- .ard_index(ard)
+  expect_true("group_fold" %in% names(index))
+  expect_equal(index$group_fold, c("drug 10 mg week 12", "placebo"))
+  ## The raw label is kept beside it: the fold is for matching, not for
+  ## anything the workbook ever shows.
+  expect_equal(index$group_level[[1]], "Drug 10 mg > Week 12")
+})
+
+test_that("a differently punctuated column heading still finds its value", {
+  ## The behaviour the folding exists for, unchanged by precomputing it: the
+  ## shell stacks two header rows, the ARD joins the grouping path with its
+  ## own separator, and the components are identical either way.
+  ard <- data.frame(
+    analysis_id    = "AN1", stat_name = "n", stat = 7,
+    group1_level   = "Drug 10 mg > Week 12",
+    variable_level = NA_character_, stringsAsFactors = FALSE)
+  index <- .ard_index(ard)
+
+  expect_equal(.ard_value(index, "AN1", "Drug 10 mg Week 12",
+                          NA_character_, "n")$value, 7)
+  expect_equal(.ard_value(index, "AN1", "Drug 10 mg > Week 12",
+                          NA_character_, "n")$value, 7)
+  ## And folding still cannot make two DIFFERENT labels equal.
+  expect_equal(.ard_value(index, "AN1", "Placebo", NA_character_, "n")$status,
+               "no_row")
+})
+
+test_that("an index built by hand is still answered, just more slowly", {
+  ## .ard_value() is total over its input: a fixture without the precomputed
+  ## column pays to fold on the spot rather than failing.
+  by_hand <- data.frame(
+    analysis_id = "AN1", group_level = "Drug 10 mg > Week 12",
+    variable_level = NA_character_, stat_name = "n", value = 7,
+    status = "computed", stringsAsFactors = FALSE)
+  expect_false("group_fold" %in% names(by_hand))
+  expect_equal(.ard_value(by_hand, "AN1", "Drug 10 mg Week 12",
+                          NA_character_, "n")$value, 7)
+})
