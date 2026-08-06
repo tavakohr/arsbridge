@@ -1925,6 +1925,10 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
     ))
   }
 
+  ## Loading the workbook twice is the slow start of this stage, and it used
+  ## to happen with nothing on screen. Announced so the bar has something to
+  ## say before the first output is walked.
+  .progress_tick(0L, 0L, "reading the workbook")
   wb <- openxlsx2::wb_load(shell_path)
   sheet_names <- unname(wb$get_sheet_names())
 
@@ -1938,9 +1942,13 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
   n_walked <- 0L   # progress ticks count every output, mapless ones included
 
   for (output in outputs) {
-    n_walked <- n_walked + 1L
+    ## The count is of outputs FINISHED, and the label is the one now being
+    ## filled -- so the bar reaches 100% when the work is done rather than
+    ## when the last output starts. The increment therefore comes after the
+    ## tick, not before it.
     .progress_tick(n_walked, length(outputs),
                    as.character(output$id %||% "?"))
+    n_walked <- n_walked + 1L
     fill <- output$`_meta`$shell_fill
     if (is.null(fill)) {
       ## Exiting silently here is how a run "does nothing" with no trace: the
@@ -2036,6 +2044,11 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
     }
   }
 
+  ## Writing the workbook is the single slowest step of the fill on a real
+  ## study, and it runs after the last output has been walked. Left silent it
+  ## is what makes the bar look hung at 100%: every tick has fired, and the
+  ## run still has its longest step to go.
+  .progress_tick(length(outputs), length(outputs), "saving the workbook")
   .check_sheets_writable(wb, sheet_names)
   openxlsx2::wb_save(wb, output_path, overwrite = TRUE)
 

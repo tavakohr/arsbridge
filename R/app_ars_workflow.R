@@ -177,48 +177,113 @@ ars_workflow <- function(project_dir = NULL) {
 #' The current progress of a background build, read back from its run log.
 #'
 #' The worker's only channel to the app is the log callr builds from its
-#' stdout, so the state of the build IS the last [progress] line in it. The
-#' raw tail rides along: when something goes wrong, the surrounding output
-#' beats a frozen bar.
+#' stdout, so the state of the build IS the last [progress] line in it.
+#'
+#' `last_seen` is the log's modification time, and it is the only thing on
+#' screen that separates a stage taking its time from a worker that has died.
+#' The raw tail rides along for the expander -- it used to be shown under the
+#' bar as the last three NON-progress lines, which with `verbose = FALSE`
+#' meant it was pinned forever on the package-attach message from the
+#' worker's first second, and read as evidence of a hang.
 #' @noRd
 .workflow_read_progress <- function(log_path) {
   if (is.null(log_path) || !file.exists(log_path)) return(NULL)
   lines <- readLines(log_path, warn = FALSE)
-  tail_lines <- utils::tail(grep("^\\[progress\\] ", lines,
-                                 value = TRUE, invert = TRUE), 3)
-  list(ev = .parse_progress_line(lines), tail = tail_lines)
+  list(ev        = .parse_progress_line(lines),
+       last_seen = file.mtime(log_path),
+       tail      = utils::tail(lines, 20))
+}
+
+#' A duration a person can read at a glance.
+#' @noRd
+.workflow_elapsed_label <- function(seconds) {
+  seconds <- max(0, round(as.numeric(seconds)))
+  if (seconds < 60) return(sprintf("%ds", seconds))
+  minutes <- seconds %/% 60
+  if (minutes < 60) return(sprintf("%dm %02ds", minutes, seconds %% 60))
+  sprintf("%dh %02dm", minutes %/% 60, minutes %% 60)
+}
+
+## How long a build may go without saying anything before the panel says so.
+## Long enough that a slow stage does not trip it (an LLM pass over a big
+## shell, a workbook save) and short enough that a dead worker is not mistaken
+## for a working one for the rest of the afternoon.
+.WORKFLOW_STALL_SECONDS <- 180
+
+#' What the panel says beneath the bar: how long this build has been going,
+#' when it last reported anything, and -- past the stall threshold -- that it
+#' may be stuck.
+#'
+#' Pure, so the wording is testable without a session or a clock.
+#' @noRd
+.workflow_liveness_ui <- function(info, started, now = Sys.time()) {
+  if (is.null(started)) return(NULL)
+  elapsed <- .workflow_elapsed_label(difftime(now, started, units = "secs"))
+  quiet <- if (!is.null(info$last_seen) && !is.na(info$last_seen)) {
+    as.numeric(difftime(now, info$last_seen, units = "secs"))
+  } else {
+    NA_real_
+  }
+  stalled <- !is.na(quiet) && quiet > .WORKFLOW_STALL_SECONDS
+  shiny::div(
+    class = if (stalled) "mt-1 text-warning-emphasis" else "mt-1 text-muted",
+    sprintf("Running for %s.", elapsed),
+    if (!is.na(quiet)) {
+      sprintf(" Last reported %s ago.", .workflow_elapsed_label(quiet))
+    },
+    if (stalled) {
+      shiny::span(" This build may be stuck -- cancel it and try again.")
+    })
+}
+
+#' What one progress event says it is doing, as a phrase.
+#'
+#' The label names what is happening NOW; the count is of what is already
+#' finished. Saying "done" is what keeps "T_14_1_5 (3 of 4 done)" from reading
+#' as a contradiction. A named sub-step ("saving the workbook") carries no
+#' count, and used to be dropped entirely by the `n > 0` gate -- which is why
+#' the slowest part of a fill had nothing to show for itself.
+#' @noRd
+.workflow_progress_detail <- function(ev) {
+  if (is.na(ev$label %||% NA_character_)) return("")
+  if ((ev$n %||% 0) > 0) {
+    sprintf("%s (%d of %d done)", ev$label, ev$i, ev$n)
+  } else {
+    ev$label
+  }
 }
 
 #' The build panel's progress block, as a tag: bar when an event is known,
 #' spinner while waiting for the first one.
 #' @noRd
-.workflow_progress_ui <- function(info) {
+.workflow_progress_ui <- function(info, started = NULL, now = Sys.time()) {
   ev <- info$ev
-  tail_pre <- if (length(info$tail %||% character()) > 0) {
-    shiny::pre(class = "mb-0 mt-1 small text-muted",
-               paste(info$tail, collapse = "\n"))
+  live <- .workflow_liveness_ui(info, started, now)
+  log_details <- if (length(info$tail %||% character()) > 0) {
+    shiny::tags$details(
+      class = "mt-1",
+      shiny::tags$summary(class = "text-muted", "Run log"),
+      shiny::pre(class = "mb-0 mt-1 small text-muted",
+                 paste(info$tail, collapse = "\n")))
   }
   if (is.null(ev)) {
     return(shiny::div(
       class = "border rounded p-2 small bg-light",
       shiny::div(class = "spinner-border spinner-border-sm me-2"),
       shiny::span("Running in a background process..."),
-      tail_pre))
+      live, log_details))
   }
   pct <- round(100 * .progress_fraction(ev))
-  detail <- if (!is.na(ev$label %||% NA_character_) && (ev$n %||% 0) > 0) {
-    sprintf(" -- %s (%d/%d)", ev$label, ev$i, ev$n)
-  } else {
-    ""
-  }
+  detail <- .workflow_progress_detail(ev)
   shiny::div(
     class = "border rounded p-2 small bg-light",
-    shiny::div(sprintf("%s%s", .progress_stage_label(ev$stage), detail)),
+    shiny::div(sprintf("%s%s", .progress_stage_label(ev$stage),
+                       if (nzchar(detail)) paste0(" -- ", detail) else "")),
     shiny::div(
       class = "progress mt-1", style = "height: 6px;",
       shiny::div(class = "progress-bar", role = "progressbar",
                  style = sprintf("width: %d%%;", pct))),
-    tail_pre)
+    live, log_details)
 }
 
 #' What to announce for a finished build's payload.
@@ -269,6 +334,7 @@ ars_workflow <- function(project_dir = NULL) {
 #' Common handling for a finished build, however it ran.
 #' @noRd
 .workflow_finish_build <- function(res, state, bump) {
+  state$started(NULL)
   if (inherits(res, "error") || inherits(res, "condition")) {
     shiny::showNotification(paste("Build failed:", conditionMessage(res)),
                             type = "error", duration = 10)
@@ -317,9 +383,12 @@ ars_workflow <- function(project_dir = NULL) {
     nonce               = shiny::reactiveVal(0L),
     last_result         = shiny::reactiveVal(NULL),
     supplement_findings = shiny::reactiveVal(NULL),
-    ## The background build: whether one is in flight, and its handle.
+    ## The background build: whether one is in flight, its handle, and when
+    ## it started -- elapsed time is the one signal that keeps moving no
+    ## matter how long a stage stays silent.
     running             = shiny::reactiveVal(FALSE),
     job                 = shiny::reactiveVal(NULL),
+    started             = shiny::reactiveVal(NULL),
     ## The last progress event seen, plus the raw log tail behind it. In
     ## background mode the poller refreshes it; in-process it is set by the
     ## callback (for tests and the final state -- live repainting there goes
@@ -734,7 +803,7 @@ ars_workflow <- function(project_dir = NULL) {
     ## immediately. This block is the background mode's display.)
     output$build_progress <- shiny::renderUI({
       if (!isTRUE(state$running())) return(NULL)
-      .workflow_progress_ui(state$progress())
+      .workflow_progress_ui(state$progress(), state$started())
     })
 
     shiny::observeEvent(input$run_build, {
@@ -744,6 +813,7 @@ ars_workflow <- function(project_dir = NULL) {
 
       dir.create(dirname(paths$run_log), recursive = TRUE, showWarnings = FALSE)
       state$progress(NULL)   # last run's bar must not front-run this one
+      state$started(Sys.time())
       state$running(TRUE)
       handle <- .workflow_start_build(m, paths)
       if (is.null(handle)) {
@@ -755,14 +825,13 @@ ars_workflow <- function(project_dir = NULL) {
         ## "simplify" it away in favour of state$progress.
         res <- tryCatch({
           progress_cb <- function(ev) {
-            state$progress(list(ev = ev, tail = character()))
+            state$progress(list(ev = ev, last_seen = Sys.time(),
+                                tail = character()))
+            detail <- .workflow_progress_detail(ev)
             tryCatch(shiny::setProgress(
               value = .progress_fraction(ev),
               message = .progress_stage_label(ev$stage),
-              detail = if (!is.na(ev$label %||% NA_character_) &&
-                             (ev$n %||% 0) > 0) {
-                sprintf("%s (%d/%d)", ev$label, ev$i, ev$n)
-              }), error = function(e) NULL)
+              detail = if (nzchar(detail)) detail), error = function(e) NULL)
           }
           shiny::withProgress(
             message = "Building (in this process)...", value = 0,

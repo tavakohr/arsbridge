@@ -243,10 +243,14 @@ test_that("progress read back from a run log matches what the worker wrote", {
   info <- arsbridge:::.workflow_read_progress(log)
   expect_equal(info$ev$stage, "ars_to_ard")
   expect_equal(info$ev$i, 5L)
-  ## The tail excludes the [progress] lines -- they are the bar's food, not
-  ## reading material -- and keeps the human output.
+  ## The tail is now the RAW last lines, shown behind a "Run log" expander
+  ## rather than under the bar. Filtering the [progress] lines out of it was
+  ## what left it frozen on the worker's start-up chatter: with verbose off,
+  ## every line the worker writes after that IS a progress line.
   expect_true(any(grepl("Parsed 9 TLF", info$tail)))
-  expect_false(any(grepl("^\\[progress\\]", info$tail)))
+  expect_true(any(grepl("^\\[progress\\]", info$tail)))
+  ## The liveness signal: when the worker last said anything at all.
+  expect_false(is.na(info$last_seen))
 
   expect_null(arsbridge:::.workflow_read_progress(NULL))
   expect_null(arsbridge:::.workflow_read_progress(tempfile("gone_")))
@@ -260,11 +264,45 @@ test_that("the progress block is a bar with an event and a spinner without", {
   html <- as.character(with_ev)
   expect_match(html, "progress-bar")
   expect_match(html, "Filling the workbook")
-  expect_match(html, "T_14_2_1 \\(4/9\\)")
+  ## The count is of outputs FINISHED, and it says so -- the label beside it
+  ## names the one still in flight.
+  expect_match(html, "T_14_2_1 \\(4 of 9 done\\)")
 
   waiting <- arsbridge:::.workflow_progress_ui(list(ev = NULL,
                                                     tail = character()))
   expect_match(as.character(waiting), "spinner-border")
+})
+
+test_that("a named sub-step with no count still shows what it is doing", {
+  ## The regression this guards: the detail was gated on n > 0, so
+  ## "saving the workbook" -- the slowest step of a real fill -- rendered as
+  ## a bare stage name and the panel looked frozen at 100%.
+  saving <- arsbridge:::.workflow_progress_ui(list(
+    ev = list(stage = "ars_fill_shell", stage_idx = 3L, n_stages = 3L,
+              i = 0L, n = 0L, label = "saving the workbook"),
+    tail = character()))
+  expect_match(as.character(saving), "saving the workbook")
+})
+
+test_that("the panel says how long the build has been going, and when it went quiet", {
+  now <- as.POSIXct("2026-08-05 12:00:00", tz = "UTC")
+  info <- list(ev = NULL, last_seen = now - 30, tail = character())
+
+  live <- arsbridge:::.workflow_liveness_ui(info, started = now - 95, now = now)
+  expect_match(as.character(live), "Running for 1m 35s")
+  expect_match(as.character(live), "Last reported 30s ago")
+  expect_no_match(as.character(live), "may be stuck")
+
+  ## Past the stall threshold the panel says so rather than leaving the user
+  ## to guess whether a silent worker is working or dead.
+  quiet <- list(ev = NULL, tail = character(),
+                last_seen = now - arsbridge:::.WORKFLOW_STALL_SECONDS - 1)
+  stalled <- arsbridge:::.workflow_liveness_ui(quiet, started = now - 600,
+                                               now = now)
+  expect_match(as.character(stalled), "may be stuck")
+
+  ## No build in flight, nothing to say.
+  expect_null(arsbridge:::.workflow_liveness_ui(info, started = NULL, now = now))
 })
 
 test_that("an in-process build reports progress and leaves the last event", {

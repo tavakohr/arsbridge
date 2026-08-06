@@ -116,6 +116,38 @@ test_that("a run reports every stage, in order, to completion", {
   expect_null(getOption("arsbridge.progress"))
 })
 
+test_that("every stage ends on a named step, so none of them runs out silent", {
+  ## The defect this pins: the ticks only ever covered the per-item LOOPS, so
+  ## the work after the last item -- writing the reporting event, binding the
+  ## ARD, and above all openxlsx2::wb_save() -- ran with the bar already at
+  ## 100% and nothing changing on screen. On a real study that is the longest
+  ## silence of the run, and it read as a hang.
+  events <- list()
+  no_keys_p(ars_workflow_run(
+    shell_path = SHELL_P, adam_spec_path = SPEC_P, adam_dir = ADAM_P,
+    output_dir = tempfile("wfp_"), study_id = "APX-DRM-301",
+    on_progress = function(ev) events[[length(events) + 1L]] <<- ev))
+
+  final <- c(spec_to_ars = "writing the reporting event",
+             ars_to_ard = "assembling the results",
+             ars_fill_shell = "saving the workbook")
+  for (stage in names(final)) {
+    of_stage <- Filter(function(e) identical(e$stage, stage), events)
+    expect_equal(of_stage[[length(of_stage)]]$label, final[[stage]],
+                 info = stage)
+  }
+
+  ## And the counts are of work FINISHED: no per-item tick claims the whole
+  ## stage before the named closing step does.
+  for (stage in names(final)) {
+    items <- Filter(function(e) identical(e$stage, stage) && !is.na(e$label) &&
+                      !identical(e$label, final[[stage]]) && e$n > 0, events)
+    if (length(items) == 0) next
+    expect_lt(max(vapply(items, function(e) e$i, integer(1))),
+              items[[1]]$n)
+  }
+})
+
 test_that("the stage plan counts only the stages that will run", {
   events <- list()
   no_keys_p(ars_workflow_run(
