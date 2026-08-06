@@ -7,8 +7,13 @@
 ars_workflow(project_dir = NULL)
 }
 \arguments{
-\item{project_dir}{Path to the project folder. \code{NULL} (default) starts on
-the project-setup step; an existing project resumes.}
+\item{project_dir}{Path to the project folder. \code{NULL} (default) works out
+which project you meant: the working directory if you are standing in a
+project, otherwise the last project opened. Only a genuine first run
+starts on an empty setup form. Projects opened before are also offered in
+a dropdown, so switching between studies does not mean retyping four
+paths; that list is kept in \code{tools::R_user_dir("arsbridge", "config")}
+and holds folder paths and nothing else.}
 }
 \value{
 Invisibly, the project directory.
@@ -22,7 +27,9 @@ TLF shell to a reviewed CDISC ARS reporting event:
 \item \strong{Project setup} -- pick a project folder and name the annotated shell
 (\code{.docx} or \code{.xlsx}), the ADaM spec (\code{.xlsx}/\code{.xml}), and a study id. The
 folder gets a fixed layout (\verb{copilot/}, \verb{ars/}) and a
-small \code{arsbridge_project.json} state file.
+small \code{arsbridge_project.json} state file. With \code{shinyFiles} installed
+each path comes with a Browse button; without it they are text fields,
+as before.
 \item \strong{Instruction files} -- writes the two-phase Copilot instructions and
 the supplement JSON schema into \verb{copilot/} (see
 \code{\link[=ars_copilot_instructions]{ars_copilot_instructions()}}).
