@@ -684,6 +684,21 @@ enrich_with_llm <- function(section,
   NULL
 }
 
+#' TRUE when a row is a mock illustration of its own variable's levels: a
+#' token label ("<Reason #1>", "PT#n") whose annotation is a plain
+#' equality on the one variable it references ("ADSL.DCSREASN=1", "=n").
+#' The value names an example level -- "=n" is not even a value -- so it is
+#' never a filter, and backfilling it as a DataSubset would either attach a
+#' wrong filter or warn about a condition nobody wrote.
+#' @noRd
+.is_level_illustration <- function(label, ann) {
+  if (is.null(.token_stem(label %||% ""))) return(FALSE)
+  refs <- extract_annotation_vars(ann %||% "")
+  if (length(refs) != 1) return(FALSE)
+  ref_re <- gsub(".", "\\.", refs[1], fixed = TRUE)
+  grepl(paste0("^\\s*\\[?\\s*", ref_re, "\\s*==?"), ann)
+}
+
 #' Backfill a DataSubset onto every enriched row that lacks one, derived from
 #' the row's original annotation WHERE clause. Idempotent: rows that already
 #' carry a non-empty `data_subset` are left untouched (LLM output wins).
@@ -697,6 +712,7 @@ enrich_with_llm <- function(section,
     if (!is.null(ds) && length(ds) > 0) return(er)        # keep existing
     ann <- ann_by_label[[er$label %||% ""]]
     if (is.null(ann) || !nzchar(ann)) return(er)
+    if (.is_level_illustration(er$label, ann)) return(er)
     fs <- flat_data_subset(ann)
     if (is.null(fs)) return(er)
     er$data_subset <- fs

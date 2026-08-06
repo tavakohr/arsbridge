@@ -1,5 +1,28 @@
 # arsbridge (development version)
 
+* **A categorical mock block is kept as an expansion template, not dropped.**
+  Shells author "levels unknown until the data arrives" as a header annotated
+  with the bare variable ("Primary reason for discontinuation, n (%)
+  [ADSL.DCSREASN]") over mock rows ("<Reason #1>", "<Reason #2>",
+  "<Reason #n>"). The mocks still collapse into the header's single
+  count-and-percentage analysis, but their sheet rows now ride on the
+  parent's layout entry as `template_rows` -- the recorded shape a later
+  fill step needs to expand the block into one row per level. Until that
+  expansion exists, the block's placeholder cells say so: the cell map
+  reports them as *awaiting row expansion* instead of the misleading "no
+  analysis covers this row".
+
+  Two behaviours around the mocks are corrected with it:
+
+  * A mock that restates the variable with an illustrative level code
+    ("[ADSL.DCSREASN=1]", or the generic "[ADSL.DCSREASN=n]") is recognised
+    as an illustration. The value is no longer backfilled as a subset
+    filter, and the unparseable "=n" no longer surfaces as a
+    dropped-condition WARN -- the collapse is reported as INFO, as it
+    always was for the bare dialect.
+  * A Word shell, which has no cell addresses, records no template rows --
+    the entry gains nothing that merely looks like one.
+
 * **A promised Total must arrive, and a displayed column must receive
   something.** The remaining two checks from the guidance document, both aimed
   at the same field failure from the other end: three cohort columns full of
