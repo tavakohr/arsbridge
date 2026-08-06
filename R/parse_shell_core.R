@@ -920,10 +920,14 @@ bind_annotations <- function(sec) {
   sec$total_label <- .strip_n_placeholder(
     if (length(overall) > 0) overall[[1]]$label else bare_overall[[1]])
 
-  ## The column's own annotation, when it parsed into one.
+  ## The column's own annotation, when it parsed into one. The raw text
+  ## travels beside the parsed clause (guidance rule 5): a reviewer compares
+  ## what the shell said against what arsbridge made of it, and cannot do
+  ## that if only the normalized form survives.
   authored <- Filter(function(cand) !is.null(cand$condition), overall)
   if (length(authored) > 0) {
-    sec$total_condition <- authored[[1]]$condition
+    sec$total_condition  <- authored[[1]]$condition
+    sec$total_annotation <- authored[[1]]$annotation %||% ""
     return(sec)
   }
 
@@ -935,6 +939,48 @@ bind_annotations <- function(sec) {
   })
   sec$total_condition <- do.call(
     combine_conditions, c(level_conditions, list(operator = "OR")))
+  sec
+}
+
+#' Check that a displayed Total column has metadata that can produce it.
+#'
+#' Guidance rule 1: if the shell shows a Total column, the reporting event must
+#' carry a Total. The gap this closes is not theoretical -- a delivered
+#' workbook had numbers in every cohort column and placeholders in every Total
+#' cell, and no diagnostic anywhere said a displayed column had been dropped.
+#'
+#' Also records the column's scope (rule 7) so a reviewer can see what Total
+#' MEANS without reading the JSON: the condition the shell authored, the union
+#' of the group columns derived from it, or the analysis set.
+#' @noRd
+.check_overall_column <- function(sec) {
+  if (!identical(sec$tlf_type, "TABLE")) return(sec)
+  headers <- as.character(sec$col_labels_full %||% sec$col_headers %||%
+                            character())
+  if (length(headers) == 0) return(sec)
+  ## Every header, stub included: `col_headers` drops the stub and
+  ## `col_labels_full` keeps it, and no stub is ever labelled "Total", so
+  ## scanning all of them beats guessing which vector this section carries.
+  overall <- headers[vapply(headers, .is_overall_label, logical(1))]
+  if (length(overall) == 0) return(sec)
+
+  if (!isTRUE(sec$include_total)) {
+    .diag_gap(
+      stage = "build_ars", severity = "FAIL", input = INPUT_SHELL,
+      problem = sprintf(
+        "Table %s displays an overall column (%s) that the reporting event cannot produce.",
+        sec$tlf_number %||% "?", .strip_n_placeholder(overall[[1]])),
+      why = "Nothing declares the column, so no result is computed for it and its cells stay on their placeholder while the columns beside them fill.",
+      fix = "Annotate the header with the subjects it covers -- e.g. [ADSL.COHORTN IN (1,2)] -- or leave it unannotated to take the union of the group columns.",
+      tlf_number = sec$tlf_number, location = sec$title %||% "")
+    return(sec)
+  }
+
+  sec$total_scope <- if (!is.null(sec$total_condition)) {
+    "condition_based"
+  } else {
+    "analysis_set"
+  }
   sec
 }
 
