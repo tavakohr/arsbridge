@@ -83,9 +83,12 @@ ars_workflow_run(
   Optional function called with one progress event at a time: a list
   with `stage`, `stage_idx`, `n_stages`, `i`, `n`, `label`. Each stage
   announces itself with `i = 0`, then ticks once per TLF, analysis, or
-  sheet. Errors it raises are swallowed – a progress bar must never take
-  a build down. `NULL` (the default) reports nothing and changes
-  nothing.
+  sheet – `i` counting the items already FINISHED and `label` naming the
+  one now in flight. The work on either side of those loops (reading the
+  inputs, writing the reporting event, saving the workbook) ticks as a
+  named step with no count, so no stage runs out silent. Errors it
+  raises are swallowed – a progress bar must never take a build down.
+  `NULL` (the default) reports nothing and changes nothing.
 
 ## Value
 

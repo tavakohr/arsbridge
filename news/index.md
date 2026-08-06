@@ -2,6 +2,59 @@
 
 ## arsbridge (development version)
 
+- **A build in the workflow app can always be left.** The same field run
+  reported the second half of the problem: a `supplement.json` was
+  dropped into the project, the Build panel correctly flipped its mode
+  line to *supplement* – and there was no way to build with it, because
+  the button was a disabled “Building…” that never came back.
+
+  `running` had exactly one exit: the poller watching the worker process
+  die. A build that outlived the user’s patience had no way out, and a
+  poll that threw was worse – a Shiny observer that throws is destroyed,
+  taking the only thing that would ever clear the flag with it, for the
+  rest of the session.
+
+  - A **Cancel** button sits beside “Building…” for the whole of a
+    background build. It kills the worker and its children and hands the
+    panel straight back, so the next build – with the supplement, if
+    there is one – is available immediately.
+  - The poller no longer dies on a failed poll.
+    [`readLines()`](https://rdrr.io/r/base/readLines.html) on a file the
+    worker is writing can fail; that now costs one skipped tick instead
+    of the build panel.
+  - `running` with no worker to wait for self-heals rather than sitting
+    there. It should be unreachable; it was also unrecoverable.
+  - A worker that dies without returning a result now names its run log,
+    so “callr subprocess failed” comes with somewhere to look.
+
+- **The workflow app’s progress bar stops going quiet before the run
+  ends.** A field run reported it stuck on
+  `Filling the workbook -- T_14_1_5 (4/4)`, full bar, nothing moving.
+  Nothing was wrong with the build: the ticks only ever covered the
+  three per-item LOOPS, so everything on either side of them ran with
+  nothing to say. The longest of those silences is
+  [`openxlsx2::wb_save()`](https://janmarvin.github.io/openxlsx2/reference/wb_save.html),
+  which is the slowest single step of a real fill and runs *after* the
+  last output has been walked.
+
+  - Reading the inputs, writing the reporting event, binding the ARD and
+    saving the workbook now each tick as a named step, so no stage runs
+    out silent. A test asserts every stage’s final event is one of them.
+  - The per-item counter counts what is FINISHED rather than what is
+    starting, and the panel says so – `T_14_1_5 (3 of 4 done)`. The bar
+    reached 100% as the last item *began*, which is most of why the end
+    of a stage looked like a hang.
+  - The panel now shows how long the build has been running and how long
+    since it last reported anything, and says plainly when a build has
+    gone quiet for more than three minutes. Elapsed time keeps moving
+    however long a stage stays silent, which is what separates a slow
+    run from a dead one.
+  - The three log lines under the bar are gone. They were the last three
+    *non*-progress lines, and with `verbose = FALSE` the worker writes
+    nothing after start-up – so they were pinned forever on the
+    package-attach message from its first second and read as evidence of
+    the hang. The raw log moved behind a “Run log” expander.
+
 - **The reference bundle runs without a single warning, and a test keeps
   it that way.** Three findings, all of them the package complaining
   about something it had already understood:

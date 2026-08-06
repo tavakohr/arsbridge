@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9071</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9073</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -42,6 +42,22 @@
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="development version" id="arsbridge-development-version">arsbridge (development version)<a class="anchor" aria-label="anchor" href="#arsbridge-development-version"></a></h2>
 <ul><li>
+<p><strong>A build in the workflow app can always be left.</strong> The same field run reported the second half of the problem: a <code>supplement.json</code> was dropped into the project, the Build panel correctly flipped its mode line to <em>supplement</em> – and there was no way to build with it, because the button was a disabled “Building…” that never came back.</p>
+<p><code>running</code> had exactly one exit: the poller watching the worker process die. A build that outlived the user’s patience had no way out, and a poll that threw was worse – a Shiny observer that throws is destroyed, taking the only thing that would ever clear the flag with it, for the rest of the session.</p>
+<ul><li>A <strong>Cancel</strong> button sits beside “Building…” for the whole of a background build. It kills the worker and its children and hands the panel straight back, so the next build – with the supplement, if there is one – is available immediately.</li>
+<li>The poller no longer dies on a failed poll. <code><a href="https://rdrr.io/r/base/readLines.html" class="external-link">readLines()</a></code> on a file the worker is writing can fail; that now costs one skipped tick instead of the build panel.</li>
+<li>
+<code>running</code> with no worker to wait for self-heals rather than sitting there. It should be unreachable; it was also unrecoverable.</li>
+<li>A worker that dies without returning a result now names its run log, so “callr subprocess failed” comes with somewhere to look.</li>
+</ul></li>
+<li>
+<p><strong>The workflow app’s progress bar stops going quiet before the run ends.</strong> A field run reported it stuck on <code>Filling the workbook -- T_14_1_5 (4/4)</code>, full bar, nothing moving. Nothing was wrong with the build: the ticks only ever covered the three per-item LOOPS, so everything on either side of them ran with nothing to say. The longest of those silences is <code><a href="https://janmarvin.github.io/openxlsx2/reference/wb_save.html" class="external-link">openxlsx2::wb_save()</a></code>, which is the slowest single step of a real fill and runs <em>after</em> the last output has been walked.</p>
+<ul><li>Reading the inputs, writing the reporting event, binding the ARD and saving the workbook now each tick as a named step, so no stage runs out silent. A test asserts every stage’s final event is one of them.</li>
+<li>The per-item counter counts what is FINISHED rather than what is starting, and the panel says so – <code>T_14_1_5 (3 of 4 done)</code>. The bar reached 100% as the last item <em>began</em>, which is most of why the end of a stage looked like a hang.</li>
+<li>The panel now shows how long the build has been running and how long since it last reported anything, and says plainly when a build has gone quiet for more than three minutes. Elapsed time keeps moving however long a stage stays silent, which is what separates a slow run from a dead one.</li>
+<li>The three log lines under the bar are gone. They were the last three <em>non</em>-progress lines, and with <code>verbose = FALSE</code> the worker writes nothing after start-up – so they were pinned forever on the package-attach message from its first second and read as evidence of the hang. The raw log moved behind a “Run log” expander.</li>
+</ul></li>
+<li>
 <p><strong>The reference bundle runs without a single warning, and a test keeps it that way.</strong> Three findings, all of them the package complaining about something it had already understood:</p>
 <ul><li>
 <strong>The enricher read the shell’s column axis after deciding it had none.</strong> A section whose shell states <code>[columns -&gt; ADSL.TRT01A]</code> was run through the “no grouping variable identified” fallback first, warned about, and <em>then</em> given the axis the shell had stated all along – six WARNs on the bundled example, one per table. The authored axis is now resolved first, which also closes a latent defect: when the spec’s treatment variable differed from the authored one, the fallback added it <em>beside</em> the axis and turned a one-level column into a two-level cross.</li>

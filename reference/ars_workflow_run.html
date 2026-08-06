@@ -15,7 +15,7 @@ rendered by a UI."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9071</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9073</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -128,9 +128,12 @@ at its own log.</p></dd>
 <dd><p>Optional function called with one progress event at a
 time: a list with <code>stage</code>, <code>stage_idx</code>, <code>n_stages</code>, <code>i</code>, <code>n</code>, <code>label</code>.
 Each stage announces itself with <code>i = 0</code>, then ticks once per TLF,
-analysis, or sheet. Errors it raises are swallowed – a progress bar
-must never take a build down. <code>NULL</code> (the default) reports nothing and
-changes nothing.</p></dd>
+analysis, or sheet – <code>i</code> counting the items already FINISHED and <code>label</code>
+naming the one now in flight. The work on either side of those loops
+(reading the inputs, writing the reporting event, saving the workbook)
+ticks as a named step with no count, so no stage runs out silent. Errors
+it raises are swallowed – a progress bar must never take a build down.
+<code>NULL</code> (the default) reports nothing and changes nothing.</p></dd>
 
 </dl></div>
     <div class="section level2">
