@@ -341,3 +341,63 @@ test_that("Overall counts as an overall column, and no total column is silent", 
   expect_null(none$total_condition)
   expect_length(none$column_groups$groups, 3)
 })
+
+## ---------------------------------------------------------------------------
+## The gate: a displayed Total column must be a producible Total column
+## ---------------------------------------------------------------------------
+
+test_that("a displayed overall column with no metadata is a blocking finding", {
+  ## Exactly what shipped: numbers in every cohort column, placeholders in
+  ## every Total cell, and not one diagnostic saying a displayed column had
+  ## been dropped. It is a FAIL because the deliverable is wrong, not merely
+  ## incomplete -- and nothing downstream can tell.
+  diag_reset()
+  sec <- list(tlf_type = "TABLE", tlf_number = "14.1.1",
+              title = "Summary of Subject Status",
+              col_headers = c("Alpha Cohort (N=XX)", "Beta Cohort (N=XX)",
+                              "Unknown Cohort (N=XX)", "Total (N=XX)"),
+              include_total = FALSE)
+  out <- suppressMessages(arsbridge:::.check_overall_column(sec))
+
+  records <- diag_records()
+  hit <- records[records$severity == "FAIL" &
+                   grepl("overall column", records$problem), , drop = FALSE]
+  expect_equal(nrow(hit), 1L)
+  expect_match(hit$problem[[1]], "Total", fixed = TRUE)
+  expect_match(hit$problem[[1]], "14.1.1", fixed = TRUE)
+  ## The fix names both ways out, so the annotation can be corrected or
+  ## deliberately left off.
+  expect_match(hit$action[[1]], "IN (1,2)", fixed = TRUE)
+  expect_null(out$total_scope)
+})
+
+test_that("a producible overall column records what its scope means", {
+  ## Guidance rule 7: a reviewer must be able to see what Total MEANS without
+  ## reading a WhereClause, and compare it against the shell's own words.
+  diag_reset()
+  scoped <- suppressMessages(arsbridge:::.check_overall_column(list(
+    tlf_type = "TABLE", tlf_number = "14.1.1", title = "t",
+    col_headers = c("Cohort A (N=XX)", "Total (N=XX)"),
+    include_total = TRUE,
+    total_condition = parse_where_clause("[ADSL.COHORTN IN (1,2)]"))))
+  expect_equal(scoped$total_scope, "condition_based")
+
+  derived <- suppressMessages(arsbridge:::.check_overall_column(list(
+    tlf_type = "TABLE", tlf_number = "14.1.2", title = "t",
+    col_headers = c("Cohort A (N=XX)", "Total (N=XX)"),
+    include_total = TRUE, total_condition = NULL)))
+  expect_equal(derived$total_scope, "analysis_set")
+
+  ## Neither is a finding: both are producible.
+  expect_equal(sum(diag_records()$severity == "FAIL"), 0L)
+})
+
+test_that("a table with no overall column is left alone", {
+  diag_reset()
+  sec <- list(tlf_type = "TABLE", tlf_number = "14.1.3", title = "t",
+              col_headers = c("Cohort A (N=XX)", "Cohort B (N=XX)"),
+              include_total = FALSE)
+  out <- suppressMessages(arsbridge:::.check_overall_column(sec))
+  expect_null(out$total_scope)
+  expect_equal(nrow(diag_records()), 0L)
+})

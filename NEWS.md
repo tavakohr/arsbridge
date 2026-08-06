@@ -1,5 +1,24 @@
 # arsbridge (development version)
 
+* **A Total column the shell displays must be a Total column the metadata can
+  produce.** The delivered workbook that prompted the previous entry had
+  numbers in every cohort column, placeholders in every Total cell, and *not
+  one diagnostic* saying a displayed column had been dropped. The build
+  reported success.
+
+  `spec_to_ars()` now gates it: a table whose headers show a Total or Overall
+  column that nothing declares is a **FAIL**, naming the table and the header,
+  and saying both ways out -- annotate the header with the subjects it covers,
+  or leave it unannotated to take the union of the group columns. It is a FAIL
+  rather than a warning because the deliverable is wrong, not merely
+  incomplete, and nothing downstream can tell.
+
+  Alongside it, guidance rule 7: a producible overall column records what its
+  scope *means* in the output metadata -- the label it fills, whether the
+  scope was authored or derived, and the shell's own annotation text kept
+  verbatim beside the parsed clause. A reviewer can check what Total covers
+  against the shell without reading a WhereClause.
+
 * **A shell annotated with double quotes had every condition thrown away, and
   its Total column never computed.** A field study delivered a workbook whose
   cohort columns held real numbers -- 482, 441, 27 -- and whose Total column

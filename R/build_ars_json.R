@@ -2160,6 +2160,16 @@ build_ars_json <- function(sections,
   if (length(shell_layout %||% list()) > 0) {
     out_meta$shell_layout <- shell_layout
   }
+  ## What the overall column MEANS, in words a reviewer can check against the
+  ## shell without reading a WhereClause: the scope it was given, the
+  ## annotation it came from, and the header it fills.
+  if (isTRUE(section$include_total)) {
+    out_meta$overall_column <- list(
+      label      = section$total_label %||% "Total",
+      scope      = section$total_scope %||% "analysis_set",
+      annotation = section$total_annotation %||% ""
+    )
+  }
   ## The cell map for writing results back into the shell workbook. Absent
   ## for a Word shell, which has no cell addresses.
   if (length(shell_fill %||% list()) > 0) {

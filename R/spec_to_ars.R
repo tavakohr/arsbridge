@@ -510,6 +510,13 @@ spec_to_ars <- function(shell_path,
       "{n_unsupported} table{?s} beyond arsbridge's methods -- placeholder{?s} will be emitted; produce manually.")
   }
 
+  ## --- Overall-column gate -------------------------------------------
+  ## A Total column the shell DISPLAYS must be a Total column the metadata
+  ## can produce. The failure this closes shipped a real deliverable: cohort
+  ## columns full of numbers and a Total column of placeholders, with nothing
+  ## anywhere saying a displayed column had been dropped.
+  for (i in seq_along(enriched)) enriched[[i]] <- .check_overall_column(enriched[[i]])
+
   ## --- SAP enrichment (optional) -------------------------------------
   ## Match SAP prose per TLF and attach it to the enriched section; .build_analysis
   ## persists it as sapDescription, which the emitter prints as the block comment.
