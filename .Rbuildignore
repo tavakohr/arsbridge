@@ -37,4 +37,5 @@
 ^README\.Rmd$
 ^CODE_OF_CONDUCT\.md$
 ^PLAN_.*\.md$
+^ars_total_and_annotation_guidance\.md$
 ^data-raw$

@@ -1047,8 +1047,20 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
         a <- executor(df_filtered, analysis_var, by_arg, df_population,
                       subject_key)
         if (isTRUE(res$include_total) && !is.null(by_arg)) {
-          a <- cards::bind_ard(a, executor(df_filtered, analysis_var, NULL,
-                                           df_population, subject_key))
+          ## Scoped by the Total column's own condition when the shell gave
+          ## one, exactly as the emitted block is -- otherwise this path and
+          ## the default path would disagree and the equivalence test would
+          ## be comparing two different questions. A NULL condition makes
+          ## eval_where_clause() all-TRUE, which is the ungrouped pass as it
+          ## has always been.
+          keep_t <- eval_where_clause(df_filtered, res$total_where)
+          df_t   <- df_filtered[keep_t, , drop = FALSE]
+          df_pop <- if (is.null(df_population)) NULL else {
+            df_population[eval_where_clause(df_population, res$total_where), ,
+                          drop = FALSE]
+          }
+          a <- cards::bind_ard(a, executor(df_t, analysis_var, NULL,
+                                           df_pop, subject_key))
         }
         a
       } else {

@@ -371,6 +371,29 @@
   list(code = code, objs = objs)
 }
 
+## The overall pass's display identity: which column of the shell it is.
+##
+## The grouped pass gets group1/group1_level from cards. The ungrouped total
+## pass has neither, so .ard_index() reads its group level as NA -- and an NA
+## group level means "not reported by column", which would put the Total value
+## into every column instead of the Total one. Stamping the shell's own header
+## text is what ties the row to the column it belongs to.
+#' @noRd
+.total_stamp_expr <- function(res, by) {
+  label <- res$total_label %||% ""
+  if (!nzchar(label) || !length(by)) return("")
+  ## group1_level is a LIST column in a cards ARD -- one element per row, each
+  ## holding that row's level. A plain character stamp binds fine on its own
+  ## and then fails the moment bind_ard() meets the grouped pass beside it
+  ## ("Can't combine <list> and <character>"), which takes the whole analysis
+  ## down. list() is not cosmetic here.
+  paste0(
+    " |>\n  dplyr::mutate(\n",
+    sprintf("    group1 = %s,\n", encodeString(by[[1]], quote = "\"")),
+    sprintf("    group1_level = list(%s)\n", encodeString(label, quote = "\"")),
+    "  )")
+}
+
 ## The cards CALL (no object assignment) for one resolved analysis and a
 ## given `by` vector. Selecting the idiom by method here -- once -- lets the
 ## flat block, its include_total total pass, and every declared-path block
@@ -484,12 +507,24 @@
   ## include_total: an extra ungrouped pass (shell carries an overall column).
   ## Skipped for the inferential methods, where an ungrouped pass is meaningless
   ## (a CMH needs the grouping; a per-arm CI has no "total" arm).
+  ##
+  ## The pass is SCOPED by the Total column's own condition when the shell
+  ## annotated one. It rides on `path_where`, which .data_expr() and
+  ## .denom_expr() both apply -- so the numerator and the denominator are cut
+  ## the same way and the percentage comes out of the Total column's own N.
+  ## Without a condition it stays the ungrouped pass it always was.
   if (isTRUE(res$include_total) && length(by) &&
       !method %in% c("MTH_CMH_TEST", "MTH_PROPORTION_CI_EXACT")) {
     obj_t <- paste0(obj, "_total")
-    code  <- paste0(code, "\n",
-                    sprintf("%s <- %s", obj_t, .method_call(res, character(0))))
-    objs  <- c(objs, obj_t)
+    res_t <- res
+    res_t$path_where <- res$total_where %||% res$path_where
+    call_t <- .method_call(res_t, character(0))
+    ## The ARD row has to say which display column it is, or the fill has no
+    ## way to tell the Total column's value from an analysis that simply is
+    ## not reported by column. Stamped with the shell's own header text.
+    stamps <- .total_stamp_expr(res, by)
+    code <- paste0(code, "\n", sprintf("%s <- %s%s", obj_t, call_t, stamps))
+    objs <- c(objs, obj_t)
   }
   list(code = code, objs = objs)
 }

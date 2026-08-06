@@ -269,3 +269,75 @@ test_that("spec_to_ars carries the column groups into the ARS JSON", {
   expect_true(any(vapply(spec$analyses, function(a)
     isTRUE(a$includeTotal), logical(1))))
 })
+
+## ---------------------------------------------------------------------------
+## The overall column
+##
+## A field study delivered a workbook whose cohort columns held real numbers
+## and whose Total column was still "xx" in every row. The shell annotated it
+## "Total (N=XX) [ADSL.COHORTN IN (1,2)]" -- deliberately excluding a third
+## displayed column, an Unknown cohort -- and the column ended up with no
+## metadata at all: not a group, not a total.
+##
+## The rule: the annotation ON the column wins. Only when there is none is the
+## scope derived, as the union of the group columns.
+## ---------------------------------------------------------------------------
+
+.ocol_resolve <- function(labels, annotations) {
+  sec <- list(tlf_type = "TABLE", tlf_number = "14.1.1", title = "t",
+              .pending_column_annotations = list(labels = labels,
+                                                 annotations = annotations))
+  suppressMessages(suppressWarnings(
+    arsbridge:::.resolve_table_column_groups(sec)))
+}
+
+.ocol_labels <- c("Alpha Cohort (N=XX)", "Beta Cohort (N=XX)",
+                  "Unknown Cohort (N=XX)", "Total (N=XX)")
+.ocol_axis <- c("[ADSL.COHORTN=1]", "[ADSL.COHORTN=2]",
+                "[ADSL.COHORTN is missing]")
+
+test_that("an annotated Total column is scoped by its own annotation", {
+  sec <- .ocol_resolve(.ocol_labels,
+                       c(.ocol_axis, "[ADSL.COHORTN IN (1,2)]"))
+
+  ## Never a group level: its scope overlaps the levels, and the emitted
+  ## grouping is a first-match-wins case_when, so a Total level would be
+  ## shadowed by the very columns it totals and report zero.
+  expect_equal(vapply(sec$column_groups$groups, function(g) g$label, ""),
+               c("Alpha Cohort", "Beta Cohort", "Unknown Cohort"))
+  expect_true(isTRUE(sec$include_total_hint))
+  expect_equal(sec$total_label, "Total")
+  ## Exactly what the shell said -- which here excludes a displayed column.
+  expect_equal(where_to_filter_expr(sec$total_condition),
+               'COHORTN %in% c("1", "2")')
+})
+
+test_that("an unannotated Total column is the union of the group columns", {
+  sec <- .ocol_resolve(.ocol_labels, c(.ocol_axis, ""))
+  expect_true(isTRUE(sec$include_total_hint))
+  expect_equal(sec$total_label, "Total")
+  ## Derived, because there was nothing authored to honour. Narrower than
+  ## "the analysis set" whenever the groups do not cover the population.
+  expr <- where_to_filter_expr(sec$total_condition)
+  expect_match(expr, 'COHORTN %in% c("1")', fixed = TRUE)
+  expect_match(expr, 'COHORTN %in% c("2")', fixed = TRUE)
+  expect_match(expr, "|", fixed = TRUE)
+})
+
+test_that("a Total column may be scoped by a different variable", {
+  sec <- .ocol_resolve(.ocol_labels, c(.ocol_axis, '[ADSL.SAFFL="Y"]'))
+  expect_length(sec$column_groups$groups, 3)
+  expect_equal(where_to_filter_expr(sec$total_condition), 'SAFFL %in% c("Y")')
+})
+
+test_that("Overall counts as an overall column, and no total column is silent", {
+  overall <- .ocol_resolve(c(.ocol_labels[1:3], "Overall (N=XX)"),
+                           c(.ocol_axis, "[ADSL.COHORTN IN (1,2)]"))
+  expect_true(isTRUE(overall$include_total_hint))
+  expect_equal(overall$total_label, "Overall")
+
+  none <- .ocol_resolve(.ocol_labels[1:3], .ocol_axis)
+  expect_false(isTRUE(none$include_total_hint))
+  expect_null(none$total_condition)
+  expect_length(none$column_groups$groups, 3)
+})

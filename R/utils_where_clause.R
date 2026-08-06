@@ -7,45 +7,66 @@
 ## Regex tokens .ADAM_DS, .ADAM_VAR and the `%||%` operator come from
 ## R/aaa_constants.R, which sources first.
 
+## A string literal as annotated shells actually write it: single OR double
+## quoted. SAS and SQL both spell a string "like this", and a lead programmer
+## annotating a shell writes what they write in their programs -- so a grammar
+## that accepts only 'this' silently drops half the conditions it is shown.
+## That is not hypothetical: a field study annotated every table with
+## [ADSL.COMPLFL="Y"], and every one of those population filters was thrown
+## away without the run failing.
+##
+## Non-capturing, and captured WITH its quotes at each use site, so every
+## pattern keeps exactly one group per literal -- the group numbering
+## .one_condition() indexes by. .strip_quotes() takes them off.
+.RE_QUOTED <- "(?:'[^']*'|\"[^\"]*\")"
+## A number written without quotes: "1", "-2.5".
+.RE_NUMBER <- "[-+]?\\d+(?:\\.\\d+)?"
+
 ## Single condition: "ADSL.SAFFL='Y'" (also matches ARS-style "EQ 'Y'")
 .RE_CONDITION_EQ <- paste0(
   "(", .ADAM_DS, ")\\.(", .ADAM_VAR, ")",
-  "\\s*=\\s*'([^']*)'"
+  "\\s*=\\s*(", .RE_QUOTED, ")"
 )
 .RE_CONDITION_ARS <- paste0(
   "(", .ADAM_DS, ")\\.(", .ADAM_VAR, ")",
-  "\\s+(EQ|NE|IN|NOTIN|GT|GE|LT|LE)\\s+'([^']*)'"
+  "\\s+(EQ|NE|IN|NOTIN|GT|GE|LT|LE)\\s+(", .RE_QUOTED, ")"
 )
 ## Unquoted numeric comparison: "ADSL.AGE GE 65".
 .RE_CONDITION_NUM <- paste0(
   "(", .ADAM_DS, ")\\.(", .ADAM_VAR, ")",
-  "\\s+(EQ|NE|GT|GE|LT|LE)\\s+([-+]?\\d+(?:\\.\\d+)?)\\b"
+  "\\s+(EQ|NE|GT|GE|LT|LE)\\s+(", .RE_NUMBER, ")\\b"
 )
 ## Unquoted numeric equality: "ADSL.COHORTN=1" (the usual column-header
 ## annotation form). The quoted form must win when both could apply, so
 ## .one_condition() tries this only after .RE_CONDITION_EQ.
 .RE_CONDITION_EQ_NUM <- paste0(
   "(", .ADAM_DS, ")\\.(", .ADAM_VAR, ")",
-  "\\s*=\\s*([-+]?\\d+(?:\\.\\d+)?)\\b"
+  "\\s*=\\s*(", .RE_NUMBER, ")\\b"
 )
+## One item of a value list: a quoted string or a bare number. A coded column
+## axis is written "ADSL.COHORTN IN (1,2)" far more often than it is written
+## with quotes around the codes, and requiring the quotes cost this exact
+## annotation its Total column.
+.RE_IN_ITEM <- paste0("(?:", .RE_QUOTED, "|", .RE_NUMBER, ")")
 ## Multi-value list: "ADSL.RACE IN ('WHITE','ASIAN')" / "NOT IN (...)".
 .RE_CONDITION_IN_LIST <- paste0(
   "(", .ADAM_DS, ")\\.(", .ADAM_VAR, ")",
-  "\\s+(?i:(NOT\\s*IN|NOTIN|IN))\\s*\\(\\s*('[^']*'(?:\\s*,\\s*'[^']*')*)\\s*\\)"
+  "\\s+(?i:(NOT\\s*IN|NOTIN|IN))\\s*\\(\\s*(",
+  .RE_IN_ITEM, "(?:\\s*,\\s*", .RE_IN_ITEM, ")*", ")\\s*\\)"
 )
 ## Range: "ADSL.AGE between 18 ~AND~ 65" (the inner "and" is replaced with
 ## the ~AND~ marker by parse_where_clause BEFORE joiner splitting so the
 ## range is not torn apart). Values quoted or numeric.
 .RE_BETWEEN <- paste0(
   "(", .ADAM_DS, ")\\.(", .ADAM_VAR, ")",
-  "\\s+(?i:between)\\s+('[^']*'|[-+]?\\d+(?:\\.\\d+)?)",
-  "\\s+~AND~\\s+('[^']*'|[-+]?\\d+(?:\\.\\d+)?)"
+  "\\s+(?i:between)\\s+(", .RE_QUOTED, "|", .RE_NUMBER, ")",
+  "\\s+~AND~\\s+(", .RE_QUOTED, "|", .RE_NUMBER, ")"
 )
 ## Substring: "ADAE.AETERM contains 'rash'". CONTAINS is an arsbridge
 ## extension -- not in the ARS v1.0 ConditionComparatorEnum.
 .RE_CONTAINS <- paste0(
   "(", .ADAM_DS, ")\\.(", .ADAM_VAR, ")",
-  "\\s+(?i:contains)\\s+'([^']*)'"
+  "\\s+(?i:contains)\\s+(", .RE_QUOTED, ")"
 )
 .RE_NULL_CHECK <- paste0(
   "(", .ADAM_DS, ")\\.(", .ADAM_VAR, ")",
@@ -110,7 +131,8 @@ parse_where_clause <- function(expr) {
 
   ## Protect BETWEEN's inner "and" with a marker BEFORE joiner splitting
   ## ("AGE between 18 and 65" must not be torn into two clauses).
-  expr <- gsub("(?i)(between\\s+(?:'[^']*'|[-+]?\\d+(?:\\.\\d+)?))\\s+and\\s+",
+  expr <- gsub(paste0("(?i)(between\\s+(?:", .RE_QUOTED, "|", .RE_NUMBER,
+                      "))\\s+and\\s+"),
                "\\1 ~AND~ ", expr, perl = TRUE)
 
   ## Detect logical joiner -- "and"/"&"/"AND" produce AND; "or"/"|"/"OR" → OR.
@@ -160,7 +182,7 @@ parse_where_clause <- function(expr) {
         stage = "where_clause", severity = "WARN",
         problem = "Condition could not be parsed into an ARS WhereClause",
         location = u,
-        action = "Condition dropped -- filtering will be weaker than the annotation intends (supported: =, EQ/NE/IN/NOTIN/GT/GE/LT/LE incl. unquoted numerics, IN ('a','b') lists, BETWEEN x AND y, CONTAINS 'text', is/not null/missing, is.na()/missing() incl. negation)"
+        action = "Condition dropped -- filtering will be weaker than the annotation intends (supported: =, EQ/NE/IN/NOTIN/GT/GE/LT/LE incl. unquoted numerics, IN lists of quoted values or bare numbers, BETWEEN x AND y, CONTAINS 'text', is/not null/missing, is.na()/missing() incl. negation; string values may be 'single' or \"double\" quoted)"
       )
     }
   }
@@ -181,7 +203,9 @@ parse_where_clause <- function(expr) {
 #' specific forms before less specific ones.
 #' @noRd
 .one_condition <- function(part) {
-  strip_q <- function(x) sub("^'(.*)'$", "\\1", x)
+  ## Either quote character, and only when the two ends match -- so a value
+  ## that legitimately contains the other quote ("O'Brien") survives intact.
+  strip_q <- function(x) sub("^(['\"])(.*)\\1$", "\\2", x)
 
   ## Range: DATASET.VARIABLE between lo ~AND~ hi -> (GE lo) AND (LE hi).
   ## ARS v1.0 has no BETWEEN comparator, so emit the conformant compound.
@@ -201,14 +225,14 @@ parse_where_clause <- function(expr) {
   m <- regmatches(part, regexec(.RE_CONDITION_IN_LIST, part, perl = TRUE))[[1]]
   if (length(m) == 5) {
     comp <- if (grepl("NOT", toupper(m[4]))) "NOTIN" else "IN"
-    vals <- regmatches(m[5], gregexpr("'[^']*'", m[5]))[[1]]
+    vals <- regmatches(m[5], gregexpr(.RE_IN_ITEM, m[5], perl = TRUE))[[1]]
     vals <- vapply(vals, strip_q, character(1), USE.NAMES = FALSE)
     return(.cond_multi(m[2], m[3], comp, vals))
   }
   ## ARS-style: DATASET.VARIABLE EQ 'value'
   m <- regmatches(part, regexec(.RE_CONDITION_ARS, part, perl = TRUE))[[1]]
   if (length(m) == 5) {
-    return(.cond(m[2], m[3], m[4], m[5]))
+    return(.cond(m[2], m[3], m[4], strip_q(m[5])))
   }
   ## Unquoted numeric: DATASET.VARIABLE GE 65
   m <- regmatches(part, regexec(.RE_CONDITION_NUM, part, perl = TRUE))[[1]]
@@ -218,7 +242,7 @@ parse_where_clause <- function(expr) {
   ## Equality: DATASET.VARIABLE='value'
   m <- regmatches(part, regexec(.RE_CONDITION_EQ, part, perl = TRUE))[[1]]
   if (length(m) == 4) {
-    return(.cond(m[2], m[3], "EQ", m[4]))
+    return(.cond(m[2], m[3], "EQ", strip_q(m[4])))
   }
   ## Unquoted numeric equality: DATASET.VARIABLE=1
   m <- regmatches(part, regexec(.RE_CONDITION_EQ_NUM, part, perl = TRUE))[[1]]
@@ -234,7 +258,7 @@ parse_where_clause <- function(expr) {
       location = part,
       action = "ars_to_ard() executes it as a case-insensitive substring match; external ARS consumers may reject it"
     )
-    return(.cond(m[2], m[3], "CONTAINS", m[4]))
+    return(.cond(m[2], m[3], "CONTAINS", strip_q(m[4])))
   }
   ## Call-form missing checks: "!is.na(...)" / "not missing(...)" BEFORE the
   ## positive "is.na(...)" / "missing(...)" (the negated form embeds it).
