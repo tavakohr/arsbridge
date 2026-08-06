@@ -898,6 +898,47 @@
   decodes
 }
 
+#' Report a display column that received nothing while its siblings filled.
+#'
+#' Guidance rule 6: the columns the shell displays and the groups the ARD
+#' generated must be the same set. The per-cell census already records every
+#' unfilled cell, but a reader has to notice that all of one column's cells
+#' happen to share a reason -- and the field failure that motivated this was
+#' exactly that shape: three cohort columns full of numbers, a Total column of
+#' placeholders, and nothing anywhere saying a whole column had been lost.
+#'
+#' Only fires when at least one OTHER column filled: a table where nothing
+#' filled at all has a different problem, already reported elsewhere, and
+#' repeating it once per column would bury it.
+#' @noRd
+.check_column_coverage <- function(output_id, columns, records, sheet) {
+  if (length(columns %||% list()) < 2 || length(records %||% list()) == 0) {
+    return(invisible(NULL))
+  }
+  filled_cols <- unique(unlist(lapply(records, function(r) {
+    if (identical(r$status, "filled") || identical(r$status, "partial")) {
+      r$col
+    }
+  })))
+  if (length(filled_cols) == 0) return(invisible(NULL))
+
+  mapped_cols <- unique(unlist(lapply(records, function(r) r$col)))
+  for (column in columns) {
+    if (!column$col %in% mapped_cols) next     # never mapped; not a loss here
+    if (column$col %in% filled_cols) next
+    .diag_gap(
+      stage = "fill_shell", severity = "WARN", input = INPUT_ARS,
+      problem = sprintf(
+        "Output %s, column %s: every cell kept its placeholder while %d other column(s) filled.",
+        output_id %||% "?", dQuote(column$label, q = FALSE),
+        length(filled_cols)),
+      why = "The column is displayed but no result reached it, so the deliverable shows a column of placeholders beside columns of numbers.",
+      fix = "Check that the header's annotation resolves to subjects the ARD carries -- a column the reporting event never declared produces nothing.",
+      location = sheet %||% "")
+  }
+  invisible(NULL)
+}
+
 #' Fill the mapped cells of one table sheet.
 #'
 #' Mutates the workbook in place (openxlsx2 worksheets are R6 objects).
@@ -2036,6 +2077,7 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
         ## The arm headers last: the denominator written there is read out of
         ## the same ARD the cells underneath it came from.
         .fill_header_n(wb, sheet_index, fill, index)$records)
+      .check_column_coverage(output$id, fill$columns, result$records, sheet)
     } else if (!is.null(fill$listing)) {
       result <- .fill_listing_sheet(
         wb, sheet_index, fill$listing,
