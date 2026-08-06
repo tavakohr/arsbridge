@@ -153,9 +153,19 @@
     nest_level[take] <- v[take]
   }
 
+  group_level <- group_level %||% NA_character_
   data.frame(
     analysis_id    = analysis_id,
-    group_level    = group_level %||% NA_character_,
+    group_level    = group_level,
+    ## The folded column axis, computed once for the whole fill.
+    ##
+    ## A cell whose column label is punctuated differently from the ARD's is
+    ## matched by folding both sides (see .same_label). Folding the ARD side
+    ## per cell made the fill quadratic: two regex passes over every ARD row,
+    ## for every cell of every output. On the bundled example that was 94% of
+    ## the fill's runtime and 138 seconds on a single nested AE table -- the
+    ## point at which the workflow app's bar looked hung.
+    group_fold     = .fold_label(group_level),
     variable_level = .ard_chr(ard[["variable_level"]]) %||% NA_character_,
     nest_level     = nest_level,
     stat_name      = stat_name,
@@ -176,11 +186,18 @@
 #' inventing anything. It cannot make two different labels equal.
 #' @noRd
 .same_label <- function(a, b) {
-  fold <- function(x) {
-    x <- tolower(as.character(x %||% ""))
-    trimws(gsub("[[:space:]]+", " ", gsub("[^[:alnum:]]+", " ", x)))
-  }
-  fold(a) == fold(b)
+  .fold_label(a) == .fold_label(b)
+}
+
+#' A label reduced to the form two spellings of it share.
+#'
+#' Its own function because folding is the expensive half of `.same_label()`
+#' -- two regex passes over every element -- and the hot callers fold one side
+#' ONCE and reuse it, rather than refolding a whole ARD column per cell.
+#' @noRd
+.fold_label <- function(x) {
+  x <- tolower(as.character(x %||% ""))
+  trimws(gsub("[[:space:]]+", " ", gsub("[^[:alnum:]]+", " ", x)))
 }
 
 #' The one value a cell slot asks for.
@@ -210,9 +227,14 @@
   ## A group level of NA means the analysis is not reported by column, so
   ## every column shows the same value and the level must not be matched on.
   if (!is.null(group_level) && !is.na(group_level) && nzchar(group_level)) {
+    ## One fold of the needle against a column folded once for the whole
+    ## fill. An index built by hand rather than by .ard_index() pays to fold
+    ## here, which is the right price for a fixture and the wrong one for a
+    ## study.
+    folded <- index$group_fold %||% .fold_label(index$group_level)
     rows <- rows & !is.na(index$group_level) &
       (index$group_level %in% group_level |
-         .same_label(index$group_level, group_level))
+         folded %in% .fold_label(group_level))
   }
   if (!is.null(variable_level) && !is.na(variable_level)) {
     rows <- rows & !is.na(index$variable_level) &
@@ -1015,9 +1037,10 @@
     index$stat_name %in% "N" &
     index$status %in% "computed" & !is.na(index$value)
   if (!is.null(group_label) && !is.na(group_label) && nzchar(group_label)) {
+    folded <- index$group_fold %||% .fold_label(index$group_level)
     rows <- rows & !is.na(index$group_level) &
       (index$group_level %in% group_label |
-         .same_label(index$group_level, group_label))
+         folded %in% .fold_label(group_label))
   }
 
   values <- unique(index$value[rows])

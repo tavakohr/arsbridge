@@ -128,20 +128,25 @@ test_that("every stage ends on a named step, so none of them runs out silent", {
     output_dir = tempfile("wfp_"), study_id = "APX-DRM-301",
     on_progress = function(ev) events[[length(events) + 1L]] <<- ev))
 
-  final <- c(spec_to_ars = "writing the reporting event",
-             ars_to_ard = "assembling the results",
-             ars_fill_shell = "saving the workbook")
-  for (stage in names(final)) {
+  ## Every named step of every stage: the head ones before the per-item loop,
+  ## the tail ones after it. The LAST of each stage is what mattered.
+  named <- list(
+    spec_to_ars = c("reading the ADaM spec", "reading the shell",
+                    "writing the reporting event"),
+    ars_to_ard = c("assembling the results", "writing the results"),
+    ars_fill_shell = c("reading the workbook", "saving the workbook"))
+
+  for (stage in names(named)) {
     of_stage <- Filter(function(e) identical(e$stage, stage), events)
-    expect_equal(of_stage[[length(of_stage)]]$label, final[[stage]],
-                 info = stage)
+    expect_equal(of_stage[[length(of_stage)]]$label,
+                 named[[stage]][[length(named[[stage]])]], info = stage)
   }
 
   ## And the counts are of work FINISHED: no per-item tick claims the whole
-  ## stage before the named closing step does.
-  for (stage in names(final)) {
+  ## stage before a named closing step does.
+  for (stage in names(named)) {
     items <- Filter(function(e) identical(e$stage, stage) && !is.na(e$label) &&
-                      !identical(e$label, final[[stage]]) && e$n > 0, events)
+                      !(e$label %in% named[[stage]]) && e$n > 0, events)
     if (length(items) == 0) next
     expect_lt(max(vapply(items, function(e) e$i, integer(1))),
               items[[1]]$n)

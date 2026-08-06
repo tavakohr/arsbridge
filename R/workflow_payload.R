@@ -257,11 +257,24 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
         action = "Pass adam_dir to produce the ARD and the filled workbook.",
         stringsAsFactors = FALSE))
     } else {
+      ## Writing the ARD used to sit BETWEEN the stages, where neither one's
+      ## progress hook was installed, so it reported nothing at all -- 6.6
+      ## seconds of silence on the bundled example, the second-longest of the
+      ## run after the fill itself. It belongs to the stage that produced the
+      ## thing being written, so it happens inside it: the hook is live, and
+      ## the stage's recorded time now includes the write it is responsible
+      ## for. A write that fails is a failure OF that stage, which is also
+      ## what .workflow_stage() will now record.
       run <- with_stage_progress("ars_to_ard",
-        record(.workflow_stage("ars_to_ard",
-                               ars_to_ard(paths$ars_json, adam_dir))))
+        record(.workflow_stage("ars_to_ard", {
+          computed <- ars_to_ard(paths$ars_json, adam_dir)
+          if (!is.null(computed)) {
+            .progress_tick(1L, 1L, "writing the results")
+            saveRDS(computed, paths$ard_rds)
+          }
+          computed
+        })))
       ard <- run$value
-      if (!is.null(ard)) saveRDS(ard, paths$ard_rds)
       if (is.null(ard) && is.null(failure)) {
         ## ars_to_ard() returns NULL when not one analysis executed -- on a
         ## fully clean shell, for instance. The fill guard below then skips

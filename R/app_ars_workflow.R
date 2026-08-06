@@ -257,7 +257,9 @@ ars_workflow <- function(project_dir = NULL) {
 #' @noRd
 .workflow_progress_detail <- function(ev) {
   if (is.na(ev$label %||% NA_character_)) return("")
-  if ((ev$n %||% 0) > 0) {
+  ## A stage of one has nothing to count, and "(1 of 1 done)" beside a phrase
+  ## like "writing the results" is noise.
+  if ((ev$n %||% 0) > 1) {
     sprintf("%s (%d of %d done)", ev$label, ev$i, ev$n)
   } else {
     ev$label

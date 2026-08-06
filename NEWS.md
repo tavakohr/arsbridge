@@ -1,5 +1,36 @@
 # arsbridge (development version)
 
+* **The fill was quadratic, and that is what the stuck progress bar was
+  showing.** Tracing a full run of the bundled example with a timestamp on
+  every progress event put 138 of its 165 seconds inside a single output --
+  the nested SOC/PT adverse-event table. Profiling that output put 94% of the
+  time in `gsub`.
+
+  `.ard_value()` matches a cell's column heading against the ARD's by folding
+  both to a common form -- the shell stacks two header rows, the ARD joins the
+  grouping path with its own separator, and only the punctuation between
+  identical components differs. But it folded the ARD side *inside the
+  per-cell lookup*: two regex passes over every row of the ARD, for every cell
+  of every output. Cells times rows, in `gsub`.
+
+  The fold is now computed once, when the index is built, and each lookup
+  folds only its own one-element needle. On the bundled example the fill goes
+  from **153s to 13s** and the whole run from **165s to 25s**, writing a
+  byte-identical workbook -- every one of the 15 entries in the archive
+  unchanged, the same 820 cells filled.
+
+  Two tests pin it: that the index carries the folded column, and that a
+  differently punctuated heading still finds its value. `.ard_value()` stays
+  total over its input -- an index built by hand, as a fixture does, folds on
+  the spot rather than failing.
+
+* **Writing the ARD reports itself.** The same trace found a second silence:
+  `saveRDS()` of the results ran *between* two stages, where neither one's
+  progress hook was installed, and took 6.6 seconds saying nothing. It now
+  happens inside the stage that produced the results, so the hook is live, the
+  stage's recorded time includes the write it is responsible for, and a write
+  that fails is recorded as a failure of that stage rather than thrown.
+
 * **The workflow app knows which project you meant.** `ars_workflow()` with no
   argument opened on five empty boxes every time, so a study set up the day
   before had to be typed out again from memory -- four paths, by hand, with no
