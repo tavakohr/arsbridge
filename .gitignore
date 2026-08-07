@@ -9,18 +9,26 @@
 .env
 .claude/
 
-# Evaluation / review working docs (not part of the package)
-evaluation/
-IMPROVEMENTS_shell_spec_robustness.md
-REVIEW_p0-parsing_branch.md
-REEVALUATION_p0-parsing_premerge.md
-
 # Build artifacts
 inst/doc/
 docs/
 /*.tar.gz
 /*.tgz
 /*.Rcheck/
+
+# Local working notes: handoffs, plans, prompts and review write-ups. These
+# describe work against real studies and are written for one machine, not for
+# the repo. One folder so a new note needs no new rule here; `git add -f` if
+# one is ever genuinely worth publishing.
+notes/
+
+# Guards, in case a working note is ever written at the top level instead.
+HANDOFF_*.md
+CLAUDE_CODE_PROMPT_*.md
+PLAN_*.md
+REVIEW_*.md
+REEVALUATION_*.md
+IMPROVEMENTS_*.md
 
 # Study-specific working dirs (NEVER commit client data)
 #
@@ -38,11 +46,8 @@ inputs/*
 # inputs/DRM/ holds the retired APX-DRM-301 dermatology example, kept on
 # this machine only.
 inputs/DRM/
-
-# Local planning / handoff notes. These describe work against real studies
-# and are written for one machine, not for the repo. Kept out of commits by
-# default; `git add -f` if one is ever genuinely worth publishing.
-HANDOFF_*.md
+inputs/ADaM/
+inputs/.shell_backup/
 
 # Redacted transfer artifacts from a restricted machine (tools/README_privacy_transfer.md).
 # Structure-only by construction, but they describe a real study and belong to
@@ -53,23 +58,11 @@ diagnostics_redacted.csv
 *_digest.json
 *_redacted.csv
 
-RWE_error/
-# suprev/ holds local Copilot working files (blueprints, instruction
-# drafts, conformance notes) tied to a specific study -- never committed.
-suprev/
-inputs/ADaM/
+# Run output and scratch
 outputs/
 .align_backup/
-inputs/.shell_backup/
 graphify-out/
 ~$*
 scratch_*.R
 run_*.R
 .siera_ref/
-
-# Local working docs: prompts, guidance and integration plans written
-# against real studies for one machine. Ignored like the HANDOFF notes
-# above; `git add -f` if one is ever genuinely worth publishing.
-CLAUDE_CODE_PROMPT_*.md
-ars_total_and_annotation_guidance.md
-siera_cards_integration_plan.md
