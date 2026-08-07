@@ -2,6 +2,16 @@
 
 ## arsbridge (development version)
 
+- **A listing’s dates are now covered by a test that could fail.** Dates
+  only reach the fill writer AS dates when the data came from `.xpt` or
+  `.sas7bdat`; read a `.csv` and every column is character. Every
+  committed ADaM fixture was `.csv`, so the writer’s date formatting ran
+  on every real study and never once in CI. There is now a small typed
+  fixture (`adam_apx_drm_301_xpt/ADSL.xpt`, four subjects) behind it,
+  pinning both the ISO spelling and the rule that a missing date is a
+  blank cell rather than the text “NA”. No behaviour changed.
+  ([\#2](https://github.com/tavakohr/arsbridge/issues/2))
+
 - **Filling a real-sized listing is no longer measured in minutes.**
   [`ars_fill_shell()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_shell.md)
   expanded a listing’s template row by appending one cell at a time to
