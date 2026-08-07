@@ -242,7 +242,57 @@
   fill$cells  <- .build_table_cells(section, shell_layout, analyses, methods,
                                     fill$columns, grid)
   fill$nested <- .build_nested_fill(shell_layout)
+  categorical <- .build_categorical_fills(section, shell_layout)
+  if (length(categorical) > 0) {
+    fill$categorical <- categorical
+  }
   fill
+}
+
+#' The categorical expansion plan: one block per layout entry that recorded
+#' template rows.
+#'
+#' Unlike the nested plan (one parent/child pair per sheet), categorical
+#' blocks are plural -- a disposition table can hold several. Each block
+#' names the rows the shell authored as its template and the analysis whose
+#' levels replace them. The anchor is the first template row: it is both
+#' where the first level lands and the row whose formatting the inserted
+#' rows clone.
+#'
+#' A block whose recorded rows are not consecutive is not the authored
+#' pattern (most likely two blocks on the same variable collapsed into one
+#' entry); expanding it would write levels over unrelated rows, so it is
+#' reported and skipped instead.
+#' @noRd
+.build_categorical_fills <- function(section, shell_layout) {
+  blocks <- list()
+  for (entry in shell_layout %||% list()) {
+    rows <- as.integer(unlist(entry$template_rows %||% integer()))
+    if (length(rows) == 0) next
+    if (is.na(entry$analysis_id %||% NA_character_)) next
+    rows <- sort(unique(rows))
+    if (length(rows) > 1 && any(diff(rows) != 1L)) {
+      .diag_gap(
+        stage = "build_ars", severity = "WARN", input = INPUT_SHELL,
+        problem = sprintf(
+          "The template rows of '%s' are not contiguous (%s), so the block cannot be expanded.",
+          entry$label %||% "?", paste(rows, collapse = ", ")),
+        why = "Expanding a broken run would write level rows over unrelated rows between the fragments.",
+        fix = "Keep a block's mock rows together under one header, or author the blocks on distinct variables/subsets.",
+        tlf_number = section$tlf_number,
+        location = section$sheet_name %||% "")
+      next
+    }
+    blocks[[length(blocks) + 1L]] <- list(
+      anchor_row    = rows[1],
+      template_rows = rows,
+      analysis_id   = entry$analysis_id,
+      label         = entry$label %||% "",
+      sort          = entry$sort %||% NA_character_,
+      self_template = isTRUE(entry$self_template)
+    )
+  }
+  blocks
 }
 
 #' What a sheet row's cells should be filled from.
@@ -342,11 +392,16 @@
                                          character(1)))
 
   ## Sheet rows a categorical parent recorded as its expansion template
-  ## ("<Reason #1>" mock rows): their placeholders stay pending until the
-  ## fill step can expand the block, and the cell map must say so -- an
-  ## orphaned row and a row awaiting expansion are different problems.
-  template_rows <- unlist(lapply(entries, function(e) e$template_rows),
-                          use.names = FALSE)
+  ## ("<Reason #1>" mock rows): their cells bind to the OWNING analysis so
+  ## the fill step has slots to expand from, and each carries a template
+  ## flag plus the reason it may still be on placeholder -- an orphaned row
+  ## and a row awaiting expansion are different problems.
+  template_owner <- list()
+  for (e in entries) {
+    for (r in e$template_rows %||% integer()) {
+      template_owner[[as.character(r)]] <- e
+    }
+  }
 
   cells <- list()
   ## Rows whose placeholder asks for more statistics than the analysis
@@ -359,6 +414,24 @@
 
     binding <- bindings[[as.character(grid$row[[i]])]]
     column  <- col_by_index[[as.character(grid$col[[i]])]]
+
+    ## A template row without a binding of its own (the convention shape's
+    ## bare mocks never reach the layout) borrows the owning entry's
+    ## analysis, so its cells carry bound slots into the fill plan.
+    owner <- template_owner[[as.character(grid$row[[i]])]]
+    if (is.null(binding) && !is.null(owner) && !is.null(column)) {
+      analysis <- Filter(function(a) identical(a$id, owner$analysis_id),
+                         analyses %||% list())
+      if (length(analysis) > 0) {
+        analysis <- analysis[[1]]
+        binding <- list(
+          analysis_id = owner$analysis_id,
+          analysis    = analysis,
+          stats       = .method_operation_slots(methods,
+                                                analysis$methodId %||% "")
+        )
+      }
+    }
 
     record <- list(
       row         = grid$row[[i]],
@@ -374,7 +447,7 @@
     ## filled workbook, and neither is the same as "the number was not
     ## computed".
     if (is.null(binding) || is.null(column)) {
-      record$reason <- if (grid$row[[i]] %in% template_rows) {
+      record$reason <- if (!is.null(owner)) {
         "a template row of the categorical block above -- awaiting row expansion"
       } else if (is.null(column)) {
         "the column is not on the output's column axis"
@@ -385,6 +458,11 @@
       next
     }
 
+    if (!is.null(owner)) {
+      record$template <- TRUE
+      record$reason   <-
+        "a template row of the categorical block above -- awaiting row expansion"
+    }
     record$kind        <- "result"
     record$analysis_id <- binding$analysis_id
     record$group       <- list(

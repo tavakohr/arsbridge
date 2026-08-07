@@ -548,12 +548,25 @@
     ## "<Reason #1>", "<Reason #2>", "..."). That parent's categorical
     ## analysis already expands every level, so the mocks are emitted
     ## nowhere -- rendering them literally is the defect.
-    if (all(is.na(roles[run])) && length(distinct) == 1 && i > 1L) {
-      above <- own[[i - 1L]]
-      if (!is.null(above) && is.na(stems[i - 1L]) &&
-            identical(above$var, distinct[1]) &&
-            identical(above$ds, run_ds[1])) {
+    if (all(is.na(roles[run])) && length(distinct) == 1) {
+      above <- if (i > 1L) own[[i - 1L]] else NULL
+      same_var_above <- !is.null(above) && is.na(stems[i - 1L]) &&
+        identical(above$var, distinct[1]) &&
+        identical(above$ds, run_ds[1])
+      if (same_var_above) {
         roles[run] <- "level_repeat"
+      } else {
+        ## No annotated same-variable row above to lean on (an un-annotated
+        ## header, a row on a different variable, or the sheet's first
+        ## row): the block is SELF-describing. Its first annotated row
+        ## carries the analysis; the repeats collapse into it exactly like
+        ## the parented dialect.
+        annotated <- run[!vapply(run, function(k) is.null(own[[k]]),
+                                 logical(1))]
+        if (length(annotated) > 0) {
+          roles[run] <- "level_repeat"
+          roles[annotated[1]] <- "self_template"
+        }
       }
     }
     i <- j + 1L
@@ -564,7 +577,7 @@
     if (!is.na(roles[k]) || !.is_continuation_row(rows[[k]])) next
     if (k > 1L && !is.na(roles[k - 1L]) &&
           roles[k - 1L] %in% c("level_repeat", "nested_repeat",
-                               "nested_child")) {
+                               "nested_child", "self_template")) {
       roles[k] <- "level_repeat"
     }
   }
@@ -1363,6 +1376,29 @@ build_ars_json <- function(sections,
       if (identical(nested_role, "nested_child") &&
             !is.null(nested_parent_ctx)) {
         layout_entry$parent_order <- nested_parent_ctx$order
+      }
+      ## A self-template block's annotated mock row: the analysis lives on
+      ## the mock itself, so the mock's own row opens the template. The
+      ## run's bare repeats add theirs through the level_repeat branch, via
+      ## cat_parent below. Only a categorical block expands one row per
+      ## level -- a token row routed to any other method keeps its analysis
+      ## un-flagged.
+      if (identical(nested_role, "self_template") &&
+            identical(layout_kind, "categorical")) {
+        layout_entry$self_template <- TRUE
+        own_row <- suppressWarnings(as.integer(row$sheet_row %||%
+                                                 NA_integer_))
+        if (!is.na(own_row)) {
+          layout_entry$template_rows <- own_row
+        }
+        diag_add(
+          stage = "build_ars", severity = "INFO",
+          problem = sprintf(
+            "Row '%s' is a self-template categorical block -- its label stands for the variable's levels",
+            row$label %||% "?"),
+          tlf_number = sec$tlf_number,
+          action = "One analysis draws the distribution; the block expands one row per level at fill time"
+        )
       }
       ## An authored "sort: ..." clause on the parent token row travels on
       ## the layout entry; the renderer defaults to descending frequency
