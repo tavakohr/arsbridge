@@ -66,3 +66,10 @@ graphify-out/
 scratch_*.R
 run_*.R
 .siera_ref/
+
+# Local working docs: prompts, guidance and integration plans written
+# against real studies for one machine. Ignored like the HANDOFF notes
+# above; `git add -f` if one is ever genuinely worth publishing.
+CLAUDE_CODE_PROMPT_*.md
+ars_total_and_annotation_guidance.md
+siera_cards_integration_plan.md
