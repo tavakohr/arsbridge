@@ -712,18 +712,18 @@ test_that("a nested block reads its levels and terms out of the ARD", {
 ## is the mechanism -- what happens to the rows BELOW the template when the
 ## template expands -- and that needs a footnote the committed fixture's
 ## listings do not have.
-mini_listing <- function(footnote = TRUE) {
+mini_listing <- function(footnote = TRUE, ncol = 2L) {
+  header <- c("Subject", "Term", paste0("Extra ", seq_len(ncol)))[seq_len(ncol)]
+  template <- c("xxx-xxx", rep("xxxx", ncol))[seq_len(ncol)]
+  row_of <- function(x) as.data.frame(as.list(x), stringsAsFactors = FALSE)
+
   wb <- openxlsx2::wb_workbook()$add_worksheet("L")
   wb$add_data(sheet = "L", x = "Listing 1.1", dims = "A1", col_names = FALSE)
-  wb$add_data(sheet = "L", x = data.frame(a = "Subject", b = "Term",
-                                          stringsAsFactors = FALSE),
-              dims = "A2", col_names = FALSE)
-  wb$add_data(sheet = "L", x = data.frame(a = "xxx-xxx", b = "xxxx",
-                                          stringsAsFactors = FALSE),
-              dims = "A3", col_names = FALSE)
+  wb$add_data(sheet = "L", x = row_of(header), dims = "A2", col_names = FALSE)
+  wb$add_data(sheet = "L", x = row_of(template), dims = "A3", col_names = FALSE)
   if (footnote) {
     wb$add_data(sheet = "L", x = "Source: ADAE.", dims = "A4", col_names = FALSE)
-    wb$merge_cells(sheet = "L", dims = "A4:B4")
+    wb$merge_cells(sheet = "L", dims = paste0("A4:", .xlsx_num_to_col(ncol), "4"))
   }
   path <- tempfile(fileext = ".xlsx")
   openxlsx2::wb_save(wb, path, overwrite = TRUE)
@@ -773,6 +773,40 @@ test_that("an expanded listing is written the way Excel reads it, not just the w
   expect_equal(xlsx_raw_cell_text(out, "sheet1.xml", "B3"), "Term1")
   expect_equal(xlsx_raw_cell_text(out, "sheet1.xml", "B22"), "Term20")
   expect_equal(xlsx_raw_cell_text(out, "sheet1.xml", "A22"), "S20")
+})
+
+test_that("a real-sized listing fills in seconds, and fills completely", {
+  ## Cells used to be appended to `cc` one at a time, and each column's
+  ## template XML reparsed per cell, so the cost grew with the SQUARE of the
+  ## row count: the acceptance run's 7,500-row listing took about ten minutes.
+  ## The bound is deliberately loose -- 30,000 cells take under a second here,
+  ## and the old code took a hundred-odd. What it catches is the return of
+  ## that curve, not a slow machine.
+  skip_on_cran()
+  n <- 3000L
+  ncol <- 10L
+  path <- mini_listing(ncol = ncol)
+  wb <- openxlsx2::wb_load(path)
+  rows <- as.data.frame(
+    lapply(seq_len(ncol), function(k) paste0("v", k, "-", seq_len(n))),
+    col.names = paste0("c", seq_len(ncol)), stringsAsFactors = FALSE)
+
+  elapsed <- system.time(
+    res <- .fill_listing_sheet(wb, 1L, list(template_row = 3L), rows, TRUE)
+  )[["elapsed"]]
+  expect_equal(res$records[[1]]$rows, n)
+  expect_equal(res$records[[1]]$cells, n * ncol)
+  expect_lt(elapsed, 20)
+
+  ## Fast and short would be no better than slow. The last row of the last
+  ## column is read out of the XML, so a cell written into the wrong <row>
+  ## cannot answer for one in the right place.
+  out <- tempfile(fileext = ".xlsx")
+  openxlsx2::wb_save(wb, out, overwrite = TRUE)
+  expect_rows_well_formed(out)
+  expect_equal(xlsx_raw_cell_text(out, "sheet1.xml", "A3"), "v1-1")
+  expect_equal(xlsx_raw_cell_text(out, "sheet1.xml", paste0("J", 2L + n)),
+               paste0("v10-", n))
 })
 
 test_that("a sheet arriving with cells filed under the wrong row is reported, not saved quietly", {
