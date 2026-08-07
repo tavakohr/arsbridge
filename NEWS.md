@@ -1,5 +1,15 @@
 # arsbridge (development version)
 
+* **Step 5 of the workflow app answers "why is this cell empty" on its
+  own.** Above the diagnostics: one line per sheet saying how much of it
+  filled, and a callout naming every display column that filled *nothing*
+  while its siblings filled -- with the reason all its cells share (the
+  lost-column shape that previously had to be reconstructed cell by cell).
+  Below the per-cell table: the reasons grouped, each with how many cells
+  it explains and the author-facing hint; the per-cell table itself gains
+  the hint column. A payload archived by an older version renders
+  "available after the next build" instead of erroring.
+
 * **Every build writes a fill debrief workbook.** `outputs/fill_debrief.xlsx`
   -- the durable, human-readable record of what the fill did, for the
   machine nothing may leave. Sheets: the full cell census (rows tinted

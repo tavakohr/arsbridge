@@ -632,6 +632,7 @@ ars_workflow <- function(project_dir = NULL) {
         title = "5. Results", value = "panel_results",
         shiny::uiOutput("badge_results"),
         shiny::uiOutput("results_artifacts"),
+        shiny::uiOutput("results_fill_rollup"),
         shiny::p(class = "small mt-2 mb-1",
                  shiny::strong("What the run could not do."),
                  " Everything arsbridge declined to guess at, with the ",
@@ -639,6 +640,8 @@ ars_workflow <- function(project_dir = NULL) {
         DT::DTOutput("results_diagnostics"),
         shiny::uiOutput("results_unfilled_intro"),
         DT::DTOutput("results_unfilled"),
+        shiny::uiOutput("results_reasons_intro"),
+        DT::DTOutput("results_reasons"),
         shiny::uiOutput("results_pending")
       )
     )
@@ -1183,6 +1186,55 @@ ars_workflow <- function(project_dir = NULL) {
                  shiny::div(class = "mt-2", rows))
     })
 
+    output$results_fill_rollup <- shiny::renderUI({
+      state$nonce()
+      payload <- .workflow_last_payload(paths_r(), state)
+      if (is.null(payload)) return(NULL)
+      panels <- .fill_debrief_panels(payload)
+      if (is.null(panels)) {
+        ## An archived run from before the census existed: say so instead
+        ## of erroring or showing an empty box.
+        if (!is.null(payload$fill)) {
+          return(shiny::div(class = "text-muted small mt-2",
+                            "Fill rollup: available after the next build."))
+        }
+        return(NULL)
+      }
+      shiny::div(
+        class = "mt-2 small",
+        shiny::strong("How much of each sheet filled."),
+        shiny::tags$ul(lapply(panels$sheet_lines, shiny::tags$li)),
+        if (length(panels$column_callouts) > 0) {
+          shiny::div(
+            class = "alert alert-warning small mb-2",
+            shiny::strong("Columns that filled nothing:"),
+            shiny::tags$ul(lapply(panels$column_callouts, shiny::tags$li)))
+        }
+      )
+    })
+
+    output$results_reasons_intro <- shiny::renderUI({
+      state$nonce()
+      payload <- .workflow_last_payload(paths_r(), state)
+      panels <- .fill_debrief_panels(payload %||% list())
+      if (is.null(panels) || nrow(panels$reasons) == 0) return(NULL)
+      shiny::p(class = "small mt-3 mb-1",
+               shiny::strong("Why, grouped."),
+               " Every distinct reason across the run, how many cells it ",
+               "explains, and what an author can do about it.")
+    })
+
+    output$results_reasons <- DT::renderDT({
+      state$nonce()
+      payload <- .workflow_last_payload(paths_r(), state)
+      panels <- .fill_debrief_panels(payload %||% list())
+      if (is.null(panels) || nrow(panels$reasons) == 0) return(NULL)
+      DT::datatable(
+        panels$reasons,
+        rownames = FALSE,
+        options = list(pageLength = 8, scrollX = TRUE, dom = "tp"))
+    })
+
     output$results_diagnostics <- DT::renderDT({
       state$nonce()
       payload <- .workflow_last_payload(paths_r(), state)
@@ -1217,9 +1269,12 @@ ars_workflow <- function(project_dir = NULL) {
       unfilled <- payload$unfilled_cells
       if (is.null(unfilled) || nrow(unfilled) == 0) return(NULL)
       ## The reason is the payload's most useful column: on a run that
-      ## filled nothing, its value distribution IS the diagnosis.
+      ## filled nothing, its value distribution IS the diagnosis. The hint
+      ## beside it is what the author does about it.
+      unfilled$hint <- vapply(unfilled$reason, .fill_reason_hint,
+                              character(1), USE.NAMES = FALSE)
       DT::datatable(
-        unfilled[, c("sheet", "ref", "status", "reason")],
+        unfilled[, c("sheet", "ref", "status", "reason", "hint")],
         rownames = FALSE, filter = "top",
         options = list(pageLength = 8, scrollX = TRUE, dom = "ftp"))
     })

@@ -324,6 +324,41 @@ write_fill_debrief <- function(census, findings, output_path) {
   invisible(output_path)
 }
 
+#' The data behind the app's Step 5 rollup panels, as plain strings and
+#' frames -- kept out of the render functions so it can be tested without a
+#' running Shiny session.
+#'
+#' @return NULL when the payload carries no usable census (an archived run
+#'   from an older version); otherwise list(sheet_lines, column_callouts,
+#'   reasons).
+#' @noRd
+.fill_debrief_panels <- function(payload) {
+  census <- payload$fill_census
+  if (is.null(census) || !is.data.frame(census) || nrow(census) == 0) {
+    return(NULL)
+  }
+  summary <- ars_fill_summary(census)
+
+  sheet_lines <- sprintf(
+    "%s -- %d of %d cells filled",
+    summary$sheets$sheet,
+    summary$sheets$filled + summary$sheets$partial,
+    summary$sheets$cells)
+
+  ## A whole column that filled nothing, while the sheet filled elsewhere,
+  ## is the finding a reader must not have to reconstruct cell by cell.
+  lost <- summary$columns[summary$columns$filled == 0 &
+                            summary$columns$cells > 0, , drop = FALSE]
+  column_callouts <- sprintf(
+    "%s: column '%s' -- 0 of %d cells filled. Every cell: %s",
+    lost$sheet, lost$col_label, lost$cells,
+    lost$modal_reason %||% "(no reason recorded)")
+
+  list(sheet_lines = sheet_lines,
+       column_callouts = column_callouts,
+       reasons = summary$reasons)
+}
+
 #' The author-facing hint for one pending reason, or NA when the reason is
 #' not one the fill writes.
 #' @noRd

@@ -285,3 +285,48 @@ test_that("a run with no findings still writes a complete debrief", {
   expect_true(all(c("Fill census", "Columns", "Reasons", "Legend") %in%
                     sheets))
 })
+
+
+## --- the app's Step 5 panels (PR C3) ---------------------------------------------
+
+test_that(".fill_debrief_panels turns a payload into the rollup strings", {
+  payload <- list(fill_census = data.frame(
+    output_id   = "T_14_1_4",
+    sheet       = "Table 14.1.4",
+    ref         = sprintf("%s%d", rep(c("B", "C", "D", "E"), 2), rep(5:6, each = 4)),
+    row         = rep(5:6, each = 4),
+    col         = rep(2:5, 2),
+    col_label   = rep(c("Low (N=XX)", "Medium (N=XX)", "High (N=XX)",
+                        "Total [x] (N=482)"), 2),
+    analysis_id = "AN_1",
+    status      = rep(c("pending", "pending", "pending", "filled"), 2),
+    reason      = rep(c(rep("the column is not on the output's column axis", 3),
+                        NA), 2),
+    stringsAsFactors = FALSE
+  ))
+  panels <- .fill_debrief_panels(payload)
+
+  ## One line per sheet, counting what filled.
+  expect_length(panels$sheet_lines, 1)
+  expect_match(panels$sheet_lines, "Table 14.1.4")
+  expect_match(panels$sheet_lines, "2 of 8")
+
+  ## One callout per column that lost every cell, with its modal reason --
+  ## the 14.1.4 shape: three cohort columns dead, Total alive.
+  expect_length(panels$column_callouts, 3)
+  expect_match(panels$column_callouts[1], "Low \\(N=XX\\)")
+  expect_match(panels$column_callouts[1], "0 of 2")
+  expect_match(panels$column_callouts[1], "not on the output's column axis")
+
+  ## The reasons drilldown pairs count and hint.
+  expect_equal(panels$reasons$n_cells, 6L)
+  expect_false(any(is.na(panels$reasons$hint)))
+})
+
+test_that(".fill_debrief_panels is NULL for a payload without a census", {
+  ## An archived last_run.rds from an older version must not error the app.
+  expect_null(.fill_debrief_panels(list()))
+  expect_null(.fill_debrief_panels(list(fill_census = NULL)))
+  expect_null(.fill_debrief_panels(
+    list(fill_census = .fill_census(list()))))
+})
