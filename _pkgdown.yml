@@ -96,10 +96,14 @@ reference:
 - title: Diagnostics
   desc: >
     Plain-English findings that point at the exact location in the input
-    document to fix.
+    document to fix, and the durable record of what a fill did -- for the
+    locked machine where the app's screen and these files are the whole
+    diagnosis.
   contents:
   - ars_diagnostics
   - ars_blockers
+  - ars_fill_summary
+  - write_fill_debrief
 
 - title: LLM providers
   desc: >
