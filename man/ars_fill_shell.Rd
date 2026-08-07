@@ -41,8 +41,12 @@ placeholder (default) rather than blanking it.}
 }
 \value{
 Invisibly, a list with \code{path}, the counts \code{filled}, \code{pending} and
-\code{skipped}, and \code{diagnostics} -- one row per cell that was not filled,
-with the output, the cell reference and the reason.
+\code{skipped}, plus two frames: \code{census} -- one row per cell record, the
+FILLED cells included, with position, display-column label, owning
+analysis, status and (when unresolved) the reason -- and \code{findings},
+the diagnostics this run itself raised (lost columns, declined
+expansions), which previously lived only in the session collector.
+Roll the census up with \code{\link[=ars_fill_summary]{ars_fill_summary()}}.
 }
 \description{
 Takes the Excel shell that was parsed to build an ARS, and returns a copy

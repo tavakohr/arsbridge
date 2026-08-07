@@ -1,5 +1,24 @@
 # arsbridge (development version)
 
+* **The fill census keeps every cell, and every reason carries a hint.**
+  Diagnosing a half-empty workbook on a machine nothing may leave needs the
+  whole answer on-screen, and the old census could not give it: filled
+  cells were dropped (so no per-column fill rate was computable), the cell
+  position and owning analysis were dropped with them, and the fill stage's
+  own WARNs lived only in the session collector a CLI caller loses on exit.
+
+  `ars_fill_shell()` now returns `census` -- one row per cell record,
+  filled cells included, with row/column, the display column's label, the
+  owning analysis, status and reason -- and `findings`, the run's own
+  diagnostics. The new `ars_fill_summary()` rolls a census up into the
+  three tables a reader actually asks for: per-sheet counts, per-column
+  fill rates with the lost column's modal reason, and a reason histogram.
+  Every reason the fill can write now carries an author-facing hint
+  (`.fill_reason_hint()`), and a coverage test holds the contract: a new
+  reason string cannot ship without one. The old unfilled-only
+  `diagnostics` field is gone; `ars_workflow_run()`'s `unfilled_cells`
+  payload keeps its shape.
+
 * **Categorical template blocks expand in the filled workbook: one row per
   level.** The other half of the template work -- the visible one. A
   recorded block's mock rows are replaced at fill time: each level of the
