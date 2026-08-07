@@ -1,5 +1,23 @@
 # arsbridge (development version)
 
+* **Categorical template blocks expand in the filled workbook: one row per
+  level.** The other half of the template work -- the visible one. A
+  recorded block's mock rows are replaced at fill time: each level of the
+  variable takes a row (decoded labels, codelist order, zero-count levels
+  included), values land formatted to the template's own placeholder
+  decimals, and rows below move down when the levels outgrow the authored
+  rows -- the same `.shift_rows_down()` machinery the nested SOC/PT and
+  listing expanders already trust. Authored rows the levels do not reach
+  are cleared, and reported, rather than left showing "<Reason #n>".
+
+  Several blocks per sheet compose (nested pair included): expansions run
+  bottom-up, so a shift never moves a block that is still waiting. A sheet
+  carrying formulas or other unshiftable features declines the expansion
+  with a FAIL naming the block, and fills everything else. The default
+  level order is the spec/codelist order the Word renderer already prints
+  -- the workbook and the document cannot disagree -- with the authored
+  "sort:" overrides available as on nested blocks.
+
 * **A mock block with no annotated header above it is a self-template, not
   debris.** Shells in the field author the same "levels unknown until the
   data arrives" intent the other way round: a plain-text header over a

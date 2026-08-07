@@ -1400,10 +1400,12 @@ build_ars_json <- function(sections,
           action = "One analysis draws the distribution; the block expands one row per level at fill time"
         )
       }
-      ## An authored "sort: ..." clause on the parent token row travels on
-      ## the layout entry; the renderer defaults to descending frequency
-      ## when there is none.
-      if (identical(nested_role, "nested_parent")) {
+      ## An authored "sort: ..." clause travels on the layout entry -- from
+      ## a nested parent token row, or from any categorical row (whose mock
+      ## block below may expand). Without one, nested blocks default to
+      ## descending frequency and categorical blocks to codelist order.
+      if (identical(nested_role, "nested_parent") ||
+            identical(layout_kind, "categorical")) {
         sort_clause <- .nested_sort_clause(row$annotation)
         if (!is.null(sort_clause)) {
           if (is.na(sort_clause$basis)) {
@@ -1427,7 +1429,7 @@ build_ars_json <- function(sections,
                 "Row '%s' declares its own sort order (sort: %s)",
                 row$label %||% "?", sort_clause$raw),
               tlf_number = sec$tlf_number,
-              action = sprintf("Nested block sorts by %s", layout_entry$sort)
+              action = sprintf("The block sorts by %s", layout_entry$sort)
             )
           }
         }
