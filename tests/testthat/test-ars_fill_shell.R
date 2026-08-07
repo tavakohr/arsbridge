@@ -809,6 +809,41 @@ test_that("a real-sized listing fills in seconds, and fills completely", {
                paste0("v10-", n))
 })
 
+test_that("a date column out of real ADaM is written as a date, not as its number", {
+  ## Issue #2. A listing's dates only reach `.listing_value()` AS dates when
+  ## the data came from .xpt -- read a .csv and every column is character, so
+  ## the Date branch could not run in CI even though it always runs in
+  ## production. This is the one fixture in the suite that arrives typed.
+  skip_if_not_installed("haven")
+  rows <- .listing_load(test_path("fixtures", "adam_apx_drm_301_xpt"), "ADSL")
+
+  ## Guard the premise: if this ever comes back character, the assertions
+  ## below would still pass and would be testing nothing.
+  expect_s3_class(rows$TRTSDT, "Date")
+  expect_s3_class(rows$TRTEDT, "Date")
+
+  path <- mini_listing(ncol = 4L)
+  wb <- openxlsx2::wb_load(path)
+  res <- .fill_listing_sheet(wb, 1L, list(template_row = 3L), rows, TRUE)
+  expect_equal(res$records[[1]]$status, "filled")
+
+  out <- tempfile(fileext = ".xlsx")
+  openxlsx2::wb_save(wb, out, overwrite = TRUE)
+  txt <- function(ref) xlsx_raw_cell_text(out, "sheet1.xml", ref)
+
+  ## The subject and arm are unremarkable; the dates are the point. A writer
+  ## that formatted the underlying number would put "20451" here.
+  expect_equal(txt("A3"), "APX-301-001")
+  expect_equal(txt("C3"), "2025-12-29")
+  expect_equal(txt("D3"), "2026-01-05")
+  expect_equal(txt("C4"), "2026-01-02")
+
+  ## A missing date is a blank cell: in a listing that means "not recorded",
+  ## which is not the same as the string "NA".
+  expect_equal(txt("D5"), "")
+  expect_equal(txt("C5"), "2026-02-14")
+})
+
 test_that("a sheet arriving with cells filed under the wrong row is reported, not saved quietly", {
   ## The standing check behind the defect above: nothing a user can do makes
   ## it fire, so it is provoked here by hand.

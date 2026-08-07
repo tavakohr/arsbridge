@@ -1709,16 +1709,18 @@
 #'
 #' Everything becomes text, because a listing column is a display of what the
 #' data says, not a recomputation of it: a subject id, a coded severity, a
-#' date that is already a formatted string in the ADaM data. `NA` becomes an
-#' empty cell -- in a listing, unlike a table, a blank means "not recorded"
-#' rather than zero.
+#' date. `NA` becomes an empty cell -- in a listing, unlike a table, a blank
+#' means "not recorded" rather than zero.
+#'
+#' A date is spelled ISO rather than left to `as.character()`, which follows
+#' the session's locale. Whether one arrives typed at all depends on the
+#' format the data came in: .xpt and .sas7bdat give a `Date`, .csv gives the
+#' string that was in the file.
 #' @noRd
 .listing_value <- function(x) {
   if (length(x) == 0 || is.na(x)) return("")
   if (inherits(x, "Date")) return(format(x, "%Y-%m-%d"))
-  if (is.numeric(x)) {
-    return(if (x == round(x)) format(x, trim = TRUE) else format(x, trim = TRUE))
-  }
+  if (is.numeric(x)) return(format(x, trim = TRUE))
   as.character(x)
 }
 
