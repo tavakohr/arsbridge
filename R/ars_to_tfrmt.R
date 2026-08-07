@@ -118,6 +118,11 @@ extract_footnotes <- function(out_obj) {
       if (is.null(v) || length(v) == 0 || is.na(v[[1]])) NA_character_
       else as.character(v[[1]])
     }, character(1)),
+    ## A self-template categorical block: the analysis lives on a mock row
+    ## ("<Reason #1>") whose label stands for the levels, so the renderer
+    ## must not print it as a header line.
+    self_template = vapply(sl, function(e) isTRUE(e[["self_template"]]),
+                           logical(1)),
     stringsAsFactors = FALSE
   )
   df[order(df$order), , drop = FALSE]
@@ -906,8 +911,13 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
     }
 
     ## Grouped row: authored label as a header line, then one line per
-    ## category level (categorical) / stat line (continuous, manual).
-    rows[[length(rows) + 1L]] <- blank_row(le, ord)
+    ## category level (categorical) / stat line (continuous, manual). A
+    ## self-template block prints no header line of its own -- its mock
+    ## label stands for the levels, and the authored un-annotated row above
+    ## it is the block's visible header.
+    if (!isTRUE(le$self_template)) {
+      rows[[length(rows) + 1L]] <- blank_row(le, ord)
+    }
 
     ## Authored LEVEL slots (kind "level" entries following this categorical
     ## parent, option A): each takes its authored label and position, filled

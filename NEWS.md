@@ -1,5 +1,26 @@
 # arsbridge (development version)
 
+* **A mock block with no annotated header above it is a self-template, not
+  debris.** Shells in the field author the same "levels unknown until the
+  data arrives" intent the other way round: a plain-text header over a
+  single `<Reason #1>` mock carrying the bare variable, or numbered
+  subcategory mocks under a row annotated on a different variable. Those
+  runs used to fall apart -- one analysis per mock, deduped by signature,
+  nothing marked for expansion, and the mock text rendered as if it were a
+  real row.
+
+  Now such a run is a *self-template*: its first annotated row carries the
+  block's single count-and-percentage analysis, the repeats collapse into
+  it, the layout entry is flagged `self_template` with the run's sheet rows
+  as `template_rows`, and the Word renderer stops printing the mock label
+  as a header line -- the authored plain header above remains the block's
+  visible title. Template-row cells in mapped columns are bound to the
+  owning analysis (slots and all), so the fill plan (`fill$categorical`,
+  one block per template entry, several per sheet allowed) knows exactly
+  which rows to expand and from what. The expansion itself lands next; a
+  block whose recorded rows are not contiguous is reported and skipped
+  rather than expanded over unrelated rows.
+
 * **A categorical mock block is kept as an expansion template, not dropped.**
   Shells author "levels unknown until the data arrives" as a header annotated
   with the bare variable ("Primary reason for discontinuation, n (%)

@@ -61,17 +61,19 @@ test_that(".detect_nested_token_blocks marks the pattern and nothing else", {
   roles <- .detect_nested_token_blocks(rows[1:3], list())
   expect_equal(roles, c(NA, "nested_parent", "nested_child"))
 
-  ## A lone token row is not a hierarchy.
+  ## A lone token row is not a hierarchy -- it is a self-template block:
+  ## its label stands for the variable's levels, one analysis, expandable.
   roles <- .detect_nested_token_blocks(rows[1:2], list())
-  expect_equal(roles, c(NA_character_, NA_character_))
+  expect_equal(roles, c(NA_character_, "self_template"))
 
-  ## A run on ONE variable (repeated PT mocks with no parent) is not nested.
+  ## A run on ONE variable (repeated PT mocks with no parent) is not nested
+  ## either: the annotated first row carries the block, the repeat collapses.
   flat <- list(
     row("<Preferred Term>", "ADAE.AEDECOD"),
     row("<Preferred Term>", "ADAE.AEDECOD")
   )
   expect_equal(.detect_nested_token_blocks(flat, list()),
-               rep(NA_character_, 2))
+               c("self_template", "level_repeat"))
 
   ## Child before parent does not qualify.
   inverted <- list(
@@ -497,16 +499,20 @@ test_that("single-level mocks under a categorical parent collapse", {
   expect_true(all(roles[2:4] == "level_repeat"))
 })
 
-test_that("mocks on a different variable than the row above are left alone", {
+test_that("mocks on a different variable than the row above are a self-template", {
   rows <- list(
     .tok_row("Age group, n (%)", "ADSL.AGEGR1"),
     .tok_row("<Preferred Term>", "ADAE.AEDECOD"),
     .tok_row("<Preferred Term>", "ADAE.AEDECOD")
   )
   ## No parent/child pair (one variable) and no matching categorical row
-  ## above -- nothing is collapsed, the rows keep their own analyses.
-  expect_equal(.detect_nested_token_blocks(rows, list()),
-               rep(NA_character_, 3))
+  ## above: the run cannot lean on the row above it, so the first annotated
+  ## mock carries the block's single analysis and the repeat collapses into
+  ## it. (Before self-templates each mock became its own analysis and the
+  ## duplicates were deduped by row signature -- same single analysis, but
+  ## nothing marked the block for expansion.)
+  roles <- .detect_nested_token_blocks(rows, list())
+  expect_equal(roles, c(NA_character_, "self_template", "level_repeat"))
 })
 
 test_that("a continuation row is only swallowed after a mock block", {
