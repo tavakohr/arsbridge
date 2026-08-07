@@ -73,12 +73,19 @@ round-trip for cells arsbridge cannot yet compute automatically.
 ## Diagnostics
 
 Plain-English findings that point at the exact location in the input
-document to fix.
+document to fix, and the durable record of what a fill did – for the
+locked machine where the app’s screen and these files are the whole
+diagnosis.
 
 - [`ars_diagnostics()`](https://tavakohr.github.io/arsbridge/reference/ars_diagnostics.md)
   : Retrieve pipeline diagnostics from the most recent run
 - [`ars_blockers()`](https://tavakohr.github.io/arsbridge/reference/ars_blockers.md)
   : Blocking problems from the most recent run, in plain English
+- [`ars_fill_summary()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_summary.md)
+  : Roll a fill census up into the three tables a reader actually asks
+  for.
+- [`write_fill_debrief()`](https://tavakohr.github.io/arsbridge/reference/write_fill_debrief.md)
+  : Write the fill debrief workbook.
 
 ## LLM providers
 

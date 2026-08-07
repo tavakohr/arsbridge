@@ -67,8 +67,13 @@ ars_fill_shell(
 ## Value
 
 Invisibly, a list with `path`, the counts `filled`, `pending` and
-`skipped`, and `diagnostics` – one row per cell that was not filled,
-with the output, the cell reference and the reason.
+`skipped`, plus two frames: `census` – one row per cell record, the
+FILLED cells included, with position, display-column label, owning
+analysis, status and (when unresolved) the reason – and `findings`, the
+diagnostics this run itself raised (lost columns, declined expansions),
+which previously lived only in the session collector. Roll the census up
+with
+[`ars_fill_summary()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_summary.md).
 
 ## Details
 

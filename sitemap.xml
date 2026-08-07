@@ -1,12 +1,9 @@
 <urlset xmlns = 'http://www.sitemaps.org/schemas/sitemap/0.9'>
 <url><loc>https://tavakohr.github.io/arsbridge/404.html</loc></url>
-<url><loc>https://tavakohr.github.io/arsbridge/CLAUDE_CODE_PROMPT_spec_to_ars.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/CODE_OF_CONDUCT.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/CONTRIBUTING.html</loc></url>
-<url><loc>https://tavakohr.github.io/arsbridge/HANDOFF_arsbridge_layout_fidelity.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/LICENSE-text.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/LICENSE.html</loc></url>
-<url><loc>https://tavakohr.github.io/arsbridge/ars_total_and_annotation_guidance.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/articles/getting-started.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/articles/index.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/articles/no-api-access.html</loc></url>
@@ -21,6 +18,7 @@
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_copilot_instructions.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_diagnostics.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_fill_shell.html</loc></url>
+<url><loc>https://tavakohr.github.io/arsbridge/reference/ars_fill_summary.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_manual_worklist.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_render_all.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/ars_render_combined.html</loc></url>
@@ -54,7 +52,7 @@
 <url><loc>https://tavakohr.github.io/arsbridge/reference/spec_to_ars_example.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/validate_ars_model.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/view_ars.html</loc></url>
+<url><loc>https://tavakohr.github.io/arsbridge/reference/write_fill_debrief.html</loc></url>
 <url><loc>https://tavakohr.github.io/arsbridge/reference/write_supplement_draft.html</loc></url>
-<url><loc>https://tavakohr.github.io/arsbridge/siera_cards_integration_plan.html</loc></url>
 </urlset>
 

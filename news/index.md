@@ -2,6 +2,73 @@
 
 ## arsbridge (development version)
 
+- **Step 5 of the workflow app answers “why is this cell empty” on its
+  own.** Above the diagnostics: one line per sheet saying how much of it
+  filled, and a callout naming every display column that filled
+  *nothing* while its siblings filled – with the reason all its cells
+  share (the lost-column shape that previously had to be reconstructed
+  cell by cell). Below the per-cell table: the reasons grouped, each
+  with how many cells it explains and the author-facing hint; the
+  per-cell table itself gains the hint column. A payload archived by an
+  older version renders “available after the next build” instead of
+  erroring.
+
+- **Every build writes a fill debrief workbook.**
+  `outputs/fill_debrief.xlsx` – the durable, human-readable record of
+  what the fill did, for the machine nothing may leave. Sheets: the full
+  cell census (rows tinted filled/pending/skipped), the per-column
+  rollup (a column that lost every cell is tinted FAIL with its modal
+  reason beside it), the reason histogram with the author-facing hint
+  for each, the run’s complete diagnostics, and the shared legend.
+  Written by the new exported
+  [`write_fill_debrief()`](https://tavakohr.github.io/arsbridge/reference/write_fill_debrief.md)
+  after the fill stage; a debrief failure can never take a finished
+  build down – it degrades to a WARN in the payload. The workflow
+  payload gains `fill_census` and the `fill_debrief` artifact path, and
+  the app’s artifact list links it; the run-log link now says it may
+  contain console output and should be reviewed before sharing.
+
+- **The fill census keeps every cell, and every reason carries a hint.**
+  Diagnosing a half-empty workbook on a machine nothing may leave needs
+  the whole answer on-screen, and the old census could not give it:
+  filled cells were dropped (so no per-column fill rate was computable),
+  the cell position and owning analysis were dropped with them, and the
+  fill stage’s own WARNs lived only in the session collector a CLI
+  caller loses on exit.
+
+  [`ars_fill_shell()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_shell.md)
+  now returns `census` – one row per cell record, filled cells included,
+  with row/column, the display column’s label, the owning analysis,
+  status and reason – and `findings`, the run’s own diagnostics. The new
+  [`ars_fill_summary()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_summary.md)
+  rolls a census up into the three tables a reader actually asks for:
+  per-sheet counts, per-column fill rates with the lost column’s modal
+  reason, and a reason histogram. Every reason the fill can write now
+  carries an author-facing hint (`.fill_reason_hint()`), and a coverage
+  test holds the contract: a new reason string cannot ship without one.
+  The old unfilled-only `diagnostics` field is gone;
+  [`ars_workflow_run()`](https://tavakohr.github.io/arsbridge/reference/ars_workflow_run.md)’s
+  `unfilled_cells` payload keeps its shape.
+
+- **Categorical template blocks expand in the filled workbook: one row
+  per level.** The other half of the template work – the visible one. A
+  recorded block’s mock rows are replaced at fill time: each level of
+  the variable takes a row (decoded labels, codelist order, zero-count
+  levels included), values land formatted to the template’s own
+  placeholder decimals, and rows below move down when the levels outgrow
+  the authored rows – the same `.shift_rows_down()` machinery the nested
+  SOC/PT and listing expanders already trust. Authored rows the levels
+  do not reach are cleared, and reported, rather than left showing
+  “\<Reason \#n\>”.
+
+  Several blocks per sheet compose (nested pair included): expansions
+  run bottom-up, so a shift never moves a block that is still waiting. A
+  sheet carrying formulas or other unshiftable features declines the
+  expansion with a FAIL naming the block, and fills everything else. The
+  default level order is the spec/codelist order the Word renderer
+  already prints – the workbook and the document cannot disagree – with
+  the authored “sort:” overrides available as on nested blocks.
+
 - **A mock block with no annotated header above it is a self-template,
   not debris.** Shells in the field author the same “levels unknown
   until the data arrives” intent the other way round: a plain-text
