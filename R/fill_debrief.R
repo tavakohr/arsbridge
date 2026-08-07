@@ -138,63 +138,111 @@ ars_fill_summary <- function(census) {
 ## with a hint, or the test names it.
 .FILL_REASON_HINTS <- list(
   "a template row of the categorical block above -- awaiting row expansion" =
-    "Nothing to fix: the block is recognised and expands at fill time. If it stayed on placeholder, read the block's own FAIL/WARN in the diagnostics.",
+    paste("Nothing to fix: the block is recognised and expands at fill",
+          "time. If it stayed on placeholder, read the block's own",
+          "FAIL/WARN in the diagnostics."),
   "the column is not on the output's column axis" =
-    "The column header's annotation must name a variable the ADaM spec has ([columns -> DATASET.VARIABLE]), and the column labels must match that variable's values. The build stage logged a WARN naming the header it could not resolve.",
+    paste("The column header's annotation must name a variable the ADaM",
+          "spec has ([columns -> DATASET.VARIABLE]), and the column labels",
+          "must match that variable's values. The build stage logged a",
+          "WARN naming the header it could not resolve."),
   "no analysis covers this row" =
-    "The stub row's annotation never bound to an analysis: check it names DATASET.VARIABLE the spec knows, or add the row through the supplement.",
+    paste("The stub row's annotation never bound to an analysis: check it",
+          "names DATASET.VARIABLE the spec knows, or add the row through",
+          "the supplement."),
   "the method declares no statistic for this placeholder" =
-    "The row's method produces no statistic for this cell: the annotation typed the row as something else. Annotate the row as what the placeholder shows (a count, a count with percentage, a summary).",
+    paste("The row's method produces no statistic for this cell: the",
+          "annotation typed the row as something else. Annotate the row",
+          "as what the placeholder shows (a count, a count with",
+          "percentage, a summary)."),
   "not bound to an analysis" =
-    "The cell reached the writer without an analysis behind it: the row's annotation never resolved. Check the stub row's annotation against the ADaM spec.",
+    paste("The cell reached the writer without an analysis behind it: the",
+          "row's annotation never resolved. Check the stub row's",
+          "annotation against the ADaM spec."),
   "the cell is not in the workbook" =
-    "The cell map points at a cell the sheet does not have -- the shell changed after the ARS was built. Rebuild from the current shell.",
+    paste("The cell map points at a cell the sheet does not have -- the",
+          "shell changed after the ARS was built. Rebuild from the",
+          "current shell."),
   "the cell holds no text to replace" =
-    "The mapped cell is empty in the workbook: the placeholder moved or was deleted. Rebuild from the current shell.",
+    paste("The mapped cell is empty in the workbook: the placeholder",
+          "moved or was deleted. Rebuild from the current shell."),
   "reserved for manual derivation" =
-    "Intentional: the method is beyond the deterministic engine, and the cell is reserved. See ars_manual_worklist() for the full list.",
+    paste("Intentional: the method is beyond the deterministic engine,",
+          "and the cell is reserved. See ars_manual_worklist() for the",
+          "full list."),
   "the placeholder asks for a statistic the analysis does not produce" =
-    "The shell shows more numbers than the row's method computes -- most often 'xx (xx.x)' on a count-only row. Annotate the row so it reads as a count with percentage, or simplify the placeholder.",
+    paste("The shell shows more numbers than the row's method computes --",
+          "most often 'xx (xx.x)' on a count-only row. Annotate the row",
+          "so it reads as a count with percentage, or simplify the",
+          "placeholder."),
   "the analysis produced no value for this cell" =
-    "The analysis ran and has no result for this column/level: usually the column label does not match any value of the column variable in the data.",
+    paste("The analysis ran and has no result for this column/level:",
+          "usually the column label does not match any value of the",
+          "column variable in the data."),
   "the row stands for a repeated block, which needs row expansion" =
-    "The row's analysis draws a whole distribution into one cell. Author the block as a template (header annotated with the bare variable over mock rows), or update to a version with categorical row expansion.",
+    paste("The row's analysis draws a whole distribution into one cell.",
+          "Author the block as a template (header annotated with the bare",
+          "variable over mock rows), or update to a version with",
+          "categorical row expansion."),
   "no result in the ARD for this cell" =
-    "The ARD has no row for this cell's analysis at all: the analysis was skipped or failed at execution. Check the execution diagnostics for its id.",
+    paste("The ARD has no row for this cell's analysis at all: the",
+          "analysis was skipped or failed at execution. Check the",
+          "execution diagnostics for its id."),
   "the placeholder text could not be located in the cell" =
-    "The cell's text changed after the ARS was built, so the placeholder pattern is gone. Rebuild from the current shell.",
+    paste("The cell's text changed after the ARS was built, so the",
+          "placeholder pattern is gone. Rebuild from the current shell."),
   "no result in this column is shown as a percentage" =
-    "The (N=xx) header fills from the denominator of the column's percentage results, and this column shows none. Expected for count-only columns.",
+    paste("The (N=xx) header fills from the denominator of the column's",
+          "percentage results, and this column shows none. Expected for",
+          "count-only columns."),
   "no analysis in this column reports a denominator" =
-    "No percentage in this column carried a denominator, so there is no N to write. Check the column's analyses declare a population.",
+    paste("No percentage in this column carried a denominator, so there",
+          "is no N to write. Check the column's analyses declare a",
+          "population."),
   "the (N=xx) placeholder could not be located in the cell" =
-    "The header cell's text changed after the ARS was built. Rebuild from the current shell.",
+    paste("The header cell's text changed after the ARS was built.",
+          "Rebuild from the current shell."),
   "the nested block's analyses produced no levels" =
-    "The nested pair ran but the data has no rows in scope -- check the section's record filter and the population.",
+    paste("The nested pair ran but the data has no rows in scope -- check",
+          "the section's record filter and the population."),
   "the categorical block's analysis produced no levels" =
-    "The block's analysis ran but produced no category levels -- check the variable is populated in scope, and the spec codelist if one exists.",
+    paste("The block's analysis ran but produced no category levels --",
+          "check the variable is populated in scope, and the spec",
+          "codelist if one exists."),
   "the block has fewer observed levels than authored template rows; the leftover row was cleared" =
-    "Nothing to fix: the shell authored more mock rows than the data has levels, and the spare row was cleared on purpose.",
+    paste("Nothing to fix: the shell authored more mock rows than the",
+          "data has levels, and the spare row was cleared on purpose."),
   "the shell has no template row to expand" =
-    "A listing needs one body row of placeholders to use as its template. Add one row of column placeholders under the header.",
+    paste("A listing needs one body row of placeholders to use as its",
+          "template. Add one row of column placeholders under the",
+          "header."),
   "the listing's rows could not be read from the data" =
-    "The listing's source dataset could not be read -- check the ADaM directory holds it and the file opens.",
+    paste("The listing's source dataset could not be read -- check the",
+          "ADaM directory holds it and the file opens."),
   "the listing selected no rows" =
-    "The listing's filter matched nothing. Check the record filter against the data.",
+    paste("The listing's filter matched nothing. Check the record filter",
+          "against the data."),
   "the template row is not in the workbook" =
-    "The listing's template row is outside the sheet -- the shell changed after the ARS was built. Rebuild from the current shell.",
+    paste("The listing's template row is outside the sheet -- the shell",
+          "changed after the ARS was built. Rebuild from the current",
+          "shell."),
   "the shell states no annotation block to write the series into" =
-    "A figure sheet needs the annotation block that declares its series. Re-annotate the figure sheet.",
+    paste("A figure sheet needs the annotation block that declares its",
+          "series. Re-annotate the figure sheet."),
   "no ADaM directory was given, so the series could not be computed" =
-    "Figures compute their series straight from the data: pass the ADaM directory to the build.",
+    paste("Figures compute their series straight from the data: pass the",
+          "ADaM directory to the build."),
   "the shell does not name both an x axis and a y axis variable" =
-    "The figure's annotation must name both axes (x and y variables). Complete the annotation.",
+    paste("The figure's annotation must name both axes (x and y",
+          "variables). Complete the annotation."),
   "the figure's filter could not be parsed" =
-    "The figure's record filter is not in a supported form -- see the WARN in the diagnostics for the supported grammar.",
+    paste("The figure's record filter is not in a supported form -- see",
+          "the WARN in the diagnostics for the supported grammar."),
   "the figure's filter selected no records" =
     "The figure's filter matched nothing. Check it against the data.",
   "no cell map recorded for this output" =
-    "The output carries no cell map -- it was built from a Word shell or an older ARS file. Rebuild from the Excel shell."
+    paste("The output carries no cell map -- it was built from a Word",
+          "shell or an older ARS file. Rebuild from the Excel shell.")
 )
 
 ## Parameterised reason families: the leading text is stable, the tail names
@@ -216,6 +264,65 @@ ars_fill_summary <- function(census) {
     grepl(" does not have ", reason, fixed = TRUE)
   }, hint = "The annotation names a variable its dataset does not carry. Correct the annotation, or the ADaM spec.")
 )
+
+#' Write the fill debrief workbook.
+#'
+#' The durable, human-readable record of what a fill did -- for the locked
+#' machine where the app's screen and this file are the entire diagnosis.
+#' Sheets: the full cell census (rows tinted by outcome), the per-column
+#' rollup, the reason histogram with its hints, the run's diagnostics (when
+#' any), and the shared legend.
+#'
+#' @param census The `census` frame `ars_fill_shell()` returned.
+#' @param findings A diagnostics frame (the workflow's accumulated table, or
+#'   the fill's own `findings`); its sheet is omitted when empty.
+#' @param output_path Path of the `.xlsx` to write.
+#' @return Invisibly, `output_path`.
+#' @export
+write_fill_debrief <- function(census, findings, output_path) {
+  if (!requireNamespace("openxlsx2", quietly = TRUE)) {
+    cli::cli_abort("openxlsx2 is required to write the fill debrief.")
+  }
+  summary <- ars_fill_summary(census)
+
+  ## The tint vocabulary is the report's: a filled cell passed, a pending or
+  ## partial one needs review, a skipped one was refused.
+  tint_of <- c(filled = "PASS", partial = "WARN", pending = "WARN",
+               skipped = "FAIL")
+  census_sheet <- cbind(
+    data.frame(Status = unname(tint_of[census$status]),
+               stringsAsFactors = FALSE),
+    census
+  )
+
+  columns_sheet <- summary$columns
+  if (nrow(columns_sheet) > 0) {
+    column_status <- ifelse(
+      columns_sheet$filled == columns_sheet$cells, "PASS",
+      ifelse(columns_sheet$filled == 0, "FAIL", "WARN"))
+    columns_sheet <- cbind(
+      data.frame(Status = column_status, stringsAsFactors = FALSE),
+      columns_sheet
+    )
+  }
+
+  wb <- openxlsx2::wb_workbook(creator = "arsbridge")
+  wb$add_worksheet("Fill census")
+  .write_styled_sheet(wb, "Fill census", census_sheet, tint_col = "Status")
+  wb$add_worksheet("Columns")
+  .write_styled_sheet(wb, "Columns", columns_sheet, tint_col = "Status")
+  wb$add_worksheet("Reasons")
+  .write_styled_sheet(wb, "Reasons", summary$reasons, tint_col = NULL)
+  if (!is.null(findings) && nrow(findings) > 0) {
+    wb$add_worksheet("Diagnostics (run)")
+    .write_styled_sheet(wb, "Diagnostics (run)", findings,
+                        tint_col = "severity")
+  }
+  .write_legend_sheet(wb)
+
+  openxlsx2::wb_save(wb, file = output_path, overwrite = TRUE)
+  invisible(output_path)
+}
 
 #' The author-facing hint for one pending reason, or NA when the reason is
 #' not one the fill writes.

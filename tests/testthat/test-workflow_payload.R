@@ -80,7 +80,7 @@ test_that("the payload names every artifact it produced", {
   p <- payload_run()
   expect_named(p$artifacts,
                c("ars_json", "validation_report", "code_dir", "ard_rds",
-                 "filled_workbook", "run_log"))
+                 "filled_workbook", "fill_debrief", "run_log"))
   for (name in c("ars_json", "ard_rds", "filled_workbook")) {
     expect_true(file.exists(p$artifacts[[name]]), info = name)
   }
@@ -184,8 +184,9 @@ test_that("unfilled workbook cells come back with their reasons", {
     shell_path = SHELL_X, ars = p$artifacts$ars_json, ard = gap,
     output_path = tempfile(fileext = ".xlsx"), adam_dir = ADAM_X,
     overwrite = TRUE)))
-  expect_gt(nrow(res$diagnostics), 0)
-  expect_true(all(nzchar(res$diagnostics$reason)))
+  unresolved <- res$census[res$census$status != "filled", ]
+  expect_gt(nrow(unresolved), 0)
+  expect_true(all(nzchar(unresolved$reason)))
 })
 
 test_that("the payload survives serialization, which is how it travels", {
@@ -244,4 +245,35 @@ test_that("a clean shell's run says the fill never happened, and why", {
   expect_true(any(p$diagnostics$stage == "fill_shell" &
                     grepl("was not produced", p$diagnostics$problem)))
   expect_true(is.na(p$artifacts$filled_workbook))
+})
+
+## ---------------------------------------------------------------------------
+## The fill debrief artifact (PR C2)
+## ---------------------------------------------------------------------------
+
+test_that("a filling run writes the fill debrief and hands back the census", {
+  p <- payload_run()
+  expect_false(is.na(p$artifacts$fill_debrief))
+  expect_true(file.exists(p$artifacts$fill_debrief))
+
+  ## The census travels in the payload, filled cells included, so the app
+  ## can roll it up without re-reading any file.
+  expect_s3_class(p$fill_census, "data.frame")
+  expect_true("filled" %in% p$fill_census$status)
+  expect_true(all(c("row", "col", "col_label", "analysis_id") %in%
+                    names(p$fill_census)))
+
+  ## And the workbook itself opens with the debrief sheets.
+  wb <- openxlsx2::wb_load(p$artifacts$fill_debrief)
+  expect_true(all(c("Fill census", "Columns", "Reasons", "Legend") %in%
+                    unname(openxlsx2::wb_get_sheet_names(wb))))
+})
+
+test_that("a run that never fills produces no debrief, and no error", {
+  p <- no_keys(ars_workflow_run(
+    shell_path = SHELL_X, adam_spec_path = SPEC_X,
+    output_dir = tempfile("wf_"), study_id = "APX-DRM-301"))
+  expect_true(is.na(p$artifacts$fill_debrief))
+  expect_null(p$fill_census)
+  expect_false(identical(p$status, "error"))
 })

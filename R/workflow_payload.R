@@ -212,7 +212,8 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
     validation_report = file.path(output_dir, "validation_report.xlsx"),
     code_dir          = file.path(output_dir, "code"),
     ard_rds           = file.path(output_dir, "ard.rds"),
-    filled_workbook   = file.path(output_dir, "filled_shells.xlsx")
+    filled_workbook   = file.path(output_dir, "filled_shells.xlsx"),
+    fill_debrief      = file.path(output_dir, "fill_debrief.xlsx")
   )
 
   diagnostics <- .EMPTY_DIAGNOSTICS()
@@ -315,6 +316,26 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
     fill <- filled$value
   }
 
+  ## The debrief workbook is bookkeeping about the fill, not the fill: its
+  ## failure must never take a finished build down with it. It is written
+  ## AFTER stage 3 so it sees the complete diagnostics table.
+  if (!is.null(fill)) {
+    debrief_error <- tryCatch({
+      write_fill_debrief(fill$census, diagnostics, paths$fill_debrief)
+      NULL
+    }, error = function(e) conditionMessage(e))
+    if (!is.null(debrief_error)) {
+      diagnostics <- rbind(diagnostics, data.frame(
+        stage = "fill_debrief", severity = "WARN",
+        input = NA_character_, tlf_number = NA_character_,
+        location = paths$fill_debrief,
+        problem = sprintf("The fill debrief could not be written: %s",
+                          debrief_error),
+        action = "The build itself is complete; only the debrief workbook is missing.",
+        stringsAsFactors = FALSE))
+    }
+  }
+
   produced <- function(path) if (file.exists(path)) path else NA_character_
   ## The census carries every cell; the app's unfilled table wants only the
   ## unresolved ones, in the shape it always had.
@@ -344,6 +365,7 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
       code_dir          = if (dir.exists(paths$code_dir)) paths$code_dir else NA_character_,
       ard_rds           = produced(paths$ard_rds),
       filled_workbook   = produced(paths$filled_workbook),
+      fill_debrief      = produced(paths$fill_debrief),
       run_log           = log_path %||% NA_character_
     ),
     metadata = list(
@@ -366,6 +388,9 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
       list(filled = fill$filled, pending = fill$pending,
            skipped = fill$skipped)
     } else NULL,
+    ## The full census (filled cells included) rides along so the app can
+    ## roll it up without re-reading any file.
+    fill_census    = if (!is.null(fill)) fill$census else NULL,
     unfilled_cells = unfilled,
     error          = failure,
     failed_stage   = stage_failed

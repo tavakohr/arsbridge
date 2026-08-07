@@ -240,3 +240,48 @@ test_that("the fill returns a full census and the run's findings", {
   expect_true(any(res$findings$severity == "WARN" &
                     grepl("kept its placeholder", res$findings$problem)))
 })
+
+
+## --- the debrief workbook (PR C2) ----------------------------------------------
+
+test_that("write_fill_debrief writes the four sheets plus the legend", {
+  td <- withr::local_tempdir()
+  census <- .debrief_census()
+  findings <- data.frame(
+    stage = "fill_shell", severity = "WARN", input = "shell",
+    tlf_number = "T1", location = "Table X",
+    problem = "Column 'Total': every cell kept its placeholder while 2 other columns filled.",
+    action = "Check the header annotation.",
+    stringsAsFactors = FALSE)
+  path <- file.path(td, "fill_debrief.xlsx")
+  write_fill_debrief(census, findings, path)
+
+  wb <- openxlsx2::wb_load(path)
+  sheets <- openxlsx2::wb_get_sheet_names(wb)
+  expect_equal(unname(sheets),
+               c("Fill census", "Columns", "Reasons", "Diagnostics (run)",
+                 "Legend"))
+
+  ## The census sheet carries a tintable Status column derived from the
+  ## cell status, with the raw status kept beside it.
+  cens <- openxlsx2::wb_to_df(wb, sheet = "Fill census")
+  expect_true(all(c("Status", "status", "reason") %in% names(cens)))
+  expect_setequal(unique(cens$Status), c("PASS", "WARN"))
+
+  ## The reasons sheet pairs every reason with its hint.
+  reasons <- openxlsx2::wb_to_df(wb, sheet = "Reasons")
+  expect_true("hint" %in% names(reasons))
+  expect_false(any(is.na(reasons$hint)))
+})
+
+test_that("a run with no findings still writes a complete debrief", {
+  td <- withr::local_tempdir()
+  path <- file.path(td, "fill_debrief.xlsx")
+  write_fill_debrief(.debrief_census(), .EMPTY_DIAGNOSTICS(), path)
+  wb <- openxlsx2::wb_load(path)
+  sheets <- unname(openxlsx2::wb_get_sheet_names(wb))
+  ## No diagnostics sheet when there is nothing to put on it.
+  expect_false("Diagnostics (run)" %in% sheets)
+  expect_true(all(c("Fill census", "Columns", "Reasons", "Legend") %in%
+                    sheets))
+})
