@@ -1315,25 +1315,8 @@
   source_cells[[as.character(plan$parent$row)]] <- source_row(plan$parent$row)
   source_cells[[as.character(plan$child$row)]]  <- source_row(plan$child$row)
 
-  in_col <- function(template, col) {
-    which(vapply(template$c_r, .xlsx_col_to_num, integer(1)) == col)
-  }
-
-  ## Write one cell, cloning the authored row's own cell when the line is on a
-  ## row the shift opened up -- so a written line carries the template's style
-  ## index, not the workbook default.
-  put <- function(cc, row, col, xml, template) {
-    ref  <- .xlsx_rc_to_a1(row, col)
-    slot <- which(cc$r == ref)
-    if (length(slot) == 1) return(.cell_set_is(cc, slot, xml))
-    hit <- in_col(template, col)
-    proto <- if (length(hit) >= 1) template[hit[[1]], , drop = FALSE] else
-      template[1, , drop = FALSE]
-    proto$is  <- xml
-    proto$c_t <- "inlineStr"
-    proto$v   <- ""
-    .cc_add(cc, proto, row, col)
-  }
+  in_col <- .tpl_col_hit
+  put    <- .tpl_put
 
   records <- list()
   for (i in seq_along(lines)) {
@@ -1409,6 +1392,265 @@
   ws <- .ensure_row_records(ws, seq.int(plan$parent$row,
                                         length.out = length(lines)))
   wb$worksheets[[sheet_index]] <- ws
+  list(records = records)
+}
+
+#' The cells a template row holds in one column, by position in its cc frame.
+#' Shared by every block expander so a written line finds the authored cell
+#' whose style it clones.
+#' @noRd
+.tpl_col_hit <- function(template, col) {
+  which(vapply(template$c_r, .xlsx_col_to_num, integer(1)) == col)
+}
+
+#' Write one cell, cloning the authored row's own cell when the line is on a
+#' row the shift opened up -- so a written line carries the template's style
+#' index, not the workbook default.
+#' @noRd
+.tpl_put <- function(cc, row, col, xml, template) {
+  ref  <- .xlsx_rc_to_a1(row, col)
+  slot <- which(cc$r == ref)
+  if (length(slot) == 1) return(.cell_set_is(cc, slot, xml))
+  hit <- .tpl_col_hit(template, col)
+  proto <- if (length(hit) >= 1) template[hit[[1]], , drop = FALSE] else
+    template[1, , drop = FALSE]
+  proto$is  <- xml
+  proto$c_t <- "inlineStr"
+  proto$v   <- ""
+  .cc_add(cc, proto, row, col)
+}
+
+#' The levels a categorical block expands into, in presentation order.
+#'
+#' The default order is the ARD's own -- which, when the ADaM spec shipped a
+#' codelist, IS the codelist order (the generated code makes the variable a
+#' factor over the codelist terms), zero-count levels included. That is also
+#' the order the Word renderer prints, so the workbook and the document
+#' cannot disagree. An authored "sort:" clause overrides through the same
+#' helpers the nested blocks use.
+#' @noRd
+.categorical_block_levels <- function(index, block) {
+  rows <- index$analysis_id %in% (block$analysis_id %||% "")
+  levels <- unique(index$variable_level[rows & !is.na(index$variable_level)])
+  if (length(levels) == 0) return(character())
+
+  sort_spec <- block$sort %||% NA_character_
+  if (is.na(sort_spec)) return(levels)
+
+  basis <- .nested_sort_basis(sort_spec)
+  freq <- .nested_level_freq(index$variable_level[rows],
+                             index$stat_name[rows], index$value[rows],
+                             index$group_level[rows], basis_col = basis)
+  .nested_level_order(levels, freq, sort_spec)
+}
+
+#' Expand one categorical template block into a row per level.
+#'
+#' The shell wrote mock rows ("<Reason #1>", "<Reason #n>") and meant "one
+#' row per level of this variable". The block's recorded template rows are
+#' replaced: each level takes the next row, the anchor row's cells are the
+#' formatting template, rows below move down when the levels outgrow the
+#' authored rows (`.shift_rows_down()`), and authored rows the levels do not
+#' reach are cleared rather than left showing placeholder text.
+#'
+#' @return list(records) -- one per cell written, cleared or declined.
+#' @noRd
+.fill_categorical_block <- function(wb, sheet_index, fill, block, index,
+                                    sheet_name = NA_character_) {
+  ## The plan crossed the ARS JSON: scalars survive, vectors come back as
+  ## lists. Normalised once, here, so nothing below has to care.
+  block$anchor_row    <- as.integer(block$anchor_row)
+  block$template_rows <- as.integer(unlist(block$template_rows))
+
+  record <- list(ref = NA_character_, row = block$anchor_row,
+                 col = NA_integer_,
+                 analysis_id = block$analysis_id %||% NA_character_)
+
+  levels <- .categorical_block_levels(index, block)
+  if (length(levels) == 0) {
+    record$status <- "pending"
+    record$reason <- "the categorical block's analysis produced no levels"
+    return(list(records = list(record)))
+  }
+
+  ## The bound template cells: normally on the anchor row; when the anchor's
+  ## columns were unmapped, the first template row that carries any.
+  template_cells <- list()
+  for (row in block$template_rows) {
+    template_cells <- Filter(function(cell) {
+      identical(cell$row, row) && isTRUE(cell$template)
+    }, fill$cells %||% list())
+    if (length(template_cells) > 0) break
+  }
+
+  ws <- wb$worksheets[[sheet_index]]
+  extra <- length(levels) - length(block$template_rows)
+
+  ## Refuse rather than half-move, exactly as the nested expander does.
+  if (extra > 0) {
+    blockers <- .unshiftable_features(ws, max(block$template_rows) + 1L)
+    if (length(blockers) > 0) {
+      .diag_gap(
+        stage = "fill_shell", severity = "FAIL", input = INPUT_SHELL,
+        problem = sprintf(
+          "Categorical block '%s' on sheet %s cannot be expanded: the sheet carries %s.",
+          block$label %||% "?", sheet_name %||% "?",
+          paste(blockers, collapse = ", ")),
+        why = paste("Expanding the block shifts rows, and those would be",
+                    "left pointing at the wrong ones."),
+        fix = paste("Remove them from the shell, or fill this table by hand.",
+                    "Every other sheet is still filled."),
+        location = sheet_name %||% "")
+      record$status <- "skipped"
+      record$reason <- sprintf("the sheet carries %s, which cannot be shifted",
+                               paste(blockers, collapse = ", "))
+      return(list(records = list(record)))
+    }
+    ws <- .shift_rows_down(ws, from_row = max(block$template_rows) + 1L,
+                           by = extra, template_row = block$anchor_row)
+  }
+
+  cc <- ws$sheet_data$cc
+  ## The anchor row's cells, read BEFORE anything is written: every line
+  ## clones them, and the first line overwrites the originals.
+  template <- cc[cc$row_r == as.character(block$anchor_row), , drop = FALSE]
+
+  records <- list()
+  for (i in seq_along(levels)) {
+    level  <- levels[[i]]
+    target <- block$anchor_row + i - 1L
+
+    ## The stub label: the level takes the mock's place, in the mock cell's
+    ## own styling.
+    if (length(.tpl_col_hit(template, 1L)) >= 1) {
+      cc <- .tpl_put(cc, target, 1L,
+                     sprintf("<is><t xml:space=\"preserve\">%s</t></is>",
+                             .xml_escape(level)), template)
+    }
+
+    for (cell in template_cells) {
+      rec <- list(ref = .xlsx_rc_to_a1(target, cell$col), row = target,
+                  col = cell$col,
+                  analysis_id = cell$analysis_id %||% NA_character_)
+
+      hit <- .tpl_col_hit(template, cell$col)
+      xml <- if (length(hit) >= 1) .cell_is_xml(wb, template, hit[[1]]) else
+        NA_character_
+      if (is.na(xml)) {
+        rec$status <- "skipped"
+        rec$reason <- "the cell holds no text to replace"
+        records[[length(records) + 1L]] <- rec
+        next
+      }
+
+      cell$variable_level <- level
+      resolved <- .resolve_cell(cell, index)
+      if (!any(resolved$statuses %in% "computed")) {
+        rec$status <- "pending"
+        rec$reason <- .pending_reason(resolved$statuses)
+        records[[length(records) + 1L]] <- rec
+        next
+      }
+
+      doc <- xml2::read_xml(xml)
+      ranges <- list()
+      for (k in seq_along(cell$slots)) {
+        if (is.na(resolved$values[[k]])) next
+        ranges[[length(ranges) + 1L]] <- list(
+          start = cell$slots[[k]]$start, stop = cell$slots[[k]]$stop,
+          text  = resolved$values[[k]])
+      }
+      if (.replace_ranges(doc, ranges)) {
+        cc <- .tpl_put(cc, target, cell$col, .is_xml(doc), template)
+        rec$status <- "filled"
+        rec$text   <- .is_text(doc)
+        if (any(is.na(resolved$values))) {
+          rec$status <- "partial"
+          rec$reason <- .pending_reason(resolved$statuses)
+        }
+      } else {
+        rec$status <- "skipped"
+        rec$reason <- "the placeholder text could not be located in the cell"
+      }
+      records[[length(records) + 1L]] <- rec
+    }
+  }
+
+  ## Authored rows the levels did not reach: cleared, not left showing mock
+  ## text -- and reported, so the census says why the row is empty.
+  if (extra < 0) {
+    leftover <- block$template_rows[seq.int(length(levels) + 1L,
+                                            length(block$template_rows))]
+    clear_cols <- unique(c(1L, vapply(template_cells,
+                                      function(cell) cell$col, integer(1))))
+    for (row in leftover) {
+      for (col in clear_cols) {
+        slot <- which(cc$r == .xlsx_rc_to_a1(row, col))
+        if (length(slot) == 1) {
+          cc <- .cell_set_is(cc, slot, "<is><t/></is>")
+        }
+      }
+      records[[length(records) + 1L]] <- list(
+        ref = .xlsx_rc_to_a1(row, 1L), row = row, col = 1L,
+        analysis_id = block$analysis_id %||% NA_character_,
+        status = "skipped",
+        reason = paste("the block has fewer observed levels than authored",
+                       "template rows; the leftover row was cleared"))
+    }
+  }
+
+  ws$sheet_data$cc <- .cc_sorted(cc)
+  ws <- .ensure_row_records(ws, seq.int(
+    block$anchor_row,
+    length.out = max(length(levels), length(block$template_rows))))
+  wb$worksheets[[sheet_index]] <- ws
+  list(records = records)
+}
+
+#' Every row a sheet's expansions own -- excluded from the fixed-cell fill,
+#' because an expansion writes them itself.
+#' @noRd
+.sheet_expansion_rows <- function(fill) {
+  nested <- if (is.null(fill$nested)) integer() else {
+    c(fill$nested$parent$row, fill$nested$child$row)
+  }
+  template <- unlist(lapply(fill$categorical %||% list(),
+                            function(block) block$template_rows),
+                     use.names = FALSE)
+  as.integer(c(nested, template))
+}
+
+#' Run every expansion a sheet carries, bottom-up.
+#'
+#' Bottom-up is what lets several blocks (and a nested pair alongside them)
+#' compose: a shift only moves rows at or below its insertion point, so
+#' expanding the lowest block first means every block still waiting sits
+#' above every row that has moved.
+#' @noRd
+.fill_sheet_expansions <- function(wb, sheet_index, fill, index,
+                                   sheet_name = NA_character_) {
+  jobs <- list()
+  if (!is.null(fill$nested)) {
+    jobs[[length(jobs) + 1L]] <- list(anchor = fill$nested$parent$row,
+                                      kind = "nested", block = NULL)
+  }
+  for (block in fill$categorical %||% list()) {
+    jobs[[length(jobs) + 1L]] <- list(anchor = block$anchor_row,
+                                      kind = "categorical", block = block)
+  }
+  if (length(jobs) == 0) return(list(records = list()))
+
+  anchors <- vapply(jobs, function(job) as.integer(job$anchor), integer(1))
+  records <- list()
+  for (job in jobs[order(anchors, decreasing = TRUE)]) {
+    result <- if (identical(job$kind, "nested")) {
+      .fill_nested_block(wb, sheet_index, fill, index, sheet_name)
+    } else {
+      .fill_categorical_block(wb, sheet_index, fill, job$block, index,
+                              sheet_name)
+    }
+    records <- c(records, result$records)
+  }
   list(records = records)
 }
 
@@ -2058,22 +2300,21 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
 
     result <- NULL
     cells <- fill$cells %||% list()
-    ## A nested block's two authored rows are not cells to substitute into --
-    ## they are a pattern to expand. They are written by .fill_nested_block()
-    ## instead, and left out here so one row is never reported twice.
-    nested_rows <- if (is.null(fill$nested)) integer() else {
-      c(fill$nested$parent$row, fill$nested$child$row)
-    }
+    ## An expansion's authored rows -- a nested pair, a categorical template
+    ## block -- are not cells to substitute into: they are a pattern to
+    ## expand. They are written by .fill_sheet_expansions() instead, and
+    ## left out here so one row is never reported twice.
+    expansion_rows <- .sheet_expansion_rows(fill)
     if (length(cells) > 0) {
-      fixed <- Filter(function(cell) !cell$row %in% nested_rows, cells)
+      fixed <- Filter(function(cell) !cell$row %in% expansion_rows, cells)
       result <- .fill_table_sheet(wb, sheet_index, fixed, index,
                                   keep_pending_placeholders, sheet)
-      ## The block expands AFTER the fixed cells are written: it moves the
-      ## rows below it down, and a cell written before the shift travels with
-      ## its row.
+      ## The blocks expand AFTER the fixed cells are written: a shift moves
+      ## the rows below it down, and a cell written before the shift travels
+      ## with its row.
       result$records <- c(
         result$records,
-        .fill_nested_block(wb, sheet_index, fill, index, sheet)$records,
+        .fill_sheet_expansions(wb, sheet_index, fill, index, sheet)$records,
         ## The arm headers last: the denominator written there is read out of
         ## the same ARD the cells underneath it came from.
         .fill_header_n(wb, sheet_index, fill, index)$records)

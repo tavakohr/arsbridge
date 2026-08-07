@@ -112,6 +112,19 @@ test_that("a self-template block flags its layout entry and records its rows", {
   expect_true(any(grepl("self-template", d$problem)))
 })
 
+test_that("an authored sort clause on a categorical block rides the layout entry", {
+  sec <- .ce_section(list(
+    .ce_row("Primary reason for discontinuation, n (%)",
+            "ADSL.DCSREASN; sort: alphabetical", sheet_row = 5L),
+    .ce_row("<Reason #1>", "ADSL.DCSREASN", sheet_row = 6L)
+  ))
+  re <- build_ars_json(list(sec), study_id = "S-SO")
+  layout <- re$outputs[[1]][["_meta"]][["shell_layout"]]
+  entry <- layout[[1]]
+  expect_equal(entry$kind, "categorical")
+  expect_equal(entry$sort, "alphabetical")
+})
+
 test_that("a continuous self-token row is not flagged for expansion", {
   ## Only a categorical block expands one row per level. A token row that
   ## routes to a continuous method keeps its analysis un-flagged.
@@ -209,4 +222,321 @@ test_that("a self-template block renders levels without the mock header line", {
   expect_false("<Reason #1>" %in% prep[[.ARS_SHELL_LBL]])
   expect_true(all(c("DEATH", "LOST TO FOLLOW-UP") %in%
                     prep[[.ARS_SHELL_LBL]]))
+})
+
+
+## ===========================================================================
+## PR B2: the expansion itself -- template rows become one filled row per
+## level in the written workbook.
+## ===========================================================================
+
+## Level order helper, in isolation ------------------------------------------
+
+.ce_index <- function() {
+  ## Appearance order deliberately NOT alphabetical and NOT by frequency:
+  ## OTHER (n=6) comes last, DEATH (n=4) first, LOST TO FOLLOW-UP (n=2)
+  ## in the middle -- so each ordering mode gives a different answer.
+  data.frame(
+    analysis_id    = "AN_1",
+    group_level    = "Placebo",
+    group_fold     = .fold_label("Placebo"),
+    variable_level = c("DEATH", "LOST TO FOLLOW-UP", "OTHER"),
+    nest_level     = NA_character_,
+    stat_name      = "n",
+    value          = c(4, 2, 6),
+    status         = "computed",
+    stringsAsFactors = FALSE
+  )
+}
+
+test_that(".categorical_block_levels keeps ARD appearance order by default", {
+  block <- list(analysis_id = "AN_1", sort = NA_character_)
+  expect_equal(.categorical_block_levels(.ce_index(), block),
+               c("DEATH", "LOST TO FOLLOW-UP", "OTHER"))
+})
+
+test_that(".categorical_block_levels honours authored sort overrides", {
+  block <- list(analysis_id = "AN_1", sort = "alphabetical")
+  expect_equal(.categorical_block_levels(.ce_index(), block),
+               c("DEATH", "LOST TO FOLLOW-UP", "OTHER"))
+
+  block$sort <- "desc-freq"
+  expect_equal(.categorical_block_levels(.ce_index(), block),
+               c("OTHER", "DEATH", "LOST TO FOLLOW-UP"))
+})
+
+test_that(".categorical_block_levels returns nothing for an absent analysis", {
+  block <- list(analysis_id = "AN_MISSING", sort = NA_character_)
+  expect_length(.categorical_block_levels(.ce_index(), block), 0)
+})
+
+## The full chain --------------------------------------------------------------
+
+.ce_spec_file <- function(td, with_codelist = TRUE) {
+  vars <- data.frame(
+    Dataset   = rep("ADSL", 5),
+    Variable  = c("USUBJID", "TRT01A", "SAFFL", "DCSREASN", "SEX"),
+    Label     = c("Unique Subject Identifier", "Actual Treatment",
+                  "Safety Population Flag", "Reason for Disc from Study",
+                  "Sex"),
+    Type      = c("Char", "Char", "Char",
+                  if (with_codelist) "integer" else "Char", "Char"),
+    Origin    = rep("Derived", 5),
+    Codelist  = c("", "", "", if (with_codelist) "DCSREAS" else "",
+                  if (with_codelist) "SEX" else ""),
+    Length    = c("40", "40", "1", "60", "1"),
+    Mandatory = rep("Req", 5),
+    stringsAsFactors = FALSE
+  )
+  path <- file.path(td, "spec_ce.xlsx")
+  wb <- openxlsx2::wb_workbook() |>
+    openxlsx2::wb_add_worksheet("Variables") |>
+    openxlsx2::wb_add_data(sheet = "Variables", x = vars)
+  if (with_codelist) {
+    cls <- data.frame(
+      `Codelist Name`     = c("DCSREAS", "", "", "SEX", ""),
+      `Term (Code)`       = c("1", "2", "3", "F", "M"),
+      `Decoded Value`     = c("DEATH", "LOST TO FOLLOW-UP", "OTHER",
+                              "Female", "Male"),
+      `Used By Variables` = c("ADSL.DCSREASN", "", "", "ADSL.SEX", ""),
+      check.names = FALSE, stringsAsFactors = FALSE
+    )
+    wb <- wb |>
+      openxlsx2::wb_add_worksheet("CODELISTS") |>
+      openxlsx2::wb_add_data(sheet = "CODELISTS", x = cls)
+  }
+  openxlsx2::wb_save(wb, file = path, overwrite = TRUE)
+  path
+}
+
+.ce_adam_dir <- function(td, dcsreasn = NULL) {
+  adam <- file.path(td, "adam")
+  dir.create(adam, showWarnings = FALSE)
+  ## Arms differ on purpose (3/2 vs 1/4): a column mix-up cannot pass.
+  adsl <- data.frame(
+    USUBJID  = sprintf("S%02d", 1:10),
+    TRT01A   = rep(c("Drug A", "Placebo"), each = 5),
+    SAFFL    = "Y",
+    DCSREASN = dcsreasn %||% c(1, 1, 1, 2, 2, 1, 2, 2, 2, 2),
+    SEX      = c("F", "F", "F", "M", "M", "F", "M", "M", "M", "M"),
+    stringsAsFactors = FALSE
+  )
+  utils::write.csv(adsl, file.path(adam, "ADSL.csv"), row.names = FALSE)
+  adam
+}
+
+.ce_wb_start <- function() {
+  wb <- openxlsx2::wb_workbook()$add_worksheet("Table 14.1.1")
+  put <- function(x, row, col = 1L) {
+    wb$add_data(sheet = "Table 14.1.1", x = x, start_row = row,
+                start_col = col, col_names = FALSE)
+  }
+  black <- openxlsx2::wb_color(hex = "FF000000")
+  red   <- openxlsx2::wb_color(hex = "FFC00000")
+  annotated <- function(label, annotation) {
+    openxlsx2::fmt_txt(label, color = black, size = 10) +
+      openxlsx2::fmt_txt(paste0("\n", annotation), color = red, size = 8,
+                         italic = TRUE)
+  }
+  put("Table 14.1.1", 1)
+  put("Summary of Subject Disposition", 2)
+  put(annotated("Safety Population ", "(ADSL.SAFFL='Y')"), 3)
+  for (r in 1:3) {
+    wb$merge_cells(sheet = "Table 14.1.1", dims = sprintf("A%d:C%d", r, r))
+  }
+  put(annotated("Item", "[columns -> ADSL.TRT01A; source ADSL]"), 4)
+  put("Drug A", 4, 2L)
+  put("Placebo", 4, 3L)
+  list(wb = wb, put = put, annotated = annotated)
+}
+
+.ce_fill_chain <- function(td, shell_path, spec_path, adam_dir) {
+  ars <- file.path(td, "re.json")
+  withr::with_envvar(
+    c(ANTHROPIC_API_KEY = "", OPENAI_API_KEY = "", GEMINI_API_KEY = "",
+      GLM_API_KEY = "", ARS_LLM_PROVIDER = ""),
+    suppressMessages(suppressWarnings(spec_to_ars(
+      shell_path = shell_path, adam_spec_path = spec_path, api_key = "",
+      output_path = ars, report_path = file.path(td, "rep.xlsx"),
+      verbose = FALSE))))
+  ard <- suppressMessages(suppressWarnings(ars_to_ard(ars, adam_dir)))
+  out <- file.path(td, "filled.xlsx")
+  res <- suppressMessages(suppressWarnings(ars_fill_shell(
+    shell_path = shell_path, ars = ars, ard = ard, output_path = out,
+    adam_dir = adam_dir, overwrite = TRUE)))
+  list(res = res, out = out, book = xlsx_read_shell_cells(out))
+}
+
+.ce_text <- function(book, ref, sheet = "Table 14.1.1") {
+  cells <- book$sheets[[sheet]]$cells
+  hit <- cells$text[cells$ref == ref]
+  if (length(hit) == 0) NA_character_ else hit[[1]]
+}
+
+test_that("a convention-shape block expands to one filled row per codelist level", {
+  td <- withr::local_tempdir()
+  s <- .ce_wb_start()
+  s$put(s$annotated("Primary reason for discontinuation, n (%)",
+                    "[ADSL.DCSREASN]"), 5)
+  ## Two mock rows, three codelist levels: the block must GROW by one row.
+  s$put(s$annotated("<Reason #1>", "[ADSL.DCSREASN=1]"), 6)
+  s$put(s$annotated("<Reason #n>", "[ADSL.DCSREASN=n]"), 7)
+  for (r in 6:7) for (j in 2:3) s$put("xx (xx.x)", r, j)
+  s$put("Source: synthetic.", 8)
+  shell <- file.path(td, "shell.xlsx")
+  s$wb$save(shell)
+
+  run <- .ce_fill_chain(td, shell, .ce_spec_file(td), .ce_adam_dir(td))
+
+  ## Levels in codelist order, decoded labels, the unobserved one included.
+  expect_equal(.ce_text(run$book, "A6"), "DEATH")
+  expect_equal(.ce_text(run$book, "A7"), "LOST TO FOLLOW-UP")
+  expect_equal(.ce_text(run$book, "A8"), "OTHER")
+
+  ## Values computed from the data, formatted by the template's placeholder.
+  expect_equal(.ce_text(run$book, "B6"), "3 (60.0)")
+  expect_equal(.ce_text(run$book, "C6"), "1 (20.0)")
+  expect_equal(.ce_text(run$book, "B7"), "2 (40.0)")
+  expect_equal(.ce_text(run$book, "C7"), "4 (80.0)")
+  expect_equal(.ce_text(run$book, "B8"), "0 (0.0)")
+  expect_equal(.ce_text(run$book, "C8"), "0 (0.0)")
+
+  ## The footnote below the block moved down with the shift, intact.
+  expect_equal(.ce_text(run$book, "A9"), "Source: synthetic.")
+
+  ## The workbook is one Excel will actually show.
+  expect_rows_well_formed(run$out)
+
+  ## Nothing in the block is left on placeholder, and the awaiting-expansion
+  ## reason is gone from the census.
+  reasons <- run$res$diagnostics$reason %||% character()
+  expect_false(any(grepl("awaiting row expansion", reasons)))
+})
+
+test_that("a self-template block expands in place of its mock row", {
+  td <- withr::local_tempdir()
+  s <- .ce_wb_start()
+  s$put("Primary reason for discontinuation from the study, n (%)", 5)
+  s$put(s$annotated("<Reason #1>", "[ADSL.DCSREASN]"), 6)
+  for (j in 2:3) s$put("xx (xx.x)", 6, j)
+  s$put("Source: synthetic.", 7)
+  shell <- file.path(td, "shell.xlsx")
+  s$wb$save(shell)
+
+  run <- .ce_fill_chain(td, shell, .ce_spec_file(td), .ce_adam_dir(td))
+
+  ## The single mock became three level rows; the header above is untouched.
+  expect_equal(.ce_text(run$book, "A5"),
+               "Primary reason for discontinuation from the study, n (%)")
+  expect_equal(.ce_text(run$book, "A6"), "DEATH")
+  expect_equal(.ce_text(run$book, "A7"), "LOST TO FOLLOW-UP")
+  expect_equal(.ce_text(run$book, "A8"), "OTHER")
+  expect_equal(.ce_text(run$book, "B6"), "3 (60.0)")
+  expect_equal(.ce_text(run$book, "C7"), "4 (80.0)")
+  expect_equal(.ce_text(run$book, "A9"), "Source: synthetic.")
+  expect_rows_well_formed(run$out)
+})
+
+test_that("leftover template rows are blanked when levels run out", {
+  td <- withr::local_tempdir()
+  s <- .ce_wb_start()
+  s$put(s$annotated("Primary reason for discontinuation, n (%)",
+                    "[ADSL.DCSREASN]"), 5)
+  ## Three mock rows; without a codelist the data offers only two levels.
+  s$put(s$annotated("<Reason #1>", "[ADSL.DCSREASN]"), 6)
+  s$put(s$annotated("<Reason #2>", "[ADSL.DCSREASN]"), 7)
+  s$put(s$annotated("<Reason #n>", "[ADSL.DCSREASN]"), 8)
+  for (r in 6:8) for (j in 2:3) s$put("xx (xx.x)", r, j)
+  s$put("Source: synthetic.", 9)
+  shell <- file.path(td, "shell.xlsx")
+  s$wb$save(shell)
+
+  run <- .ce_fill_chain(
+    td, shell, .ce_spec_file(td, with_codelist = FALSE),
+    .ce_adam_dir(td, dcsreasn = c("DEATH", "DEATH", "DEATH", "LOST",
+                                  "LOST", "DEATH", "LOST", "LOST",
+                                  "LOST", "LOST")))
+
+  expect_equal(.ce_text(run$book, "A6"), "DEATH")
+  expect_equal(.ce_text(run$book, "A7"), "LOST")
+  expect_equal(.ce_text(run$book, "B6"), "3 (60.0)")
+  expect_equal(.ce_text(run$book, "B7"), "2 (40.0)")
+
+  ## The third template row is cleared, not left showing "<Reason #n>".
+  expect_true(is.na(.ce_text(run$book, "A8")) ||
+                identical(.ce_text(run$book, "A8"), ""))
+  expect_true(is.na(.ce_text(run$book, "B8")) ||
+                identical(.ce_text(run$book, "B8"), ""))
+  ## The footnote did not move: the sheet never grew.
+  expect_equal(.ce_text(run$book, "A9"), "Source: synthetic.")
+
+  cleared <- Filter(function(i) identical(i, TRUE), lapply(
+    seq_len(nrow(run$res$diagnostics)), function(i) {
+      grepl("leftover", run$res$diagnostics$reason[i])
+    }))
+  expect_gte(length(cleared), 1)
+  expect_rows_well_formed(run$out)
+})
+
+test_that("two categorical blocks on one sheet both expand, bottom-up", {
+  td <- withr::local_tempdir()
+  s <- .ce_wb_start()
+  s$put(s$annotated("Primary reason for discontinuation, n (%)",
+                    "[ADSL.DCSREASN]"), 5)
+  s$put(s$annotated("<Reason #1>", "[ADSL.DCSREASN=1]"), 6)
+  s$put(s$annotated("<Reason #n>", "[ADSL.DCSREASN=n]"), 7)
+  s$put("Sex, n (%)", 9)
+  s$put(s$annotated("<Sex #1>", "[ADSL.SEX]"), 10)
+  for (r in c(6:7, 10)) for (j in 2:3) s$put("xx (xx.x)", r, j)
+  s$put("Source: synthetic.", 12)
+  shell <- file.path(td, "shell.xlsx")
+  s$wb$save(shell)
+
+  run <- .ce_fill_chain(td, shell, .ce_spec_file(td), .ce_adam_dir(td))
+
+  ## Upper block grew by one (3 levels over 2 rows)...
+  expect_equal(.ce_text(run$book, "A6"), "DEATH")
+  expect_equal(.ce_text(run$book, "A8"), "OTHER")
+  ## ...so the lower block sits one row further down, expanded to two rows
+  ## (its own single mock grew by one as well).
+  expect_equal(.ce_text(run$book, "A10"), "Sex, n (%)")
+  expect_equal(.ce_text(run$book, "A11"), "Female")
+  expect_equal(.ce_text(run$book, "A12"), "Male")
+  expect_equal(.ce_text(run$book, "B11"), "3 (60.0)")
+  expect_equal(.ce_text(run$book, "C12"), "4 (80.0)")
+  ## The footnote moved down by both insertions.
+  expect_equal(.ce_text(run$book, "A14"), "Source: synthetic.")
+  expect_rows_well_formed(run$out)
+})
+
+test_that("an unshiftable sheet declines the expansion but fills fixed cells", {
+  td <- withr::local_tempdir()
+  s <- .ce_wb_start()
+  s$put(s$annotated("Subjects in population, n", "[ADSL.USUBJID]"), 5)
+  for (j in 2:3) s$put("xx", 5, j)
+  s$put(s$annotated("Primary reason for discontinuation, n (%)",
+                    "[ADSL.DCSREASN]"), 6)
+  s$put(s$annotated("<Reason #1>", "[ADSL.DCSREASN=1]"), 7)
+  s$put(s$annotated("<Reason #n>", "[ADSL.DCSREASN=n]"), 8)
+  for (r in 7:8) for (j in 2:3) s$put("xx (xx.x)", r, j)
+  ## A formula below the block: shifting would leave it pointing wrong.
+  s$wb$add_formula(sheet = "Table 14.1.1", x = "SUM(B7:B8)", start_row = 10,
+                   start_col = 2)
+  shell <- file.path(td, "shell.xlsx")
+  s$wb$save(shell)
+
+  diag_reset()
+  run <- .ce_fill_chain(td, shell, .ce_spec_file(td), .ce_adam_dir(td))
+
+  ## The fixed count row above still filled.
+  expect_equal(.ce_text(run$book, "B5"), "5")
+  expect_equal(.ce_text(run$book, "C5"), "5")
+  ## The block declined: mock text still there, skip recorded, FAIL diag.
+  expect_equal(.ce_text(run$book, "A7"), "<Reason #1>")
+  skipped <- run$res$diagnostics
+  expect_true(any(skipped$status == "skipped" &
+                    grepl("cannot be shifted", skipped$reason)))
+  d <- diag_records()
+  expect_true(any(d$severity == "FAIL" &
+                    grepl("cannot be expanded", d$problem)))
 })
