@@ -1,5 +1,18 @@
 # arsbridge (development version)
 
+* **Every build writes a fill debrief workbook.** `outputs/fill_debrief.xlsx`
+  -- the durable, human-readable record of what the fill did, for the
+  machine nothing may leave. Sheets: the full cell census (rows tinted
+  filled/pending/skipped), the per-column rollup (a column that lost every
+  cell is tinted FAIL with its modal reason beside it), the reason
+  histogram with the author-facing hint for each, the run's complete
+  diagnostics, and the shared legend. Written by the new exported
+  `write_fill_debrief()` after the fill stage; a debrief failure can never
+  take a finished build down -- it degrades to a WARN in the payload. The
+  workflow payload gains `fill_census` and the `fill_debrief` artifact
+  path, and the app's artifact list links it; the run-log link now says it
+  may contain console output and should be reviewed before sharing.
+
 * **The fill census keeps every cell, and every reason carries a hint.**
   Diagnosing a half-empty workbook on a machine nothing may leave needs the
   whole answer on-screen, and the old census could not give it: filled

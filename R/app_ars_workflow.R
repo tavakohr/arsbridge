@@ -1168,7 +1168,9 @@ ars_workflow <- function(project_dir = NULL) {
       }
       labels <- c(ars_json = "Reporting event", validation_report = "Validation report",
                   code_dir = "cards scripts", ard_rds = "ARD",
-                  filled_workbook = "Filled workbook", run_log = "Run log")
+                  filled_workbook = "Filled workbook",
+                  fill_debrief = "Fill debrief",
+                  run_log = "Run log (may contain console output -- review before sharing)")
       rows <- lapply(names(labels), function(key) {
         path <- payload$artifacts[[key]] %||% NA_character_
         if (is.na(path)) {
