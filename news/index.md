@@ -2,6 +2,19 @@
 
 ## arsbridge (development version)
 
+- **Filling a real-sized listing is no longer measured in minutes.**
+  [`ars_fill_shell()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_shell.md)
+  expanded a listing’s template row by appending one cell at a time to
+  the worksheet’s cell table and reparsing that column’s template XML
+  for each of them, so the cost grew with the *square* of the row count
+  – a 7,500-row listing took around ten minutes, and it was the bulk of
+  a fifteen-minute workbook. The block is now built a column at a time:
+  each column’s XML is parsed once and the cells are put into the table
+  in two vector operations. Same workbook, byte for byte; a 7,500-row
+  listing fills in about a second and a half, and the cost is now linear
+  in the number of rows.
+  ([\#1](https://github.com/tavakohr/arsbridge/issues/1))
+
 - **Step 5 of the workflow app answers “why is this cell empty” on its
   own.** Above the diagnostics: one line per sheet saying how much of it
   filled, and a callout naming every display column that filled
