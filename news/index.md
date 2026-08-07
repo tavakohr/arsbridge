@@ -2,6 +2,180 @@
 
 ## arsbridge (development version)
 
+- **A mock block with no annotated header above it is a self-template,
+  not debris.** Shells in the field author the same “levels unknown
+  until the data arrives” intent the other way round: a plain-text
+  header over a single
+  `<Reason `[`#1`](https://github.com/tavakohr/arsbridge/issues/1)`>`
+  mock carrying the bare variable, or numbered subcategory mocks under a
+  row annotated on a different variable. Those runs used to fall apart –
+  one analysis per mock, deduped by signature, nothing marked for
+  expansion, and the mock text rendered as if it were a real row.
+
+  Now such a run is a *self-template*: its first annotated row carries
+  the block’s single count-and-percentage analysis, the repeats collapse
+  into it, the layout entry is flagged `self_template` with the run’s
+  sheet rows as `template_rows`, and the Word renderer stops printing
+  the mock label as a header line – the authored plain header above
+  remains the block’s visible title. Template-row cells in mapped
+  columns are bound to the owning analysis (slots and all), so the fill
+  plan (`fill$categorical`, one block per template entry, several per
+  sheet allowed) knows exactly which rows to expand and from what. The
+  expansion itself lands next; a block whose recorded rows are not
+  contiguous is reported and skipped rather than expanded over unrelated
+  rows.
+
+- **A categorical mock block is kept as an expansion template, not
+  dropped.** Shells author “levels unknown until the data arrives” as a
+  header annotated with the bare variable (“Primary reason for
+  discontinuation, n (%) \[ADSL.DCSREASN\]”) over mock rows (“\<Reason
+  [\#1](https://github.com/tavakohr/arsbridge/issues/1)\>”, “\<Reason
+  [\#2](https://github.com/tavakohr/arsbridge/issues/2)\>”, “\<Reason
+  \#n\>”). The mocks still collapse into the header’s single
+  count-and-percentage analysis, but their sheet rows now ride on the
+  parent’s layout entry as `template_rows` – the recorded shape a later
+  fill step needs to expand the block into one row per level. Until that
+  expansion exists, the block’s placeholder cells say so: the cell map
+  reports them as *awaiting row expansion* instead of the misleading “no
+  analysis covers this row”.
+
+  Two behaviours around the mocks are corrected with it:
+
+  - A mock that restates the variable with an illustrative level code
+    (“\[ADSL.DCSREASN=1\]”, or the generic “\[ADSL.DCSREASN=n\]”) is
+    recognised as an illustration. The value is no longer backfilled as
+    a subset filter, and the unparseable “=n” no longer surfaces as a
+    dropped-condition WARN – the collapse is reported as INFO, as it
+    always was for the bare dialect.
+  - A Word shell, which has no cell addresses, records no template rows
+    – the entry gains nothing that merely looks like one.
+
+- **A promised Total must arrive, and a displayed column must receive
+  something.** The remaining two checks from the guidance document, both
+  aimed at the same field failure from the other end: three cohort
+  columns full of numbers, a Total column of placeholders, and a build
+  that reported success.
+
+  - **Rule 2, at execution.** `includeTotal` says an overall column
+    *will* be computed.
+    [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)
+    now checks it was: an analysis that declares one and produces no
+    result for it is a WARN naming the analysis and the column. Nothing
+    else compared the promise with the delivery, so an overall pass that
+    silently produced nothing reached the workbook unremarked.
+  - **Rule 6, at fill.** A display column whose every cell kept its
+    placeholder *while other columns filled* is a WARN naming the column
+    and how many did fill. The per-cell census already recorded each
+    unfilled cell, but a reader had to notice that all of one column’s
+    cells happened to share a reason – and a whole lost column is a
+    different finding from a scattering of pending cells.
+
+  Both stay quiet where they should. A partly filled column (“58.0
+  (xx.xx)”) is a column that received results, not a lost one. A table
+  where *nothing* filled has a different problem, already reported, and
+  repeating it once per column would bury it. A column the cell map
+  never reached is not a fill failure. The bundled example still runs
+  with zero WARN and zero FAIL.
+
+- **A Total column the shell displays must be a Total column the
+  metadata can produce.** The delivered workbook that prompted the
+  previous entry had numbers in every cohort column, placeholders in
+  every Total cell, and *not one diagnostic* saying a displayed column
+  had been dropped. The build reported success.
+
+  [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
+  now gates it: a table whose headers show a Total or Overall column
+  that nothing declares is a **FAIL**, naming the table and the header,
+  and saying both ways out – annotate the header with the subjects it
+  covers, or leave it unannotated to take the union of the group
+  columns. It is a FAIL rather than a warning because the deliverable is
+  wrong, not merely incomplete, and nothing downstream can tell.
+
+  Alongside it, guidance rule 7: a producible overall column records
+  what its scope *means* in the output metadata – the label it fills,
+  whether the scope was authored or derived, and the shell’s own
+  annotation text kept verbatim beside the parsed clause. A reviewer can
+  check what Total covers against the shell without reading a
+  WhereClause.
+
+- **A shell annotated with double quotes had every condition thrown
+  away, and its Total column never computed.** A field study delivered a
+  workbook whose cohort columns held real numbers – 482, 441, 27 – and
+  whose Total column was still `xx` in every row. Three defects,
+  stacked.
+
+  - **The where-clause grammar accepted only `'single'` quotes.** Every
+    string pattern hardcoded `'…'`; not one accepted `"…"`. That study
+    annotates the way its programmers write SAS – `[ADSL.COMPLFL="Y"]`
+    on the title, `ADMH.MHCAT="GENERAL MEDICAL"` on a row – so every one
+    of those conditions was dropped, silently, including the population
+    filters. This was never only a Total-column problem: it was a
+    wrong-population problem on every table. Both spellings are now
+    accepted and a test asserts they produce the *identical*
+    WhereClause, not merely that both parse.
+  - **A value list had to be quoted.** `ADSL.RACE IN ('WHITE','ASIAN')`
+    parsed; `ADSL.COHORTN IN (1,2)` – how a coded column axis is
+    actually written – did not. Bare numbers are now accepted beside
+    quoted values.
+  - **A Total column had nowhere to go.** `include_total_hint` was only
+    set for a Total header conditioning on a *different* variable than
+    the column axis, so a `Total [ADSL.COHORTN IN (1,2)]` was neither a
+    group nor a total: no metadata, no ARD rows, placeholder in the
+    workbook.
+
+  The rule now, per the shell: **the annotation on the column wins.** A
+  Total column is computed from exactly the condition it carries –
+  including when, as here, that deliberately excludes a displayed column
+  and so does *not* equal the sum of the columns beside it. Only when
+  the column carries no usable annotation is its scope derived, as the
+  union of the group columns.
+
+  A Total column is never a level of the grouping factor. The emitted
+  grouping is a first-match-wins `case_when`, so a Total level would be
+  shadowed by the very columns it totals and report zero – a wrong
+  number where there had at least been an honest placeholder. It becomes
+  a scoped overall pass instead, filtered on both the numerator and the
+  denominator so the percentage comes out of the Total column’s own N,
+  and stamped with the shell’s own header text so the fill can find the
+  column it belongs to.
+
+  Pinned end to end: a shell with cohorts of 40 and 30 beside an unknown
+  cohort of 7 reports Total = 70, not 77 and not 0.
+
+- **The fill was quadratic, and that is what the stuck progress bar was
+  showing.** Tracing a full run of the bundled example with a timestamp
+  on every progress event put 138 of its 165 seconds inside a single
+  output – the nested SOC/PT adverse-event table. Profiling that output
+  put 94% of the time in `gsub`.
+
+  `.ard_value()` matches a cell’s column heading against the ARD’s by
+  folding both to a common form – the shell stacks two header rows, the
+  ARD joins the grouping path with its own separator, and only the
+  punctuation between identical components differs. But it folded the
+  ARD side *inside the per-cell lookup*: two regex passes over every row
+  of the ARD, for every cell of every output. Cells times rows, in
+  `gsub`.
+
+  The fold is now computed once, when the index is built, and each
+  lookup folds only its own one-element needle. On the bundled example
+  the fill goes from **153s to 13s** and the whole run from **165s to
+  25s**, writing a byte-identical workbook – every one of the 15 entries
+  in the archive unchanged, the same 820 cells filled.
+
+  Two tests pin it: that the index carries the folded column, and that a
+  differently punctuated heading still finds its value. `.ard_value()`
+  stays total over its input – an index built by hand, as a fixture
+  does, folds on the spot rather than failing.
+
+- **Writing the ARD reports itself.** The same trace found a second
+  silence: [`saveRDS()`](https://rdrr.io/r/base/readRDS.html) of the
+  results ran *between* two stages, where neither one’s progress hook
+  was installed, and took 6.6 seconds saying nothing. It now happens
+  inside the stage that produced the results, so the hook is live, the
+  stage’s recorded time includes the write it is responsible for, and a
+  write that fails is recorded as a failure of that stage rather than
+  thrown.
+
 - **The workflow app knows which project you meant.**
   [`ars_workflow()`](https://tavakohr.github.io/arsbridge/reference/ars_workflow.md)
   with no argument opened on five empty boxes every time, so a study set
