@@ -397,16 +397,19 @@
 #' Write a cell's runs back, always as an inline string. See `.cell_is_xml()`
 #' for why a shared cell is converted rather than updated in place.
 #'
+#' `slot` may be one cell or many -- a listing writes a whole column at a time
+#' -- with `xml` either one string for all of them or one per slot.
+#'
 #' `drop_style` also clears the cell's style index. Used when a cell was
 #' ENTIRELY an annotation: emptying its text but keeping its formatting leaves
 #' a cell that is still red, which shows up the moment anything is written
 #' there -- as the figure series is, into the block the annotation occupied.
 #' @noRd
 .cell_set_is <- function(cc, slot, xml, drop_style = FALSE) {
-  cc$is[[slot]]  <- xml
-  cc$c_t[[slot]] <- "inlineStr"
-  cc$v[[slot]]   <- ""
-  if (isTRUE(drop_style)) cc$c_s[[slot]] <- ""
+  cc$is[slot]  <- xml
+  cc$c_t[slot] <- "inlineStr"
+  cc$v[slot]   <- ""
+  if (isTRUE(drop_style)) cc$c_s[slot] <- ""
   cc
 }
 
@@ -1658,28 +1661,39 @@
 ## Listings: one template row becomes N
 ## ---------------------------------------------------------------------------
 
-#' An `<is>` container carrying `text`, in the formatting of an existing one.
+#' Build the writer for one listing column's cells.
 #'
 #' The template row's cells are the model for every row written under it, so
 #' their run properties are reused rather than reconstructed -- the same
 #' reason the table writer edits run XML (see the file header). Runs after the
 #' first are dropped: the template cell holds one placeholder, and the value
 #' replacing it is one string.
+#'
+#' A writer rather than a plain `template_xml, text` function because the
+#' template is the SAME for every row of a listing column, and parsing it once
+#' per cell is what made a real-sized listing take minutes: the parse and the
+#' node lookup happen here, once, and each call then only rewrites the text.
+#'
+#' @return A function of one string, returning that cell's `<is>` XML.
 #' @noRd
-.cell_with_text <- function(template_xml, text) {
-  if (is.na(template_xml) || !nzchar(template_xml)) {
-    return(sprintf("<is><t xml:space=\"preserve\">%s</t></is>", .xml_escape(text)))
+.cell_text_writer <- function(template_xml) {
+  ## No template to follow: a plain single-run cell.
+  bare <- function(text) {
+    sprintf("<is><t xml:space=\"preserve\">%s</t></is>", .xml_escape(text))
   }
+  if (is.na(template_xml) || !nzchar(template_xml)) return(bare)
+
   doc <- xml2::read_xml(template_xml)
   runs <- xml2::xml_find_all(doc, "./*[local-name()='r']")
   if (length(runs) > 1) for (i in seq_along(runs)[-1]) xml2::xml_remove(runs[[i]])
   node <- xml2::xml_find_first(doc, ".//*[local-name()='t']")
-  if (inherits(node, "xml_missing")) {
-    return(sprintf("<is><t xml:space=\"preserve\">%s</t></is>", .xml_escape(text)))
-  }
-  xml2::xml_text(node) <- text
+  if (inherits(node, "xml_missing")) return(bare)
+
   xml2::xml_set_attr(node, "xml:space", "preserve")
-  .is_xml(doc)
+  function(text) {
+    xml2::xml_text(node) <- text
+    .is_xml(doc)
+  }
 }
 
 #' The five characters XML cannot carry raw.
@@ -1788,34 +1802,58 @@
     return(list(records = list(record)))
   }
 
-  written <- 0L
-  for (i in seq_len(n)) {
-    target <- template_row + i - 1L
-    for (k in seq_len(nrow(template))) {
-      col <- .xlsx_col_to_num(template$c_r[[k]])
-      if (is.na(col) || col > ncol(rows)) next
-      value <- .listing_value(rows[[col]][[i]])
-      xml <- .cell_with_text(.cell_is_xml(wb, template, k), value)
-      ref <- .xlsx_rc_to_a1(target, col)
+  ## A listing is the one sheet where the same write runs tens of thousands of
+  ## times, so it is done a COLUMN at a time rather than a cell at a time:
+  ## everything fixed for a column is worked out once, and the cells go into
+  ## `cc` in two vector operations at the end. Done cell by cell, growing `cc`
+  ## by one row each time, a listing of a few thousand rows took minutes.
+  ##
+  ## Which of the template's cells are written, and to which data column. A
+  ## template cell past the data's last column shows nothing and is left
+  ## exactly as the author wrote it.
+  cols <- vapply(template$c_r, .xlsx_col_to_num, integer(1), USE.NAMES = FALSE)
+  shown <- which(!is.na(cols) & cols <= ncol(rows))
+  cols <- cols[shown]
+  targets <- seq.int(template_row, length.out = n)
 
-      slot <- which(cc$r == ref)
-      if (length(slot) == 1) {
-        cc <- .cell_set_is(cc, slot, xml)
-      } else {
-        ## A row opened up by the shift has no cells yet: clone the template's,
-        ## so the new row inherits its style index.
-        new <- template[k, , drop = FALSE]
-        new$is <- xml
-        new$c_t <- "inlineStr"
-        new$v <- ""
-        cc <- .cc_add(cc, new, target, col)
-      }
-      written <- written + 1L
-    }
+  ## The text of every cell, a column at a time -- see `.cell_text_writer()`
+  ## for why the column and not the cell is the unit of work here.
+  cell_xml <- unlist(lapply(seq_along(shown), function(j) {
+    write_cell <- .cell_text_writer(.cell_is_xml(wb, template, shown[[j]]))
+    values <- rows[[cols[[j]]]]
+    vapply(seq_len(n), function(i) write_cell(.listing_value(values[[i]])),
+           character(1), USE.NAMES = FALSE)
+  }), use.names = FALSE)
+
+  ## Where each of those cells goes, in the same column-by-column order.
+  cell_row <- rep(targets, times = length(shown))
+  cell_col <- rep(cols, each = n)
+  cell_letter <- rep(vapply(cols, .xlsx_num_to_col, character(1),
+                            USE.NAMES = FALSE), each = n)
+  cell_ref <- paste0(cell_letter, cell_row)
+  cell_template <- rep(shown, each = n)
+
+  ## The template row's own cells are already in `cc` and are rewritten where
+  ## they stand. The rows the shift opened up have none, so theirs are cloned
+  ## from the template -- that is how a new row inherits its style index --
+  ## and added in one go, which is the whole of the speed-up.
+  slot <- match(cell_ref, cc$r)
+  known <- !is.na(slot)
+  if (any(known)) cc <- .cell_set_is(cc, slot[known], cell_xml[known])
+  if (any(!known)) {
+    added <- template[cell_template[!known], , drop = FALSE]
+    added <- .cell_set_is(added, seq_len(nrow(added)), cell_xml[!known])
+    added$key   <- .cc_key(cell_row[!known], cell_col[!known])
+    added$r     <- cell_ref[!known]
+    added$row_r <- as.character(cell_row[!known])
+    added$c_r   <- cell_letter[!known]
+    rownames(added) <- NULL
+    cc <- rbind(cc, added)
   }
+  written <- length(cell_ref)
 
   ws$sheet_data$cc <- .cc_sorted(cc)
-  ws <- .ensure_row_records(ws, seq.int(template_row, length.out = n))
+  ws <- .ensure_row_records(ws, targets)
   wb$worksheets[[sheet_index]] <- ws
 
   record$status <- "filled"
