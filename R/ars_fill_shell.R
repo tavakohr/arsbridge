@@ -2168,8 +2168,12 @@
 #' @param overwrite Allow `output_path` to be replaced.
 #'
 #' @return Invisibly, a list with `path`, the counts `filled`, `pending` and
-#'   `skipped`, and `diagnostics` -- one row per cell that was not filled,
-#'   with the output, the cell reference and the reason.
+#'   `skipped`, plus two frames: `census` -- one row per cell record, the
+#'   FILLED cells included, with position, display-column label, owning
+#'   analysis, status and (when unresolved) the reason -- and `findings`,
+#'   the diagnostics this run itself raised (lost columns, declined
+#'   expansions), which previously lived only in the session collector.
+#'   Roll the census up with [ars_fill_summary()].
 #'
 #' @seealso [ars_to_ard()] for the results, [spec_to_ars()] for the map.
 #' @export
@@ -2204,6 +2208,10 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
   if (!requireNamespace("openxlsx2", quietly = TRUE)) {
     cli::cli_abort("The {.pkg openxlsx2} package is required to fill a shell.")
   }
+
+  ## Where the session's diagnostics stand before this run: everything past
+  ## this mark is the fill's own, returned as `findings`.
+  diag_baseline <- nrow(diag_records())
 
   spec <- if (is.character(ars)) {
     .require_file(ars, "ars", INPUT_ARS)
@@ -2327,9 +2335,23 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
     } else if (!is.null(fill$figure)) {
       result <- .fill_figure_sheet(wb, sheet_index, fill$figure, adam_dir, sheet)
     }
+    ## The display label of each result column, so the census can say
+    ## "column 'Low (N=XX)' lost every cell" instead of "column 4".
+    label_by_col <- stats::setNames(
+      vapply(fill$columns %||% list(), function(column) {
+        as.character(column$label %||% NA_character_)
+      }, character(1)),
+      vapply(fill$columns %||% list(), function(column) {
+        as.character(column$col)
+      }, character(1)))
     for (record in (result$records %||% list())) {
       record$output_id <- output$id %||% NA_character_
       record$sheet <- sheet
+      col <- record$col %||% NA_integer_
+      if (length(col) == 1 && !is.na(col) &&
+            as.character(col) %in% names(label_by_col)) {
+        record$col_label <- label_by_col[[as.character(col)]]
+      }
       records[[length(records) + 1L]] <- record
     }
 
@@ -2363,19 +2385,10 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
   pending <- sum(status %in% c("pending", "partial"))
   skipped <- sum(status %in% "skipped")
 
-  unresolved <- Filter(function(r) !identical(r$status, "filled"), records)
-  diagnostics <- data.frame(
-    output_id = vapply(unresolved, function(r) r$output_id %||% NA_character_,
-                       character(1)),
-    sheet     = vapply(unresolved, function(r) r$sheet %||% NA_character_,
-                       character(1)),
-    ref       = vapply(unresolved, function(r) r$ref %||% NA_character_,
-                       character(1)),
-    status    = vapply(unresolved, function(r) r$status, character(1)),
-    reason    = vapply(unresolved, function(r) r$reason %||% NA_character_,
-                       character(1)),
-    stringsAsFactors = FALSE
-  )
+  ## The census keeps EVERY record, the filled ones included: a per-column
+  ## fill rate needs its denominator, and "what filled" is as much a part of
+  ## the debrief as what did not.
+  census <- .fill_census(records)
 
   cli::cli_inform(c(
     "v" = "Filled {filled} cell{?s} in {.path {basename(output_path)}}.",
@@ -2407,6 +2420,14 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
     ))
   }
 
+  ## The fill stage's own findings (lost columns, declined expansions):
+  ## previously these lived only in the session collector, which a CLI
+  ## caller loses on exit. Sliced from the collector so only THIS run's
+  ## rows travel.
+  findings <- diag_records()
+  findings <- findings[seq_len(nrow(findings)) > diag_baseline, ,
+                       drop = FALSE]
+
   invisible(list(path = output_path, filled = filled, pending = pending,
-                 skipped = skipped, diagnostics = diagnostics))
+                 skipped = skipped, census = census, findings = findings))
 }

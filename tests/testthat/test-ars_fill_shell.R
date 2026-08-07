@@ -384,7 +384,8 @@ test_that("a token row becomes its own levels, never one level's value", {
   expect_equal(cell_text(run$book, "Table 14.3.1", "D8"), "2 (50.0)")
 
   ## Nothing on the sheet is left pending: the block is the whole table.
-  expect_false(any(run$res$diagnostics$sheet == "Table 14.3.1"))
+  unresolved <- run$res$census[run$res$census$status != "filled", ]
+  expect_false(any(unresolved$sheet == "Table 14.3.1"))
 })
 
 test_that("an unfillable cell keeps its placeholder and is reported", {
@@ -401,8 +402,9 @@ test_that("an unfillable cell keeps its placeholder and is reported", {
 
   book <- xlsx_read_shell_cells(out)
   expect_match(cell_text(book, "Table 14.1.2", "B6"), "x")
-  expect_true(any(res$diagnostics$ref == "B6" &
-                    res$diagnostics$sheet == "Table 14.1.2"))
+  unresolved <- res$census[res$census$status != "filled", ]
+  expect_true(any(unresolved$ref == "B6" &
+                    unresolved$sheet == "Table 14.1.2"))
   expect_gt(res$pending, 0)
   expect_equal(res$skipped, 0)
 
@@ -417,8 +419,9 @@ test_that("an arm the filter emptied is filled with zero, not left blank", {
   ## so the ARD is completed before anything consumes it.
   run <- filled_run()
   expect_equal(cell_text(run$book, "Table 14.1.1", "B7"), "0 (0.0)")
-  expect_false(any(run$res$diagnostics$ref == "B7" &
-                     run$res$diagnostics$sheet == "Table 14.1.1"))
+  unresolved <- run$res$census[run$res$census$status != "filled", ]
+  expect_false(any(unresolved$ref == "B7" &
+                     unresolved$sheet == "Table 14.1.1"))
 
   ## And it is a real ARD row, stamped like any other computed result -- not a
   ## zero the writer invented at the last moment.
@@ -1051,7 +1054,7 @@ test_that("outputs the fill passes over leave records, not silence", {
     output_path = tempfile(fileext = ".xlsx"),
     adam_dir = ADAM, overwrite = TRUE)))
 
-  d <- res$diagnostics
+  d <- res$census[res$census$status != "filled", ]
   expect_true("OUT_NO_MAP" %in% d$output_id)
   expect_equal(d$reason[d$output_id == "OUT_NO_MAP"],
                "no cell map recorded for this output")

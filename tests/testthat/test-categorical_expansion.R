@@ -409,7 +409,7 @@ test_that("a convention-shape block expands to one filled row per codelist level
 
   ## Nothing in the block is left on placeholder, and the awaiting-expansion
   ## reason is gone from the census.
-  reasons <- run$res$diagnostics$reason %||% character()
+  reasons <- run$res$census$reason %||% character()
   expect_false(any(grepl("awaiting row expansion", reasons)))
 })
 
@@ -471,8 +471,8 @@ test_that("leftover template rows are blanked when levels run out", {
   expect_equal(.ce_text(run$book, "A9"), "Source: synthetic.")
 
   cleared <- Filter(function(i) identical(i, TRUE), lapply(
-    seq_len(nrow(run$res$diagnostics)), function(i) {
-      grepl("leftover", run$res$diagnostics$reason[i])
+    seq_len(nrow(run$res$census)), function(i) {
+      grepl("leftover", run$res$census$reason[i])
     }))
   expect_gte(length(cleared), 1)
   expect_rows_well_formed(run$out)
@@ -533,7 +533,7 @@ test_that("an unshiftable sheet declines the expansion but fills fixed cells", {
   expect_equal(.ce_text(run$book, "C5"), "5")
   ## The block declined: mock text still there, skip recorded, FAIL diag.
   expect_equal(.ce_text(run$book, "A7"), "<Reason #1>")
-  skipped <- run$res$diagnostics
+  skipped <- run$res$census
   expect_true(any(skipped$status == "skipped" &
                     grepl("cannot be shifted", skipped$reason)))
   d <- diag_records()

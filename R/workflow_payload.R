@@ -316,10 +316,17 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
   }
 
   produced <- function(path) if (file.exists(path)) path else NA_character_
-  unfilled <- if (!is.null(fill)) fill$diagnostics else
+  ## The census carries every cell; the app's unfilled table wants only the
+  ## unresolved ones, in the shape it always had.
+  unfilled <- if (!is.null(fill)) {
+    unresolved <- fill$census[!fill$census$status %in% "filled", , drop = FALSE]
+    unresolved[, c("output_id", "sheet", "ref", "status", "reason"),
+               drop = FALSE]
+  } else {
     data.frame(output_id = character(), sheet = character(), ref = character(),
                status = character(), reason = character(),
                stringsAsFactors = FALSE)
+  }
 
   pending <- if (!is.null(ard)) {
     tryCatch(ars_manual_worklist(ard), error = function(e) NULL)
