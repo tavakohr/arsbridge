@@ -203,6 +203,22 @@
   paste0(e, .group_mutate_expr(res), .decode_mutate_expr(res))
 }
 
+## Remove grouping columns that must remain numerator keys without partitioning
+## the denominator. The Total pass uses this for row groupings: percentages are
+## still out of the Total column's population, not out of each parent row.
+#' @noRd
+.denom_drop_expr <- function(res) {
+  vars <- .clean_emit_name(res$denom_drop %||% character(0))
+  vars <- unique(vars[!is.na(vars) & nzchar(vars)])
+  if (!length(vars)) return("")
+
+  paste0(
+    " |>\n    dplyr::select(-dplyr::any_of(",
+    .r_chr_vec(vars),
+    "))"
+  )
+}
+
 ## The denominator (population) frame expression -- always ADSL-based, mirroring
 ## df_population = apply_where_clause("ADSL", pop_where) in ars_to_ard.R. Gets
 ## the same column-grouping derivation as the data frame: cards joins the two
@@ -215,7 +231,12 @@
   ## a subtotal's N is the parent-condition count, the grand total's N the
   ## analysis-set count.
   e <- .apply_where_expr(e, "ADSL", res$path_where, res$subject_key)
-  paste0(e, .denom_join_expr(res), .group_mutate_expr(res))
+  paste0(
+    e,
+    .denom_join_expr(res),
+    .group_mutate_expr(res),
+    .denom_drop_expr(res)
+  )
 }
 
 ## A column variable ADSL does not carry (ADCM.TRTA, ADMH.TRTA) joined onto the
@@ -373,25 +394,47 @@
 
 ## The overall pass's display identity: which column of the shell it is.
 ##
-## The grouped pass gets group1/group1_level from cards. The ungrouped total
-## pass has neither, so .ard_index() reads its group level as NA -- and an NA
-## group level means "not reported by column", which would put the Total value
-## into every column instead of the Total one. Stamping the shell's own header
-## text is what ties the row to the column it belongs to.
+## The Total pass omits the column-axis grouping, so cards starts any retained
+## row groupings at group1. Shift those row keys right, then stamp group1 with
+## the shell's Total header. That keeps both the destination column and every
+## row-level lookup key explicit in the ARD.
 #' @noRd
 .total_stamp_expr <- function(res, by) {
   label <- res$total_label %||% ""
   if (!nzchar(label) || !length(by)) return("")
+
+  ## The Total pass keeps every row grouping but omits the first, column-axis
+  ## grouping. cards therefore writes the retained row groupings from group1
+  ## onward. Move them one slot to the right, in reverse order, before stamping
+  ## the Total column as group1.
+  row_group_count <- length(by) - 1L
+  stamps <- character(0)
+  if (row_group_count > 0L) {
+    for (i in rev(seq_len(row_group_count))) {
+      stamps <- c(
+        stamps,
+        sprintf("    group%d = group%d", i + 1L, i),
+        sprintf("    group%d_level = group%d_level", i + 1L, i)
+      )
+    }
+  }
+
   ## group1_level is a LIST column in a cards ARD -- one element per row, each
   ## holding that row's level. A plain character stamp binds fine on its own
   ## and then fails the moment bind_ard() meets the grouped pass beside it
   ## ("Can't combine <list> and <character>"), which takes the whole analysis
   ## down. list() is not cosmetic here.
+  stamps <- c(
+    stamps,
+    sprintf("    group1 = %s", encodeString(by[[1]], quote = "\"")),
+    sprintf("    group1_level = list(%s)", encodeString(label, quote = "\""))
+  )
+
   paste0(
     " |>\n  dplyr::mutate(\n",
-    sprintf("    group1 = %s,\n", encodeString(by[[1]], quote = "\"")),
-    sprintf("    group1_level = list(%s)\n", encodeString(label, quote = "\"")),
-    "  )")
+    paste(stamps, collapse = ",\n"),
+    "\n  )"
+  )
 }
 
 ## The cards CALL (no object assignment) for one resolved analysis and a
@@ -417,12 +460,16 @@
         method %in% c("MTH_SUBJECT_COUNT", "MTH_SUBJECT_COUNT_PCT",
                       "MTH_COUNT_AND_PERCENTAGE")) {
       lab <- res$label %||% res$description %||% var
+      distinct_cols <- paste(
+        vapply(unique(c(sk, b)), .bt, character(1)),
+        collapse = ", "
+      )
       sprintf(paste0(
         "cards::ard_categorical(\n",
         "  data = %s |>\n    dplyr::distinct(%s, .keep_all = TRUE) |>\n",
         "    dplyr::mutate(%s = %s),\n",
         "  variables = all_of(%s)%s,\n  denominator = %s\n)"),
-        data_e, sk, .bt(lab), encodeString(lab, quote = "\""),
+        data_e, distinct_cols, .bt(lab), encodeString(lab, quote = "\""),
         encodeString(lab, quote = "\""), by_line(b), denom)
     } else if (identical(method, "MTH_SUMMARY_STATISTICS_CONTINUOUS")) {
       sprintf(paste0(
@@ -431,19 +478,49 @@
         "  variables = all_of(%s)%s\n)"),
         data_e, .bt(var), .bt(var), qvar, by_line(b))
     } else if (method %in% c("MTH_SUBJECT_COUNT", "MTH_SUBJECT_COUNT_PCT")) {
-      distinct_e <- sprintf("%s |>\n    dplyr::distinct(%s, .keep_all = TRUE)",
-                            data_e, sk)
-      if (identical(var, sk) && length(b)) {
-        sprintf(paste0("cards::ard_categorical(\n",
-                       "  data = %s,\n  variables = all_of(%s)\n)"),
-                distinct_e, .r_chr_vec(b))
-      } else if (identical(var, sk)) {
-        sprintf("cards::ard_total_n(\n  %s\n)", distinct_e)
+      if (identical(var, sk) && length(b) && isTRUE(res$total_pass)) {
+        ## A subject-key Total still needs real cards grouping slots for the
+        ## retained row keys. Count one constant subject row per parent while
+        ## keeping the ARD variable identity as the subject key.
+        distinct_cols <- paste(
+          vapply(unique(c(sk, b)), .bt, character(1)),
+          collapse = ", "
+        )
+        level <- res$analysis_id %||% res$label %||% sk
+        sprintf(paste0(
+          "cards::ard_categorical(\n",
+          "  data = %s |>\n    dplyr::distinct(%s, .keep_all = TRUE) |>\n",
+          "    dplyr::mutate(%s = %s),\n",
+          "  variables = all_of(%s)%s,\n  denominator = %s\n)"),
+          data_e, distinct_cols, .bt(sk), encodeString(level, quote = "\""),
+          encodeString(sk, quote = "\""), by_line(b), denom)
       } else {
-        sprintf(paste0("cards::ard_categorical(\n",
-                       "  data = %s,\n  variables = all_of(%s)%s,\n",
-                       "  denominator = %s\n)"),
-                distinct_e, qvar, by_line(b), denom)
+        distinct_names <- if (identical(var, sk)) {
+          sk
+        } else {
+          unique(c(sk, b, var))
+        }
+        distinct_cols <- paste(
+          vapply(distinct_names, .bt, character(1)),
+          collapse = ", "
+        )
+        distinct_e <- sprintf(
+          "%s |>\n    dplyr::distinct(%s, .keep_all = TRUE)",
+          data_e,
+          distinct_cols
+        )
+        if (identical(var, sk) && length(b)) {
+          sprintf(paste0("cards::ard_categorical(\n",
+                         "  data = %s,\n  variables = all_of(%s)\n)"),
+                  distinct_e, .r_chr_vec(b))
+        } else if (identical(var, sk)) {
+          sprintf("cards::ard_total_n(\n  %s\n)", distinct_e)
+        } else {
+          sprintf(paste0("cards::ard_categorical(\n",
+                         "  data = %s,\n  variables = all_of(%s)%s,\n",
+                         "  denominator = %s\n)"),
+                  distinct_e, qvar, by_line(b), denom)
+        }
       }
     } else if (identical(method, "MTH_AE_FREQUENCY_COUNT")) {
       ## Distinct per subject within each by-cell (see the legacy executor's
@@ -504,7 +581,9 @@
   code <- sprintf("%s\n%s <- %s", comment, obj, .method_call(res, by))
   objs <- obj
 
-  ## include_total: an extra ungrouped pass (shell carries an overall column).
+  ## include_total: an extra pass that removes only the column-axis grouping.
+  ## Any row groupings remain so nested rows keep their parent keys and are
+  ## calculated separately within each parent.
   ## Skipped for the inferential methods, where an ungrouped pass is meaningless
   ## (a CMH needs the grouping; a per-arm CI has no "total" arm).
   ##
@@ -512,13 +591,16 @@
   ## annotated one. It rides on `path_where`, which .data_expr() and
   ## .denom_expr() both apply -- so the numerator and the denominator are cut
   ## the same way and the percentage comes out of the Total column's own N.
-  ## Without a condition it stays the ungrouped pass it always was.
+  ## Without a condition it remains scoped to the whole analysis population.
   if (isTRUE(res$include_total) && length(by) &&
       !method %in% c("MTH_CMH_TEST", "MTH_PROPORTION_CI_EXACT")) {
     obj_t <- paste0(obj, "_total")
     res_t <- res
     res_t$path_where <- res$total_where %||% res$path_where
-    call_t <- .method_call(res_t, character(0))
+    row_by <- by[-1]
+    res_t$total_pass <- TRUE
+    res_t$denom_drop <- row_by
+    call_t <- .method_call(res_t, row_by)
     ## The ARD row has to say which display column it is, or the fill has no
     ## way to tell the Total column's value from an analysis that simply is
     ## not reported by column. Stamped with the shell's own header text.
