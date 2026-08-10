@@ -124,7 +124,9 @@ test_that("legacy single by_variable section still builds one grouping", {
 
 ## --- executor: multi-by + Total pass -------------------------------------------
 
-.write_p8_ars <- function(td, include_total = FALSE) {
+.write_p8_ars <- function(td, include_total = FALSE,
+                          method_id = "MTH_COUNT_AND_PERCENTAGE",
+                          variable = "AGEGR1") {
   spec <- list(
     analysisSets = list(), dataSubsets = list(),
     analysisGroupings = list(
@@ -135,15 +137,16 @@ test_that("legacy single by_variable section still builds one grouping", {
     ),
     methods = list(), outputs = list(),
     analyses = list(list(
-      id = "AN_P8_001", methodId = "MTH_COUNT_AND_PERCENTAGE",
-      dataset = "ADSL", variable = "AGEGR1",
-      analysisVariable = list(dataset = "ADSL", variable = "AGEGR1"),
+      id = "AN_P8_001", methodId = method_id,
+      dataset = "ADSL", variable = variable,
+      analysisVariable = list(dataset = "ADSL", variable = variable),
       analysisSetId = "", dataSubsetId = "",
       orderedGroupings = list(
         list(order = 1, groupingId = "GF_TRT01A", resultsByGroup = TRUE),
         list(order = 2, groupingId = "GF_SEX",    resultsByGroup = TRUE)
       ),
-      includeTotal = include_total
+      includeTotal = include_total,
+      totalLabel = if (include_total) "Total" else ""
     ))
   )
   p <- file.path(td, "p8_ars.json")
@@ -171,13 +174,57 @@ test_that("executor runs nested two-variable grouping", {
   expect_true("SEX" %in% ard$group2)
 })
 
-test_that("includeTotal adds an ungrouped pass bound into the ARD", {
+test_that("includeTotal preserves non-column groupings on Total rows", {
   skip_if_not_installed("cards")
   td <- withr::local_tempdir()
   .p8_adsl(td)
   ard <- ars_to_ard(.write_p8_ars(td, include_total = TRUE), td)
-  expect_false(is.null(ard))
-  ## Total rows come from the ungrouped pass: group1 is NA there.
-  expect_true(any(is.na(ard$group1)))
-  expect_true(any(!is.na(ard$group1)))
+
+  group1_level <- .flat_chr(ard$group1_level)
+  group2_level <- .flat_chr(ard$group2_level)
+  total_rows <- group1_level == "Total"
+  total_rows[is.na(total_rows)] <- FALSE
+
+  expect_true(any(total_rows))
+  expect_true(all(ard$group1[total_rows] == "TRT01A"))
+  expect_true(all(ard$group2[total_rows] == "SEX"))
+  expect_setequal(unique(group2_level[total_rows]), c("M", "F"))
+
+  total_n <- total_rows & ard$stat_name == "N"
+  total_p <- total_rows & ard$stat_name == "p"
+  expect_true(all(as.numeric(unlist(ard$stat[total_n])) == 8))
+  expect_setequal(
+    unique(as.numeric(unlist(ard$stat[total_p]))),
+    c(0, 0.5)
+  )
+})
+
+test_that("subject-key Total counts retain their row grouping", {
+  skip_if_not_installed("cards")
+  td <- withr::local_tempdir()
+  .p8_adsl(td)
+
+  for (method_id in c("MTH_SUBJECT_COUNT", "MTH_SUBJECT_COUNT_PCT")) {
+    ard <- suppressWarnings(ars_to_ard(
+      .write_p8_ars(
+        td,
+        include_total = TRUE,
+        method_id = method_id,
+        variable = "USUBJID"
+      ),
+      td
+    ))
+
+    group1_level <- .flat_chr(ard$group1_level)
+    group2_level <- .flat_chr(ard$group2_level)
+    total_rows <- group1_level == "Total"
+    total_rows[is.na(total_rows)] <- FALSE
+
+    expect_true(any(total_rows), info = method_id)
+    expect_true(all(ard$group2[total_rows] == "SEX"), info = method_id)
+    expect_setequal(
+      unique(group2_level[total_rows]),
+      c("M", "F")
+    )
+  }
 })

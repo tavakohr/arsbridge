@@ -1,5 +1,15 @@
 # arsbridge (development version)
 
+* **Nested child rows now fill in the Total column.** The scoped Total pass
+  removed every grouping before calculation, then restored only the Total
+  column label. A child result therefore lost its parent key, and identical
+  terms under different parents were also counted together. The Total pass now
+  removes only the column-axis grouping, retains every row grouping during the
+  calculation, and shifts those row keys behind the stamped Total identity.
+  The retained keys do not partition the Total denominator. Nested SOC/PT Total
+  cells fill completely, and same-named terms and subject counts remain
+  separately calculated within each parent.
+
 * **A second table that groups the same variable differently no longer
   inherits the first table's columns.** A grouping's id was minted from its
   variable name alone, and groupings were deduplicated on that id without ever

@@ -3,7 +3,7 @@
 ## subjects per by-cell, ADSL-based per-arm denominators, and equivalence of
 ## the emitted and legacy execution paths.
 
-.nested_engine_section <- function() {
+.nested_engine_section <- function(include_total = FALSE) {
   token_row <- function(label, annotation) {
     list(label = label, annotation = annotation, has_annot = TRUE,
          detection_method = "pattern", detection_confidence = "high")
@@ -17,8 +17,11 @@
     footnotes        = list(),
     source_datasets  = c("ADAE"),
     col_headers      = c("System Organ Class / Preferred Term",
-                         "Drug A", "Placebo"),
-    n_data_cols      = 2L,
+                         "Drug A", "Placebo",
+                         if (include_total) "Total" else NULL),
+    n_data_cols      = if (include_total) 3L else 2L,
+    include_total    = include_total,
+    total_label      = if (include_total) "Total" else "",
     stub_rows        = list(
       token_row("<System Organ Class>", "ADAE.AESOC"),
       token_row("<Preferred Term>", "ADAE.AEDECOD"),
@@ -82,11 +85,14 @@
   as.numeric(values[[1]][[1]])
 }
 
-.nested_engine_paths <- function() {
+.nested_engine_paths <- function(include_total = FALSE) {
   dir <- tempfile("nested_engine_")
   dir.create(dir)
   .nested_engine_study(dir)
-  re <- build_ars_json(list(.nested_engine_section()), study_id = "S-N2")
+  re <- build_ars_json(
+    list(.nested_engine_section(include_total = include_total)),
+    study_id = "S-N2"
+  )
   ars_path <- file.path(dir, "reporting_event.json")
   jsonlite::write_json(re, ars_path, auto_unbox = TRUE, null = "null")
   list(dir = dir, ars_path = ars_path)
@@ -120,6 +126,92 @@ test_that("the child ARD counts distinct subjects per (arm, SOC, PT)", {
                  g1 = "Drug A", g2 = "Gastrointestinal disorders"),
     2
   )
+})
+
+test_that("Total counts remain separate for each parent grouping", {
+  paths <- .nested_engine_paths(include_total = TRUE)
+  on.exit(unlink(paths$dir, recursive = TRUE))
+
+  ard <- suppressWarnings(ars_to_ard(paths$ars_path, paths$dir))
+  pt_id <- "AN_T_14_3_2_002"
+
+  expect_equal(
+    .nested_cell(ard, pt_id, "n", level = "Fatigue",
+                 g1 = "Total", g2 = "Nervous system disorders"),
+    1
+  )
+  expect_equal(
+    .nested_cell(ard, pt_id, "n", level = "Fatigue",
+                 g1 = "Total", g2 = "Gastrointestinal disorders"),
+    2
+  )
+})
+
+.nested_subject_count_paths <- function(bare_flag = FALSE) {
+  paths <- .nested_engine_paths(include_total = TRUE)
+  spec <- jsonlite::fromJSON(paths$ars_path, simplifyVector = FALSE)
+  source_analysis <- spec$analyses[[2]]
+
+  subset_id <- ""
+  if (bare_flag) {
+    subset_id <- "DS_TREATMENT_EMERGENT"
+    spec$dataSubsets <- c(spec$dataSubsets, list(list(
+      id = subset_id,
+      condition = list(
+        dataset = "ADAE",
+        variable = "TRTEMFL",
+        comparator = "EQ",
+        value = list("Y")
+      )
+    )))
+  }
+
+  spec$analyses <- list(list(
+    id = "AN_NESTED_SUBJECT_COUNT",
+    methodId = "MTH_SUBJECT_COUNT",
+    label = "Treatment-emergent event",
+    dataset = "ADAE",
+    variable = "TRTEMFL",
+    analysisVariable = list(dataset = "ADAE", variable = "TRTEMFL"),
+    analysisSetId = source_analysis$analysisSetId,
+    dataSubsetId = subset_id,
+    orderedGroupings = list(
+      list(order = 1L, groupingId = "GF_TRT01A", resultsByGroup = TRUE),
+      list(order = 2L, groupingId = "GF_AESOC", resultsByGroup = TRUE)
+    ),
+    includeTotal = TRUE,
+    totalLabel = "Total"
+  ))
+  spec$outputs[[1]]$referencedAnalysisIds <- list("AN_NESTED_SUBJECT_COUNT")
+  jsonlite::write_json(
+    spec,
+    paths$ars_path,
+    auto_unbox = TRUE,
+    null = "null"
+  )
+  paths
+}
+
+test_that("subject counts keep a subject in every parent where it occurs", {
+  for (bare_flag in c(FALSE, TRUE)) {
+    paths <- .nested_subject_count_paths(bare_flag = bare_flag)
+    on.exit(unlink(paths$dir, recursive = TRUE), add = TRUE)
+
+    ard <- suppressWarnings(ars_to_ard(paths$ars_path, paths$dir))
+    analysis_id <- "AN_NESTED_SUBJECT_COUNT"
+    level <- if (bare_flag) "Treatment-emergent event" else "Y"
+
+    expect_equal(
+      .nested_cell(ard, analysis_id, "n", level = level,
+                   g1 = "Total", g2 = "Nervous system disorders"),
+      2
+    )
+    expect_equal(
+      .nested_cell(ard, analysis_id, "n", level = level,
+                   g1 = "Total", g2 = "Gastrointestinal disorders"),
+      3
+    )
+  }
 })
 
 test_that("denominators are subjects per arm from the ADSL population", {
