@@ -740,10 +740,52 @@ build_ars_json <- function(sections,
   analysis_sets    <- list(); seen_as  <- character()
   data_subsets     <- list(); seen_ds  <- character()
   grouping_factors <- list(); seen_gf  <- character()
+  ## One definition signature per registered grouping, parallel to
+  ## grouping_factors, so an axis already in the event is found by what it
+  ## MEANS rather than by the id it happens to carry.
+  gf_signatures    <- character()
   methods          <- list(); seen_mth <- character()
   analyses         <- list()
   outputs          <- list()
   unsupported      <- list()   ## output_id -> reason, for _meta + placeholders
+
+  ## Register one GroupingFactor and hand back the object the event actually
+  ## carries -- which is NOT always the one passed in. Two outputs that define
+  ## an axis the same way share a single factor; two outputs that group the
+  ## same VARIABLE differently each keep their own definition, the later one
+  ## under a variant id. Matching on the id alone is what used to let a second
+  ## output's columns inherit the first output's groups, so every caller must
+  ## use the returned object rather than the one it built.
+  register_grouping <- function(gf_obj, tlf_number = NULL) {
+    signature <- .grouping_signature(gf_obj)
+    known     <- match(signature, gf_signatures)
+    if (!is.na(known)) return(grouping_factors[[known]])
+
+    if (gf_obj$id %in% seen_gf) {
+      gf_obj <- .rename_grouping(gf_obj, .next_variant_id(seen_gf, gf_obj$id))
+      diag_add(
+        stage = "build_ars", severity = "INFO", tlf_number = tlf_number,
+        problem = sprintf(
+          "%s is grouped differently here than in an earlier output; kept as %s",
+          gf_obj$groupingVariable %||% "?", gf_obj$id),
+        action = "Both definitions are kept -- confirm the two outputs really do mean different columns"
+      )
+    }
+    if (isTRUE(attr(gf_obj, "codelist_derived"))) {
+      diag_add(
+        stage = "build_ars", severity = "WARN",
+        problem = sprintf(
+          "Column groups for %s derived from the spec codelist (%d levels) -- no header conditions were annotated",
+          gf_obj$groupingVariable %||% "?", length(gf_obj$groups)),
+        tlf_number = tlf_number,
+        action = "Verify the derived columns (labels, order, missing-value handling) against the shell headers"
+      )
+    }
+    grouping_factors[[length(grouping_factors) + 1L]] <<- gf_obj
+    seen_gf       <<- c(seen_gf, gf_obj$id)
+    gf_signatures <<- c(gf_signatures, signature)
+    gf_obj
+  }
 
   for (sec in sections) {
     ## --- Capability-gated (unsupported) section ---------------------------
@@ -809,22 +851,10 @@ build_ars_json <- function(sections,
     ## --- GroupingFactors from the (ordered) grouping list ---
     gf_objs <- .build_groupings(sec, codelists = codelists,
                                 spec_lookup = spec_lookup)
-    for (gf_obj in gf_objs) {
-      if (!gf_obj$id %in% seen_gf) {
-        if (isTRUE(attr(gf_obj, "codelist_derived"))) {
-          diag_add(
-            stage = "build_ars", severity = "WARN",
-            problem = sprintf(
-              "Column groups for %s derived from the spec codelist (%d levels) -- no header conditions were annotated",
-              gf_obj$groupingVariable %||% "?", length(gf_obj$groups)),
-            tlf_number = sec$tlf_number,
-            action = "Verify the derived columns (labels, order, missing-value handling) against the shell headers"
-          )
-        }
-        grouping_factors[[length(grouping_factors) + 1L]] <- gf_obj
-        seen_gf <- c(seen_gf, gf_obj$id)
-      }
-    }
+    ## The resolved objects, not the ones just built: a definition already in
+    ## the event comes back under the id it was registered with, so both
+    ## gf_ids and the result paths below name groups the event really carries.
+    gf_objs <- lapply(gf_objs, register_grouping, tlf_number = sec$tlf_number)
     gf_ids <- vapply(gf_objs, function(g) g$id, character(1))
 
     ## Hierarchical column tree: the declared result-column paths become an
@@ -1299,12 +1329,13 @@ build_ars_json <- function(sections,
         row_kind <- nested_role
         if (identical(nested_role, "nested_child") &&
               !is.null(nested_parent_ctx)) {
-          rg <- .build_row_grouping(nested_parent_ctx$var,
-                                    nested_parent_ctx$ds)
-          if (!rg$id %in% seen_gf) {
-            grouping_factors[[length(grouping_factors) + 1L]] <- rg
-            seen_gf <- c(seen_gf, rg$id)
-          }
+          ## Through the same registrar as the column axes: a data-driven row
+          ## grouping enumerates no groups, so it is never the same definition
+          ## as a condition-defined column axis on that variable, and the two
+          ## can no longer absorb each other.
+          rg <- register_grouping(
+            .build_row_grouping(nested_parent_ctx$var, nested_parent_ctx$ds),
+            tlf_number = sec$tlf_number)
           row_grouping_ids <- rg$id
           diag_add(
             stage = "build_ars", severity = "INFO",
@@ -1764,6 +1795,47 @@ build_ars_json <- function(sections,
   ## Marker for the caller's once-per-factor diagnostic; attributes on lists
   ## are dropped by jsonlite::toJSON, so nothing leaks into the ARS file.
   attr(gf, "codelist_derived") <- codelist_derived
+  gf
+}
+
+#' Canonical signature of a grouping DEFINITION -- what makes two groupings
+#' the same column axis, whatever id each was minted under. Every group
+#' condition is canonicalized first, so "IN (1,2)" and "IN (2,1)" agree.
+#'
+#' The grouping DATASET is deliberately left out. One treatment axis is
+#' routinely recorded against ADSL on the demographics table and against the
+#' occurrence dataset on the AE table; those are one axis, not two. What
+#' tells two axes apart is the columns they produce.
+#' @noRd
+.grouping_signature <- function(gf) {
+  groups <- lapply(gf$groups %||% list(), function(g) {
+    list(
+      label = as.character(g$label %||% g$name %||% ""),
+      order = as.integer(g$order %||% NA_integer_),
+      where = canonicalize_condition(.group_where(g))
+    )
+  })
+  definition <- list(
+    variable   = toupper(gf$groupingVariable %||% ""),
+    dataDriven = isTRUE(gf$dataDriven),
+    groups     = groups
+  )
+  paste(deparse(definition), collapse = "")
+}
+
+#' Move a grouping to a new id. The per-level group ids move with it: a group
+#' id is only variable + label, so two definitions of one variable that share
+#' a column label would otherwise mint the same group id twice --  and
+#' resolve_analysis() keeps ONE group index across every factor, so one
+#' output's result path would quietly resolve the other output's condition.
+#' @noRd
+.rename_grouping <- function(gf, new_id) {
+  gf$id <- new_id
+  stem  <- sub("^GF_", "", new_id)
+  gf$groups <- lapply(gf$groups %||% list(), function(g) {
+    g$id <- make_group_id(stem, g$label %||% g$name %||% "")
+    g
+  })
   gf
 }
 

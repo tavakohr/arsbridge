@@ -1,5 +1,22 @@
 # arsbridge (development version)
 
+* **A second table that groups the same variable differently no longer
+  inherits the first table's columns.** A grouping's id was minted from its
+  variable name alone, and groupings were deduplicated on that id without ever
+  comparing what they contained. So a workbook whose demographics table split
+  `COHORTN` into cohorts, and whose subgroup table split the *same first-named*
+  variable into Low/Medium/High (each column a compound condition,
+  `COHORTN=1 AND CGHGR1N=k`), emitted one grouping carrying the cohort columns
+  -- and the subgroup table's analyses were quietly pointed at it. The ARD then
+  came back keyed by cohort, no shell column matched, and every subgroup cell
+  kept its `xx (xx.x)` placeholder while Total filled from its own scoped pass.
+  Groupings are now deduplicated by DEFINITION: same definition, one shared
+  grouping; same variable defined differently, both survive and the later one
+  takes a variant id, with an INFO diagnostic naming it. The per-level group
+  ids move with it, because a group id is only variable + label and one
+  output's result path would otherwise resolve another output's condition. A
+  study that defines each variable once is unaffected, byte for byte.
+
 * **A listing's dates are now covered by a test that could fail.** Dates only
   reach the fill writer AS dates when the data came from `.xpt` or
   `.sas7bdat`; read a `.csv` and every column is character. Every committed
