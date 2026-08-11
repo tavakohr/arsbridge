@@ -396,9 +396,14 @@ mod_entity_library_server <- function(id, state) {
 ## `child` addresses one group inside a grouping. It defaults to NULL, so
 ## every flat field keeps the id it has always had.
 #' @noRd
-.entity_input_id <- function(pool, id, field, child = NULL) {
+## `clause` addresses one where clause inside a child's compound expression.
+## It is a position rather than an id -- clauses have none in the ARS -- which
+## is safe because the panel re-renders after every structural action, so the
+## ids never outlive the ordering they were minted from.
+.entity_input_id <- function(pool, id, field, child = NULL, clause = NULL) {
   stem <- paste0(pool, "__", .slug(id))
   if (!is.null(child)) stem <- paste0(stem, "__", .slug(child))
+  if (!is.null(clause)) stem <- paste0(stem, "__clause", as.integer(clause))
   paste0(stem, "__", field)
 }
 
@@ -426,6 +431,18 @@ mod_entity_library_server <- function(id, state) {
     "Shiny.setInputValue('", input_id, "', ",
     "{grouping: '", grouping_id, "', group: '", group_id, "', ",
     "action: '", action, "'}, ",
+    "{priority: 'event'}); return false;"
+  )
+}
+
+## The same payload again with a clause position, so add / up / down / clone /
+## delete across every clause of every child share one observer.
+#' @noRd
+.entity_clause_js <- function(input_id, grouping_id, group_id, index, action) {
+  paste0(
+    "Shiny.setInputValue('", input_id, "', ",
+    "{grouping: '", grouping_id, "', group: '", group_id, "', ",
+    "clause: ", as.integer(index), ", action: '", action, "'}, ",
     "{priority: 'event'}); return false;"
   )
 }
@@ -646,17 +663,54 @@ mod_entity_library_server <- function(id, state) {
 
     model  <- state$model()
     before <- .group_condition_summary(model, grouping_id, group_id)
+    node   <- .editor_group_node(model, grouping_id, group_id)
+
+    clause_field <- function(index, name) {
+      input[[.entity_input_id("groupings", grouping_id, name,
+                              child = group_id, clause = index)]]
+    }
 
     updated <- tryCatch({
       out <- model_set_group_field(model, grouping_id, group_id, "label",
                                    .input_to_value(field("label")))
-      model_set_group_condition(
-        out, grouping_id, group_id,
-        dataset    = field("condition_dataset"),
-        variable   = field("condition_variable"),
-        comparator = field("condition_comparator"),
-        values     = .split_values(.blank_na(field("condition_value")))
-      )
+
+      if (!is.null(node[["compoundExpression"]])) {
+        ## A compound child commits its operator and every editable clause
+        ## together. The clause count is read from the node rather than from
+        ## the inputs: the panel was rendered from that node, so it is what
+        ## the boxes on screen correspond to.
+        clauses <- node[["compoundExpression"]][["whereClauses"]] %||% list()
+        out <- model_set_group_operator(
+          out, grouping_id, group_id,
+          field("clause_operator") %||% "OR"
+        )
+        for (index in seq_along(clauses)) {
+          ## A nested clause has no boxes to read; it keeps what it had.
+          if (!is.null(clauses[[index]][["compoundExpression"]])) next
+          ## Only commit boxes that actually exist. An empty box reads as ""
+          ## and is a real edit ("is missing"); a box that was never rendered
+          ## reads as NULL, and writing that would blank a clause the panel
+          ## never showed.
+          if (is.null(clause_field(index, "clause_variable"))) next
+          out <- model_set_clause_condition(
+            out, grouping_id, group_id, index,
+            dataset    = clause_field(index, "clause_dataset"),
+            variable   = clause_field(index, "clause_variable"),
+            comparator = clause_field(index, "clause_comparator"),
+            values     = .split_values(
+              .blank_na(clause_field(index, "clause_value")))
+          )
+        }
+        out
+      } else {
+        model_set_group_condition(
+          out, grouping_id, group_id,
+          dataset    = field("condition_dataset"),
+          variable   = field("condition_variable"),
+          comparator = field("condition_comparator"),
+          values     = .split_values(.blank_na(field("condition_value")))
+        )
+      }
     }, error = function(e) e)
 
     if (inherits(updated, "error")) {
@@ -709,6 +763,61 @@ mod_entity_library_server <- function(id, state) {
     new_id  <- attr(updated, "last_added") %||% group_id
     .record_structural_edit(state, updated, "groupings", grouping_id,
                             paste0("group ", new_id), "(present)", result[[2]])
+  })
+
+  ## Add / up / down / clone / delete for one clause of one compound child.
+  ## The clause is addressed by position, which is safe because every action
+  ## here re-renders the panel, so a stale index is never left on screen.
+  shiny::observeEvent(input$clause_action, {
+    grouping_id <- input$clause_action$grouping
+    group_id    <- input$clause_action$group
+    index       <- as.integer(input$clause_action$clause)
+    action      <- input$clause_action$action
+    model       <- state$model()
+    before      <- .group_condition_summary(model, grouping_id, group_id)
+
+    node    <- .editor_group_node(model, grouping_id, group_id)
+    clauses <- node[["compoundExpression"]][["whereClauses"]] %||% list()
+
+    result <- tryCatch(switch(
+      action,
+      ## Adding is what turns a simple condition into a compound, so it is
+      ## also reachable from a child that has no clauses yet.
+      add    = list(model_add_clause(model, grouping_id, group_id,
+                                     after = index), "(clause added)"),
+      up     = list(model_move_clause(model, grouping_id, group_id,
+                                      index, -1L), "(clause moved up)"),
+      down   = list(model_move_clause(model, grouping_id, group_id,
+                                      index, 1L), "(clause moved down)"),
+      ## Cloning copies the clause as it stands, next to itself -- including
+      ## a nested one, which has no other way to be duplicated. The index is
+      ## checked here because reading past the end would be a subscript error
+      ## rather than the sentence the other refusals give.
+      clone  = if (index >= 1L && index <= length(clauses)) {
+        list(model_add_clause(model, grouping_id, group_id,
+                              clause = clauses[[index]], after = index),
+             "(clause cloned)")
+      } else {
+        simpleError(sprintf("Group %s has no clause %s.", group_id, index))
+      },
+      delete = list(model_remove_clause(model, grouping_id, group_id, index),
+                    "(clause deleted)"),
+      NULL
+    ), error = function(e) e)
+
+    if (inherits(result, "error")) {
+      shiny::showNotification(conditionMessage(result), type = "error",
+                              duration = 10)
+      return()
+    }
+    if (is.null(result)) return()
+
+    .record_structural_edit(
+      state, result[[1]], "groupings", grouping_id,
+      paste0("group ", group_id), before,
+      paste(.group_condition_summary(result[[1]], grouping_id, group_id),
+            result[[2]])
+    )
   })
 
   ## Add a child. The dataset and variable default to the grouping's own, so
@@ -819,14 +928,9 @@ mod_entity_library_server <- function(id, state) {
 ## or its label when it has no condition at all.
 #' @noRd
 .group_condition_summary <- function(model, grouping_id, group_id) {
-  index <- match(grouping_id, model$groupings$id)
-  if (is.na(index)) return("(none)")
-  groups <- model$groupings$raw[[index]][["groups"]] %||% list()
-  hit <- which(vapply(groups, function(g) identical(.chr_field(g[["id"]]),
-                                                    group_id), logical(1)))
-  if (length(hit) == 0) return("(none)")
+  group <- .editor_group_node(model, grouping_id, group_id)
+  if (is.null(group)) return("(none)")
 
-  group <- groups[[hit[[1]]]]
   text  <- .group_condition_text(group)
   label <- .chr_field(group[["label"]] %||% group[["name"]])
   if (is.na(text)) paste0(.blank_na(label), " (no condition)") else
@@ -946,17 +1050,11 @@ mod_entity_library_server <- function(id, state) {
     group_id <- .chr_field(group[["id"]])
     label    <- .chr_field(group[["label"]] %||% group[["name"]])
 
-    ## A compound child is shown as the expression it stands for. Replacing
-    ## it with a simple condition here would drop the other clauses, so that
-    ## stays the raw-JSON hatch's business.
+    ## A compound child is edited clause by clause. Its own four fields are
+    ## meaningless -- there is no single condition to put in them -- so the
+    ## clause editor takes their place entirely.
     body <- if (!is.null(group[["compoundExpression"]])) {
-      shiny::div(
-        class = "small",
-        shiny::div(class = "text-muted", "Condition (compound):"),
-        shiny::tags$code(.blank_na(.group_condition_text(group))),
-        shiny::div(class = "text-muted mt-1",
-                   "Edit this one through Raw JSON below.")
-      )
+      .clauses_editor(row, group, group_id, ns)
     } else {
       condition <- group[["condition"]] %||% list()
       shiny::tagList(
@@ -974,9 +1072,21 @@ mod_entity_library_server <- function(id, state) {
           shiny::textInput(field_id(group_id, "condition_value"), "Value(s)",
                            value = .blank_na(.join_values(condition[["value"]])))
         ),
-        shiny::div(class = "text-muted small",
-                   "Separate multiple values with a semicolon. Leave empty to ",
-                   "mean a missing value.")
+        shiny::div(
+          class = "d-flex align-items-center gap-2",
+          shiny::div(class = "text-muted small",
+                     "Separate multiple values with a semicolon. Leave empty ",
+                     "to mean a missing value."),
+          ## The only way into a compound expression from the UI. The
+          ## condition above becomes the first clause rather than being
+          ## replaced, so nothing is lost by trying it.
+          shiny::tags$button(
+            type = "button", class = "btn btn-sm btn-outline-secondary",
+            onclick = .entity_clause_js(ns("clause_action"), row$id, group_id,
+                                        1L, "add"),
+            "Add a clause (AND / OR)"
+          )
+        )
       )
     }
 
@@ -999,13 +1109,14 @@ mod_entity_library_server <- function(id, state) {
       body,
       shiny::div(
         class = "d-flex gap-2 mt-2",
-        if (is.null(group[["compoundExpression"]])) {
-          shiny::tags$button(
-            type = "button", class = "btn btn-sm btn-outline-primary",
-            onclick = .entity_group_js(ns("group_apply"), row$id, group_id),
-            "Save this group"
-          )
-        },
+        ## Both shapes save through the same button: the handler reads the
+        ## label either way and then either the four condition fields or every
+        ## clause, depending on which the child actually carries.
+        shiny::tags$button(
+          type = "button", class = "btn btn-sm btn-outline-primary",
+          onclick = .entity_group_js(ns("group_apply"), row$id, group_id),
+          "Save this group"
+        ),
         action("Up", "up"),
         action("Down", "down"),
         action("Clone", "clone"),
@@ -1050,6 +1161,116 @@ mod_entity_library_server <- function(id, state) {
   shiny::div(class = "small text-muted", message)
 }
 
+## The clause editor for one compound child: the operator that joins the
+## clauses, the clauses themselves, and a preview of what they add up to.
+##
+## Like the child fields around it, the clause inputs are rendered but never
+## observed. A clause write is a node write, so it goes through
+## .record_structural_edit() and re-renders this panel -- a per-keystroke
+## observer would destroy the box being typed into. One Save commits every
+## clause of the child at once, which is also the only honest unit: a
+## half-saved expression is a different filter, not a partial one.
+#' @noRd
+.clauses_editor <- function(row, group, group_id, ns) {
+  clauses  <- group[["compoundExpression"]][["whereClauses"]] %||% list()
+  operator <- .chr_field(group[["compoundExpression"]][["logicalOperator"]])
+  operator <- if (is.na(operator) || !nzchar(operator)) "OR" else
+    toupper(operator)
+
+  field_id <- function(index, field) {
+    ns(.entity_input_id("groupings", row$id, field, child = group_id,
+                        clause = index))
+  }
+
+  rows <- lapply(seq_along(clauses), function(index) {
+    clause <- clauses[[index]]
+
+    ## Nesting the editor cannot safely flatten stays visible and read-only,
+    ## with its structural buttons still live -- it can be reordered or
+    ## removed as a whole even though its insides are the hatch's business.
+    body <- if (!is.null(clause[["compoundExpression"]])) {
+      shiny::div(
+        class = "small",
+        shiny::tags$code(.clause_phrase(clause)),
+        shiny::div(class = "text-muted mt-1",
+                   "A nested expression: edit it through Raw JSON below.")
+      )
+    } else {
+      condition <- clause[["condition"]] %||% list()
+      bslib::layout_columns(
+        col_widths = c(3, 3, 3, 3),
+        shiny::textInput(field_id(index, "clause_dataset"), "Dataset",
+                         value = .blank_na(.chr_field(condition[["dataset"]]))),
+        shiny::textInput(field_id(index, "clause_variable"), "Variable",
+                         value = .blank_na(.chr_field(condition[["variable"]]))),
+        shiny::selectizeInput(
+          field_id(index, "clause_comparator"), "Comparator",
+          choices  = c("EQ", "NE", "IN", "NOTIN", "GT", "GE", "LT", "LE"),
+          selected = .blank_na(.chr_field(condition[["comparator"]]))
+        ),
+        shiny::textInput(field_id(index, "clause_value"), "Value(s)",
+                         value = .blank_na(.join_values(condition[["value"]])))
+      )
+    }
+
+    clause_action <- function(label, name, class = "btn-outline-secondary") {
+      shiny::tags$button(
+        type = "button", class = paste("btn btn-sm", class),
+        onclick = .entity_clause_js(ns("clause_action"), row$id, group_id,
+                                    index, name),
+        label
+      )
+    }
+
+    shiny::div(
+      class = "border-start ps-2 mb-2",
+      shiny::div(class = "text-muted small",
+                 paste("Clause", index, "of", length(clauses))),
+      body,
+      shiny::div(
+        class = "d-flex gap-1 mt-1",
+        clause_action("Up", "up"),
+        clause_action("Down", "down"),
+        clause_action("Clone", "clone"),
+        clause_action("Delete", "delete", "btn-outline-danger")
+      )
+    )
+  })
+
+  shiny::tagList(
+    shiny::div(
+      class = "d-flex align-items-center gap-2 mb-2",
+      shiny::div(
+        style = "min-width: 8rem;",
+        shiny::selectizeInput(
+          ns(.entity_input_id("groupings", row$id, "clause_operator",
+                              child = group_id)),
+          "Join clauses with", choices = c("AND", "OR"), selected = operator
+        )
+      ),
+      shiny::div(
+        class = "small",
+        shiny::div(class = "text-muted", "Reads as:"),
+        shiny::tags$code(.clause_phrase(group))
+      )
+    ),
+    rows,
+    shiny::div(
+      class = "d-flex gap-2",
+      shiny::tags$button(
+        type = "button", class = "btn btn-sm btn-outline-primary",
+        onclick = .entity_clause_js(ns("clause_action"), row$id, group_id,
+                                    length(clauses), "add"),
+        "Add clause"
+      )
+    ),
+    shiny::div(class = "text-muted small mt-1",
+               "Separate multiple values with a semicolon. Leave a value ",
+               "empty to mean a missing value. Deleting the second-to-last ",
+               "clause turns this group back into a simple condition.")
+  )
+}
+
 ## One row per child group. `level` earns its column because a nested
 ## grouping puts a child under a parent, and reading the table without it
 ## would flatten the hierarchy into a list of peers.
@@ -1073,6 +1294,98 @@ mod_entity_library_server <- function(id, state) {
     )
   })
   do.call(rbind, rows)
+}
+
+## A condition as the reviewer reads it, rather than as R evaluates it.
+##
+## .group_condition_text() answers an execution predicate, which is the right
+## thing in the child table and the edit log -- it is what will run. It is the
+## wrong register inside the compound editor, though: it renders an empty EQ
+## as `(is.na(X) | X == "")` and drops the dataset entirely, so two clauses on
+## different datasets read identically while the reviewer is deciding whether
+## the expression says what the shell meant. This spells the same clause the
+## way the shell annotation did.
+##
+## Every field goes through .chr_field() (always length 1, NA when absent) and
+## then .blank_na() (NA becomes ""), so nzchar() below never meets an NA.
+#' @noRd
+.condition_phrase <- function(condition) {
+  dataset    <- .blank_na(.chr_field(condition[["dataset"]]))
+  variable   <- .blank_na(.chr_field(condition[["variable"]]))
+  comparator <- toupper(.blank_na(.chr_field(condition[["comparator"]])))
+  values     <- as.character(unlist(condition[["value"]] %||% list()))
+  values     <- values[!is.na(values)]
+
+  subject <- if (nzchar(dataset) && nzchar(variable)) {
+    paste0(dataset, ".", variable)
+  } else if (nzchar(variable)) {
+    variable
+  } else {
+    "(no variable)"
+  }
+  if (!nzchar(comparator)) comparator <- "EQ"
+
+  ## An empty value list is how a where clause says "is missing". Printing
+  ## "EQ ()" instead would read as a contradiction rather than a condition.
+  if (length(values) == 0) {
+    return(switch(
+      comparator,
+      EQ = , IN = paste(subject, "is missing"),
+      NE = , NOTIN = paste(subject, "is not missing"),
+      paste(subject, comparator)
+    ))
+  }
+  if (length(values) == 1) return(paste(subject, comparator, values[[1]]))
+  paste0(subject, " ", comparator, " (", paste(values, collapse = ", "), ")")
+}
+
+## One clause, or a whole expression, as a sentence. Recurses so nesting the
+## editor cannot edit is still readable; the nested part is parenthesised so
+## it is visibly one operand rather than more clauses of the outer operator.
+#' @noRd
+.clause_phrase <- function(clause, depth = 0L) {
+  if (!is.null(clause[["compoundExpression"]])) {
+    ce      <- clause[["compoundExpression"]]
+    op      <- .chr_field(ce[["logicalOperator"]])
+    op      <- if (is.na(op) || !nzchar(op)) "OR" else toupper(op)
+    clauses <- ce[["whereClauses"]] %||% list()
+    if (length(clauses) == 0) return("(no clauses)")
+
+    parts <- vapply(clauses, .clause_phrase, character(1), depth = depth + 1L)
+    text  <- paste(parts, collapse = paste0(" ", op, " "))
+    return(if (depth > 0L) paste0("(", text, ")") else text)
+  }
+  if (!is.null(clause[["condition"]])) {
+    return(.condition_phrase(clause[["condition"]]))
+  }
+  "(no condition)"
+}
+
+## A usable id is one real string. NA is not a lookup key: `match(NA, ids)`
+## finds a grouping whose own id is missing, and identical(NA, NA) is TRUE, so
+## an idless child would answer to a lost group_id. Both would return the
+## wrong node rather than nothing.
+#' @noRd
+.usable_id <- function(id) {
+  length(id) == 1L && !is.na(id) && nzchar(trimws(as.character(id)))
+}
+
+## One child group's node, or NULL when either id has gone. Both the edit-log
+## summary and the clause editor need it, and looking it up twice by hand is
+## how the two drift apart.
+#' @noRd
+.editor_group_node <- function(model, grouping_id, group_id) {
+  if (!.usable_id(grouping_id) || !.usable_id(group_id)) return(NULL)
+
+  index <- match(as.character(grouping_id), model$groupings$id)
+  if (is.na(index)) return(NULL)
+  groups <- model$groupings$raw[[index]][["groups"]] %||% list()
+  hit <- which(vapply(groups, function(g) {
+    id <- .chr_field(g[["id"]])
+    !is.na(id) && identical(id, as.character(group_id))
+  }, logical(1)))
+  if (length(hit) == 0) return(NULL)
+  groups[[hit[[1]]]]
 }
 
 ## The filter a child group stands for, in the same words the analysis-set
