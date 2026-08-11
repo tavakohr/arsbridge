@@ -46,10 +46,17 @@
     )
   },
   MTH_SUBJECT_COUNT = function(df, var, by, denom, subject_key) {
+    ## Counting the subject key itself is one row per subject, so the by
+    ## variables are all that join it. Counting anything else means an
+    ## occurrence frame -- one subject, several rows, a different term on
+    ## each -- and there the term has to join the distinct as well, exactly
+    ## as the emitted block does (see .analysis_block()). Deduplicating on
+    ## the subject alone would keep only whichever row happened to come
+    ## first and report every one of that subject's other terms as zero.
     distinct_vars <- if (identical(var, subject_key)) {
       unique(c(subject_key, by))
     } else {
-      subject_key
+      unique(c(subject_key, by, var))
     }
     df_unique <- df |>
       dplyr::distinct(
