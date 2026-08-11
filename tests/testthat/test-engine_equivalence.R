@@ -367,3 +367,43 @@ test_that("decoded categorical analyses stay equivalent across engines", {
   expect_true(all(c("DEATH", "LOST TO FOLLOW-UP", "OTHER", "PREGNANCY") %in% lv))
   expect_false(any(lv %in% c("1", "2", "3", "4"), na.rm = TRUE))
 })
+
+## A subject count run over an occurrence frame, which is where the two
+## engines used to part company. ADAE gives S01 two rows -- Headache and
+## Nausea -- so deduplicating on the subject alone keeps whichever came
+## first and reports the other term as zero. No Total column is involved;
+## the disagreement is in the ordinary grouped pass.
+test_that("subject counts on an occurrence frame count every term", {
+  skip_if_not_installed("cards")
+  td <- withr::local_tempdir()
+  .eq_adam(td)
+
+  for (method_id in c("MTH_SUBJECT_COUNT", "MTH_SUBJECT_COUNT_PCT")) {
+    spec <- .eq_spec()
+    spec$outputs <- list(list(id = "OUT_AE", name = "T-AE",
+                              referencedAnalysisIds = list("AN_AE")))
+    spec$analyses <- Filter(function(a) identical(a$id, "AN_AE"),
+                            spec$analyses)
+    spec$analyses[[1]]$methodId     <- method_id
+    spec$analyses[[1]]$includeTotal <- FALSE
+
+    ars <- .eq_write(spec, td, paste0(tolower(method_id), "_occurrence.json"))
+    ard_new <- ars_to_ard(ars, td)
+    ard_leg <- ars_to_ard(ars, td, legacy = TRUE)
+
+    expect_equal(.eq_norm(ard_new), .eq_norm(ard_leg),
+                 info = paste("method =", method_id))
+
+    ## S01 and S02 report Headache, S01 alone reports Nausea. Nausea is the
+    ## term carried by S01's second row, so it is the one a subject-level
+    ## dedup drops.
+    for (ard in list(ard_new, ard_leg)) {
+      expect_equal(.eq_stat(ard, "Drug A", "Headache"), 2,
+                   info = paste("method =", method_id))
+      expect_equal(.eq_stat(ard, "Drug A", "Nausea"), 1,
+                   info = paste("method =", method_id))
+      expect_equal(.eq_stat(ard, "Placebo", "Headache"), 1,
+                   info = paste("method =", method_id))
+    }
+  }
+})
