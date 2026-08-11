@@ -393,9 +393,13 @@ mod_entity_library_server <- function(id, state) {
 
 ## Input ids carry the pool and entity, so switching rows cannot leave one
 ## row's value sitting in another row's box.
+## `child` addresses one group inside a grouping. It defaults to NULL, so
+## every flat field keeps the id it has always had.
 #' @noRd
-.entity_input_id <- function(pool, id, field) {
-  paste0(pool, "__", .slug(id), "__", field)
+.entity_input_id <- function(pool, id, field, child = NULL) {
+  stem <- paste0(pool, "__", .slug(id))
+  if (!is.null(child)) stem <- paste0(stem, "__", .slug(child))
+  paste0(stem, "__", field)
 }
 
 #' @noRd
@@ -404,6 +408,24 @@ mod_entity_library_server <- function(id, state) {
     "Shiny.setInputValue('", input_id, "', ",
     "{pool: '", pool, "', id: '", entity_id, "'}, ",
     "{priority: 'event'}); return false;"
+  )
+}
+
+## Buttons that carry which grouping (and which child) they belong to, so one
+## observer serves every row -- the same shape apply_json already uses. The
+## child fields themselves are never observed: a child write is a NODE write,
+## so it goes through .record_structural_edit(), which bumps state$refresh()
+## and re-renders this panel. A per-keystroke observer would therefore destroy
+## the input being typed into, and a four-field condition is meaningless until
+## all four are in hand anyway.
+#' @noRd
+.entity_group_js <- function(input_id, grouping_id, group_id = NULL) {
+  payload <- paste0("{grouping: '", grouping_id, "'",
+                    if (!is.null(group_id)) paste0(", group: '", group_id, "'"),
+                    "}")
+  paste0(
+    "Shiny.setInputValue('", input_id, "', ", payload,
+    ", {priority: 'event'}); return false;"
   )
 }
 
@@ -430,17 +452,21 @@ mod_entity_library_server <- function(id, state) {
   }
 
   if (identical(pool, "groupings")) {
+    groups <- row$raw[[1]][["groups"]] %||% list()
     return(shiny::tagList(
       bslib::layout_columns(
         col_widths = c(6, 6),
         field_input("groupingDataset", "Dataset", row$groupingDataset),
         field_input("groupingVariable", "Variable", row$groupingVariable)
       ),
+      shiny::checkboxInput(
+        ns(.entity_input_id(pool, row$id, "dataDriven")),
+        "Data driven (levels discovered from the data at run time)",
+        value = isTRUE(row$dataDriven)
+      ),
+      .grouping_shape_alert(row, ns),
       shiny::h6(class = "mt-3", "Groups"),
-      shiny::div(class = "text-muted small",
-                 "The child groups this grouping defines. Editing them is ",
-                 "still the raw-JSON hatch below."),
-      .groups_view(row$raw[[1]][["groups"]] %||% list(), row$dataDriven)
+      .groups_editor(row, groups, ns)
     ))
   }
 
@@ -485,7 +511,10 @@ mod_entity_library_server <- function(id, state) {
     data_subsets  = c("name", "label", "condition_dataset",
                       "condition_variable", "condition_comparator",
                       "condition_value"),
-    groupings     = c("name", "label", "groupingDataset", "groupingVariable")
+    ## dataDriven is a genuine flat column, so the existing machinery carries
+    ## it. The CHILD fields are not here on purpose -- see .groups_editor().
+    groupings     = c("name", "label", "groupingDataset", "groupingVariable",
+                      "dataDriven")
   )
 }
 
@@ -587,6 +616,76 @@ mod_entity_library_server <- function(id, state) {
                             "(edited as JSON)", "(replaced)")
     shiny::showNotification("Applied.", type = "message", duration = 4)
   })
+
+  ## One child group, committed as a whole. The handler is isolated, so
+  ## reading the child's inputs by name here creates no dependency on them --
+  ## which is the point of not observing them.
+  shiny::observeEvent(input$group_apply, {
+    grouping_id <- input$group_apply$grouping
+    group_id    <- input$group_apply$group
+    field <- function(name) {
+      input[[.entity_input_id("groupings", grouping_id, name,
+                              child = group_id)]]
+    }
+
+    model  <- state$model()
+    before <- .group_condition_summary(model, grouping_id, group_id)
+
+    updated <- tryCatch({
+      out <- model_set_group_field(model, grouping_id, group_id, "label",
+                                   .input_to_value(field("label")))
+      model_set_group_condition(
+        out, grouping_id, group_id,
+        dataset    = field("condition_dataset"),
+        variable   = field("condition_variable"),
+        comparator = field("condition_comparator"),
+        values     = .split_values(.blank_na(field("condition_value")))
+      )
+    }, error = function(e) e)
+
+    if (inherits(updated, "error")) {
+      shiny::showNotification(paste("Not applied:", conditionMessage(updated)),
+                              type = "error", duration = 10)
+      return()
+    }
+
+    ## The child id goes in the FIELD, because .diff_summary() collapses on
+    ## pool|id|field -- a constant label would fold every child into one line.
+    .record_structural_edit(
+      state, updated, "groupings", grouping_id,
+      paste0("group ", group_id),
+      before, .group_condition_summary(updated, grouping_id, group_id)
+    )
+    shiny::showNotification("Group saved.", type = "message", duration = 4)
+  })
+
+  ## The way out of a fixed grouping with no groups. Explicit and logged: the
+  ## alternative is changing what the columns mean without being asked.
+  shiny::observeEvent(input$group_make_data_driven, {
+    grouping_id <- input$group_make_data_driven$grouping
+    updated <- model_set_field(state$model(), "groupings", grouping_id,
+                               "dataDriven", TRUE)
+    .record_structural_edit(state, updated, "groupings", grouping_id,
+                            "dataDriven", "FALSE", "TRUE")
+  })
+}
+
+## How a child group reads now, for the edit log: the filter it stands for,
+## or its label when it has no condition at all.
+#' @noRd
+.group_condition_summary <- function(model, grouping_id, group_id) {
+  index <- match(grouping_id, model$groupings$id)
+  if (is.na(index)) return("(none)")
+  groups <- model$groupings$raw[[index]][["groups"]] %||% list()
+  hit <- which(vapply(groups, function(g) identical(.chr_field(g[["id"]]),
+                                                    group_id), logical(1)))
+  if (length(hit) == 0) return("(none)")
+
+  group <- groups[[hit[[1]]]]
+  text  <- .group_condition_text(group)
+  label <- .chr_field(group[["label"]] %||% group[["name"]])
+  if (is.na(text)) paste0(.blank_na(label), " (no condition)") else
+    paste0(.blank_na(label), ": ", text)
 }
 
 #' @noRd
@@ -659,6 +758,103 @@ mod_entity_library_server <- function(id, state) {
     },
     .detail_row("Compound expression", row$is_compound)
   )
+}
+
+## Said where the reviewer is standing, not only in the findings panel across
+## the app. Validation blocks the save either way; this is the same sentence
+## next to the control that caused it, with the one-click way out beside it.
+##
+## The flip is offered, never applied automatically: it changes what the
+## columns MEAN, from a declared set to whatever the data happens to contain.
+## Guessing that is the class of thing this package refuses everywhere else.
+#' @noRd
+.grouping_shape_alert <- function(row, ns) {
+  if (isTRUE(row$dataDriven) || (row$n_groups %||% 0L) > 0L) return(NULL)
+
+  shiny::div(
+    class = "alert alert-danger py-2 px-3 small mt-2",
+    shiny::div("This fixed grouping declares no groups, so it defines no ",
+               "result columns. It cannot be saved until that is resolved."),
+    shiny::tags$button(
+      type = "button", class = "btn btn-sm btn-outline-danger mt-2",
+      onclick = .entity_group_js(ns("group_make_data_driven"), row$id),
+      "Mark data-driven"
+    )
+  )
+}
+
+## The child groups, editable. One Save button per child: the four condition
+## fields only mean something together, and committing per keystroke would
+## walk through states like "IN with one value" -- each of them a history
+## entry and an edit-log row.
+#' @noRd
+.groups_editor <- function(row, groups, ns) {
+  if (length(groups) == 0) {
+    return(.groups_view(groups, row$dataDriven))
+  }
+
+  field_id <- function(child, field) {
+    ns(.entity_input_id("groupings", row$id, field, child = child))
+  }
+
+  cards <- lapply(groups, function(group) {
+    group_id <- .chr_field(group[["id"]])
+    label    <- .chr_field(group[["label"]] %||% group[["name"]])
+
+    ## A compound child is shown as the expression it stands for. Replacing
+    ## it with a simple condition here would drop the other clauses, so that
+    ## stays the raw-JSON hatch's business.
+    body <- if (!is.null(group[["compoundExpression"]])) {
+      shiny::div(
+        class = "small",
+        shiny::div(class = "text-muted", "Condition (compound):"),
+        shiny::tags$code(.blank_na(.group_condition_text(group))),
+        shiny::div(class = "text-muted mt-1",
+                   "Edit this one through Raw JSON below.")
+      )
+    } else {
+      condition <- group[["condition"]] %||% list()
+      shiny::tagList(
+        bslib::layout_columns(
+          col_widths = c(3, 3, 3, 3),
+          shiny::textInput(field_id(group_id, "condition_dataset"), "Dataset",
+                           value = .blank_na(.chr_field(condition[["dataset"]]))),
+          shiny::textInput(field_id(group_id, "condition_variable"), "Variable",
+                           value = .blank_na(.chr_field(condition[["variable"]]))),
+          shiny::selectizeInput(
+            field_id(group_id, "condition_comparator"), "Comparator",
+            choices  = c("EQ", "NE", "IN", "NOTIN", "GT", "GE", "LT", "LE"),
+            selected = .blank_na(.chr_field(condition[["comparator"]]))
+          ),
+          shiny::textInput(field_id(group_id, "condition_value"), "Value(s)",
+                           value = .blank_na(.join_values(condition[["value"]])))
+        ),
+        shiny::div(class = "text-muted small",
+                   "Separate multiple values with a semicolon. Leave empty to ",
+                   "mean a missing value.")
+      )
+    }
+
+    shiny::div(
+      class = "border rounded p-2 mb-2",
+      shiny::div(
+        class = "d-flex align-items-center gap-2 mb-2",
+        shiny::span(class = "badge text-bg-light", group_id),
+        shiny::textInput(field_id(group_id, "label"), NULL,
+                         value = .blank_na(label))
+      ),
+      body,
+      if (is.null(group[["compoundExpression"]])) {
+        shiny::tags$button(
+          type = "button", class = "btn btn-sm btn-outline-primary",
+          onclick = .entity_group_js(ns("group_apply"), row$id, group_id),
+          "Save this group"
+        )
+      }
+    )
+  })
+
+  shiny::div(cards)
 }
 
 ## A grouping's child groups, or a sentence saying why there are none.

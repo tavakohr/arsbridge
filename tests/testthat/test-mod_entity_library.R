@@ -517,3 +517,187 @@ test_that("entity observer reconciliation tracks membership without duplicates",
   expect_identical(counts$created, c("field_a", "field_a"))
   expect_identical(ls(registry), "field_a")
 })
+
+
+## --- Editing child groups in place -----------------------------------------
+##
+## Child inputs are rendered but NOT observed: they are read by name inside
+## one isolated handler when a Save button fires. Per-keystroke observers
+## would not survive here -- a child write is a node write, so it goes through
+## .record_structural_edit(), which bumps state$refresh(), which re-renders
+## the panel and destroys the very input being typed into.
+
+.cge_state <- function(mode = "edit") {
+  .editor_state(.library_model_nested(), NULL, NULL, NULL, mode)
+}
+
+.cge_groups <- function(state, grouping_id = "GF_TRT01A") {
+  shiny::isolate({
+    model <- state$model()
+    model$groupings$raw[[match(grouping_id, model$groupings$id)]]$groups
+  })
+}
+
+test_that("a simple child gets condition inputs and a compound one does not", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  state <- .cge_state()
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(table_groupings_rows_selected = 1)
+    rendered <- paste(as.character(output$detail_groupings), collapse = " ")
+
+    expect_match(
+      rendered,
+      .entity_input_id("groupings", "GF_TRT01A", "condition_variable",
+                       child = "GRP_DRUG_A"),
+      fixed = TRUE)
+    ## A compound child stays read-only: replacing it with a simple condition
+    ## would drop the other clauses.
+    expect_false(grepl(
+      .entity_input_id("groupings", "GF_TRT01A", "condition_variable",
+                       child = "GRP_EITHER"),
+      rendered, fixed = TRUE))
+  })
+})
+
+test_that("saving one child leaves its siblings byte-identical", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  state <- .cge_state()
+  before <- .cge_groups(state)
+
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(table_groupings_rows_selected = 1)
+    field <- function(name) {
+      .entity_input_id("groupings", "GF_TRT01A", name, child = "GRP_DRUG_A")
+    }
+    .set_input(session, field("label"), "Drug A only")
+    .set_input(session, field("condition_dataset"), "ADSL")
+    .set_input(session, field("condition_variable"), "TRT01A")
+    .set_input(session, field("condition_comparator"), "IN")
+    .set_input(session, field("condition_value"), "Drug A;Drug A 10 mg")
+    session$setInputs(group_apply = list(grouping = "GF_TRT01A",
+                                         group = "GRP_DRUG_A"))
+    session$flushReact()
+  })
+
+  after <- .cge_groups(state)
+  expect_equal(after[[1]]$label, "Drug A only")
+  expect_equal(after[[1]]$condition$comparator, "IN")
+  expect_equal(after[[1]]$condition$value, list("Drug A", "Drug A 10 mg"))
+
+  ## The H3 guarantee, through the UI this time.
+  expect_equal(after[[2]], before[[2]])
+  expect_equal(after[[3]], before[[3]])
+  expect_length(after, 3L)
+
+  ## One action, one log row -- and the child id is in `field`, because
+  ## .diff_summary() collapses on pool|id|field.
+  log <- shiny::isolate(state$edit_log())
+  expect_equal(nrow(log), 1L)
+  expect_true(grepl("GRP_DRUG_A", log$field[1], fixed = TRUE))
+
+  ## And it round-trips.
+  ars <- model_to_ars(shiny::isolate(state$model()))
+  node <- Filter(function(g) identical(g$id, "GF_TRT01A"),
+                 ars$analysisGroupings)[[1]]
+  expect_equal(node$groups[[1]]$label, "Drug A only")
+})
+
+test_that("two child edits stay two lines in the save summary", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  state <- .cge_state()
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(table_groupings_rows_selected = 1)
+    for (child in c("GRP_DRUG_A", "GRP_UNDEFINED")) {
+      .set_input(session,
+                 .entity_input_id("groupings", "GF_TRT01A", "label",
+                                  child = child),
+                 paste("Renamed", child))
+      session$setInputs(group_apply = list(grouping = "GF_TRT01A",
+                                           group = child))
+      session$flushReact()
+    }
+  })
+
+  summary <- .diff_summary(shiny::isolate(state$edit_log()))
+  expect_equal(nrow(summary), 2L)
+})
+
+test_that("a child edit can be undone", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  state <- .cge_state()
+  before <- .cge_groups(state)[[1]]$label
+
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(table_groupings_rows_selected = 1)
+    .set_input(session,
+               .entity_input_id("groupings", "GF_TRT01A", "label",
+                                child = "GRP_DRUG_A"),
+               "Changed")
+    session$setInputs(group_apply = list(grouping = "GF_TRT01A",
+                                         group = "GRP_DRUG_A"))
+    session$flushReact()
+  })
+  expect_equal(.cge_groups(state)[[1]]$label, "Changed")
+
+  shiny::isolate(.undo(state))
+  expect_equal(.cge_groups(state)[[1]]$label, before)
+  expect_equal(nrow(shiny::isolate(state$edit_log())), 0L)
+})
+
+test_that("a grouping left fixed and childless says so, and offers the flip", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  ## The frozen fixture's grouping is data-driven with no children. Turning
+  ## the mode off makes it a fixed grouping that defines no result columns --
+  ## allowed, logged, undoable, and unsaveable until it is resolved.
+  state <- .editor_state(.valid_fixture_model(), NULL, NULL, NULL, "edit")
+
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(table_groupings_rows_selected = 1)
+    .set_input(session,
+               .entity_input_id("groupings", "GF_TRT01A", "dataDriven"),
+               FALSE)
+    session$flushReact()
+
+    findings <- state$findings()
+    expect_true(any(findings$ref %in% "FIXED_GROUPING_EMPTY"))
+
+    rendered <- paste(as.character(output$detail_groupings), collapse = " ")
+    expect_match(rendered, "defines no result columns", fixed = TRUE)
+    expect_match(rendered, "Mark data-driven", fixed = TRUE)
+
+    ## The offered fix is an explicit, logged action -- never automatic.
+    session$setInputs(group_make_data_driven = list(grouping = "GF_TRT01A"))
+    session$flushReact()
+    expect_false(any(state$findings()$ref %in% "FIXED_GROUPING_EMPTY"))
+  })
+})
+
+test_that("a fixed childless grouping cannot be saved", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  state <- .editor_state(.valid_fixture_model(), NULL, NULL, NULL, "edit")
+  gate <- shiny::isolate({
+    state$model(model_set_field(state$model(), "groupings", "GF_TRT01A",
+                                "dataDriven", FALSE))
+    .model_validation_gate(state$model(), state$spec, state$report)
+  })
+  expect_true(gate$blocked)
+  expect_true("FIXED_GROUPING_EMPTY" %in% gate$blocking_refs)
+})
