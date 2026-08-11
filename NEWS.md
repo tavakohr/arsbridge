@@ -1,5 +1,17 @@
 # arsbridge (development version)
 
+* **Two populations that share a name no longer share a definition.** An
+  `AnalysisSet` id is minted from the population text while its filter comes
+  from the annotation, so two tables both headed "Safety Population" with
+  different annotations collided: the first definition won and every later
+  analysis silently ran the wrong population, which a filled table cannot show
+  you. Analysis sets and data subsets are now deduplicated by what they filter,
+  the way groupings already were -- one definition written twice is one entity,
+  and one name over two definitions keeps both, the second under a variant id
+  and a diagnostic. A population named but left unannotated still joins its
+  annotated namesake rather than splitting from it, and if the unannotated one
+  came first, the annotated definition replaces it.
+
 * **A Total column scoped on a subject-level variable now computes on the
   legacy engine.** A shell whose Total header is annotated with an ADSL
   variable (`[ADSL.COHORTN IN (1,2)]`) names a column an occurrence dataset
