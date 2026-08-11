@@ -1,5 +1,17 @@
 # arsbridge (development version)
 
+* **A Total column on an ordinary treatment axis is no longer invisible.**
+  When a table declares its column axis on the stub header
+  (`[columns -> ADSL.TRT01A]`) and leaves the column headers as plain text,
+  no column header carries an annotation -- and the resolver returned before
+  it ever looked for an overall column. A displayed `Total` was therefore
+  never recorded, the reporting event carried no Total, every Total cell kept
+  its placeholder, and nothing reported that a displayed column had produced
+  nothing. The bare label is now read on this path too, scoping the pass by
+  the analysis set, which is all an unannotated Total can mean. The bundled
+  example gains a Total column on its nested adverse-event table, where the
+  parent and child rows both fill.
+
 * **Two populations that share a name no longer share a definition.** An
   `AnalysisSet` id is minted from the population text while its filter comes
   from the annotation, so two tables both headed "Safety Population" with

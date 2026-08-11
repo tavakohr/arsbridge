@@ -416,20 +416,30 @@ footnote("Table 14.3.1", 13,
 ## treatment-emergent -- 29 subjects with a psychiatric event where 28 had a
 ## treatment-emergent one. The filter variable is qualified for the same
 ## reason it is on Table 14.2.1: unqualified, the subset does not parse.
+##
+## This is also the one table in the bundle with a Total column, and it sits
+## beside a NESTED block on purpose: that pairing is the shape that failed in
+## the field, where the parent SOC rows filled and the child term rows did
+## not. The column is left UNANNOTATED, which is the ordinary convention --
+## a data-driven axis has no group conditions to union, so the Total is
+## scoped by the analysis set alone.
 banner("Table 14.3.2", "Table 14.3.2",
        paste("Treatment-Emergent Adverse Events by System Organ Class",
-             "and Preferred Term"))
+             "and Preferred Term"),
+       n_cols = 5L)
 header_row("Table 14.3.2", "System Organ Class / Preferred Term",
-           "[columns -> ADSL.TRT01A; source ADAE]")
+           "[columns -> ADSL.TRT01A; source ADAE]",
+           cols = c(arms, "Total"))
 data_row("Table 14.3.2", 5, "Subjects with any TEAE",
-         "[ADAE.TRTEMFL = 'Y']")
+         "[ADAE.TRTEMFL = 'Y']", n_vals = 4L)
 ## row 6 blank -- spacer
 data_row("Table 14.3.2", 7, "<System Organ Class>",
-         "[ADAE.AESOC WHERE ADAE.TRTEMFL='Y']")
+         "[ADAE.AESOC WHERE ADAE.TRTEMFL='Y']", n_vals = 4L)
 data_row("Table 14.3.2", 8, "<Preferred Term>",
-         "[ADAE.AEDECOD WHERE ADAE.TRTEMFL='Y']")
+         "[ADAE.AEDECOD WHERE ADAE.TRTEMFL='Y']", n_vals = 4L)
 footnote("Table 14.3.2", 10,
-         "A subject is counted once per system organ class and once per term.")
+         "A subject is counted once per system organ class and once per term.",
+         n_cols = 5L)
 
 ## --- Table 14.2.1: exposure. Two continuous blocks off ADEX parameters. ---
 ## The filter variable is written QUALIFIED ("ADEX.PARAMCD='TDURD'", not
