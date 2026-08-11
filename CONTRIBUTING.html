@@ -129,6 +129,12 @@
 </ul><p>When you make a design-level change, add or update an ADR in the same PR. Keep the standard <code>ARS → ARD → tfrmt</code> pipeline — the shell is never the source of truth for layout.</p>
 </div>
 <div class="section level2">
+<h2 id="handing-work-over">Handing work over<a class="anchor" aria-label="anchor" href="#handing-work-over"></a></h2>
+<p>Investigations that outlive a session — especially any that happened on a machine whose data cannot leave it — get written up under <code>notes/handoffs/</code>. Start from <a href="tools/HANDOFF_TEMPLATE.html"><code>tools/HANDOFF_TEMPLATE.md</code></a>.</p>
+<p>Two of its blocks are mandatory, and both earn it. <strong>Repository state</strong> records <code>packageVersion("arsbridge")</code> alongside the <code>HEAD</code> sha, because a handoff written against a stale install describes a build nobody can identify — half the findings of one 2026 RCA turned out to have been fixed days before it was written. <strong>Fill debrief</strong> records all three <code><a href="reference/ars_fill_summary.html">ars_fill_summary()</a></code> frames, which name the stage each pending cell died at; without them the next reader reconstructs that by hand.</p>
+<p><code>notes/</code> is gitignored, so handoffs travel by hand and have to be self-contained. The template lives in <code>tools/</code> so that it does not.</p>
+</div>
+<div class="section level2">
 <h2 id="code-of-conduct">Code of Conduct<a class="anchor" aria-label="anchor" href="#code-of-conduct"></a></h2>
 <p>Please note that the arsbridge project is released with a <a href="CODE_OF_CONDUCT.html">Contributor Code of Conduct</a>. By contributing to this project you agree to abide by its terms.</p>
 </div>
