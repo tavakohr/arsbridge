@@ -31,7 +31,8 @@ spec_to_ars(
   report_path = file.path(tempdir(), "spec_validation_report.xlsx"),
   code_dir = NULL,
   adam_dir = ".",
-  verbose = TRUE
+  verbose = TRUE,
+  .on_artifact_written = NULL
 )
 ```
 
@@ -219,6 +220,13 @@ spec_to_ars(
 - verbose:
 
   Print progress messages. Default `TRUE`.
+
+- .on_artifact_written:
+
+  Internal callback invoked with a named artifact receipt after a
+  current-run artifact has been written successfully. Used by the
+  workflow to retain exact repair provenance if a later build step
+  fails. Callback errors are ignored.
 
 ## Value
 
