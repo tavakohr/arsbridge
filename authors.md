@@ -8,16 +8,16 @@
 ## Citation
 
 Source:
-[`DESCRIPTION`](https://github.com/tavakohr/arsbridge/blob/feat/editor-child-group-edit/DESCRIPTION)
+[`DESCRIPTION`](https://github.com/tavakohr/arsbridge/blob/feat/editor-child-group-crud/DESCRIPTION)
 
 Tavakoli H (2026). *arsbridge: Convert Annotated TLF Shells and ADaM
-Spec to CDISC ARS JSON*. R package version 0.1.0.9101,
+Spec to CDISC ARS JSON*. R package version 0.1.0.9102,
 <https://github.com/tavakohr/arsbridge>.
 
     @Manual{,
       title = {arsbridge: Convert Annotated TLF Shells and ADaM Spec to CDISC ARS JSON},
       author = {Hamid Tavakoli},
       year = {2026},
-      note = {R package version 0.1.0.9101},
+      note = {R package version 0.1.0.9102},
       url = {https://github.com/tavakohr/arsbridge},
     }
