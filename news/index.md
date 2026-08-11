@@ -2,6 +2,14 @@
 
 ## arsbridge (development version)
 
+- **Child groups can be added, cloned, reordered and deleted in the
+  editor.** With the previous entry, a grouping’s column levels can now
+  be authored without the raw-JSON hatch. Deleting a group that a
+  declared result path names is refused, and says which output holds the
+  path, because removing it would leave that path pointing at a group
+  that no longer exists. Every action is one undo step and one line in
+  the save summary.
+
 - **The editor can change a grouping’s child groups.** Each child now
   carries its label and its condition as fields, saved one child at a
   time, so the four condition fields commit together rather than a
