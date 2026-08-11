@@ -724,20 +724,26 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     character(0)
   }
 
-  apply_where_clause <- function(target_ds_name, where_clause) {
-    df <- get_df(target_ds_name)
-    if (is.null(df) || is.null(where_clause)) {
-      return(df)
-    }
+  ## The mask a where-clause puts on one frame that is already in hand.
+  ##
+  ## A clause naming only the target dataset is evaluated row by row. A clause
+  ## naming another one is answered on THAT dataset and carried back by
+  ## subject key, because eval_condition() reads a variable the frame does not
+  ## have as FALSE for every row -- so an ADSL condition applied directly to an
+  ## occurrence frame keeps nothing at all. This is the one place that rule
+  ## lives; apply_where_clause() and the Total pass both go through it, and
+  ## the emitted code says the same thing in dplyr (.apply_where_expr()).
+  where_keep_mask <- function(df, target_ds_name, where_clause) {
+    if (is.null(df)) return(logical(0))
+    all_rows <- rep(TRUE, nrow(df))
+    if (is.null(where_clause)) return(all_rows)
 
     ref_datasets <- get_referenced_datasets(where_clause)
-    if (length(ref_datasets) == 0) {
-      return(df)
-    }
+    if (length(ref_datasets) == 0) return(all_rows)
 
-    if (length(ref_datasets) == 1 && ref_datasets == target_ds_name) {
-      keep <- eval_where_clause(df, where_clause)
-      return(df[keep, , drop = FALSE])
+    ## Case-insensitive, as the emitter compares them.
+    if (all(toupper(ref_datasets) == toupper(target_ds_name %||% ""))) {
+      return(eval_where_clause(df, where_clause))
     }
 
     valid_subjects <- NULL
@@ -765,11 +771,18 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       }
     }
 
-    if (!is.null(valid_subjects) && subject_key %in% names(df)) {
-      df <- df[df[[subject_key]] %in% valid_subjects, , drop = FALSE]
+    if (is.null(valid_subjects) || !subject_key %in% names(df)) {
+      return(all_rows)
     }
+    df[[subject_key]] %in% valid_subjects
+  }
 
-    return(df)
+  apply_where_clause <- function(target_ds_name, where_clause) {
+    df <- get_df(target_ds_name)
+    if (is.null(df) || is.null(where_clause)) {
+      return(df)
+    }
+    df[where_keep_mask(df, target_ds_name, where_clause), , drop = FALSE]
   }
 
   # Walk analyses and execute
@@ -1116,14 +1129,23 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
           ## Scoped by the Total column's own condition when the shell gave
           ## one, exactly as the emitted block is -- otherwise this path and
           ## the default path would disagree and the equivalence test would
-          ## be comparing two different questions. A NULL condition makes
-          ## eval_where_clause() all-TRUE, which is the ungrouped pass as it
-          ## has always been.
-          keep_t <- eval_where_clause(df_filtered, res$total_where)
+          ## be comparing two different questions. A NULL condition makes the
+          ## mask all-TRUE, which is the ungrouped pass as it has always been.
+          ##
+          ## Each frame is masked against its OWN dataset: the numerator on
+          ## the analysis dataset, the denominator on ADSL, which is what
+          ## .denom_expr() emits. A Total header annotated with a subject-level
+          ## variable ([ADSL.COHORTN IN (1,2)] is the shape shells write) names
+          ## a column the occurrence frame cannot answer by itself, so this
+          ## goes through where_keep_mask() rather than evaluating the clause
+          ## row by row.
+          keep_t <- where_keep_mask(df_filtered, analysis_ds, res$total_where)
           df_t   <- df_filtered[keep_t, , drop = FALSE]
           df_pop <- if (is.null(df_population)) NULL else {
-            df_population[eval_where_clause(df_population, res$total_where), ,
-                          drop = FALSE]
+            df_population[
+              where_keep_mask(df_population, "ADSL", res$total_where), ,
+              drop = FALSE
+            ]
           }
           ## Keep every grouping after the column axis as a row key, but do not
           ## let those row variables split the denominator. This mirrors the

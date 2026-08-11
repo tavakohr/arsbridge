@@ -13,6 +13,9 @@
     AGE     = c(40, 50, 60, 70, 80, 45, 55, 65, 75, 85),
     SEX     = rep(c("M", "F"), 5),
     AGEGR1  = rep(c("<65", ">=65"), 5),
+    ## Subject-level only, so a Total column scoped on it is the cross-dataset
+    ## case: an ADAE analysis cannot answer it from its own rows.
+    COHORTN = c(1, 2, 1, 2, 1, 1, 2, 1, 2, 1),
     stringsAsFactors = FALSE
   ), file.path(td, "adsl.csv"), row.names = FALSE)
   utils::write.csv(data.frame(
@@ -170,6 +173,133 @@ test_that("subject-key percentages use each treatment arm denominator", {
       all(variable_levels[p_rows] == "AN_N"),
       info = paste("legacy =", legacy)
     )
+  }
+})
+
+## A spec with one analysis that carries a scoped Total column. `cohort` is
+## the where-clause the Total pass is scoped by; leaving it NULL gives the
+## unscoped Total, which is the count the scoped one has to come in under.
+.eq_total_spec <- function(method_id = "MTH_AE_FREQUENCY_COUNT",
+                           cohort = NULL) {
+  spec <- .eq_spec()
+  spec$outputs <- list(list(id = "OUT_AE", name = "T-AE",
+                            referencedAnalysisIds = list("AN_AE")))
+  spec$analyses <- Filter(function(a) identical(a$id, "AN_AE"), spec$analyses)
+  spec$analyses[[1]]$methodId     <- method_id
+  spec$analyses[[1]]$includeTotal <- TRUE
+  spec$analyses[[1]]$totalLabel   <- "Total"
+  if (!is.null(cohort)) spec$analyses[[1]]$totalWhere <- cohort
+  spec
+}
+
+.eq_write <- function(spec, td, name) {
+  path <- file.path(td, name)
+  writeLines(jsonlite::toJSON(spec, auto_unbox = TRUE, null = "null"), path)
+  path
+}
+
+## One statistic out of an ARD, by group level and variable level.
+.eq_stat <- function(ard, group_level, variable_level, stat_name = "n") {
+  flat <- function(column) vapply(ard[[column]], function(x) {
+    if (length(x)) as.character(x[[1]]) else NA_character_
+  }, character(1))
+  rows <- which(flat("group1_level") == group_level &
+                  flat("variable_level") == variable_level &
+                  ard$stat_name == stat_name)
+  if (length(rows) != 1L) {
+    return(NA_real_)
+  }
+  as.numeric(ard$stat[[rows]])
+}
+
+test_that("a Total column scoped on another dataset counts the right rows", {
+  skip_if_not_installed("cards")
+  td <- withr::local_tempdir()
+  .eq_adam(td)
+
+  ## ADSL-only variable: the ADAE frame this analysis runs on has no COHORTN
+  ## column at all, so a row-wise predicate reads FALSE for every AE.
+  cohort_1 <- list(condition = list(dataset = "ADSL", variable = "COHORTN",
+                                    comparator = "IN", value = list(1)))
+  scoped   <- .eq_write(.eq_total_spec(cohort = cohort_1), td, "scoped.json")
+  unscoped <- .eq_write(.eq_total_spec(), td, "unscoped.json")
+
+  ard_new <- ars_to_ard(scoped, td)
+  ard_leg <- ars_to_ard(scoped, td, legacy = TRUE)
+  expect_equal(.eq_norm(ard_new), .eq_norm(ard_leg))
+
+  ## Recomputed from the CSVs rather than stored: safety subjects in cohort 1
+  ## with a treatment-emergent Headache are S01 and S06.
+  adsl <- utils::read.csv(file.path(td, "adsl.csv"), stringsAsFactors = FALSE)
+  adae <- utils::read.csv(file.path(td, "adae.csv"), stringsAsFactors = FALSE)
+  in_scope <- adsl$USUBJID[adsl$SAFFL == "Y" & adsl$COHORTN == 1]
+  teae <- adae[adae$TRTEMFL == "Y" & adae$USUBJID %in% adsl$USUBJID[adsl$SAFFL == "Y"], ]
+  expected <- length(unique(teae$USUBJID[teae$AEDECOD == "Headache" &
+                                           teae$USUBJID %in% in_scope]))
+  all_subjects <- length(unique(teae$USUBJID[teae$AEDECOD == "Headache"]))
+
+  for (ard in list(ard_new, ard_leg)) {
+    got <- .eq_stat(ard, "Total", "Headache")
+    expect_equal(got, expected)
+    ## The two ways this can be wrong are both counts: dropping the clause
+    ## gives every subject, and evaluating it on the AE frame gives none.
+    expect_gt(got, 0)
+    expect_lt(got, all_subjects)
+  }
+})
+
+test_that("a Total column scoped on its own dataset is unchanged", {
+  skip_if_not_installed("cards")
+  td <- withr::local_tempdir()
+  .eq_adam(td)
+
+  ## Same-dataset clause: the AE frame can answer this one row by row, and
+  ## that branch must keep behaving exactly as it did.
+  headache <- list(condition = list(dataset = "ADAE", variable = "AEDECOD",
+                                    comparator = "EQ", value = list("Headache")))
+  ars <- .eq_write(.eq_total_spec(cohort = headache), td, "same_ds.json")
+
+  ard_new <- ars_to_ard(ars, td)
+  ard_leg <- ars_to_ard(ars, td, legacy = TRUE)
+  expect_equal(.eq_norm(ard_new), .eq_norm(ard_leg))
+
+  adsl <- utils::read.csv(file.path(td, "adsl.csv"), stringsAsFactors = FALSE)
+  adae <- utils::read.csv(file.path(td, "adae.csv"), stringsAsFactors = FALSE)
+  teae <- adae[adae$TRTEMFL == "Y" &
+                 adae$USUBJID %in% adsl$USUBJID[adsl$SAFFL == "Y"], ]
+  expected <- length(unique(teae$USUBJID[teae$AEDECOD == "Headache"]))
+
+  for (ard in list(ard_new, ard_leg)) {
+    expect_equal(.eq_stat(ard, "Total", "Headache"), expected)
+    ## Nausea is outside the Total's own scope, so it has no Total cell.
+    expect_true(is.na(.eq_stat(ard, "Total", "Nausea")))
+  }
+})
+
+test_that("a scoped Total takes its denominator from the same clause", {
+  skip_if_not_installed("cards")
+  td <- withr::local_tempdir()
+  .eq_adam(td)
+
+  cohort_1 <- list(condition = list(dataset = "ADSL", variable = "COHORTN",
+                                    comparator = "IN", value = list(1)))
+  ars <- .eq_write(.eq_total_spec(cohort = cohort_1), td, "denominator.json")
+
+  ard_new <- ars_to_ard(ars, td)
+  ard_leg <- ars_to_ard(ars, td, legacy = TRUE)
+  expect_equal(.eq_norm(ard_new), .eq_norm(ard_leg))
+
+  adsl <- utils::read.csv(file.path(td, "adsl.csv"), stringsAsFactors = FALSE)
+  ## The percentage is out of the cohort-restricted population, not the whole
+  ## safety population: numerator and denominator are scoped by one clause,
+  ## each masked on its own frame -- the AEs on ADAE, the population on ADSL.
+  denominator <- sum(adsl$SAFFL == "Y" & adsl$COHORTN == 1)
+  expect_lt(denominator, sum(adsl$SAFFL == "Y"))
+
+  for (ard in list(ard_new, ard_leg)) {
+    n <- .eq_stat(ard, "Total", "Headache", "n")
+    expect_equal(.eq_stat(ard, "Total", "Headache", "N"), denominator)
+    expect_equal(.eq_stat(ard, "Total", "Headache", "p"), n / denominator)
   }
 })
 
