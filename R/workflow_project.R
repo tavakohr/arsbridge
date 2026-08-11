@@ -245,6 +245,21 @@
 ## found, edit the handful of judgements that are wrong, rebuild.
 .WORKFLOW_STEPS <- c("project", "build", "supplement", "review", "results")
 
+#' TRUE when two path strings name the same file.
+#'
+#' Windows spells one file two ways: `file.path()` keeps the separators it was
+#' handed, while anything that has passed through `dirname()` comes back fully
+#' forward-slashed. Comparing the strings would call one file two.
+#' @noRd
+.workflow_same_file <- function(a, b) {
+  if (length(a) != 1L || length(b) != 1L) return(FALSE)
+  if (is.na(a) || is.na(b)) return(FALSE)
+  identical(
+    normalizePath(a, winslash = "/", mustWork = FALSE),
+    normalizePath(b, winslash = "/", mustWork = FALSE)
+  )
+}
+
 #' Resolve the reporting event that the Review step may open.
 #'
 #' Current payloads explicitly identify artifacts from their own run. An
@@ -262,7 +277,14 @@
 
     artifacts <- payload$artifacts
     if (is.list(artifacts) && "ars_json" %in% names(artifacts)) {
-      ars_path <- artifacts$ars_json
+      recorded <- artifacts$ars_json
+      ## The receipt names this project's own reporting event, so keep the
+      ## project's spelling of it and let callers compare paths as strings.
+      ars_path <- if (.workflow_same_file(recorded, paths$ars)) {
+        paths$ars
+      } else {
+        recorded
+      }
     }
   }
 

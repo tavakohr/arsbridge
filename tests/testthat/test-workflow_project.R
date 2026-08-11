@@ -145,6 +145,31 @@ test_that("current and archived reporting events remain reviewable", {
   )
 })
 
+test_that("a receipt spelled differently still names the project's own file", {
+  ## The build records its artifact path through dirname(), which on Windows
+  ## returns forward slashes where the project's own path kept backslashes.
+  ## The hand-off must still hand back one spelling, not two.
+  td <- withr::local_tempdir()
+  project <- file.path(td, "study")
+  inputs <- .wfp_inputs()
+  arsbridge:::.workflow_init(project, inputs$shell, inputs$spec)
+
+  paths <- arsbridge:::.workflow_paths(project)
+  writeLines("{}", paths$ars)
+  respelled <- file.path(dirname(paths$ars), ".", basename(paths$ars))
+  expect_false(identical(respelled, paths$ars))
+
+  saveRDS(
+    list(status = "success", artifacts = list(ars_json = respelled)),
+    paths$payload
+  )
+
+  expect_identical(
+    arsbridge:::.workflow_handoff_payload(project)$ars_path,
+    paths$ars
+  )
+})
+
 test_that("receive_json takes clean and fenced pastes and rejects garbage", {
   td <- withr::local_tempdir()
   dest <- file.path(td, "phase1", "blueprint.json")
