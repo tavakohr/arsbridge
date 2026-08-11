@@ -23,7 +23,9 @@
                                owner_kind = NA_character_) {
   if (kind %in% c("subject_count", "filtered_count")) return("xxx")
   ## The same count, in a shell that also shows what share of the arm it is.
-  if (identical(kind, "filtered_count_pct")) return("xx (xx.x%)")
+  if (kind %in% c("subject_count_pct", "filtered_count_pct")) {
+    return("xx (xx.x%)")
+  }
 
   ## Parent header lines print their label in the stub and nothing in the
   ## body; their numbers live on the sub-rows beneath them.

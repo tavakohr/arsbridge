@@ -1,5 +1,16 @@
 # arsbridge (development version)
 
+* **Subject-count rows now honor two-statistic placeholders.** An annotation
+  such as `Count of unique USUBJID where SAFFL='Y'` previously selected the
+  count-only method before consulting the shell's placeholder shape, leaving
+  the percentage token in `xx (xx.x)` unfilled. Every subject-count annotation
+  form now selects Count and Percentage when the row declares two slots, while
+  one-slot rows remain count-only. Grouped subject-key rows also carry real
+  treatment keys and use each treatment arm as their denominator, so unequal
+  arms fill completely with correct percentages instead of whole-study shares.
+  Total passes now emit the same count, denominator, and percentage rows, and
+  the exported siera template performs the same scalar distinct-subject count.
+
 * **Nested child rows now fill in the Total column.** The scoped Total pass
   removed every grouping before calculation, then restored only the Total
   column label. A child result therefore lost its parent key, and identical

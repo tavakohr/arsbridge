@@ -187,10 +187,9 @@
       code = paste(
         "denom_n <- length(unique(df2_analysisidhere$USUBJID))",
         "df3_analysisidhere <- df2_analysisidhere |>",
-        "  dplyr::distinct(USUBJID, .keep_all = TRUE) |>",
-        "  dplyr::group_by(anavarhere) |>",
+        "  dplyr::distinct(USUBJID) |>",
         "  dplyr::summarise(",
-        "    OP_N     = dplyr::n_distinct(USUBJID),",
+        "    OP_N     = dplyr::n(),",
         "    OP_DENOM = denom_n,",
         "    .groups  = 'drop'",
         "  ) |>",
@@ -203,10 +202,7 @@
         "  dplyr::mutate(pattern = 'XXX')",
         sep = "\n"
       ),
-      parameters = list(
-        list(name = "anavarhere", valueSource = "ana_var",
-             description = "Variable whose state the subjects are counted in")
-      )
+      parameters = list()
     )
   ),
   "Kaplan-Meier Estimate" = list(
@@ -297,7 +293,7 @@
 #' so it overrides the section-level LLM method for this row.
 #'
 #' @param row  Stub row (needs `annotation`; `n_slots` when the shell said how
-#'   many statistics the row displays -- see the filtered-count branch).
+#'   many statistics the row displays).
 #' @param var_is_categorical NA/TRUE/FALSE -- the spec's verdict on the row's
 #'   primary variable (from `.var_is_categorical`).
 #' @return list(method = standard-catalogue name, kind = layout kind), or
@@ -306,10 +302,23 @@
 .infer_row_method <- function(row, var_is_categorical = NA) {
   ann <- as.character(row$annotation %||% "")
   if (!nzchar(trimws(ann))) return(NULL)
+
+  ## The placeholder shape decides whether a subject-count row also declares a
+  ## percentage. Both Excel and Word readers carry `n_slots` when the shell
+  ## makes that shape explicit. Without it, keep the count-only method.
+  slots <- suppressWarnings(as.integer(row$n_slots %||% NA_integer_))
+  has_percentage_slot <- !is.na(slots) && slots >= 2L
+  subject_count_method <- if (has_percentage_slot) {
+    "Subject Count and Percentage"
+  } else {
+    "Subject Count"
+  }
+
   ## Count expression or a bare USUBJID reference -> distinct subject count.
   if (grepl("(?i)\\bcount\\s+of\\b|(?i)\\bunique\\s+USUBJID\\b", ann, perl = TRUE) ||
       grepl(paste0("\\b", .ADAM_DS, "\\.USUBJID\\b"), ann, perl = TRUE)) {
-    return(list(method = "Subject Count", kind = "subject_count"))
+    kind <- if (has_percentage_slot) "subject_count_pct" else "subject_count"
+    return(list(method = subject_count_method, kind = kind))
   }
   ## Value filter present. A filter ON the primary variable itself
   ## ("ADSL.SAFFL='Y'") means "count subjects in this state" -> subject count
@@ -322,18 +331,8 @@
     fs <- flat_data_subset(ann)
     filter_var <- toupper(fs$variable %||% "")
     if (!nzchar(filter_var) || identical(filter_var, toupper(primary))) {
-      ## What the cell shows decides whether the percentage is declared. An
-      ## Excel shell states this exactly -- "xx (xx.x)" is two statistics,
-      ## "xx" is one -- and a method declaring only the count leaves the
-      ## second token unfillable however well the executor computes it. A
-      ## Word shell carries no cell grid, so `n_slots` is absent there and
-      ## the count-only method stands, as before.
-      slots <- suppressWarnings(as.integer(row$n_slots %||% NA_integer_))
-      if (!is.na(slots) && slots >= 2L) {
-        return(list(method = "Subject Count and Percentage",
-                    kind = "filtered_count_pct"))
-      }
-      return(list(method = "Subject Count", kind = "filtered_count"))
+      kind <- if (has_percentage_slot) "filtered_count_pct" else "filtered_count"
+      return(list(method = subject_count_method, kind = kind))
     }
     ## fall through: subset on another variable; type decides the method
   }

@@ -99,6 +99,65 @@ test_that("emitted-block engine equals the legacy executor path", {
   expect_equal(.eq_norm(ard_new), .eq_norm(ard_leg))
 })
 
+test_that("subject-key percentages use each treatment arm denominator", {
+  skip_if_not_installed("cards")
+  td <- withr::local_tempdir()
+  .eq_adam(td)
+
+  spec <- .eq_spec()
+  spec$outputs <- list(list(
+    id = "OUT_N", name = "T-N",
+    referencedAnalysisIds = list("AN_N")
+  ))
+  spec$analyses <- Filter(
+    function(analysis) identical(analysis$id, "AN_N"),
+    spec$analyses
+  )
+  spec$analyses[[1]]$methodId <- "MTH_SUBJECT_COUNT_PCT"
+  spec$analyses[[1]]$includeTotal <- TRUE
+  spec$analyses[[1]]$totalLabel <- "Total"
+
+  ars <- file.path(td, "subject_count_pct.json")
+  writeLines(jsonlite::toJSON(spec, auto_unbox = TRUE, null = "null"), ars)
+
+  ard_by_engine <- lapply(c(FALSE, TRUE), function(legacy) {
+    ars_to_ard(ars, td, legacy = legacy)
+  })
+  expect_equal(.eq_norm(ard_by_engine[[1]]), .eq_norm(ard_by_engine[[2]]))
+
+  for (i in seq_along(ard_by_engine)) {
+    legacy <- c(FALSE, TRUE)[[i]]
+    ard <- ard_by_engine[[i]]
+    n_rows <- ard$stat_name == "N"
+    p_rows <- ard$stat_name == "p"
+    group_levels <- vapply(ard$group1_level, function(x) {
+      if (length(x)) as.character(x[[1]]) else NA_character_
+    }, character(1))
+    variable_levels <- vapply(ard$variable_level, function(x) {
+      if (length(x)) as.character(x[[1]]) else NA_character_
+    }, character(1))
+
+    expect_equal(
+      sort(as.numeric(unlist(ard$stat[n_rows]))),
+      c(4, 5, 9),
+      info = paste("legacy =", legacy)
+    )
+    expect_equal(
+      sort(as.numeric(unlist(ard$stat[p_rows]))),
+      c(1, 1, 1),
+      info = paste("legacy =", legacy)
+    )
+    expect_true(
+      any(group_levels[p_rows] == "Total", na.rm = TRUE),
+      info = paste("legacy =", legacy)
+    )
+    expect_true(
+      all(variable_levels[p_rows] == "AN_N"),
+      info = paste("legacy =", legacy)
+    )
+  }
+})
+
 test_that("decoded categorical analyses stay equivalent across engines", {
   skip_if_not_installed("cards")
   td <- withr::local_tempdir()

@@ -478,10 +478,12 @@
         "  variables = all_of(%s)%s\n)"),
         data_e, .bt(var), .bt(var), qvar, by_line(b))
     } else if (method %in% c("MTH_SUBJECT_COUNT", "MTH_SUBJECT_COUNT_PCT")) {
-      if (identical(var, sk) && length(b) && isTRUE(res$total_pass)) {
-        ## A subject-key Total still needs real cards grouping slots for the
-        ## retained row keys. Count one constant subject row per parent while
-        ## keeping the ARD variable identity as the subject key.
+      if (identical(var, sk) &&
+          (length(b) || identical(method, "MTH_SUBJECT_COUNT_PCT"))) {
+        ## A subject-key row needs a constant analysis level so treatment or
+        ## retained row keys occupy real cards grouping slots. The supplied
+        ## denominator then splits by those keys; without a grouping, the same
+        ## shape still emits the n/N/p rows declared by the percentage method.
         distinct_cols <- paste(
           vapply(unique(c(sk, b)), .bt, character(1)),
           collapse = ", "
@@ -509,11 +511,7 @@
           data_e,
           distinct_cols
         )
-        if (identical(var, sk) && length(b)) {
-          sprintf(paste0("cards::ard_categorical(\n",
-                         "  data = %s,\n  variables = all_of(%s)\n)"),
-                  distinct_e, .r_chr_vec(b))
-        } else if (identical(var, sk)) {
+        if (identical(var, sk)) {
           sprintf("cards::ard_total_n(\n  %s\n)", distinct_e)
         } else {
           sprintf(paste0("cards::ard_categorical(\n",
