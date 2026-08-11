@@ -1131,6 +1131,185 @@ model_set_operation <- function(model, method_id, operation_index,
   .model_refresh_row(model, "methods", method_id, patch = FALSE)
 }
 
+## --- Child groups inside a grouping factor ---------------------------------
+##
+## A grouping's `groups` are a nested list, like a method's operations, so
+## they get accessors rather than flat columns. Every one of these writes the
+## `raw` node directly and refreshes with patch = FALSE: `n_groups` and
+## `group_labels` are derived, so the columns have to be re-read from the node
+## rather than patched back onto it.
+##
+## .patch_grouping_node() is deliberately NOT taught about `groups`. That it
+## never touches them is what makes a parent-field edit unable to drop a
+## child, which is the data-loss class the editor was suspected of and never
+## had.
+
+## The groups of one grouping, and the index of one child within them.
+#' @noRd
+.grouping_groups <- function(model, grouping_id) {
+  idx <- .row_index(model$groupings, grouping_id, "groupings")
+  list(index = idx, groups = model$groupings$raw[[idx]][["groups"]] %||% list())
+}
+
+#' @noRd
+.group_index <- function(groups, group_id, grouping_id) {
+  hit <- which(vapply(groups, function(g) identical(.chr_field(g[["id"]]),
+                                                    group_id), logical(1)))
+  if (length(hit) == 0) {
+    cli::cli_abort("Grouping {.val {grouping_id}} has no group {.val {group_id}}.")
+  }
+  hit[[1]]
+}
+
+## Write the groups back and re-derive the columns from the node.
+#' @noRd
+.set_grouping_groups <- function(model, grouping_id, index, groups) {
+  ## Positions are the display order, so `order` follows them rather than
+  ## recording whatever the caller last stamped.
+  groups <- lapply(seq_along(groups), function(i) {
+    groups[[i]][["order"]] <- i
+    groups[[i]]
+  })
+  model$groupings$raw[[index]][["groups"]] <- groups
+  .model_refresh_row(model, "groupings", grouping_id, patch = FALSE)
+}
+
+## Add a child group. `condition` is an ARS WhereClause (use .cond() or
+## .cond_multi()); a group without one is legal and stays unconditioned until
+## model_set_group_condition() gives it one.
+#' @noRd
+model_add_group <- function(model, grouping_id, label, condition = NULL,
+                            after = NULL) {
+  .assert_ars_model(model)
+  found  <- .grouping_groups(model, grouping_id)
+  groups <- found$groups
+
+  label <- trimws(label %||% "")
+  if (!nzchar(label)) {
+    cli::cli_abort("A group needs a label: it is what the column prints.")
+  }
+
+  stem   <- sub("^GF_", "", grouping_id)
+  new_id <- make_group_id(stem, label)
+  if (new_id %in% vapply(groups, function(g) .chr_field(g[["id"]]) %||% "",
+                         character(1))) {
+    cli::cli_abort(c(
+      "Grouping {.val {grouping_id}} already has a group labelled {.val {label}}.",
+      "i" = "Group ids are minted from the label, and a result path resolves one group per factor."
+    ))
+  }
+
+  node <- list(id = new_id, name = label, label = label, level = 1L)
+  if (!is.null(condition)) node <- utils::modifyList(node, condition)
+
+  at <- if (is.null(after)) length(groups) else max(0L, min(after, length(groups)))
+  groups <- append(groups, list(node), after = at)
+
+  model <- .set_grouping_groups(model, grouping_id, found$index, groups)
+  attr(model, "last_added") <- new_id
+  model
+}
+
+## Remove a child group. Refused while a declared result path names it: the
+## path would be left pointing at a group that no longer exists, and the
+## right order (repoint the path, then delete) should be explicit.
+#' @noRd
+model_remove_group <- function(model, grouping_id, group_id) {
+  .assert_ars_model(model)
+  found <- .grouping_groups(model, grouping_id)
+  hit   <- .group_index(found$groups, group_id, grouping_id)
+
+  users <- .group_path_dependents(model, group_id)
+  if (length(users) > 0) {
+    cli::cli_abort(c(
+      "Group {.val {group_id}} is named by a result-group path on {length(users)} output{?s}.",
+      "i" = "Repoint or remove {?that path/those paths} first: {.val {users}}."
+    ))
+  }
+
+  .set_grouping_groups(model, grouping_id, found$index, found$groups[-hit])
+}
+
+## Move a child group by `offset` positions. Clamped at the ends, so the
+## editor's up/down buttons stay pressable on the first and last rows.
+#' @noRd
+model_move_group <- function(model, grouping_id, group_id, offset) {
+  .assert_ars_model(model)
+  found  <- .grouping_groups(model, grouping_id)
+  groups <- found$groups
+  hit    <- .group_index(groups, group_id, grouping_id)
+
+  target <- max(1L, min(length(groups), hit + as.integer(offset)))
+  if (identical(target, hit)) return(model)
+
+  order <- seq_along(groups)
+  order <- append(order[-hit], hit, after = target - 1L)
+  .set_grouping_groups(model, grouping_id, found$index, groups[order])
+}
+
+## Edit a child group's own text. The id is NOT re-minted from a new label:
+## result paths reference group ids, so renaming a column must not move it.
+#' @noRd
+model_set_group_field <- function(model, grouping_id, group_id, field, value) {
+  .assert_ars_model(model)
+  if (!field %in% c("name", "label")) {
+    cli::cli_abort(c(
+      "Only {.val name} and {.val label} are editable on a group.",
+      "i" = "Its id is referenced by result paths, and its order follows its position."
+    ))
+  }
+  found  <- .grouping_groups(model, grouping_id)
+  groups <- found$groups
+  hit    <- .group_index(groups, group_id, grouping_id)
+
+  groups[[hit]] <- .set_or_drop(groups[[hit]], field, value)
+  .set_grouping_groups(model, grouping_id, found$index, groups)
+}
+
+## Set a child group's simple condition, CREATING it when the group had none
+## -- which the flat where-clause path cannot do, since it only patches a
+## condition that already exists. An empty `values` is kept as an empty value
+## list rather than ignored: eval_condition() reads an empty EQ as "is
+## missing", which is a real condition a shell can mean.
+#' @noRd
+model_set_group_condition <- function(model, grouping_id, group_id,
+                                      dataset, variable, comparator, values) {
+  .assert_ars_model(model)
+  found  <- .grouping_groups(model, grouping_id)
+  groups <- found$groups
+  hit    <- .group_index(groups, group_id, grouping_id)
+
+  if (!is.null(groups[[hit]][["compoundExpression"]])) {
+    cli::cli_abort(c(
+      "Group {.val {group_id}} carries a compound expression.",
+      "i" = "Edit it as raw JSON: replacing it with a simple condition here would drop the other clauses."
+    ))
+  }
+
+  values <- as.character(values %||% character(0))
+  values <- values[!is.na(values)]
+  groups[[hit]][["condition"]] <- list(
+    dataset    = toupper(trimws(dataset %||% "")),
+    variable   = toupper(trimws(variable %||% "")),
+    comparator = toupper(trimws(comparator %||% "EQ")),
+    value      = as.list(values)
+  )
+  .set_grouping_groups(model, grouping_id, found$index, groups)
+}
+
+## The outputs whose declared result paths name this group.
+#' @noRd
+.group_path_dependents <- function(model, group_id) {
+  outputs <- model$outputs
+  hits <- vapply(seq_len(nrow(outputs)), function(i) {
+    paths <- outputs$raw[[i]][["resultGroupPaths"]][["paths"]] %||% list()
+    any(vapply(paths, function(p) {
+      group_id %in% as.character(unlist(p[["groupIds"]] %||% list()))
+    }, logical(1)))
+  }, logical(1))
+  outputs$id[hits]
+}
+
 ## Add one of the standard methods to the file. Selecting a catalogue method
 ## in the editor calls this first, so the analysis never points at a methodId
 ## that is not in the reporting event.

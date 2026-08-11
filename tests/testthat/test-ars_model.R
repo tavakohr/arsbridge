@@ -601,3 +601,202 @@ test_that("a freshly generated event still round-trips", {
     names(.read_json(.ars_fixture_path()))
   )
 })
+
+## --- Child groups inside a grouping factor ---------------------------------
+##
+## A grouping's `groups` are a nested list, so they get accessors of their own
+## rather than flat columns -- the same shape model_set_operation() uses for a
+## method's operations. The contract these tests hold: the node is written
+## directly and refreshed with patch = FALSE, and .patch_grouping_node() is
+## never taught about `groups` (that it does not touch them is what makes a
+## parent-field edit unable to drop a child).
+
+.cg_model <- function() {
+  ars <- .read_json(.ars_fixture_path())
+  index <- which(vapply(ars$analysisGroupings,
+                        function(node) identical(node$id, "GF_TRT01A"),
+                        logical(1)))
+  ars$analysisGroupings[[index]]$dataDriven <- FALSE
+  ars$analysisGroupings[[index]]$groups <- list(
+    list(id = "GRP_TRT01A_DRUG_A", name = "Drug A", label = "Drug A",
+         level = 1L, order = 1L,
+         condition = list(dataset = "ADSL", variable = "TRT01A",
+                          comparator = "EQ", value = list("Drug A"))),
+    list(id = "GRP_TRT01A_PLACEBO", name = "Placebo", label = "Placebo",
+         level = 1L, order = 2L,
+         condition = list(dataset = "ADSL", variable = "TRT01A",
+                          comparator = "EQ", value = list("Placebo")))
+  )
+  ars_to_model(ars)
+}
+
+.cg_groups <- function(model, grouping_id = "GF_TRT01A") {
+  model$groupings$raw[[match(grouping_id, model$groupings$id)]]$groups
+}
+
+test_that("a child group can be added to a grouping that had none", {
+  model <- ars_to_model(.ars_fixture_path())
+  expect_equal(model$groupings$n_groups[match("GF_TRT01A", model$groupings$id)],
+               0L)
+
+  model <- model_add_group(model, "GF_TRT01A", "Drug A",
+                           condition = .cond("ADSL", "TRT01A", "EQ", "Drug A"))
+
+  index <- match("GF_TRT01A", model$groupings$id)
+  ## The derived columns are re-read from the node, not left stale.
+  expect_equal(model$groupings$n_groups[index], 1L)
+  expect_equal(model$groupings$group_labels[index], "Drug A")
+
+  node <- model_to_ars(model)$analysisGroupings[[
+    which(vapply(model_to_ars(model)$analysisGroupings,
+                 function(g) identical(g$id, "GF_TRT01A"), logical(1)))
+  ]]
+  expect_length(node$groups, 1L)
+  expect_equal(node$groups[[1]]$label, "Drug A")
+  expect_equal(node$groups[[1]]$level, 1L)
+  expect_equal(node$groups[[1]]$order, 1L)
+  expect_equal(node$groups[[1]]$condition$value, list("Drug A"))
+  expect_equal(attr(model, "last_added"), "GRP_TRT01A_DRUG_A")
+})
+
+test_that("two child groups cannot share a label", {
+  ## Their ids would collide, and resolve_analysis() keeps ONE group index
+  ## across every factor -- so one output's declared path would quietly
+  ## resolve the other group's condition.
+  model <- .cg_model()
+  expect_error(model_add_group(model, "GF_TRT01A", "Drug A"), "already")
+  expect_length(.cg_groups(model), 2L)
+})
+
+test_that("child groups reorder and renumber together", {
+  model <- .cg_model()
+  model <- model_add_group(model, "GF_TRT01A", "Drug B")
+  expect_equal(vapply(.cg_groups(model), function(g) g$label, ""),
+               c("Drug A", "Placebo", "Drug B"))
+
+  model <- model_move_group(model, "GF_TRT01A", "GRP_TRT01A_DRUG_B", -1L)
+  groups <- .cg_groups(model)
+  expect_equal(vapply(groups, function(g) g$label, ""),
+               c("Drug A", "Drug B", "Placebo"))
+  ## order is re-stamped to match the new positions, not left as authored.
+  expect_equal(vapply(groups, function(g) as.integer(g$order), integer(1)),
+               1:3)
+
+  ## Moving past the end is a no-op rather than an error: the button stays
+  ## pressable at the ends.
+  model <- model_move_group(model, "GF_TRT01A", "GRP_TRT01A_DRUG_A", -1L)
+  expect_equal(vapply(.cg_groups(model), function(g) g$label, "")[1], "Drug A")
+})
+
+test_that("removing a child renumbers the rest and leaves their ids alone", {
+  model <- .cg_model()
+  model <- model_add_group(model, "GF_TRT01A", "Drug B")
+
+  model <- model_remove_group(model, "GF_TRT01A", "GRP_TRT01A_PLACEBO")
+  groups <- .cg_groups(model)
+  expect_equal(vapply(groups, function(g) g$id, ""),
+               c("GRP_TRT01A_DRUG_A", "GRP_TRT01A_DRUG_B"))
+  expect_equal(vapply(groups, function(g) as.integer(g$order), integer(1)),
+               1:2)
+  expect_equal(
+    model$groupings$n_groups[match("GF_TRT01A", model$groupings$id)], 2L)
+})
+
+test_that("a child group named by a declared result path cannot be removed", {
+  ## Result paths reference group ids. Removing a referenced child would
+  ## leave the path dangling, so the refusal belongs in the model layer where
+  ## a script hits it too, not only in the editor.
+  model <- .cg_model()
+  index <- match("T_14_1_1", model$outputs$id)
+  if (is.na(index)) index <- 1L
+  node <- model$outputs$raw[[index]]
+  node$resultGroupPaths <- list(paths = list(list(
+    pathId = "P1", groupIds = list("GRP_TRT01A_DRUG_A")
+  )))
+  model$outputs$raw[[index]] <- node
+
+  expect_error(
+    model_remove_group(model, "GF_TRT01A", "GRP_TRT01A_DRUG_A"),
+    "result-group path"
+  )
+  expect_length(.cg_groups(model), 2L)
+})
+
+test_that("a child group's label can change without re-minting its id", {
+  ## The id travels in result paths, so renaming a column must not move it.
+  model <- .cg_model()
+  model <- model_set_group_field(model, "GF_TRT01A", "GRP_TRT01A_DRUG_A",
+                                 "label", "Drug A 10 mg")
+
+  groups <- .cg_groups(model)
+  expect_equal(groups[[1]]$id, "GRP_TRT01A_DRUG_A")
+  expect_equal(groups[[1]]$label, "Drug A 10 mg")
+  expect_equal(
+    model$groupings$group_labels[match("GF_TRT01A", model$groupings$id)],
+    paste("Drug A 10 mg", "Placebo", sep = .MODEL_SEP))
+})
+
+test_that("a condition can be created on a child that had none", {
+  ## The flat where-clause path only PATCHES an existing condition, so a
+  ## freshly added child could never get one. This accessor creates it.
+  model <- .cg_model()
+  model <- model_add_group(model, "GF_TRT01A", "Drug B")
+  expect_null(.cg_groups(model)[[3]]$condition)
+
+  model <- model_set_group_condition(model, "GF_TRT01A", "GRP_TRT01A_DRUG_B",
+                                     "ADSL", "TRT01A", "IN",
+                                     c("Drug B", "Drug B 20 mg"))
+  group <- .cg_groups(model)[[3]]
+  expect_equal(group$condition$comparator, "IN")
+  expect_equal(group$condition$value, list("Drug B", "Drug B 20 mg"))
+})
+
+test_that("an empty value list is a condition, not a cleared one", {
+  ## eval_condition() reads an empty EQ as "is missing" -- a real clinical
+  ## condition the flat path cannot express, because it keeps the old values
+  ## whenever the new list is empty.
+  model <- .cg_model()
+  model <- model_set_group_condition(model, "GF_TRT01A", "GRP_TRT01A_DRUG_A",
+                                     "ADSL", "TRT01A", "EQ", character(0))
+  group <- .cg_groups(model)[[1]]
+  expect_equal(group$condition$comparator, "EQ")
+  expect_length(group$condition$value, 0L)
+})
+
+test_that("a compound child refuses a flat condition", {
+  model <- .cg_model()
+  groups <- .cg_groups(model)
+  groups[[1]]$condition <- NULL
+  groups[[1]]$compoundExpression <- list(logicalOperator = "OR",
+                                         whereClauses = list())
+  index <- match("GF_TRT01A", model$groupings$id)
+  model$groupings$raw[[index]]$groups <- groups
+
+  expect_error(
+    model_set_group_condition(model, "GF_TRT01A", "GRP_TRT01A_DRUG_A",
+                              "ADSL", "TRT01A", "EQ", "Drug A"),
+    "compound"
+  )
+})
+
+test_that("a parent-field edit still cannot drop a child group", {
+  ## The H3 guarantee, asserted through the accessors that now write the same
+  ## node: .patch_grouping_node() must stay ignorant of `groups`.
+  model <- .cg_model()
+  model <- model_set_field(model, "groupings", "GF_TRT01A",
+                           "groupingVariable", "TRT01P")
+
+  groups <- .cg_groups(model)
+  expect_length(groups, 2L)
+  expect_equal(vapply(groups, function(g) g$label, ""), c("Drug A", "Placebo"))
+})
+
+test_that("child accessors name the grouping or the group they cannot find", {
+  model <- .cg_model()
+  expect_error(model_add_group(model, "GF_NOPE", "X"), "GF_NOPE")
+  expect_error(
+    model_remove_group(model, "GF_TRT01A", "GRP_NOPE"), "GRP_NOPE")
+  expect_error(
+    model_set_group_field(model, "GF_TRT01A", "GRP_NOPE", "label", "X"),
+    "GRP_NOPE")
+})
