@@ -225,3 +225,95 @@ distribution like this:
 Blockers are not errors in the programming sense. They are intentional stops
 that name the exact annotation to fix: correct the shell or add the variable
 to the ADaM spec, then re-run. The pipeline is designed to be run iteratively.
+
+---
+
+## Coded values and codelists
+
+A clinical shell prints what a reviewer reads — "Female", "Severe", "Death" —
+while the dataset holds what the study collected: `F`, `SEVERE`, `1`. Something
+has to pair the two, or the most ordinary table in clinical reporting fills
+nothing.
+
+arsbridge does it from the ADaM spec, at build time, and carries the answer in
+the reporting event.
+
+### Where a codelist comes from
+
+Sheets are classified **by their column headers, never by their name**. A sheet
+qualifies as a codelist sheet when three columns map: a codelist name, a term,
+and a decoded value. Any of these spellings work, case-insensitively:
+
+| role | accepted headers |
+|---|---|
+| name | `Codelist Name`, `Codelist ID`, `Codelist`, `ID` |
+| term | `Term`, `Term (Code)`, `Coded Value`, `Code`, `Submission Value` |
+| decode | `Decoded Value`, `Decode`, `Display Value` |
+| order | `Order` |
+| used by | `Used By Variables`, `Used By`, `Variables` |
+
+So a sheet called `CT`, or `Controlled Terminology`, or `CODELISTS`, is read
+the same way — and a *variables* sheet is never mistaken for one, because the
+codelist test runs first and requires all three columns.
+
+A `define.xml` is read equivalently: `CodeList` / `CodeListItem` with
+`Decode/TranslatedText`, linked through `CodeListRef`.
+
+A variable finds its codelist by the name in its own `Codelist` spec column,
+falling back to any codelist whose `Used By Variables` names the exact
+`DATASET.VARIABLE`.
+
+### What it produces, and who uses it
+
+The terms travel in the reporting event as `_meta$value_decodes`, one entry per
+`DATASET.VARIABLE`, each an ordered list of `{value, label, order}`. From there:
+
+* **the emitted {cards} code** turns it into
+  `factor(as.character(VAR), levels = <codes>, labels = <decodes>)`, so the ARD
+  carries `"Female"`, not `"F"`;
+* **the legacy engine** derives the identical factor, which is what keeps
+  emitted and executed the same;
+* **the column axis** falls back to the codelist when the shell's headers carry
+  no conditions of their own, giving labelled, condition-defined columns
+  instead of raw coded ones. Header annotations always win.
+
+By the time the fill writer runs, there is normally nothing left to reconcile.
+
+### Which analyses decode
+
+Only the methods whose results *are* categories: `MTH_COUNT_AND_PERCENTAGE`,
+`MTH_AE_FREQUENCY_COUNT`, `MTH_SUBJECT_COUNT`, `MTH_SUBJECT_COUNT_PCT`. A
+continuous summary reports a mean, a listing is a different pipeline entirely,
+and the inferential methods report no category label — none of them display a
+value that could be decoded. The subject key is never decoded either: its
+"categories" are subjects.
+
+### The two caps
+
+`.CODELIST_DECODE_MAX_TERMS` (15) governs **expansion**, and it governs it in
+two places:
+
+* **rows** — under the cap every term becomes a row, including the ones the
+  data never took, at `n = 0`. That is right for a nine-term discontinuation
+  codelist and wrong for a 195-term COUNTRY one, so above the cap the engine
+  drops the unobserved levels and shows only the terms observed. Either way the
+  labels are decoded.
+* **columns** — above the cap the codelist never becomes a column axis at all.
+  Twenty terms is twenty columns, which is wrong however useful the decode is.
+
+### When there is no codelist
+
+If the spec defines none for the variable, the fill writer falls back to a
+label-matching heuristic, and that heuristic is deliberately allowed to fail
+rather than guess. A shell label pairs with a data value when it matches
+exactly, or when exactly **one** remaining value is a case-insensitive prefix
+of it and the pairing is one-to-one across the whole block.
+
+"Female"/"Male" against `F`/`M` pairs. "Mild"/"Moderate" against `M` does not —
+both labels start with the same letter, so the pairing is ambiguous, and the
+whole block's pairing is dropped rather than resolved by row order. Every
+pairing that *is* used is reported, because a cell filled by inference should
+be visible to whoever signs the output.
+
+The fix is not to make the heuristic cleverer. It is to give the spec a
+codelist, and let the decode happen where it can be checked.

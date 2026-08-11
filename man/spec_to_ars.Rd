@@ -253,6 +253,32 @@ columns and counted (WARN); a \verb{Total (N=XX) ...} header is read as the
 overall column, not a group.
 }
 
+\section{Codelists (coded values and what a shell prints)}{
+
+A shell prints \code{Female} where ADSL holds \code{F}. If the ADaM spec carries a
+codelist for the variable, arsbridge pairs the two here rather than
+leaving it to the fill: the terms travel in the reporting event as
+\verb{_meta$value_decodes}, and both the emitted \code{{cards}} code and the
+executed ARD derive the same \code{factor(levels = codes, labels = decodes)},
+so the ARD reads \code{Female} and the shell row matches it exactly.
+
+A codelist sheet is recognised by its COLUMN HEADERS, never by the sheet
+name: it needs a codelist name, a term (\code{Term}, \verb{Coded Value}, \code{Code},
+\verb{Submission Value}), and a decoded value (\verb{Decoded Value}, \code{Decode},
+\verb{Display Value}); \code{Order} and \verb{Used By Variables} are read when present.
+\code{define.xml} \code{CodeList} elements are read equivalently. A variable finds
+its codelist by its own \code{Codelist} spec column, else by a codelist whose
+\verb{Used By Variables} names its exact \code{DATASET.VARIABLE}.
+
+Only per-category methods decode -- counts, percentages, AE frequencies,
+subject counts -- since no other method displays a value that could be
+decoded. Codelists longer than 15 terms still decode, but stop expanding:
+unobserved terms do not become zero rows, and the codelist does not become
+a column axis. When the spec has no codelist for a variable, the fill
+writer falls back to a label-matching heuristic that refuses ambiguous
+pairings rather than guessing; see \code{vignette("reading-engine")}.
+}
+
 \section{Human review}{
 
 The generated ARS JSON is a draft. A qualified clinical programmer MUST
