@@ -178,7 +178,7 @@ mod_entity_library_server <- function(id, state) {
     })
 
     if (identical(state$mode, "edit")) {
-      .observe_entity_inputs(input, state, session$ns)
+      .observe_entity_inputs(input, state)
       .observe_grouping_actions(input, state, session)
     }
   })
@@ -465,12 +465,12 @@ mod_entity_library_server <- function(id, state) {
   )
 }
 
-## One observer per editable field of every entity. The ids are stable and
-## derived from the entity, so this is set up once rather than rebuilt as the
-## selection moves.
+## Editable fields are registered by entity id rather than by the selected row.
+## The registry follows model membership so entities created during the session
+## receive observers, while removed entities release theirs.
 #' @noRd
-.observe_entity_inputs <- function(input, state, ns) {
-  fields <- list(
+.entity_input_fields <- function() {
+  list(
     methods       = c("name", "label", "description"),
     analysis_sets = c("name", "label", "condition_dataset",
                       "condition_variable", "condition_comparator",
@@ -480,26 +480,81 @@ mod_entity_library_server <- function(id, state) {
                       "condition_value"),
     groupings     = c("name", "label", "groupingDataset", "groupingVariable")
   )
+}
 
-  model <- shiny::isolate(state$model())
+#' @noRd
+.entity_observer_specs <- function(model) {
+  fields <- .entity_input_fields()
+  specs <- list()
 
   for (pool in names(fields)) {
     for (entity_id in model[[pool]]$id) {
       for (field in fields[[pool]]) {
-        local({
-          this_pool <- pool
-          this_id <- entity_id
-          this_field <- field
-          input_id <- .entity_input_id(this_pool, this_id, this_field)
-
-          shiny::observeEvent(input[[input_id]], {
-            apply_edit(state, this_pool, this_id, this_field,
-                       .input_to_value(input[[input_id]]))
-          }, ignoreInit = TRUE)
-        })
+        input_id <- .entity_input_id(pool, entity_id, field)
+        specs[[input_id]] <- list(
+          pool = pool,
+          entity_id = entity_id,
+          field = field,
+          input_id = input_id
+        )
       }
     }
   }
+
+  specs
+}
+
+#' @noRd
+.reconcile_entity_observers <- function(registry, desired, create_observer) {
+  current_keys <- ls(registry, all.names = TRUE)
+  desired_keys <- names(desired)
+
+  removed_keys <- setdiff(current_keys, desired_keys)
+  for (key in removed_keys) {
+    observer <- get(key, envir = registry, inherits = FALSE)
+    observer$destroy()
+    rm(list = key, envir = registry)
+  }
+
+  added_keys <- setdiff(desired_keys, current_keys)
+  for (key in added_keys) {
+    observer <- create_observer(desired[[key]])
+    assign(key, observer, envir = registry)
+  }
+
+  invisible(registry)
+}
+
+#' @noRd
+.observe_entity_field <- function(input, state, spec) {
+  pool <- spec$pool
+  entity_id <- spec$entity_id
+  field <- spec$field
+  input_id <- spec$input_id
+
+  shiny::observeEvent(input[[input_id]], {
+    apply_edit(
+      state,
+      pool,
+      entity_id,
+      field,
+      .input_to_value(input[[input_id]])
+    )
+  }, ignoreInit = TRUE)
+}
+
+#' @noRd
+.observe_entity_inputs <- function(input, state) {
+  registry <- new.env(parent = emptyenv())
+
+  create_observer <- function(spec) {
+    .observe_entity_field(input, state, spec)
+  }
+
+  shiny::observe({
+    desired <- .entity_observer_specs(state$model())
+    .reconcile_entity_observers(registry, desired, create_observer)
+  })
 
   ## The raw-JSON escape hatch replaces a whole node, so a mistake here is
   ## reported rather than applied.
