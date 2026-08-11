@@ -1,5 +1,14 @@
 # arsbridge (development version)
 
+* **Blocking ARS findings now stop runnable deliverables.** The ARS JSON and
+  validation report are retained, while code, ARD, shell fill, and fill debrief
+  are skipped until the model is repaired; editor saves use the same gate. Three
+  structural checks now block empty fixed groupings, flat-axis display/grouping
+  mismatches, and method/placeholder slot mismatches. The fill census and
+  workflow per-cell view include row, method, placeholder, grouping, variable,
+  parent, and ARD lookup provenance, so a child Total miss exposes the retained
+  parent key directly.
+
 * **Entities created during an editor session remain editable.** The entity
   library now registers field observers as methods, analysis sets, data subsets,
   and groupings enter the model, rather than taking a one-time snapshot at app

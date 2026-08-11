@@ -271,6 +271,9 @@ apply_edit <- function(state, pool, id, field, value) {
 
     shiny::checkboxInput(ns("includeTotal"), "Include a total column",
                          value = isTRUE(row$includeTotal)),
+    shiny::textInput(ns("totalLabel"), "Total column label",
+                     value = .blank_na(row$totalLabel),
+                     placeholder = "Total"),
     shiny::textAreaInput(ns("description"), "Description",
                          value = .blank_na(row$description), rows = 2),
 
@@ -391,7 +394,8 @@ apply_edit <- function(state, pool, id, field, value) {
 #' @noRd
 .observe_analysis_inputs <- function(input, state, selected_id, session) {
   simple_fields <- c("label", "description", "dataset", "variable",
-                     "analysisSetId", "dataSubsetId", "reason", "purpose")
+                     "analysisSetId", "dataSubsetId", "reason", "purpose",
+                     "totalLabel")
 
   for (field in simple_fields) {
     local({
@@ -568,6 +572,52 @@ mod_save_ui <- function(id) {
   )
 }
 
+## Recompute from the current model every time a save is attempted. The
+## reactive findings panel can be one flush behind a just-completed edit, so it
+## is informative state, not authority to write a deliverable.
+#' @noRd
+.current_save_gate <- function(state) {
+  gate <- .model_validation_gate(
+    state$model(), spec = state$spec, report = state$report
+  )
+  state$findings(gate$findings)
+  gate
+}
+
+#' @noRd
+.show_save_blocker <- function(gate) {
+  refs <- gate$blocking_refs
+  shiny::showModal(shiny::modalDialog(
+    title = "Save blocked",
+    size = "l",
+    shiny::div(
+      class = "alert alert-danger",
+      shiny::strong("This reporting event still has blocking problems."),
+      shiny::br(),
+      gate$summary
+    ),
+    if (length(refs) > 0L) {
+      shiny::p(
+        class = "small",
+        "Finding references: ", shiny::tags$code(paste(refs, collapse = ", "))
+      )
+    },
+    shiny::p(
+      class = "text-muted small",
+      "Your working changes remain in the editor and in crash recovery."
+    ),
+    footer = shiny::modalButton("Keep editing")
+  ))
+  invisible(FALSE)
+}
+
+#' @noRd
+.save_is_ready <- function(state) {
+  gate <- .current_save_gate(state)
+  if (gate$blocked) return(.show_save_blocker(gate))
+  TRUE
+}
+
 #' @noRd
 mod_save_server <- function(id, state) {
   shiny::moduleServer(id, function(input, output, session) {
@@ -654,8 +704,7 @@ mod_save_server <- function(id, state) {
     ## Show what is about to be written before writing it. This doubles as
     ## the QC record a clinical reviewer needs.
     shiny::observeEvent(input$save, {
-      findings <- state$findings()
-      n_fail <- sum(findings$severity == "FAIL")
+      if (!.save_is_ready(state)) return()
 
       shiny::showModal(shiny::modalDialog(
         title = "Save these changes?",
@@ -671,16 +720,6 @@ mod_save_server <- function(id, state) {
           )
         },
 
-        if (n_fail > 0) {
-          shiny::div(
-            class = "alert alert-danger",
-            shiny::strong(paste(n_fail, "blocking problem(s) remain.")),
-            shiny::br(),
-            "Saving is allowed, but the engine will not be able to execute ",
-            "these analyses until they are fixed."
-          )
-        },
-
         .diff_table_ui(state$edit_log()),
 
         footer = shiny::tagList(
@@ -692,6 +731,7 @@ mod_save_server <- function(id, state) {
     })
 
     shiny::observeEvent(input$confirm_save, {
+      if (!.save_is_ready(state)) return()
       shiny::removeModal()
       shiny::stopApp(list(
         model       = state$model(),
@@ -711,8 +751,7 @@ mod_save_server <- function(id, state) {
         )
         return()
       }
-      findings <- state$findings()
-      n_fail <- sum(findings$severity == "FAIL")
+      if (!.save_is_ready(state)) return()
 
       shiny::showModal(shiny::modalDialog(
         title = "Save these changes?",
@@ -724,15 +763,6 @@ mod_save_server <- function(id, state) {
           shiny::span(class = "text-muted",
                       "The previous file is backed up with a timestamp first.")
         ),
-        if (n_fail > 0) {
-          shiny::div(
-            class = "alert alert-danger",
-            shiny::strong(paste(n_fail, "blocking problem(s) remain.")),
-            shiny::br(),
-            "Saving is allowed, but the engine will not be able to execute ",
-            "these analyses until they are fixed."
-          )
-        },
         .diff_table_ui(state$edit_log()),
         footer = shiny::tagList(
           shiny::modalButton("Keep editing"),
@@ -743,6 +773,7 @@ mod_save_server <- function(id, state) {
     })
 
     shiny::observeEvent(input$confirm_save_stay, {
+      if (!.save_is_ready(state)) return()
       shiny::removeModal()
       .app_write_event(state, state$source_path, reset_dirty = TRUE)
     })
@@ -750,6 +781,8 @@ mod_save_server <- function(id, state) {
     ## Save As: write a copy elsewhere; the original file and this editing
     ## session are untouched.
     shiny::observeEvent(input$save_as, {
+      if (!.save_is_ready(state)) return()
+
       default_dir <- dirname(state$source_path %||% file.path(getwd(), "x"))
       default_name <- paste0(
         sub("\\.json$", "",
@@ -775,6 +808,8 @@ mod_save_server <- function(id, state) {
     })
 
     shiny::observeEvent(input$confirm_save_as, {
+      if (!.save_is_ready(state)) return()
+
       path <- trimws(input$save_as_path %||% "")
       if (!nzchar(path)) {
         shiny::showNotification("Give the copy a destination path.",
@@ -842,6 +877,10 @@ mod_save_server <- function(id, state) {
       paste("Save failed:", conditionMessage(written)),
       type = "error", duration = 10
     )
+    return(invisible(FALSE))
+  }
+  if (is.list(written) && identical(written$saved, FALSE)) {
+    .show_save_blocker(written$validation_gate)
     return(invisible(FALSE))
   }
 

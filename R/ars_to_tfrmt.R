@@ -99,6 +99,11 @@ extract_footnotes <- function(out_obj) {
       if (is.null(v) || length(v) == 0 || is.na(v[[1]])) NA_character_ else as.character(v[[1]])
     }, character(1)),
     kind        = vapply(sl, function(e) as.character(e[["kind"]] %||% "row"), character(1)),
+    n_slots     = vapply(sl, function(e) {
+      v <- e[["n_slots"]]
+      if (is.null(v) || length(v) == 0 || is.na(v[[1]])) NA_integer_
+      else as.integer(v[[1]])
+    }, integer(1)),
     level       = vapply(sl, function(e) {
       v <- e[["level"]]
       if (is.null(v) || length(v) == 0) NA_character_ else as.character(v[[1]])

@@ -100,7 +100,9 @@ test_that("previously supported forms are unchanged", {
     dataSubsets = list(list(id = "DS_TEST", name = "t", label = "t",
                             condition = where_cond$condition %||% NULL,
                             compoundExpression = where_cond$compoundExpression %||% NULL)),
-    analysisGroupings = list(), methods = list(), outputs = list(),
+    analysisGroupings = list(),
+    methods = list(list(id = method, name = method)),
+    outputs = list(),
     analyses = list(list(
       id = "AN_P9", methodId = method,
       dataset = "ADSL", variable = "SEX",

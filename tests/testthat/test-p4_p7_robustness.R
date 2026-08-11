@@ -113,7 +113,8 @@ test_that("every executor id is a standard catalogue method id", {
 .write_mini_ars <- function(td, method_id, dataset, variable) {
   spec <- list(
     analysisSets = list(), dataSubsets = list(),
-    analysisGroupings = list(), methods = list(),
+    analysisGroupings = list(),
+    methods = list(list(id = method_id, name = method_id)),
     outputs = list(),
     analyses = list(list(
       id = "AN_TEST_001", methodId = method_id,

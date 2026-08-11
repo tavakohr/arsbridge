@@ -773,6 +773,8 @@ write_tlf_code <- function(spec_or_path, code_dir, output_ids = NULL,
     jsonlite::fromJSON(spec_or_path, simplifyVector = FALSE)
   } else spec_or_path
 
+  .assert_runnable_ars(spec)
+
   if (!dir.exists(code_dir)) {
     dir.create(code_dir, recursive = TRUE, showWarnings = FALSE)
   }
@@ -795,15 +797,27 @@ write_tlf_code <- function(spec_or_path, code_dir, output_ids = NULL,
   outs <- all_outputs[keep]
 
   paths <- character(0)
-  for (o in outs) {
-    oid <- .as_scalar_char(o[["id"]])
-    script <- .emit_tlf_script(oid, spec, subject_key, adam_dir,
-                               grouping_map, analysis_to_output,
-                               grouping_groups, output_paths)
-    fp <- file.path(code_dir, paste0(make.names(oid), ".R"))
-    writeLines(script, fp)
-    paths[[oid]] <- fp
-    if (!is.null(log)) log(sprintf("Emitted cards script: %s", fp))
-  }
+  tryCatch(
+    for (o in outs) {
+      oid <- .as_scalar_char(o[["id"]])
+      script <- .emit_tlf_script(
+        oid, spec, subject_key, adam_dir,
+        grouping_map, analysis_to_output,
+        grouping_groups, output_paths
+      )
+      fp <- file.path(code_dir, paste0(make.names(oid), ".R"))
+      writeLines(script, fp)
+      paths[[oid]] <- fp
+      if (!is.null(log)) log(sprintf("Emitted cards script: %s", fp))
+    },
+    error = function(e) {
+      rlang::abort(
+        conditionMessage(e),
+        class = "arsbridge_tlf_code_error",
+        code_paths = paths,
+        parent = e
+      )
+    }
+  )
   paths
 }

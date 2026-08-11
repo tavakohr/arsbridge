@@ -33,9 +33,24 @@
     dataSubsets = list(list(id = "DS_TEAE", name = "TEAE",
       condition = list(dataset = "ADAE", variable = "TRTEMFL",
                        comparator = "EQ", value = list("Y")))),
-    analysisGroupings = list(list(id = "GF_TRT", name = "TRT01A",
-                                  groupingVariable = "TRT01A")),
-    methods = list(),
+    analysisGroupings = list(list(
+      id = "GF_TRT",
+      name = "TRT01A",
+      groupingVariable = "TRT01A",
+      groupingDataset = "ADSL",
+      dataDriven = TRUE,
+      groups = list()
+    )),
+    methods = list(
+      list(id = "MTH_SUMMARY_STATISTICS_CONTINUOUS",
+           name = "Summary Statistics - Continuous"),
+      list(id = "MTH_COUNT_AND_PERCENTAGE",
+           name = "Count and Percentage"),
+      list(id = "MTH_SUBJECT_COUNT", name = "Subject Count"),
+      list(id = "MTH_SUBJECT_COUNT_PCT",
+           name = "Subject Count and Percentage"),
+      list(id = "MTH_AE_FREQUENCY_COUNT", name = "AE Frequency Count")
+    ),
     outputs = list(
       list(id = "OUT_DM", name = "T-DM",
            referencedAnalysisIds = list("AN_AGE", "AN_AGEGR", "AN_N")),
@@ -174,9 +189,18 @@ test_that("decoded categorical analyses stay equivalent across engines", {
       condition = list(dataset = "ADSL", variable = "SAFFL",
                        comparator = "EQ", value = list("Y")))),
     dataSubsets = list(),
-    analysisGroupings = list(list(id = "GF_TRT", name = "TRT01A",
-                                  groupingVariable = "TRT01A")),
-    methods = list(),
+    analysisGroupings = list(list(
+      id = "GF_TRT",
+      name = "TRT01A",
+      groupingVariable = "TRT01A",
+      groupingDataset = "ADSL",
+      dataDriven = TRUE,
+      groups = list()
+    )),
+    methods = list(list(
+      id = "MTH_COUNT_AND_PERCENTAGE",
+      name = "Count and Percentage"
+    )),
     outputs = list(list(id = "OUT_DS", name = "T-DS",
                         referencedAnalysisIds = list("AN_REAS"))),
     analyses = list(list(

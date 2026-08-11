@@ -209,20 +209,14 @@
 #'   Only "computed" is ever written.
 #' @noRd
 .ard_value <- function(index, analysis_id, group_level, variable_level,
-                       stat_name, nest_level = NA_character_) {
+                       stat_name, nest_level = NA_character_,
+                       total_column = FALSE) {
   none <- function(status) list(value = NA_real_, status = status)
   if (is.null(index) || is.na(stat_name %||% NA_character_)) {
     return(none("no_row"))
   }
 
   rows <- index$analysis_id %in% analysis_id & index$stat_name %in% stat_name
-
-  ## A nested child's cell names one term UNDER one parent level; the same
-  ## term can appear under two parents, so the parent has to be part of the
-  ## key or the two would answer each other's cells.
-  if (!is.na(nest_level %||% NA_character_) && "nest_level" %in% names(index)) {
-    rows <- rows & !is.na(index$nest_level) & index$nest_level %in% nest_level
-  }
 
   ## A group level of NA means the analysis is not reported by column, so
   ## every column shows the same value and the level must not be matched on.
@@ -241,7 +235,27 @@
       index$variable_level %in% variable_level
   }
 
+  ## A nested child's cell names one term UNDER one parent level; the same
+  ## term can appear under two parents, so the parent has to be part of the
+  ## key or the two would answer each other's cells. Keep the otherwise-
+  ## complete rows long enough to distinguish the one narrow diagnostic case:
+  ## a child in the Total column whose analysis/stat/term all exist, but whose
+  ## required parent key does not.
+  parent_needed <- !is.na(nest_level %||% NA_character_)
+  rows_without_parent <- rows
+  if (parent_needed) {
+    if ("nest_level" %in% names(index)) {
+      rows <- rows & !is.na(index$nest_level) & index$nest_level %in% nest_level
+    } else {
+      rows[] <- FALSE
+    }
+  }
+
   hits <- which(rows)
+  if (length(hits) == 0 && parent_needed && isTRUE(total_column) &&
+      any(rows_without_parent)) {
+    return(none("missing_parent_key"))
+  }
   if (length(hits) == 0) return(none("no_row"))
 
   ## More than one level answering to one cell means the row is a TEMPLATE for
@@ -811,6 +825,88 @@
 ## Filling one sheet
 ## ---------------------------------------------------------------------------
 
+#' One typed record for the fill census.
+#'
+#' Every writer path starts here, including records that have no cell address
+#' or no ARD lookup. Typed missing values keep those cases in one stable schema
+#' instead of letting data-frame assembly infer a different type from each run.
+#' @noRd
+.fill_record <- function(output_id = NA_character_, sheet = NA_character_,
+                         ref = NA_character_, row = NA_integer_,
+                         col = NA_integer_, col_label = NA_character_,
+                         analysis_id = NA_character_, status = NA_character_,
+                         reason = NA_character_, row_label = NA_character_,
+                         method_id = NA_character_, placeholder = NA_character_,
+                         ars_grouping_id = NA_character_,
+                         ars_group_label = NA_character_,
+                         variable_level = NA_character_,
+                         parent_level = NA_character_,
+                         ard_lookup_key = NA_character_) {
+  chr <- function(value) {
+    if (is.null(value) || length(value) == 0 || is.na(value[[1]])) {
+      return(NA_character_)
+    }
+    as.character(value[[1]])
+  }
+  int <- function(value) {
+    if (is.null(value) || length(value) == 0 || is.na(value[[1]])) {
+      return(NA_integer_)
+    }
+    as.integer(value[[1]])
+  }
+
+  list(
+    output_id = chr(output_id),
+    sheet = chr(sheet),
+    ref = chr(ref),
+    row = int(row),
+    col = int(col),
+    col_label = chr(col_label),
+    analysis_id = chr(analysis_id),
+    status = chr(status),
+    reason = chr(reason),
+    row_label = chr(row_label),
+    method_id = chr(method_id),
+    placeholder = chr(placeholder),
+    ars_grouping_id = chr(ars_grouping_id),
+    ars_group_label = chr(ars_group_label),
+    variable_level = chr(variable_level),
+    parent_level = chr(parent_level),
+    ard_lookup_key = chr(ard_lookup_key)
+  )
+}
+
+#' A readable rendering of the dimensions passed to `.ard_value()`.
+#'
+#' This is diagnostic only. `.resolve_cell()` still performs the one real
+#' lookup; the key simply records its arguments so a pending cell can be traced
+#' without reimplementing the match.
+#' @noRd
+.ard_lookup_key <- function(analysis_id, slots, group_level,
+                            variable_level, parent_level = NA_character_) {
+  show <- function(value) {
+    value <- as.character(value %||% NA_character_)
+    value <- value[!is.na(value) & nzchar(value)]
+    if (length(value) == 0) "<NA>" else paste(value, collapse = ",")
+  }
+  slot_labels <- vapply(slots %||% list(), function(slot) {
+    operation <- slot$operation_id %||% NA_character_
+    statistic <- slot$stat_name %||% NA_character_
+    if (is.na(operation) && is.na(statistic)) return("<unbound>")
+    if (is.na(operation)) return(as.character(statistic))
+    if (is.na(statistic)) return(paste0(as.character(operation), ":<unbound>"))
+    paste0(as.character(operation), ":", as.character(statistic))
+  }, character(1))
+
+  paste0(
+    "analysis=", show(analysis_id),
+    " | slots=", show(slot_labels),
+    " | column=", show(group_level),
+    " | variable=", show(variable_level),
+    " | parent=", show(parent_level)
+  )
+}
+
 #' Resolve every slot of one mapped cell against the ARD.
 #'
 #' @return list(values, statuses) -- one entry per slot, values as formatted
@@ -824,6 +920,10 @@
 
   level <- cell$variable_level %||% NA_character_
   if (!is.na(level) && level %in% names(decode)) level <- decode[[level]]
+  group <- cell$group %||% list()
+  group_level <- group$label %||% NA_character_
+  total_column <- isTRUE(group$is_total)
+  analysis_id <- cell$analysis_id %||% NA_character_
 
   for (i in seq_along(slots)) {
     slot <- slots[[i]]
@@ -834,17 +934,30 @@
     }
     hit <- .ard_value(
       index          = index,
-      analysis_id    = cell$analysis_id %||% NA_character_,
-      group_level    = (cell$group %||% list())$label %||% NA_character_,
+      analysis_id    = analysis_id,
+      group_level    = group_level,
       variable_level = level,
       stat_name      = stat,
-      nest_level     = nest_level)
+      nest_level     = nest_level,
+      total_column   = total_column)
     statuses[[i]] <- hit$status
     if (identical(hit$status, "computed")) {
       values[[i]] <- .format_value(hit$value, slot$decimals)
     }
   }
-  list(values = values, statuses = statuses)
+  list(
+    values = values,
+    statuses = statuses,
+    variable_level = level,
+    parent_level = nest_level,
+    ard_lookup_key = .ard_lookup_key(
+      analysis_id = analysis_id,
+      slots = slots,
+      group_level = group_level,
+      variable_level = level,
+      parent_level = nest_level
+    )
+  )
 }
 
 #' Why a cell could not be filled, in the words its reader needs.
@@ -855,7 +968,7 @@
 #' the percentage was surplus would describe the cell as a typing quibble when
 #' the actual result is absent.
 #' @noRd
-.pending_reason <- function(statuses) {
+.pending_reason <- function(statuses, parent_level = NA_character_) {
   failed <- statuses[!statuses %in% "computed"]
   if (length(failed) == 0) return(NA_character_)
   switch(
@@ -866,7 +979,21 @@
     no_value  = "the analysis produced no value for this cell",
     ambiguous = paste("the row stands for a repeated block, which needs",
                       "row expansion"),
+    missing_parent_key = sprintf(
+      "the ARD has no row for required parent/nest key '%s'",
+      parent_level %||% "?"
+    ),
     "no result in the ARD for this cell")
+}
+
+#' The census status for a cell whose slots did not all resolve.
+#' @noRd
+.pending_status <- function(statuses) {
+  failed <- statuses[!statuses %in% "computed"]
+  if (length(failed) > 0 && identical(failed[[1]], "missing_parent_key")) {
+    return("missing_parent_key")
+  }
+  "pending"
 }
 
 #' Resolve the shell-label-to-data-value pairing for every analysis on a
@@ -957,8 +1084,18 @@
   decodes <- .sheet_level_decodes(cells, index, sheet_name)
 
   for (cell in cells) {
-    record <- list(ref = cell$ref, row = cell$row, col = cell$col,
-                   analysis_id = cell$analysis_id %||% NA_character_)
+    record <- .fill_record(
+      ref = cell$ref,
+      row = cell$row,
+      col = cell$col,
+      analysis_id = cell$analysis_id %||% NA_character_,
+      row_label = cell$stat_line %||% cell$variable_level %||% NA_character_,
+      placeholder = cell$placeholder %||% NA_character_,
+      ars_grouping_id = (cell$group %||% list())$grouping_id %||%
+        NA_character_,
+      ars_group_label = (cell$group %||% list())$label %||% NA_character_,
+      variable_level = cell$variable_level %||% NA_character_
+    )
 
     ## The map already knew this cell had nothing to bind to.
     if (!identical(cell$kind, "result")) {
@@ -986,9 +1123,15 @@
 
     decode <- decodes[[cell$analysis_id %||% ""]] %||% character()
     resolved <- .resolve_cell(cell, index, decode)
+    record$variable_level <- resolved$variable_level
+    record$parent_level <- resolved$parent_level
+    record$ard_lookup_key <- resolved$ard_lookup_key
     if (!any(resolved$statuses %in% "computed")) {
-      record$status <- "pending"
-      record$reason <- .pending_reason(resolved$statuses)
+      record$status <- .pending_status(resolved$statuses)
+      record$reason <- .pending_reason(
+        resolved$statuses,
+        resolved$parent_level
+      )
       records[[length(records) + 1L]] <- record
       next
     }
@@ -1012,7 +1155,10 @@
       ## showing nothing -- but it is still counted as pending.
       if (any(is.na(resolved$values))) {
         record$status <- "partial"
-        record$reason <- .pending_reason(resolved$statuses)
+        record$reason <- .pending_reason(
+          resolved$statuses,
+          resolved$parent_level
+        )
       }
     } else {
       record$status <- "skipped"
@@ -1141,9 +1287,29 @@
       span <- .n_placeholder_span(.is_text(doc))
       if (is.null(span)) next
 
-      record <- list(ref = ref, row = row, col = column$col,
-                     analysis_id = NA_character_, kind = "header_n",
-                     placeholder = "(N=xx)")
+      grouping_ids <- unique(vapply(own, function(cell) {
+        (cell$group %||% list())$grouping_id %||% NA_character_
+      }, character(1)))
+      grouping_ids <- grouping_ids[!is.na(grouping_ids)]
+      record <- .fill_record(
+        ref = ref,
+        row = row,
+        col = column$col,
+        analysis_id = NA_character_,
+        placeholder = "(N=xx)",
+        ars_grouping_id = if (length(grouping_ids) == 1) {
+          grouping_ids[[1]]
+        } else {
+          NA_character_
+        },
+        ars_group_label = column$label %||% NA_character_,
+        ard_lookup_key = .ard_lookup_key(
+          analysis_id = ids,
+          slots = list(list(stat_name = "N")),
+          group_level = column$label,
+          variable_level = NA_character_
+        )
+      )
       hit <- .column_denominator(index, ids, column$label)
       if (!identical(hit$status, "computed")) {
         record$status <- "pending"
@@ -1175,7 +1341,7 @@
 #' @noRd
 .blank_pending_cells <- function(cc, records) {
   for (record in records) {
-    if (!record$status %in% c("pending", "partial")) next
+    if (!record$status %in% c("pending", "partial", "missing_parent_key")) next
     slot <- which(cc$r == record$ref)
     if (length(slot) != 1) next
     cc <- .cell_set_is(cc, slot, "<is><t/></is>")
@@ -1251,9 +1417,13 @@
   if (is.null(plan)) return(list(records = list()))
 
   blocks <- .nested_block_levels(index, plan)
-  record <- list(ref = NA_character_, row = plan$parent$row,
-                 col = NA_integer_,
-                 analysis_id = plan$parent$analysis_id %||% NA_character_)
+  record <- .fill_record(
+    ref = NA_character_,
+    row = plan$parent$row,
+    col = NA_integer_,
+    analysis_id = plan$parent$analysis_id %||% NA_character_,
+    row_label = plan$parent$label %||% NA_character_
+  )
   if (length(blocks) == 0) {
     record$status <- "pending"
     record$reason <- "the nested block's analyses produced no levels"
@@ -1336,9 +1506,19 @@
     }
 
     for (cell in line$cells) {
-      rec <- list(ref = .xlsx_rc_to_a1(target, cell$col), row = target,
-                  col = cell$col,
-                  analysis_id = cell$analysis_id %||% NA_character_)
+      rec <- .fill_record(
+        ref = .xlsx_rc_to_a1(target, cell$col),
+        row = target,
+        col = cell$col,
+        analysis_id = cell$analysis_id %||% NA_character_,
+        row_label = line$label,
+        placeholder = cell$placeholder %||% NA_character_,
+        ars_grouping_id = (cell$group %||% list())$grouping_id %||%
+          NA_character_,
+        ars_group_label = (cell$group %||% list())$label %||% NA_character_,
+        variable_level = line$variable_level,
+        parent_level = line$nest_level
+      )
       if (!identical(cell$kind, "result")) {
         rec$status <- "pending"
         rec$reason <- cell$reason %||% "not bound to an analysis"
@@ -1360,9 +1540,15 @@
 
       cell$variable_level <- line$variable_level
       resolved <- .resolve_cell(cell, index, nest_level = line$nest_level)
+      rec$variable_level <- resolved$variable_level
+      rec$parent_level <- resolved$parent_level
+      rec$ard_lookup_key <- resolved$ard_lookup_key
       if (!any(resolved$statuses %in% "computed")) {
-        rec$status <- "pending"
-        rec$reason <- .pending_reason(resolved$statuses)
+        rec$status <- .pending_status(resolved$statuses)
+        rec$reason <- .pending_reason(
+          resolved$statuses,
+          resolved$parent_level
+        )
         records[[length(records) + 1L]] <- rec
         next
       }
@@ -1381,7 +1567,10 @@
         rec$text   <- .is_text(doc)
         if (any(is.na(resolved$values))) {
           rec$status <- "partial"
-          rec$reason <- .pending_reason(resolved$statuses)
+          rec$reason <- .pending_reason(
+            resolved$statuses,
+            resolved$parent_level
+          )
         }
       } else {
         rec$status <- "skipped"
@@ -1465,9 +1654,13 @@
   block$anchor_row    <- as.integer(block$anchor_row)
   block$template_rows <- as.integer(unlist(block$template_rows))
 
-  record <- list(ref = NA_character_, row = block$anchor_row,
-                 col = NA_integer_,
-                 analysis_id = block$analysis_id %||% NA_character_)
+  record <- .fill_record(
+    ref = NA_character_,
+    row = block$anchor_row,
+    col = NA_integer_,
+    analysis_id = block$analysis_id %||% NA_character_,
+    row_label = block$label %||% NA_character_
+  )
 
   levels <- .categorical_block_levels(index, block)
   if (length(levels) == 0) {
@@ -1532,9 +1725,18 @@
     }
 
     for (cell in template_cells) {
-      rec <- list(ref = .xlsx_rc_to_a1(target, cell$col), row = target,
-                  col = cell$col,
-                  analysis_id = cell$analysis_id %||% NA_character_)
+      rec <- .fill_record(
+        ref = .xlsx_rc_to_a1(target, cell$col),
+        row = target,
+        col = cell$col,
+        analysis_id = cell$analysis_id %||% NA_character_,
+        row_label = level,
+        placeholder = cell$placeholder %||% NA_character_,
+        ars_grouping_id = (cell$group %||% list())$grouping_id %||%
+          NA_character_,
+        ars_group_label = (cell$group %||% list())$label %||% NA_character_,
+        variable_level = level
+      )
 
       hit <- .tpl_col_hit(template, cell$col)
       xml <- if (length(hit) >= 1) .cell_is_xml(wb, template, hit[[1]]) else
@@ -1548,9 +1750,15 @@
 
       cell$variable_level <- level
       resolved <- .resolve_cell(cell, index)
+      rec$variable_level <- resolved$variable_level
+      rec$parent_level <- resolved$parent_level
+      rec$ard_lookup_key <- resolved$ard_lookup_key
       if (!any(resolved$statuses %in% "computed")) {
-        rec$status <- "pending"
-        rec$reason <- .pending_reason(resolved$statuses)
+        rec$status <- .pending_status(resolved$statuses)
+        rec$reason <- .pending_reason(
+          resolved$statuses,
+          resolved$parent_level
+        )
         records[[length(records) + 1L]] <- rec
         next
       }
@@ -1569,7 +1777,10 @@
         rec$text   <- .is_text(doc)
         if (any(is.na(resolved$values))) {
           rec$status <- "partial"
-          rec$reason <- .pending_reason(resolved$statuses)
+          rec$reason <- .pending_reason(
+            resolved$statuses,
+            resolved$parent_level
+          )
         }
       } else {
         rec$status <- "skipped"
@@ -1593,12 +1804,15 @@
           cc <- .cell_set_is(cc, slot, "<is><t/></is>")
         }
       }
-      records[[length(records) + 1L]] <- list(
-        ref = .xlsx_rc_to_a1(row, 1L), row = row, col = 1L,
+      records[[length(records) + 1L]] <- .fill_record(
+        ref = .xlsx_rc_to_a1(row, 1L),
+        row = row,
+        col = 1L,
         analysis_id = block$analysis_id %||% NA_character_,
         status = "skipped",
         reason = paste("the block has fewer observed levels than authored",
-                       "template rows; the leftover row was cleared"))
+                       "template rows; the leftover row was cleared")
+      )
     }
   }
 
@@ -1740,8 +1954,12 @@
 .fill_listing_sheet <- function(wb, sheet_index, plan, rows, keep_pending,
                                 sheet_name = NA_character_) {
   template_row <- plan$template_row %||% NA_integer_
-  record <- list(ref = NA_character_, row = template_row, col = NA_integer_,
-                 analysis_id = NA_character_)
+  record <- .fill_record(
+    ref = NA_character_,
+    row = template_row,
+    col = NA_integer_,
+    analysis_id = NA_character_
+  )
 
   if (is.na(template_row)) {
     record$status <- "pending"
@@ -1941,8 +2159,12 @@
 #' @noRd
 .fill_figure_sheet <- function(wb, sheet_index, plan, adam_dir, sheet) {
   anchor <- plan$series_anchor %||% NA_integer_
-  record <- list(ref = NA_character_, row = anchor, col = NA_integer_,
-                 analysis_id = NA_character_)
+  record <- .fill_record(
+    ref = NA_character_,
+    row = anchor,
+    col = NA_integer_,
+    analysis_id = NA_character_
+  )
 
   directive <- function(key) {
     hit <- Filter(function(d) identical(d$key, key), plan$directives %||% list())
@@ -2259,8 +2481,14 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
   } else {
     ars
   }
+  .assert_runnable_ars(spec)
 
   outputs <- spec$outputs %||% list()
+  analysis_by_id <- list()
+  for (analysis in spec$analyses %||% list()) {
+    id <- analysis$id %||% NA_character_
+    if (!is.na(id) && nzchar(id)) analysis_by_id[[id]] <- analysis
+  }
   fills <- Filter(Negate(is.null),
                   lapply(outputs, function(o) o$`_meta`$shell_fill))
   if (length(fills) == 0) {
@@ -2309,10 +2537,13 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
       ## output simply never appears in the census. One skipped record keeps
       ## the accounting honest -- the caller sees the output was passed over
       ## and why, instead of inferring it from an absence.
-      records[[length(records) + 1L]] <- list(
+      records[[length(records) + 1L]] <- .fill_record(
         output_id = output$id %||% NA_character_,
-        sheet = NA_character_, ref = NA_character_, status = "skipped",
-        reason = "no cell map recorded for this output")
+        sheet = NA_character_,
+        ref = NA_character_,
+        status = "skipped",
+        reason = "no cell map recorded for this output"
+      )
       next
     }
     sheet <- fill$source$sheet %||% NA_character_
@@ -2329,11 +2560,16 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
       ## The diagnostic above lives in a collector this function neither
       ## resets nor returns, so on its own it vanishes in a hand-run
       ## pipeline. The record travels with the return value.
-      records[[length(records) + 1L]] <- list(
+      records[[length(records) + 1L]] <- .fill_record(
         output_id = output$id %||% NA_character_,
-        sheet = sheet, ref = NA_character_, status = "skipped",
-        reason = sprintf("the output names sheet '%s', which is not in the workbook",
-                         sheet %||% "?"))
+        sheet = sheet,
+        ref = NA_character_,
+        status = "skipped",
+        reason = sprintf(
+          "the output names sheet '%s', which is not in the workbook",
+          sheet %||% "?"
+        )
+      )
       next
     }
 
@@ -2385,8 +2621,22 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
         as.character(column$col)
       }, character(1)))
     for (record in (result$records %||% list())) {
-      record$output_id <- output$id %||% NA_character_
-      record$sheet <- sheet
+      record$output_id <- as.character(output$id %||% NA_character_)
+      record$sheet <- as.character(sheet)
+
+      analysis_id <- record$analysis_id %||% NA_character_
+      analysis <- if (!is.na(analysis_id)) analysis_by_id[[analysis_id]] else NULL
+      if (!is.null(analysis)) {
+        record$method_id <- as.character(
+          analysis$methodId %||% NA_character_
+        )
+        if (is.na(record$row_label %||% NA_character_)) {
+          record$row_label <- as.character(
+            analysis$label %||% analysis$name %||% NA_character_
+          )
+        }
+      }
+
       col <- record$col %||% NA_integer_
       if (length(col) == 1 && !is.na(col) &&
             as.character(col) %in% names(label_by_col)) {
@@ -2422,7 +2672,7 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
 
   status <- vapply(records, function(r) r$status, character(1))
   filled  <- sum(status %in% c("filled", "partial"))
-  pending <- sum(status %in% c("pending", "partial"))
+  pending <- sum(status %in% c("pending", "partial", "missing_parent_key"))
   skipped <- sum(status %in% "skipped")
 
   ## The census keeps EVERY record, the filled ones included: a per-column

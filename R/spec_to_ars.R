@@ -118,6 +118,10 @@
 #' @param adam_dir       ADaM directory baked into each emitted script's header
 #'   (the reader can edit it). Default `"."`.
 #' @param verbose        Print progress messages. Default `TRUE`.
+#' @param .on_artifact_written Internal callback invoked with a named artifact
+#'   receipt after a current-run artifact has been written successfully. Used by
+#'   the workflow to retain exact repair provenance if a later build step fails.
+#'   Callback errors are ignored.
 #'
 #' @return Invisibly returns a named list:
 #'   \describe{
@@ -233,9 +237,17 @@ spec_to_ars <- function(shell_path,
                         report_path  = file.path(tempdir(), "spec_validation_report.xlsx"),
                         code_dir     = NULL,
                         adam_dir     = ".",
-                        verbose      = TRUE) {
+                        verbose      = TRUE,
+                        .on_artifact_written = NULL) {
 
   supplement_trust <- match.arg(supplement_trust)
+
+  notify_artifact_written <- function(receipt) {
+    if (is.function(.on_artifact_written)) {
+      tryCatch(.on_artifact_written(receipt), error = function(e) NULL)
+    }
+    invisible(NULL)
+  }
 
   ## Closed CDISC vocabularies: fail here, not after six minutes of parsing.
   allowed_reasons  <- .ANALYSIS_REASONS
@@ -559,8 +571,28 @@ spec_to_ars <- function(shell_path,
                        analysis_reason  = analysis_reason,
                        analysis_purpose = analysis_purpose)
 
+  ## Validate the in-memory event before any executable code can be emitted.
+  ## The JSON itself remains repairable and is always written below.
+  validation_gate <- .model_validation_gate(
+    ars_to_model(re), spec = spec, report = validation
+  )
+  ars_validation <- validation_gate$findings
+  gate_diagnostics <- .validation_gate_diagnostics(validation_gate)
+  for (i in seq_len(nrow(gate_diagnostics))) {
+    diag_add(
+      stage = gate_diagnostics$stage[i],
+      severity = gate_diagnostics$severity[i],
+      input = gate_diagnostics$input[i],
+      tlf_number = gate_diagnostics$tlf_number[i],
+      location = gate_diagnostics$location[i],
+      problem = gate_diagnostics$problem[i],
+      action = gate_diagnostics$action[i]
+    )
+  }
+
   json_text <- jsonlite::toJSON(re, auto_unbox = TRUE, pretty = TRUE, null = "null")
   .write_text(json_text, output_path, "the ARS JSON", useBytes = TRUE)
+  notify_artifact_written(list(ars_json = output_path))
 
   if (verbose) {
     cli::cli_alert_success("Wrote ARS JSON to {.path {output_path}}")
@@ -571,14 +603,24 @@ spec_to_ars <- function(shell_path,
   ## the code ars_to_ard() sources to compute the ARD. Read back the written
   ## JSON so emission parses the spec exactly as the engine will.
   if (is.null(code_dir)) code_dir <- file.path(dirname(output_path), "code")
-  code_paths <- tryCatch(
-    write_tlf_code(output_path, code_dir, adam_dir = adam_dir,
-                   log = if (verbose) function(m) cli::cli_alert(m) else NULL),
-    error = function(e) {
-      cli::cli_warn("Could not emit {.path code/} scripts: {conditionMessage(e)}")
-      character(0)
+  code_paths <- if (validation_gate$blocked) {
+    if (verbose) {
+      cli::cli_alert_danger(
+        "Runnable code was not emitted: {validation_gate$summary}"
+      )
     }
-  )
+    character(0)
+  } else {
+    tryCatch(
+      write_tlf_code(output_path, code_dir, adam_dir = adam_dir,
+                     log = if (verbose) function(m) cli::cli_alert(m) else NULL),
+      error = function(e) {
+        cli::cli_warn("Could not emit {.path code/} scripts: {conditionMessage(e)}")
+        e$code_paths %||% character(0)
+      }
+    )
+  }
+  notify_artifact_written(list(code_paths = code_paths))
   if (verbose && length(code_paths)) {
     cli::cli_alert_success("Emitted {length(code_paths)} {.path .R} deliverable{?s} to {.path {code_dir}}")
   }
@@ -586,13 +628,14 @@ spec_to_ars <- function(shell_path,
   ## --- Diagnostics summary + report ----------------------------------
   diagnostics <- diag_records()
   blockers    <- ars_blockers(diagnostics)
+  write_report <- isTRUE(validate) || validation_gate$blocked
   if (nrow(diagnostics) > 0) {
     n_fail <- sum(diagnostics$severity == "FAIL")
     n_warn_diag <- sum(diagnostics$severity == "WARN")
     cli::cli_alert_warning(
       paste0("{nrow(diagnostics)} pipeline diagnostic{?s} ",
              "({n_fail} FAIL, {n_warn_diag} WARN)",
-             if (isTRUE(validate)) " -- see the Diagnostics sheet of {.path {report_path}}"
+             if (write_report) " -- see the Diagnostics sheet of {.path {report_path}}"
              else " -- inspect with {.code ars_diagnostics()}")
     )
   }
@@ -602,15 +645,19 @@ spec_to_ars <- function(shell_path,
              "incomplete -- inspect with {.code ars_blockers()} and fix the named input{?s}.")
     )
   }
-  if (isTRUE(validate)) {
-    write_validation_report(validation, report_path,
-                            diagnostics = diagnostics, blockers = blockers)
+  if (write_report) {
+    write_validation_report(
+      validation %||% data.frame(), report_path,
+      diagnostics = diagnostics,
+      blockers = blockers,
+      ars_findings = ars_validation
+    )
   }
 
   result <- list(
     ars_path        = output_path,
     extraction_mode = extraction_mode,
-    report_path     = if (isTRUE(validate)) report_path else NULL,
+    report_path     = if (write_report) report_path else NULL,
     ## Carried so the review stage can wire up spec-driven dropdowns and
     ## spec validation from the result alone: edit_ars(result).
     adam_spec_path  = adam_spec_path,
@@ -622,6 +669,8 @@ spec_to_ars <- function(shell_path,
                         sum(validation$status %in% c("WARN", "FAIL")) else 0L,
     reporting_event = re,
     validation      = validation,
+    ars_validation  = ars_validation,
+    validation_gate = validation_gate,
     diagnostics     = diagnostics,
     blockers        = blockers
   )

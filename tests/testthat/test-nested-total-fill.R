@@ -179,4 +179,44 @@ test_that("nested child Total cells fill end to end", {
 
   expect_equal(shared_totals[["Respiratory disorders"]], "3 (37.5)")
   expect_equal(shared_totals[["Gastrointestinal disorders"]], "2 (25.0)")
+
+  ## Remove only the ARD rows for one child/parent/Total key. Every other
+  ## lookup dimension remains present, so this is not the generic no-row case.
+  reporting_event <- .read_json(ars_path)
+  nested <- reporting_event$outputs[[1]]$`_meta`$shell_fill$nested
+  child_id <- nested$child$analysis_id
+  ard_index <- .ard_index(ard)
+  missing_key <- ard_index$analysis_id == child_id &
+    ard_index$group_level == "Total" &
+    ard_index$variable_level == "Shared term" &
+    ard_index$nest_level == "Respiratory disorders"
+  expect_true(any(missing_key))
+
+  gap_path <- file.path(td, "filled_missing_parent.xlsx")
+  gap_fill <- suppressWarnings(ars_fill_shell(
+    shell_path = shell_path,
+    ars = reporting_event,
+    ard = ard[!missing_key, , drop = FALSE],
+    output_path = gap_path,
+    overwrite = TRUE
+  ))
+  missing <- gap_fill$census[
+    gap_fill$census$status == "missing_parent_key",
+    ,
+    drop = FALSE
+  ]
+
+  expect_equal(nrow(missing), 1L)
+  expect_equal(missing$col_label, "Total")
+  expect_equal(missing$ars_group_label, "Total")
+  expect_equal(missing$row_label, "Shared term")
+  expect_equal(missing$variable_level, "Shared term")
+  expect_equal(missing$parent_level, "Respiratory disorders")
+  expect_match(missing$reason, "required parent/nest key")
+  expect_match(missing$ard_lookup_key, "column=Total", fixed = TRUE)
+  expect_match(
+    missing$ard_lookup_key,
+    "parent=Respiratory disorders",
+    fixed = TRUE
+  )
 })

@@ -10,12 +10,19 @@
     test_path("fixtures", "ars_apx_drm_301_deterministic.json"),
     path
   )
+
+  ## The frozen fixture predates data-driven empty groupings. Save-path tests
+  ## need a structurally clean baseline; blocker tests add their own defect.
+  model <- .valid_fixture_model()
+  json <- jsonlite::toJSON(model_to_ars(model), auto_unbox = TRUE,
+                           pretty = TRUE, null = "null")
+  .write_text(json, path, "the clean edit fixture", useBytes = TRUE)
   path
 }
 
-.edit_result <- function(model, edit_log = NULL) {
+.edit_result <- function(model, edit_log = NULL, source_path = NULL) {
   if (is.null(edit_log)) edit_log <- .new_edit_log()
-  list(model = model, edit_log = edit_log)
+  list(model = model, edit_log = edit_log, source_path = source_path)
 }
 
 .one_edit_log <- function(id, field = "label", old = "before",
@@ -93,6 +100,41 @@ test_that("writing to a new path makes no backup", {
   expect_equal(length(list.files(dir, pattern = "\\.bak-")), 0)
 })
 
+test_that("a blocked explicit save leaves the file and autosave untouched", {
+  dir <- withr::local_tempdir()
+  path <- .edit_fixture_copy(dir)
+  before <- readBin(path, what = "raw", n = file.info(path)$size)
+  autosave_path <- .autosave_path(path)
+  dir.create(dirname(autosave_path), recursive = TRUE, showWarnings = FALSE)
+  saveRDS("keep this recovery copy", autosave_path)
+  withr::defer(unlink(autosave_path))
+  autosave_before <- readBin(
+    autosave_path, what = "raw", n = file.info(autosave_path)$size
+  )
+
+  model <- ars_to_model(path)
+  model$analyses$methodId[1] <- NA_character_
+  result <- list(
+    model = model,
+    edit_log = .one_edit_log(model$analyses$id[1], "methodId"),
+    source_path = path
+  )
+
+  blocked <- suppressMessages(.edit_ars_finish(result, path))
+
+  expect_false(blocked$saved)
+  expect_true(blocked$validation_gate$blocked)
+  expect_identical(
+    readBin(path, what = "raw", n = file.info(path)$size),
+    before
+  )
+  expect_identical(
+    readBin(autosave_path, what = "raw", n = file.info(autosave_path)$size),
+    autosave_before
+  )
+  expect_length(list.files(dir, pattern = "\\.bak-|\\.tmp$|\\.edits\\.json$"), 0L)
+})
+
 test_that("the temporary file used for the atomic write is not left behind", {
   dir <- withr::local_tempdir()
   path <- .edit_fixture_copy(dir)
@@ -143,6 +185,30 @@ test_that("edit_ars() refuses an in-memory event with nowhere to write", {
   ## Must fail before the app opens, not after an hour of corrections.
   expect_error(edit_ars(ars), "output_path.*is required")
 })
+
+test_that("an in-memory editor uses output_path for crash recovery", {
+  skip_if_not_installed("shiny")
+  ars <- model_to_ars(.valid_fixture_model())
+  output_path <- file.path(withr::local_tempdir(), "reporting_event.json")
+  recovery_path <- NULL
+
+  suppressMessages(testthat::with_mocked_bindings(
+    .ars_editor_app = function(model, spec, report, source_path, mode) {
+      recovery_path <<- source_path
+      structure(list(), class = "shiny.appobj")
+    },
+    .package = "arsbridge",
+    testthat::with_mocked_bindings(
+      runApp = function(app) NULL,
+      .package = "shiny",
+      edit_ars(ars, output_path = output_path)
+    )
+  ))
+
+  expect_identical(recovery_path, output_path)
+  expect_match(.autosave_path(recovery_path), "\\.rds$")
+})
+
 
 test_that("an edited model executes into an ARD", {
   ## The point of the whole stage: what comes out is still executable.

@@ -637,6 +637,36 @@ test_that("authored level slots are stamped with the decoded label", {
   expect_equal(lvl[[1]]$level_code, "1")
 })
 
+test_that("Word layout preserves placeholder counts for method validation", {
+  section <- .cl_section()
+  section$source_format <- "docx"
+  section$stub_rows[[1]]$n_slots <- 2L
+
+  model <- ars_to_model(build_ars_json(
+    list(section),
+    spec_lookup = .cl_lookup(),
+    codelists = .cl_codelists()
+  ))
+  output <- model$outputs$raw[[1]]
+  layout <- output[["_meta"]][["shell_layout"]]
+  analysis_row <- Filter(function(row) {
+    identical(row$label, "Primary reason for discontinuation")
+  }, layout)[[1]]
+  analysis_index <- match(analysis_row$analysis_id, model$analyses$id)
+  model$analyses$methodId[analysis_index] <- "MTH_SUBJECT_COUNT"
+
+  expect_equal(analysis_row$n_slots, 2L)
+  findings <- validate_ars_model(model)
+  mismatch <- findings[
+    findings$ref %in% "METHOD_PLACEHOLDER_SLOT_MISMATCH" &
+      findings$id == analysis_row$analysis_id,
+    ,
+    drop = FALSE
+  ]
+  expect_equal(nrow(mismatch), 1L)
+})
+
+
 test_that("grouping factor groups fall back to the codelist when headers have none", {
   diag_reset()
   re <- build_ars_json(list(.cl_section()), spec_lookup = .cl_lookup(),

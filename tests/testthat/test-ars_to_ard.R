@@ -62,7 +62,8 @@ test_that("ars_to_ard works on synthetic ARS and ADaM datasets", {
         groupingVariable = list(
           dataset = "ADSL",
           variable = "TRT01A"
-        )
+        ),
+        dataDriven = TRUE
       )
     ),
     methods = list(
@@ -200,7 +201,8 @@ test_that("declared-but-unexecutable method reserves manual_pending stub rows", 
       condition = list(dataset = "ADEFF", variable = "SAFFL",
                        comparator = "EQ", value = list("Y")))),
     analysisGroupings = list(list(id = "GF_TRT", name = "TRT01A",
-      groupingVariable = list(dataset = "ADEFF", variable = "TRT01A"))),
+      groupingVariable = list(dataset = "ADEFF", variable = "TRT01A"),
+      dataDriven = TRUE)),
     methods = list(list(id = "MTH_CMH_TEST", name = "CMH test")),
     analyses = list(list(
       id = "AN_CMH", name = "EASI75 CMH", analysisSetId = "AS_ITT",
@@ -311,7 +313,8 @@ test_that("MTH_CMH_TEST computes with a strata operand, reserves without one", {
         condition = list(dataset = "ADSL", variable = "SAFFL",
                          comparator = "EQ", value = list("Y")))),
       analysisGroupings = list(list(id = "GF_TRT", name = "TRT01A",
-        groupingVariable = list(dataset = "ADSL", variable = "TRT01A"))),
+        groupingVariable = list(dataset = "ADSL", variable = "TRT01A"),
+        dataDriven = TRUE)),
       methods = list(list(id = "MTH_CMH_TEST", name = "CMH")),
       analyses = list(ana),
       outputs = list(list(id = "T_CMH", name = "T-CMH",
@@ -358,7 +361,8 @@ test_that("MTH_CMH_TEST computes with a strata operand, reserves without one", {
       condition = list(dataset = "ADSL", variable = "SAFFL",
                        comparator = "EQ", value = list("Y")))),
     analysisGroupings = list(list(id = "GF_TRT", name = "TRT01A",
-      groupingVariable = list(dataset = "ADSL", variable = "TRT01A"))),
+      groupingVariable = list(dataset = "ADSL", variable = "TRT01A"),
+      dataDriven = TRUE)),
     methods = list(list(id = method, name = method)),
     analyses = list(list(id = "AN_E", methodId = method, analysisSetId = "AS_SAF",
       analysisVariable = list(dataset = "ADSL", variable = variable),
@@ -445,7 +449,8 @@ test_that("ars_to_ard errors when the ADaM directory is missing", {
       condition = list(dataset = "ADSL", variable = "EOSSTT",
                        comparator = "EQ", value = list("DISCONTINUED")))),
     analysisGroupings = list(list(id = "GF_TRT", name = "TRT01A",
-      groupingVariable = list(dataset = "ADSL", variable = "TRT01A"))),
+      groupingVariable = list(dataset = "ADSL", variable = "TRT01A"),
+      dataDriven = TRUE)),
     methods = list(list(id = method, name = method)),
     analyses = list(list(id = "AN_Z", methodId = method,
       analysisSetId = "AS_SAF", dataSubsetId = "DS_DISC",
@@ -554,7 +559,8 @@ test_that("a continuous summary is never completed with zeros", {
       condition = list(dataset = "ADSL", variable = "SAFFL",
                        comparator = "EQ", value = list("Y")))),
     analysisGroupings = list(list(id = "GF_COL", name = grouping_var,
-      groupingVariable = list(dataset = grouping_ds, variable = grouping_var))),
+      groupingVariable = list(dataset = grouping_ds, variable = grouping_var),
+      dataDriven = TRUE)),
     methods = list(list(id = "MTH_COUNT_AND_PERCENTAGE",
                         name = "Count and Percentage")),
     analyses = list(list(id = "AN_C", methodId = "MTH_COUNT_AND_PERCENTAGE",

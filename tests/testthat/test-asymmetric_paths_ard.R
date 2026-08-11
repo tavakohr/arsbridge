@@ -118,12 +118,10 @@ test_that("an unresolvable path declaration blocks execution instead of degradin
   broken_path <- file.path(td, "re_broken.json")
   jsonlite::write_json(event, broken_path, auto_unbox = TRUE, null = "null")
 
-  ard <- suppressMessages(suppressWarnings(ars_to_ard(broken_path, td)))
-  # The whole output is skipped -- no flat three-column fallback.
-  expect_true(is.null(ard) || nrow(ard) == 0)
-  diags <- ars_diagnostics()
-  expect_true(any(diags$severity == "FAIL" &
-                  grepl("result-group paths", diags$problem)))
+  expect_error(
+    suppressMessages(suppressWarnings(ars_to_ard(broken_path, td))),
+    "GROUPING_VARIABLE_NOT_LINKED"
+  )
 })
 
 test_that("the path-mode ARD renders with one ordered column per path", {

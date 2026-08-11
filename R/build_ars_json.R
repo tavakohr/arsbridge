@@ -1785,7 +1785,7 @@ build_ars_json <- function(sections,
     ## variables are not always ADSL (e.g. AVISIT in a BDS dataset).
     groupingDataset  = dataset,
     groupingVariable = variable,
-    dataDriven       = FALSE,
+    dataDriven       = length(groups) == 0L,
     ## Per-level groups when the shell's column headers defined them (each
     ## header condition = one display column); otherwise the empty array
     ## siera expects (it iterates JSON_AnalysisGroupings$groups[[e]]).
@@ -1814,6 +1814,9 @@ build_ars_json <- function(sections,
       where = canonicalize_condition(.group_where(g))
     )
   })
+  group_order <- vapply(groups, function(group) group$order, integer(1))
+  groups <- groups[order(group_order, seq_along(groups), na.last = TRUE)]
+
   definition <- list(
     variable   = toupper(gf$groupingVariable %||% ""),
     dataDriven = isTRUE(gf$dataDriven),
@@ -2347,10 +2350,19 @@ build_ars_json <- function(sections,
         ## Carry the shell's column-header order so the renderer lays
         ## treatment columns out as the author wrote them (build_col_levels
         ## reads this), instead of falling back to alphabetical ARD order.
-        ## An arsbridge extension; ars_conformance() strips it.
-        columns      = lapply(
-          Filter(nzchar, as.character(section$col_headers %||% character())),
-          function(h) list(label = h)),
+        ## An arsbridge extension; ars_conformance() strips it. Word sections
+        ## keep the physical header vector so its blank stub remains column 1;
+        ## older/internal section builders carry only nonblank col_headers.
+        columns      = local({
+          headers <- section$col_labels_full
+          if (is.null(headers)) {
+            headers <- Filter(
+              nzchar,
+              as.character(section$col_headers %||% character())
+            )
+          }
+          lapply(as.character(headers), function(h) list(label = h))
+        }),
         displaySections = list(list(
           sectionType = "Footnote",
           ## Official shape: each footnote is an OrderedSubSection wrapping a
@@ -2422,7 +2434,7 @@ build_ars_json <- function(sections,
     label            = "Default treatment grouping",
     groupingDataset  = "ADSL",
     groupingVariable = "TRT01A",
-    dataDriven       = FALSE,
+    dataDriven       = TRUE,
     groups           = list()
   )
 }

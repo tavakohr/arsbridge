@@ -5,10 +5,7 @@
 ## mechanics.
 
 .history_state <- function(source_path = NULL) {
-  model <- ars_to_model(
-    test_path("fixtures", "ars_apx_drm_301_deterministic.json")
-  )
-  .editor_state(model, NULL, NULL, source_path, "edit")
+  .editor_state(.valid_fixture_model(), NULL, NULL, source_path, "edit")
 }
 
 .with_reactives <- function() {

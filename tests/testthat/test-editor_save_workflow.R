@@ -6,12 +6,20 @@ skip_if_not_installed("bslib")
 skip_if_not_installed("DT")
 
 .swf_model <- function() {
-  ars_to_model(test_path("fixtures", "ars_apx_drm_301_deterministic.json"))
+  .valid_fixture_model()
 }
 
 .swf_state <- function(source_path = NULL, model = .swf_model()) {
   arsbridge:::.editor_state(model, spec = NULL, report = NULL,
                             source_path = source_path, mode = "edit")
+}
+
+.swf_one_edit_log <- function(id, field = "label") {
+  data.frame(
+    time = "2026-08-10T00:00:00Z", pool = "analyses", id = id,
+    field = field, old = "before", new = "after",
+    stringsAsFactors = FALSE
+  )
 }
 
 test_that("Save in place writes the file, backs up, and resets the dirty state", {
@@ -65,6 +73,54 @@ test_that("Save As writes a copy and keeps the session dirty", {
     labels0 <- vapply(original$analyses, function(a) a$label %||% "", character(1))
     expect_false("Renamed for the copy" %in% labels0)
     expect_identical(nrow(state$edit_log()), 1L)
+  })
+})
+
+test_that("every explicit save confirmation revalidates the current model", {
+  td <- withr::local_tempdir()
+  source_path <- file.path(td, "re.json")
+  model <- .swf_model()
+  json <- jsonlite::toJSON(model_to_ars(model), auto_unbox = TRUE,
+                           pretty = TRUE, null = "null")
+  writeLines(json, source_path)
+  before <- readBin(source_path, what = "raw", n = file.info(source_path)$size)
+  state <- .swf_state(source_path, model)
+
+  # Simulate a model update landing after a clean modal was opened. The cached
+  # findings deliberately remain clean: confirmation must validate the model,
+  # not trust that stale snapshot.
+  invalid <- shiny::isolate(state$model())
+  invalid$analyses$methodId[1] <- NA_character_
+  state$model(invalid)
+  state$findings(.new_findings())
+  state$edit_log(.swf_one_edit_log(invalid$analyses$id[1], "methodId"))
+  shiny::isolate(.write_autosave(state))
+  withr::defer(.clear_autosave(source_path))
+  expect_false(is.null(.read_autosave(source_path)))
+
+  stop_called <- FALSE
+  testthat::local_mocked_bindings(
+    stopApp = function(...) stop_called <<- TRUE,
+    .package = "shiny"
+  )
+
+  shiny::testServer(arsbridge:::mod_save_server, args = list(state = state), {
+    suppressMessages(session$setInputs(confirm_save_stay = 1))
+    expect_identical(
+      readBin(source_path, what = "raw", n = file.info(source_path)$size),
+      before
+    )
+    expect_identical(nrow(state$edit_log()), 1L)
+
+    copy_path <- file.path(td, "blocked_copy.json")
+    suppressMessages(session$setInputs(save_as_path = copy_path,
+                                       confirm_save_as = 1))
+    expect_false(file.exists(copy_path))
+
+    suppressMessages(session$setInputs(confirm_save = 1))
+    expect_false(stop_called)
+    expect_false(session$.__enclos_env__$private$was_closed)
+    expect_false(is.null(.read_autosave(source_path)))
   })
 })
 

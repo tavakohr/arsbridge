@@ -14,13 +14,25 @@
 }
 
 .ac_spec <- function(analyses, groupings = TRUE, subsets = list()) {
+  method_ids <- unique(vapply(analyses, `[[`, character(1), "methodId"))
+  methods <- lapply(method_ids, function(id) {
+    list(id = id, name = id)
+  })
+
   list(
     analysisSets = list(),
     dataSubsets  = subsets,
     analysisGroupings = if (groupings) list(
-      list(id = "GF_TRT", name = "TRT01A", groupingVariable = "TRT01A")
+      list(
+        id = "GF_TRT",
+        name = "TRT01A",
+        groupingVariable = "TRT01A",
+        groupingDataset = "ADSL",
+        dataDriven = TRUE,
+        groups = list()
+      )
     ) else list(),
-    methods = list(),
+    methods = methods,
     outputs = list(list(
       id = "OUT_1", name = "T-1",
       referencedAnalysisIds = as.list(vapply(analyses, `[[`, character(1), "id"))

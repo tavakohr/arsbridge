@@ -142,6 +142,9 @@ test_that("RWB column headers resolve to annotated groups", {
   expect_equal(s$col_headers,
                c("Alpha Cohort (N=XX)", "Beta Cohort (N=XX)",
                  "Unknown (N=XX)", "Total (N=XX)"))
+  expect_equal(s$col_labels_full,
+               c("", "Alpha Cohort (N=XX)", "Beta Cohort (N=XX)",
+                 "Unknown (N=XX)", "Total (N=XX)"))
   cg <- s$column_groups
   expect_equal(cg$variable, "COHORTN")
   conds <- vapply(cg$groups, function(g) g$annotation %||% "", character(1))
@@ -153,6 +156,14 @@ test_that("the RWB fixture builds into an ARS with subject-count semantics", {
   secs <- suppressMessages(.rwb_secs())
   re <- build_ars_json(secs, study_id = "S-RWB")
   expect_length(re$outputs, 1)
+  columns <- vapply(
+    re$outputs[[1]]$displays[[1]]$display$columns,
+    function(column) column$label,
+    character(1)
+  )
+  expect_equal(columns,
+               c("", "Alpha Cohort (N=XX)", "Beta Cohort (N=XX)",
+                 "Unknown (N=XX)", "Total (N=XX)"))
 
   ## The wrapper-unwrapped row routes to a distinct-subject count, exactly
   ## like a hand-authored "count of unique USUBJID" annotation would.

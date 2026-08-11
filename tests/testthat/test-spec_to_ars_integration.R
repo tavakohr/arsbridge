@@ -116,6 +116,133 @@ test_that("spec_to_ars emits per-TLF {cards} deliverables (deterministic)", {
   }
 })
 
+test_that("spec_to_ars publishes write receipts without trusting the callback", {
+  td <- withr::local_tempdir()
+  json_out <- file.path(td, "re.json")
+  receipts <- list()
+
+  res <- withr::with_envvar(
+    c(ANTHROPIC_API_KEY = "", OPENAI_API_KEY = "", GEMINI_API_KEY = "",
+      GLM_API_KEY = "", ARS_LLM_PROVIDER = ""),
+    suppressMessages(suppressWarnings(spec_to_ars(
+      shell_path = test_path("fixtures", "annotated_shell_2tlf_minimal.docx"),
+      adam_spec_path = test_path("fixtures", "adam_spec_minimal.xlsx"),
+      output_path = json_out,
+      report_path = file.path(td, "rep.xlsx"),
+      verbose = FALSE,
+      .on_artifact_written = function(receipt) {
+        receipts[[length(receipts) + 1L]] <<- receipt
+        stop("the receipt observer failed")
+      }
+    )))
+  )
+
+  expect_identical(receipts[[1L]], list(ars_json = json_out))
+  expect_identical(receipts[[2L]], list(code_paths = res$code_paths))
+  expect_true(file.exists(res$report_path))
+})
+
+
+test_that("partially emitted scripts retain exact current-run provenance", {
+  skip_if_not_installed("cards")
+  td <- withr::local_tempdir()
+  json_out <- file.path(td, "re.json")
+  report_out <- file.path(td, "rep.xlsx")
+  code_dir <- file.path(td, "code")
+  dir.create(code_dir)
+
+  stale_path <- file.path(code_dir, "OLD_OUTPUT.R")
+  writeLines("# user-edited script", stale_path)
+
+  original_emit <- .emit_tlf_script
+  calls <- 0L
+  receipts <- list()
+  testthat::local_mocked_bindings(
+    .emit_tlf_script = function(...) {
+      calls <<- calls + 1L
+      if (calls == 2L) stop("forced second script failure")
+      original_emit(...)
+    },
+    .package = "arsbridge"
+  )
+
+  res <- NULL
+  expect_warning(
+    res <- withr::with_envvar(
+      c(ANTHROPIC_API_KEY = "", OPENAI_API_KEY = "", GEMINI_API_KEY = "",
+        GLM_API_KEY = "", ARS_LLM_PROVIDER = ""),
+      suppressMessages(spec_to_ars(
+        shell_path = test_path(
+          "fixtures", "annotated_shell_2tlf_minimal.docx"
+        ),
+        adam_spec_path = test_path("fixtures", "adam_spec_minimal.xlsx"),
+        output_path = json_out,
+        report_path = report_out,
+        code_dir = code_dir,
+        verbose = FALSE,
+        .on_artifact_written = function(receipt) {
+          receipts[[length(receipts) + 1L]] <<- receipt
+        }
+      ))
+    ),
+    "forced second script failure"
+  )
+
+  current_path <- file.path(code_dir, "T_14_1_1.R")
+  expect_identical(
+    res$code_paths,
+    stats::setNames(current_path, "T_14_1_1")
+  )
+  expect_identical(receipts[[2L]], list(code_paths = res$code_paths))
+  expect_true(file.exists(current_path))
+  expect_false(file.exists(file.path(code_dir, "T_14_3_1.R")))
+  expect_identical(readLines(stale_path), "# user-edited script")
+  expect_false(stale_path %in% res$code_paths)
+})
+
+
+test_that("a blocked reporting event keeps repair artifacts but emits no code", {
+  skip_if_not_installed("openxlsx2")
+  td <- withr::local_tempdir()
+  json_out <- file.path(td, "repairable.json")
+  report_out <- file.path(td, "validation.xlsx")
+  code_dir <- file.path(td, "code")
+
+  blocked <- .add_finding(
+    .new_findings(), "FAIL", "groupings", "GF_EMPTY", "groups",
+    "This fixed grouping has no groups.", "Add groups or make it data-driven.",
+    ref = "FIXED_GROUPING_EMPTY"
+  )
+  testthat::local_mocked_bindings(
+    validate_ars_model = function(model, spec = NULL, report = NULL) blocked,
+    .package = "arsbridge"
+  )
+
+  res <- withr::with_envvar(
+    c(ANTHROPIC_API_KEY = "", OPENAI_API_KEY = "", GEMINI_API_KEY = "",
+      GLM_API_KEY = "", ARS_LLM_PROVIDER = ""),
+    suppressMessages(spec_to_ars(
+      shell_path     = test_path("fixtures/annotated_shell_2tlf_minimal.docx"),
+      adam_spec_path = test_path("fixtures/adam_spec_minimal.xlsx"),
+      output_path    = json_out,
+      report_path    = report_out,
+      code_dir       = code_dir,
+      validate       = FALSE,
+      verbose        = FALSE
+    ))
+  )
+
+  expect_true(res$validation_gate$blocked)
+  expect_equal(res$validation_gate$blocking_refs, "FIXED_GROUPING_EMPTY")
+  expect_equal(res$ars_validation, blocked)
+  expect_true(file.exists(json_out))
+  expect_true(file.exists(report_out))
+  expect_length(res$code_paths, 0L)
+  expect_false(dir.exists(code_dir))
+  expect_true("ARS validation" %in%
+                unname(openxlsx2::wb_get_sheet_names(openxlsx2::wb_load(report_out))))
+})
+
 test_that("spec_to_ars end-to-end on minimal synthetic fixture (requires API key)", {
   skip_if(Sys.getenv("ANTHROPIC_API_KEY") == "",
           "ANTHROPIC_API_KEY not set -- skipping live LLM integration test")

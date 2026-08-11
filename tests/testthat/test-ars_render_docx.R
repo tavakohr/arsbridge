@@ -42,7 +42,8 @@ skip_if_not_installed("officer")
       condition = list(dataset = "ADSL", variable = "SAFFL",
                        comparator = "EQ", value = list("Y")))),
     analysisGroupings = list(list(id = "GF_TRT", name = "TRT01A",
-      groupingVariable = list(dataset = "ADSL", variable = "TRT01A"))),
+      groupingVariable = list(dataset = "ADSL", variable = "TRT01A"),
+      dataDriven = TRUE)),
     methods = list(list(id = "MTH_COUNT_AND_PERCENTAGE", name = "Count"),
                    list(id = "MTH_LISTING", name = "Listing")),
     analyses = list(
