@@ -2,6 +2,29 @@
 
 ## arsbridge (development version)
 
+- **The editor can change a grouping’s child groups.** Each child now
+  carries its label and its condition as fields, saved one child at a
+  time, so the four condition fields commit together rather than a
+  keystroke at a time. A compound child stays read-only and says which
+  hatch to use, since replacing it with a simple condition would drop
+  its other clauses. A grouping’s data-driven mode is a checkbox, and if
+  turning it off leaves a grouping with no groups, the panel says so
+  where the reviewer is standing and offers to mark it data-driven again
+  – an explicit, logged action, never an automatic one, because the two
+  modes mean different things about what the columns are.
+
+- **A grouping’s child groups can be edited from R.**
+  `model_add_group()`, `model_remove_group()`, `model_move_group()`,
+  `model_set_group_field()` and `model_set_group_condition()` write the
+  grouping node directly, the way a method’s operations already worked,
+  so the columns a reader sees (`n_groups`, `group_labels`) are
+  re-derived rather than left stale. Two of them do what the flat column
+  path cannot: a condition can be *created* on a child that had none,
+  and an empty value list is kept as one, which is how a where-clause
+  says “is missing”. A child named by a declared result path refuses to
+  be removed, and a relabelled child keeps its id, because result paths
+  reference those ids.
+
 - **A large codelist still decodes.** Above the 15-term expansion cap
   the decode was dropped entirely, not just the expansion: the ARD then
   carried raw codes, no shell row labelled with a decoded value matched
