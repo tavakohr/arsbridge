@@ -27,7 +27,8 @@ spec_to_ars(
   report_path = file.path(tempdir(), "spec_validation_report.xlsx"),
   code_dir = NULL,
   adam_dir = ".",
-  verbose = TRUE
+  verbose = TRUE,
+  .on_artifact_written = NULL
 )
 }
 \arguments{
@@ -162,6 +163,11 @@ engine \code{ars_to_ard()} sources to build the ARD.}
 (the reader can edit it). Default \code{"."}.}
 
 \item{verbose}{Print progress messages. Default \code{TRUE}.}
+
+\item{.on_artifact_written}{Internal callback invoked with a named artifact
+receipt after a current-run artifact has been written successfully. Used by
+the workflow to retain exact repair provenance if a later build step fails.
+Callback errors are ignored.}
 }
 \value{
 Invisibly returns a named list:

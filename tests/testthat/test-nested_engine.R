@@ -182,6 +182,8 @@ test_that("Total counts remain separate for each parent grouping", {
     includeTotal = TRUE,
     totalLabel = "Total"
   ))
+  spec$methods[[length(spec$methods) + 1L]] <-
+    .with_op_self_rels(.STANDARD_METHODS[["Subject Count"]])
   spec$outputs[[1]]$referencedAnalysisIds <- list("AN_NESTED_SUBJECT_COUNT")
   jsonlite::write_json(
     spec,

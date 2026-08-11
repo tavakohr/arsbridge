@@ -23,7 +23,7 @@
     test_path("fixtures", "ars_apx_drm_301_deterministic.json"), path
   )
 
-  model <- ars_to_model(path)
+  model <- .valid_fixture_model()
   target <- model$analyses$id[1]
   edited <- model_set_field(model, "analyses", target, "label", "Renamed")
 

@@ -736,7 +736,8 @@ parse_shell_docx <- function(docx_path, spec_lookup = NULL,
     ## a clean display label and a condition. The conditions are resolved
     ## into column groups later, in .finalize_section().
     combined <- .combine_header_rows_detected(header_rows)
-    keep     <- nzchar(combined$labels)
+    current$col_labels_full <- combined$labels
+    keep <- nzchar(combined$labels)
     current$col_headers <- combined$labels[keep]
     current$.pending_column_annotations <- list(
       labels      = combined$labels[keep],

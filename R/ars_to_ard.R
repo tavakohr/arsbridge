@@ -539,6 +539,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
   diag_reset()
 
   spec <- .read_json(ars_path)
+  .assert_runnable_ars(spec)
 
   # Cache list for loaded datasets
   dfs <- list()

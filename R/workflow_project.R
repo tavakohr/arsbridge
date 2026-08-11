@@ -245,6 +245,34 @@
 ## found, edit the handful of judgements that are wrong, rebuild.
 .WORKFLOW_STEPS <- c("project", "build", "supplement", "review", "results")
 
+#' Resolve the reporting event that the Review step may open.
+#'
+#' Current payloads explicitly identify artifacts from their own run. An
+#' explicit missing `ars_json` therefore blocks Review even when an older file
+#' remains at the canonical path. Payloads archived before artifact receipts
+#' existed intentionally fall back to that canonical file.
+#' @noRd
+.workflow_review_ars_path <- function(project_dir,
+                                      paths = .workflow_paths(project_dir)) {
+  ars_path <- paths$ars
+
+  if (file.exists(paths$payload)) {
+    payload <- tryCatch(readRDS(paths$payload), error = function(e) e)
+    if (inherits(payload, "condition")) return(NULL)
+
+    artifacts <- payload$artifacts
+    if (is.list(artifacts) && "ars_json" %in% names(artifacts)) {
+      ars_path <- artifacts$ars_json
+    }
+  }
+
+  if (length(ars_path) != 1L || is.na(ars_path) || !nzchar(ars_path) ||
+      !file.exists(ars_path)) {
+    return(NULL)
+  }
+  ars_path
+}
+
 #' Step statuses, derived entirely from what is on disk.
 #'
 #' Returns one row per step: `step`, `done`, `available` (all prerequisites
@@ -268,8 +296,10 @@
     sprintf("%s -- shell and spec recorded.", state$study_id %||% "")
   }
 
-  ars_done        <- file.exists(paths$ars)
-  supplement_done <- file.exists(paths$supplement)
+  ars_done         <- file.exists(paths$ars)
+  review_ars       <- .workflow_review_ars_path(project_dir, paths)
+  review_available <- !is.null(review_ars)
+  supplement_done  <- file.exists(paths$supplement)
   draft_done      <- file.exists(paths$draft)
   results_done    <- file.exists(paths$payload)
 
@@ -300,14 +330,14 @@
       ## to have happened -- which is why it follows the build rather than
       ## blocking it.
       ars_done,
-      ars_done,
+      review_available,
       results_done
     ),
     detail = c(
       project_detail,
       build_detail,
       supplement_detail,
-      if (ars_done) "Open the reporting event in the review editor." else
+      if (review_available) "Open the reporting event in the review editor." else
         "Available after the build.",
       if (results_done) "Everything the last run produced, and what it could not."
         else "Available after the build."
@@ -409,11 +439,14 @@
 #' @noRd
 .workflow_handoff_payload <- function(project_dir) {
   paths <- .workflow_paths(project_dir)
+  ars_path <- .workflow_review_ars_path(project_dir, paths)
+  if (is.null(ars_path)) return(NULL)
+
   state <- .workflow_read_state(project_dir)
   list(
     action         = "edit",
     project_dir    = project_dir,
-    ars_path       = paths$ars,
+    ars_path       = ars_path,
     adam_spec_path = state$adam_spec_path %||% NULL,
     report_path    = if (file.exists(paths$report)) paths$report else NULL
   )

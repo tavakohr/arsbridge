@@ -299,6 +299,116 @@ ars_workflow <- function(project_dir = NULL) {
     live, log_details)
 }
 
+#' Is this payload blocked at model validation?
+#'
+#' Read both fields because an in-memory payload may have been assembled while
+#' the validation gate was being added. This compatibility belongs at the UI
+#' boundary; the build and fill paths keep one current model contract.
+#' @noRd
+.workflow_payload_needs_fixes <- function(payload) {
+  gate <- payload$validation_gate
+  isTRUE(payload$needs_fixes) ||
+    isTRUE(gate$blocked) ||
+    identical(gate$status %||% "", "needs-fixes")
+}
+
+#' The blocked validation gate, including its model findings.
+#' @noRd
+.workflow_validation_gate_ui <- function(payload) {
+  if (!.workflow_payload_needs_fixes(payload)) return(NULL)
+
+  gate <- payload$validation_gate %||% list()
+  findings <- gate$blocking_findings
+  if (is.null(findings) && is.data.frame(gate$findings)) {
+    severity <- if ("severity" %in% names(gate$findings)) {
+      gate$findings$severity
+    } else {
+      rep(NA_character_, nrow(gate$findings))
+    }
+    findings <- gate$findings[severity %in% "FAIL", , drop = FALSE]
+  }
+  if (is.null(findings) || !is.data.frame(findings)) {
+    findings <- data.frame()
+  }
+
+  finding_columns <- c("ref", "entity", "id", "field", "problem", "action")
+  for (column in setdiff(finding_columns, names(findings))) {
+    findings[[column]] <- rep(NA_character_, nrow(findings))
+  }
+
+  finding_items <- lapply(seq_len(nrow(findings)), function(i) {
+    context <- unlist(findings[i, c("entity", "id", "field"), drop = FALSE],
+                      use.names = FALSE)
+    context <- context[!is.na(context) & nzchar(context)]
+    ref <- findings$ref[i]
+    if (is.na(ref) || !nzchar(ref)) ref <- "UNREFERENCED_FINDING"
+
+    shiny::tags$li(
+      shiny::tags$code(ref),
+      if (length(context) > 0) paste0(" -- ", paste(context, collapse = " / ")),
+      if (!is.na(findings$problem[i]) && nzchar(findings$problem[i])) {
+        paste0(": ", findings$problem[i])
+      },
+      if (!is.na(findings$action[i]) && nzchar(findings$action[i])) {
+        paste0(" To fix: ", findings$action[i])
+      }
+    )
+  })
+
+  if (length(finding_items) == 0L) {
+    refs <- as.character(gate$blocking_refs %||% character())
+    refs <- refs[!is.na(refs) & nzchar(refs)]
+    finding_items <- lapply(refs, function(ref) {
+      shiny::tags$li(shiny::tags$code(ref))
+    })
+  }
+
+  shiny::div(
+    class = "alert alert-danger small mt-2 mb-2",
+    shiny::strong("NEEDS FIXES -- runnable outputs blocked."),
+    shiny::p(
+      class = "mb-1",
+      "ARS JSON and validation report were retained for review; runnable code, ARD, filled workbook, and fill debrief were skipped."
+    ),
+    if (!is.null(gate$summary) && nzchar(gate$summary)) {
+      shiny::p(class = "mb-1", gate$summary)
+    },
+    shiny::strong("Blocking model findings:"),
+    if (length(finding_items) > 0L) {
+      shiny::tags$ul(class = "mb-0", finding_items)
+    } else {
+      shiny::p(
+        class = "mb-0",
+        "Open the retained validation report for the blocking finding details."
+      )
+    }
+  )
+}
+
+#' Normalize the per-cell table at the UI boundary.
+#'
+#' Archived payloads predate the provenance columns. They should still open,
+#' with the unavailable fields shown as missing, rather than failing while the
+#' Results panel subsets the data frame.
+#' @noRd
+.workflow_unfilled_table <- function(unfilled) {
+  columns <- c(
+    "output_id", "sheet", "ref", "row", "col", "col_label",
+    "row_label", "analysis_id", "method_id", "placeholder",
+    "ars_grouping_id", "ars_group_label", "variable_level", "parent_level",
+    "status", "reason", "hint", "ard_lookup_key"
+  )
+  source_columns <- setdiff(columns, "hint")
+  integer_columns <- c("row", "col")
+  for (column in setdiff(source_columns, names(unfilled))) {
+    missing <- if (column %in% integer_columns) NA_integer_ else NA_character_
+    unfilled[[column]] <- rep(missing, nrow(unfilled))
+  }
+  unfilled$hint <- vapply(unfilled$reason, .fill_reason_hint,
+                          character(1), USE.NAMES = FALSE)
+  unfilled[, columns, drop = FALSE]
+}
+
 #' What to announce for a finished build's payload.
 #'
 #' Pure, so the choice of words is testable without a Shiny session. The
@@ -310,6 +420,14 @@ ars_workflow <- function(project_dir = NULL) {
   if (identical(status, "error")) {
     return(list(
       text = paste("Build failed at", payload$failed_stage %||% "an early stage."),
+      type = "warning"))
+  }
+  if (.workflow_payload_needs_fixes(payload)) {
+    return(list(
+      text = paste(
+        "Build needs fixes -- the ARS JSON and validation report were retained;",
+        "runnable outputs were skipped."
+      ),
       type = "warning"))
   }
   n_unfilled <- if (is.null(payload$unfilled_cells)) 0L
@@ -356,15 +474,55 @@ ars_workflow <- function(project_dir = NULL) {
   paste0(text, " The worker's own output is in ", log_path, ".")
 }
 
+#' A payload for a worker that failed outside the headless workflow's own
+#' error handling.
+#'
+#' No earlier artifact is attributed to this attempt. The run log is retained
+#' as a diagnostic pointer because it may contain the worker's last output.
+#' @noRd
+.workflow_worker_failure_payload <- function(err, paths = NULL) {
+  list(
+    status = "error",
+    failed_stage = "background worker",
+    error = conditionMessage(err),
+    timings = list(total = NA_real_),
+    diagnostics = .EMPTY_DIAGNOSTICS(),
+    artifacts = list(
+      ars_json = NA_character_,
+      validation_report = NA_character_,
+      code_dir = NA_character_,
+      code_paths = character(0),
+      ard_rds = NA_character_,
+      filled_workbook = NA_character_,
+      fill_debrief = NA_character_,
+      run_log = paths$run_log %||% NA_character_
+    ),
+    validation_gate = NULL,
+    needs_fixes = FALSE,
+    fill = NULL,
+    fill_census = NULL,
+    unfilled_cells = NULL,
+    pending = NULL,
+    metadata = list()
+  )
+}
+
 #' Common handling for a finished build, however it ran.
 #' @noRd
 .workflow_finish_build <- function(res, state, bump) {
   state$started(NULL)
   if (inherits(res, "error") || inherits(res, "condition")) {
+    project_dir <- state$project_dir()
+    paths <- if (is.null(project_dir)) NULL else .workflow_paths(project_dir)
+    payload <- .workflow_worker_failure_payload(res, paths)
+    state$last_result(payload)
+    if (!is.null(paths)) {
+      tryCatch(saveRDS(payload, paths$payload), error = function(e) NULL)
+    }
     shiny::showNotification(paste("Build failed:", conditionMessage(res)),
                             type = "error", duration = 10)
     bump()
-    return(invisible(NULL))
+    return(invisible(payload))
   }
   state$last_result(res)
   bump()
@@ -387,9 +545,14 @@ ars_workflow <- function(project_dir = NULL) {
 #' The one-line verdict on a run.
 #' @noRd
 .workflow_summary_ui <- function(payload) {
-  status <- payload$status %||% "success"
-  tone <- switch(status, success = "alert-success", partial = "alert-warning",
-                 "alert-danger")
+  needs_fixes <- .workflow_payload_needs_fixes(payload)
+  status <- if (needs_fixes) "needs fixes" else payload$status %||% "success"
+  tone <- if (needs_fixes) {
+    "alert-danger"
+  } else {
+    switch(status, success = "alert-success", partial = "alert-warning",
+           "alert-danger")
+  }
   fails <- sum((payload$diagnostics$severity %||% character()) %in% "FAIL")
   seconds <- payload$timings$total %||% NA_real_
   shiny::div(
@@ -534,7 +697,8 @@ ars_workflow <- function(project_dir = NULL) {
 #' A copyable checklist of files to upload to the chat assistant.
 #' @noRd
 .workflow_upload_list <- function(title, paths) {
-  paths <- Filter(function(p) !is.null(p) && nzchar(p), paths)
+  paths <- unlist(paths, use.names = FALSE)
+  paths <- paths[!is.na(paths) & nzchar(paths)]
   shiny::div(
     class = "border rounded p-2 mb-3 small",
     shiny::div(class = "fw-bold mb-1", title),
@@ -543,6 +707,18 @@ ars_workflow <- function(project_dir = NULL) {
       lapply(paths, function(p) shiny::tags$li(shiny::tags$code(p)))
     )
   )
+}
+
+#' Scripts produced by the represented run.
+#'
+#' Payloads archived before per-run script paths existed carry only `code_dir`.
+#' Keep that display fallback at the UI boundary; current payloads always carry
+#' `code_paths`, including an empty vector when no scripts were written.
+#' @noRd
+.workflow_code_paths <- function(payload) {
+  paths <- payload$artifacts$code_paths
+  if (is.null(paths)) paths <- payload$artifacts$code_dir
+  paths
 }
 
 #' @noRd
@@ -1128,12 +1304,12 @@ ars_workflow <- function(project_dir = NULL) {
     ## --- step 4: review hand-off -------------------------------------------
     output$review_paths <- shiny::renderUI({
       state$nonce()
-      paths <- paths_r()
-      if (is.null(paths) || !file.exists(paths$ars)) return(NULL)
+      payload <- .workflow_last_payload(paths_r(), state)
+      if (is.null(payload)) return(NULL)
       .workflow_upload_list("Built artifacts:", list(
-        paths$ars,
-        if (file.exists(paths$report)) paths$report,
-        if (dir.exists(paths$code_dir)) paths$code_dir
+        payload$artifacts$ars_json,
+        payload$artifacts$validation_report,
+        .workflow_code_paths(payload)
       ))
     })
 
@@ -1170,20 +1346,32 @@ ars_workflow <- function(project_dir = NULL) {
                           "Available after the first build."))
       }
       labels <- c(ars_json = "Reporting event", validation_report = "Validation report",
-                  code_dir = "cards scripts", ard_rds = "ARD",
+                  code_paths = "cards scripts", ard_rds = "ARD",
                   filled_workbook = "Filled workbook",
                   fill_debrief = "Fill debrief",
                   run_log = "Run log (may contain console output -- review before sharing)")
-      rows <- lapply(names(labels), function(key) {
-        path <- payload$artifacts[[key]] %||% NA_character_
-        if (is.na(path)) {
-          return(shiny::div(class = "small text-muted",
-                            labels[[key]], ": not produced"))
+      rows <- unlist(lapply(names(labels), function(key) {
+        paths <- if (key %in% "code_paths") {
+          .workflow_code_paths(payload)
+        } else {
+          payload$artifacts[[key]]
         }
-        shiny::div(class = "small", labels[[key]], ": ", shiny::tags$code(path))
-      })
-      shiny::div(.workflow_summary_ui(payload),
-                 shiny::div(class = "mt-2", rows))
+        paths <- as.character(paths %||% NA_character_)
+        paths <- paths[!is.na(paths) & nzchar(paths)]
+        if (length(paths) == 0L) {
+          return(list(shiny::div(class = "small text-muted",
+                                 labels[[key]], ": not produced")))
+        }
+        lapply(paths, function(path) {
+          shiny::div(class = "small", labels[[key]], ": ",
+                     shiny::tags$code(path))
+        })
+      }), recursive = FALSE)
+      shiny::div(
+        .workflow_summary_ui(payload),
+        .workflow_validation_gate_ui(payload),
+        shiny::div(class = "mt-2", rows)
+      )
     })
 
     output$results_fill_rollup <- shiny::renderUI({
@@ -1270,11 +1458,11 @@ ars_workflow <- function(project_dir = NULL) {
       if (is.null(unfilled) || nrow(unfilled) == 0) return(NULL)
       ## The reason is the payload's most useful column: on a run that
       ## filled nothing, its value distribution IS the diagnosis. The hint
-      ## beside it is what the author does about it.
-      unfilled$hint <- vapply(unfilled$reason, .fill_reason_hint,
-                              character(1), USE.NAMES = FALSE)
+      ## beside it is what the author does about it. The remaining columns
+      ## carry the exact ARS and ARD lookup provenance for this cell.
+      unfilled <- .workflow_unfilled_table(unfilled)
       DT::datatable(
-        unfilled[, c("sheet", "ref", "status", "reason", "hint")],
+        unfilled,
         rownames = FALSE, filter = "top",
         options = list(pageLength = 8, scrollX = TRUE, dom = "ftp"))
     })

@@ -25,13 +25,16 @@
 #' @param blockers Optional data frame from `ars_blockers()` -- written as the
 #'   FIRST worksheet ("What to fix first") when it has rows, so the user sees
 #'   the show-stoppers before anything else.
+#' @param ars_findings Optional findings from `validate_ars_model()` -- written
+#'   to an "ARS validation" worksheet so the repairable event and its structural
+#'   findings travel together.
 #'
 #' @return Invisibly returns `output_path`.
 #'
 #' @keywords internal
 #' @noRd
 write_validation_report <- function(report_df, output_path, diagnostics = NULL,
-                                    blockers = NULL) {
+                                    blockers = NULL, ars_findings = NULL) {
   if (!requireNamespace("openxlsx2", quietly = TRUE)) {
     cli::cli_abort("openxlsx2 is required to write the validation report.")
   }
@@ -55,6 +58,24 @@ write_validation_report <- function(report_df, output_path, diagnostics = NULL,
     wb$add_data(sheet = "Validation", x = placeholder, start_row = 1L)
   } else {
     .write_styled_sheet(wb, "Validation", report_df, tint_col = "status")
+  }
+
+  if (!is.null(ars_findings)) {
+    wb$add_worksheet("ARS validation")
+    if (nrow(ars_findings) == 0L) {
+      wb$add_data(
+        sheet = "ARS validation",
+        x = data.frame(
+          message = "No ARS model findings to report.",
+          stringsAsFactors = FALSE
+        ),
+        start_row = 1L
+      )
+    } else {
+      .write_styled_sheet(
+        wb, "ARS validation", ars_findings, tint_col = "severity"
+      )
+    }
   }
 
   if (!is.null(diagnostics) && nrow(diagnostics) > 0) {
@@ -132,10 +153,12 @@ write_validation_report <- function(report_df, output_path, diagnostics = NULL,
     }
   }
 
-  ## Auto widths (clamped 12..60).
+  ## Auto widths (clamped 12..60). Missing cells contribute zero width.
   for (c in seq_len(n_cols)) {
     lens <- nchar(as.character(df[[c]]) %||% "")
-    width <- max(12L, min(60L, max(lens, na.rm = TRUE) + 2L))
+    lens[is.na(lens)] <- 0L
+    longest <- max(c(0L, lens))
+    width <- max(12L, min(60L, longest + 2L))
     wb$set_col_widths(sheet = sheet, cols = c, widths = width)
   }
   wb$freeze_pane(sheet = sheet, first_active_row = 2L)

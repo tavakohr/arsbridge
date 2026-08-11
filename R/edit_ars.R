@@ -11,7 +11,8 @@
 ##     reporting event where the good one was,
 ##   * an edit log is written beside it as a sidecar, keeping the ARS JSON
 ##     itself free of non-standard provenance fields,
-##   * and the result is re-validated so the reviewer is told what they saved.
+##   * and the result is validated before any explicit write, so blocking
+##     findings cannot replace the repair copy on disk.
 ##
 ## .edit_ars_finish() does all of that with no Shiny involved, so the whole
 ## save path is testable without a browser.
@@ -82,11 +83,12 @@ edit_ars <- function(ars, adam_spec_path = NULL, report_path = NULL,
     ))
   }
 
+  recovery_path <- input$source_path %||% output_path
   app <- .ars_editor_app(
     model       = input$model,
     spec        = input$spec,
     report      = input$report,
-    source_path = input$source_path,
+    source_path = recovery_path,
     mode        = "edit"
   )
 
@@ -109,9 +111,24 @@ edit_ars <- function(ars, adam_spec_path = NULL, report_path = NULL,
 review_ars <- edit_ars
 
 
-## Serialize, back up, write atomically, log, re-validate. Returns the path.
+## Validate, serialize, back up, write atomically and log. Returns the path.
 #' @noRd
 .edit_ars_finish <- function(result, output_path, spec = NULL, report = NULL) {
+  validation_gate <- .model_validation_gate(
+    result$model, spec = spec, report = report
+  )
+  if (validation_gate$blocked) {
+    cli::cli_alert_danger(
+      "Not saved: {validation_gate$summary}"
+    )
+    return(invisible(list(
+      saved = FALSE,
+      path = output_path,
+      validation_gate = validation_gate,
+      diagnostics = validation_gate$findings
+    )))
+  }
+
   ars <- model_to_ars(result$model)
 
   ## Back up whatever is there before replacing it.
@@ -152,8 +169,7 @@ review_ars <- edit_ars
   ## protect -- leaving it would offer stale changes on the next open.
   .clear_autosave(result$source_path %||% output_path)
 
-  findings <- validate_ars_model(result$model, spec, report)
-  .report_save(output_path, result$edit_log, findings)
+  .report_save(output_path, result$edit_log, validation_gate$findings)
   .report_conformance(ars)
 
   invisible(output_path)

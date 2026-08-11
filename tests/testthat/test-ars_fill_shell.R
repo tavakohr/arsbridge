@@ -118,6 +118,102 @@ test_that("the reason names the first failing slot, not the worst one", {
   expect_true(is.na(.pending_reason(c("computed", "computed"))))
 })
 
+test_that("nested child Total misses identify the absent parent key only", {
+  index <- data.frame(
+    analysis_id = c("AN_CHILD", "AN_CHILD"),
+    group_level = c("Total", "Cohort A"),
+    variable_level = c("Shared term", "Shared term"),
+    nest_level = c("Other parent", "Other parent"),
+    stat_name = c("n", "n"),
+    value = c(3, 2),
+    status = c("computed", "computed"),
+    stringsAsFactors = FALSE
+  )
+
+  total <- .ard_value(
+    index = index,
+    analysis_id = "AN_CHILD",
+    group_level = "Total",
+    variable_level = "Shared term",
+    stat_name = "n",
+    nest_level = "Respiratory disorders",
+    total_column = TRUE
+  )
+  expect_equal(total$status, "missing_parent_key")
+  expect_true(is.na(total$value))
+
+  custom_total <- .ard_value(
+    index = transform(index, group_level = c("Overall", "Cohort A")),
+    analysis_id = "AN_CHILD",
+    group_level = "Overall",
+    variable_level = "Shared term",
+    stat_name = "n",
+    nest_level = "Respiratory disorders",
+    total_column = TRUE
+  )
+  expect_equal(custom_total$status, "missing_parent_key")
+
+  ## The same mismatch outside Total remains the ordinary no-row diagnosis.
+  cohort <- .ard_value(
+    index = index,
+    analysis_id = "AN_CHILD",
+    group_level = "Cohort A",
+    variable_level = "Shared term",
+    stat_name = "n",
+    nest_level = "Respiratory disorders"
+  )
+  expect_equal(cohort$status, "no_row")
+
+  ## A Total lookup missing the analysis/stat/level dimensions is also generic.
+  unrelated <- .ard_value(
+    index = index,
+    analysis_id = "AN_OTHER",
+    group_level = "Total",
+    variable_level = "Shared term",
+    stat_name = "n",
+    nest_level = "Respiratory disorders"
+  )
+  expect_equal(unrelated$status, "no_row")
+})
+
+test_that("the diagnostic lookup key mirrors every ARD lookup dimension", {
+  cell <- list(
+    analysis_id = "AN_CHILD",
+    group = list(label = "Total"),
+    variable_level = "Shared term",
+    slots = list(
+      list(operation_id = "OP_N", stat_name = "n", decimals = 0L),
+      list(operation_id = "OP_P", stat_name = "p", decimals = 1L)
+    )
+  )
+  index <- data.frame(
+    analysis_id = c("AN_CHILD", "AN_CHILD"),
+    group_level = c("Total", "Total"),
+    variable_level = c("Shared term", "Shared term"),
+    nest_level = c("Respiratory disorders", "Respiratory disorders"),
+    stat_name = c("n", "p"),
+    value = c(3, 0.375),
+    status = c("computed", "computed"),
+    stringsAsFactors = FALSE
+  )
+
+  resolved <- .resolve_cell(
+    cell,
+    index,
+    nest_level = "Respiratory disorders"
+  )
+
+  expect_equal(
+    resolved$ard_lookup_key,
+    paste(
+      "analysis=AN_CHILD | slots=OP_N:n,OP_P:p | column=Total |",
+      "variable=Shared term | parent=Respiratory disorders"
+    )
+  )
+  expect_equal(resolved$variable_level, "Shared term")
+  expect_equal(resolved$parent_level, "Respiratory disorders")
+})
+
 ## ---------------------------------------------------------------------------
 ## Formatting
 ## ---------------------------------------------------------------------------

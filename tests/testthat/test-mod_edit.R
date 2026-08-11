@@ -10,11 +10,57 @@
 
 .edit_state <- function(model = NULL, spec = NULL, report = NULL) {
   if (is.null(model)) {
-    model <- ars_to_model(
-      test_path("fixtures", "ars_apx_drm_301_deterministic.json")
-    )
+    model <- .valid_fixture_model()
   }
   .editor_state(model, spec, report, NULL, "edit")
+}
+
+.total_label_repair_model <- function() {
+  groups <- list(
+    list(label = "Cohort A", annotation = "ADSL.COHORTN=1", order = 1L),
+    list(label = "Cohort B", annotation = "ADSL.COHORTN=2", order = 2L)
+  )
+  section <- list(
+    tlf_number = "T-1",
+    tlf_type = "TABLE",
+    title = "Table 1",
+    population_text = "Safety Population",
+    population_annot = "ADSL.SAFFL='Y'",
+    analysis_type = "CATEGORICAL",
+    ars_method_name = "Count and Percentage",
+    by_variable = "COHORTN",
+    by_variable_dataset = "ADSL",
+    source_format = "docx",
+    col_headers = c("Characteristic", "Cohort A", "Cohort B"),
+    column_groups = list(variable = "COHORTN", dataset = "ADSL",
+                         groups = groups),
+    stub_rows = list(list(label = "Sex", annotation = "ADSL.SEX",
+                          has_annot = TRUE)),
+    enriched_rows = list(list(label = "Sex", primary_dataset = "ADSL",
+                              primary_variable = "SEX", data_subset = NULL,
+                              variable_role = "ANALYSIS"))
+  )
+  model <- ars_to_model(build_ars_json(list(section), study_id = "S1"))
+
+  first <- model$analyses[1, , drop = FALSE]
+  first$id <- "AN_T_1_001"
+  first$includeTotal <- TRUE
+  first$raw[[1]]$id <- first$id
+  first$raw[[1]]$includeTotal <- TRUE
+  first$raw[[1]]$totalLabel <- "All"
+
+  second <- first
+  second$id <- "AN_T_1_002"
+  second$raw[[1]]$id <- second$id
+  second$raw[[1]]$totalLabel <- "Overall"
+  model$analyses <- rbind(first, second)
+  model$outputs$referenced_analysis_ids[1] <- .join_values(c(first$id, second$id))
+  model$outputs$raw[[1]]$referencedAnalysisIds <- list(first$id, second$id)
+
+  columns <- model$outputs$raw[[1]]$displays[[1]]$display$columns
+  columns[[length(columns) + 1L]] <- list(label = "Overall")
+  model$outputs$raw[[1]]$displays[[1]]$display$columns <- columns
+  model
 }
 
 .edit_log_row <- function(id, field = "label", old = "before", new = "after") {
@@ -76,6 +122,43 @@ test_that("an edit re-runs validation", {
   findings <- state$findings()
   expect_gt(sum(findings$severity == "FAIL"), 0)
   expect_true(any(grepl("MTH_GONE", findings$problem)))
+})
+
+test_that("the structured editor can repair and save a Total-label blocker", {
+  skip_if_not_installed("shiny")
+  shiny::reactiveConsole(TRUE)
+  withr::defer(shiny::reactiveConsole(FALSE))
+
+  state <- .edit_state(.total_label_repair_model())
+  target <- "AN_T_1_001"
+  mismatch <- state$findings()$ref %in% "FLAT_AXIS_COLUMN_LABEL_MISMATCH"
+  expect_equal(sum(mismatch), 1L)
+
+  row <- state$model()$analyses[state$model()$analyses$id == target, ]
+  html <- paste(as.character(.analysis_edit_ui(
+    row, state$model(), state, identity
+  )), collapse = "\n")
+  expect_match(html, "Total column label", fixed = TRUE)
+  expect_match(html, "All", fixed = TRUE)
+
+  expect_true(apply_edit(state, "analyses", target,
+                         "totalLabel", "Overall"))
+  expect_equal(state$model()$analyses$totalLabel[1], "Overall")
+  expect_equal(state$model()$analyses$raw[[1]]$totalLabel, "Overall")
+  expect_false(any(state$findings()$ref %in%
+                     "FLAT_AXIS_COLUMN_LABEL_MISMATCH"))
+
+  output_path <- tempfile(fileext = ".json")
+  result <- list(
+    model = state$model(),
+    edit_log = state$edit_log(),
+    source_path = output_path
+  )
+  suppressMessages(.edit_ars_finish(result, output_path))
+  saved <- jsonlite::read_json(output_path, simplifyVector = FALSE)
+  saved_analysis <- Filter(function(x) identical(x$id, target),
+                           saved$analyses)[[1]]
+  expect_equal(saved_analysis$totalLabel, "Overall")
 })
 
 test_that("clearing an optional field removes the key on save", {

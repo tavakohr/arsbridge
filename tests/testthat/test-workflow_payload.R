@@ -79,8 +79,8 @@ test_that("an empty diagnostics table still has the full shape", {
 test_that("the payload names every artifact it produced", {
   p <- payload_run()
   expect_named(p$artifacts,
-               c("ars_json", "validation_report", "code_dir", "ard_rds",
-                 "filled_workbook", "fill_debrief", "run_log"))
+               c("ars_json", "validation_report", "code_dir", "code_paths",
+                 "ard_rds", "filled_workbook", "fill_debrief", "run_log"))
   for (name in c("ars_json", "ard_rds", "filled_workbook")) {
     expect_true(file.exists(p$artifacts[[name]]), info = name)
   }
@@ -146,6 +146,207 @@ test_that("a run without data builds the ARS and says why it stopped there", {
   expect_equal(p$status, "success")
 })
 
+test_that("a blocked build needs fixes and reports only this run's artifacts", {
+  output_dir <- withr::local_tempdir()
+  paths <- list(
+    code_dir = file.path(output_dir, "code"),
+    ard = file.path(output_dir, "ard.rds"),
+    filled = file.path(output_dir, "filled_shells.xlsx"),
+    debrief = file.path(output_dir, "fill_debrief.xlsx")
+  )
+  dir.create(paths$code_dir)
+  writeLines("stale code", file.path(paths$code_dir, "stale.R"))
+  saveRDS(data.frame(stale = TRUE), paths$ard)
+  writeLines("stale fill", paths$filled)
+  writeLines("stale debrief", paths$debrief)
+
+  findings <- .add_finding(
+    .new_findings(), "FAIL", "groupings", "GF_EMPTY", "groups",
+    "This fixed grouping has no groups.", "Add groups or make it data-driven.",
+    ref = "FIXED_GROUPING_EMPTY"
+  )
+  gate <- list(
+    blocked = TRUE,
+    status = "needs-fixes",
+    findings = findings,
+    blocking_findings = findings,
+    blocking_refs = "FIXED_GROUPING_EMPTY",
+    summary = "1 blocking finding. Add groups or make it data-driven."
+  )
+
+  testthat::local_mocked_bindings(
+    spec_to_ars = function(shell_path, adam_spec_path, output_path, report_path,
+                           code_dir, ...) {
+      writeLines("{}", output_path)
+      writeLines("validation", report_path)
+      list(
+        ars_path = output_path,
+        report_path = report_path,
+        code_dir = code_dir,
+        code_paths = character(0),
+        validation_gate = gate,
+        ars_validation = findings
+      )
+    },
+    ars_to_ard = function(...) stop("blocked builds must not execute"),
+    ars_fill_shell = function(...) stop("blocked builds must not fill"),
+    write_fill_debrief = function(...) stop("blocked builds need no debrief"),
+    .package = "arsbridge"
+  )
+
+  p <- ars_workflow_run(
+    shell_path = SHELL_X,
+    adam_spec_path = SPEC_X,
+    adam_dir = ADAM_X,
+    output_dir = output_dir
+  )
+
+  expect_equal(p$status, "partial")
+  expect_true(p$needs_fixes)
+  expect_true(p$validation_gate$blocked)
+  expect_null(p$error)
+  expect_true(file.exists(p$artifacts$ars_json))
+  expect_true(file.exists(p$artifacts$validation_report))
+  expect_true(all(is.na(unlist(p$artifacts[c(
+    "code_dir", "ard_rds", "filled_workbook", "fill_debrief"
+  )]))))
+  expect_true(any(p$diagnostics$stage == "validate_ars" &
+                    p$diagnostics$severity == "FAIL"))
+})
+
+test_that("a successful rebuild reports only scripts written by this run", {
+  output_dir <- withr::local_tempdir()
+  code_dir <- file.path(output_dir, "code")
+  dir.create(code_dir)
+  stale_path <- file.path(code_dir, "OLD_OUTPUT.R")
+  current_path <- file.path(code_dir, "T_01.R")
+  writeLines("# stale", stale_path)
+
+  gate <- .validation_gate(.new_findings())
+  testthat::local_mocked_bindings(
+    spec_to_ars = function(shell_path, adam_spec_path, output_path, report_path,
+                           code_dir, ...) {
+      writeLines("{}", output_path)
+      writeLines("validation", report_path)
+      writeLines("# current", current_path)
+      list(
+        ars_path = output_path,
+        report_path = report_path,
+        code_dir = code_dir,
+        code_paths = c(T_01 = current_path),
+        validation_gate = gate,
+        ars_validation = gate$findings
+      )
+    },
+    .package = "arsbridge"
+  )
+
+  payload <- ars_workflow_run(
+    shell_path = SHELL_X,
+    adam_spec_path = SPEC_X,
+    output_dir = output_dir,
+    adam_dir = NULL
+  )
+
+  expect_true(is.na(payload$artifacts$code_dir))
+  expect_identical(unname(payload$artifacts$code_paths), current_path)
+  expect_false(stale_path %in% payload$artifacts$code_paths)
+})
+
+
+test_that("a late build failure retains only its current repair JSON", {
+  output_dir <- withr::local_tempdir()
+  ars_path <- file.path(output_dir, "reporting_event.json")
+  stale_paths <- c(
+    file.path(output_dir, "validation_report.xlsx"),
+    file.path(output_dir, "code", "OLD_OUTPUT.R"),
+    file.path(output_dir, "ard.rds"),
+    file.path(output_dir, "filled_shells.xlsx"),
+    file.path(output_dir, "fill_debrief.xlsx")
+  )
+  for (path in stale_paths) {
+    dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+    writeLines("stale", path)
+  }
+  writeLines('{"run":"prior"}', ars_path)
+
+  write_repair <- TRUE
+  testthat::local_mocked_bindings(
+    spec_to_ars = function(..., output_path, .on_artifact_written = NULL) {
+      if (write_repair) {
+        writeLines('{"run":"current"}', output_path)
+        if (is.function(.on_artifact_written)) {
+          .on_artifact_written(list(ars_json = output_path))
+        }
+      }
+      stop("forced failure after writing repair JSON")
+    },
+    ars_to_ard = function(...) stop("a failed build must not execute"),
+    .package = "arsbridge"
+  )
+
+  current <- ars_workflow_run(
+    shell_path = SHELL_X,
+    adam_spec_path = SPEC_X,
+    adam_dir = ADAM_X,
+    output_dir = output_dir
+  )
+
+  expect_equal(current$status, "error")
+  expect_equal(current$failed_stage, "spec_to_ars")
+  expect_identical(current$artifacts$ars_json, ars_path)
+  expect_identical(readLines(ars_path), '{"run":"current"}')
+  expect_length(current$artifacts$code_paths, 0L)
+  expect_true(all(is.na(unlist(current$artifacts[c(
+    "validation_report", "code_dir", "ard_rds",
+    "filled_workbook", "fill_debrief"
+  )]))))
+
+  write_repair <- FALSE
+  stale_only <- ars_workflow_run(
+    shell_path = SHELL_X,
+    adam_spec_path = SPEC_X,
+    adam_dir = ADAM_X,
+    output_dir = output_dir
+  )
+
+  expect_true(is.na(stale_only$artifacts$ars_json))
+})
+
+
+test_that("a late report failure retains exact current-run code paths", {
+  output_dir <- withr::local_tempdir()
+  code_dir <- file.path(output_dir, "code")
+  dir.create(code_dir)
+  stale_path <- file.path(code_dir, "OLD_OUTPUT.R")
+  writeLines("# from a prior run", stale_path)
+
+  testthat::local_mocked_bindings(
+    write_validation_report = function(...) {
+      stop("forced validation report failure")
+    },
+    .package = "arsbridge"
+  )
+
+  payload <- no_keys(ars_workflow_run(
+    shell_path = test_path("fixtures", "annotated_shell_2tlf_minimal.docx"),
+    adam_spec_path = test_path("fixtures", "adam_spec_minimal.xlsx"),
+    output_dir = output_dir
+  ))
+
+  expected <- stats::setNames(
+    file.path(code_dir, c("T_14_1_1.R", "T_14_3_1.R")),
+    c("T_14_1_1", "T_14_3_1")
+  )
+  expect_equal(payload$status, "error")
+  expect_equal(payload$failed_stage, "spec_to_ars")
+  expect_match(payload$error, "forced validation report failure")
+  expect_identical(payload$artifacts$code_paths, expected)
+  expect_true(all(file.exists(expected)))
+  expect_false(stale_path %in% payload$artifacts$code_paths)
+})
+
+
 test_that("a failing stage returns a payload instead of throwing", {
   ## The moment the caller most needs the payload is when the run died: it
   ## carries which stage, the message, and the log to read.
@@ -169,8 +370,14 @@ test_that("unfilled workbook cells come back with their reasons", {
   ## now that nested blocks expand, so the frame is legitimately empty and the
   ## test asserts the shape rather than a count it no longer controls.
   p <- payload_run()
-  expect_true(all(c("sheet", "ref", "status", "reason") %in%
+  provenance <- c(
+    "row", "col", "col_label", "analysis_id", "row_label", "method_id",
+    "placeholder", "ars_grouping_id", "ars_group_label", "variable_level",
+    "parent_level", "ard_lookup_key"
+  )
+  expect_true(all(c("sheet", "ref", "status", "reason", provenance) %in%
                     names(p$unfilled_cells)))
+  expect_identical(names(p$unfilled_cells), names(p$fill_census))
   expect_equal(p$fill$pending, 0)
   if (nrow(p$unfilled_cells) > 0) {
     expect_true(all(nzchar(p$unfilled_cells$reason)))
@@ -260,13 +467,19 @@ test_that("a filling run writes the fill debrief and hands back the census", {
   ## can roll it up without re-reading any file.
   expect_s3_class(p$fill_census, "data.frame")
   expect_true("filled" %in% p$fill_census$status)
-  expect_true(all(c("row", "col", "col_label", "analysis_id") %in%
-                    names(p$fill_census)))
+  provenance <- c(
+    "row", "col", "col_label", "analysis_id", "row_label", "method_id",
+    "placeholder", "ars_grouping_id", "ars_group_label", "variable_level",
+    "parent_level", "ard_lookup_key"
+  )
+  expect_true(all(provenance %in% names(p$fill_census)))
 
-  ## And the workbook itself opens with the debrief sheets.
+  ## And the workbook itself exposes the same provenance in its census sheet.
   wb <- openxlsx2::wb_load(p$artifacts$fill_debrief)
   expect_true(all(c("Fill census", "Columns", "Reasons", "Legend") %in%
                     unname(openxlsx2::wb_get_sheet_names(wb))))
+  workbook_census <- openxlsx2::wb_to_df(wb, sheet = "Fill census")
+  expect_true(all(provenance %in% names(workbook_census)))
 })
 
 test_that("a run that never fills produces no debrief, and no error", {

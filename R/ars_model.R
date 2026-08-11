@@ -160,7 +160,7 @@
   "analysisSetId", "dataSubsetId", "methodId",
   "reason", "purpose",
   "dataset", "variable", "variableRole",
-  "annotation", "sapDescription", "includeTotal", "strata",
+  "annotation", "sapDescription", "includeTotal", "totalLabel", "strata",
   "grouping_ids", "output_id"
 )
 
@@ -197,6 +197,7 @@
       annotation     = .chr_field(node[["annotation"]]),
       sapDescription = .chr_field(node[["sapDescription"]]),
       includeTotal   = .lgl_field(node[["includeTotal"]]),
+      totalLabel     = .chr_field(node[["totalLabel"]]),
       strata         = .chr_field(node[["strata"]]),
       grouping_ids   = if (length(grouping_ids) == 0) {
         NA_character_
@@ -587,6 +588,10 @@ print.ars_model <- function(x, ...) {
   node <- .set_or_drop(node, "sapDescription", row$sapDescription)
   node <- .set_or_drop(node, "variableRole", row$variableRole)
   node <- .set_or_drop(node, "includeTotal", row$includeTotal)
+  current_total_label <- .chr_field(node[["totalLabel"]])
+  if (!identical(current_total_label, row$totalLabel)) {
+    node <- .set_or_drop(node, "totalLabel", row$totalLabel)
+  }
   node <- .set_or_drop(node, "strata", row$strata)
 
   ## dataset / variable live twice: as flat strings (which siera reads) and

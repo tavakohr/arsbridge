@@ -244,6 +244,318 @@
 }
 
 #' @noRd
+.check_grouping_shapes <- function(findings, model) {
+  groupings <- model$groupings
+
+  is_fixed <- is.na(groupings$dataDriven) | !groupings$dataDriven
+  invalid <- which(is_fixed & groupings$n_groups == 0L)
+  for (i in invalid) {
+    findings <- .add_finding(
+      findings, "FAIL", "groupings", groupings$id[i], "groups",
+      "This fixed grouping declares no groups, so it defines no result columns.",
+      "Add the fixed groups, or mark the grouping as data-driven.",
+      ref = "FIXED_GROUPING_EMPTY"
+    )
+  }
+
+  findings
+}
+
+#' Result-column labels carried by the display for both Word and Excel shells.
+#' Arsbridge-authored shell layouts retain the physical stub as the first
+#' display column. Displays without shell layout metadata use the compact ARS
+#' shape and carry result columns only.
+#' @noRd
+.flat_display_labels <- function(output_node) {
+  display <- .display_node(output_node)
+  labels <- vapply(
+    display[["columns"]] %||% list(),
+    function(column) .chr_field(column[["label"]]),
+    character(1)
+  )
+  if (!is.null(.shell_layout(output_node)) && length(labels) > 0L) {
+    labels <- labels[-1]
+  }
+
+  labels <- .strip_n_placeholder(labels[!is.na(labels)])
+  labels
+}
+
+#' @noRd
+.check_flat_axes <- function(findings, model) {
+  for (i in seq_len(nrow(model$outputs))) {
+    if (!identical(model$outputs$outputType[i], "TABLE")) next
+
+    output_node <- model$outputs$raw[[i]]
+
+    tree_mode <- .chr_field(output_node[["_meta"]][["column_tree"]][["mode"]])
+    if (!is.na(tree_mode) &&
+        tree_mode %in% c("NESTED", "ASYMMETRIC_NESTED")) {
+      next
+    }
+
+    analysis_ids <- .split_values(model$outputs$referenced_analysis_ids[i])
+    analysis_rows <- match(analysis_ids, model$analyses$id)
+    analysis_rows <- analysis_rows[!is.na(analysis_rows)]
+    if (length(analysis_rows) == 0) next
+
+    fixed_by_analysis <- vapply(analysis_rows, function(analysis_row) {
+      grouping_ids <- .split_values(
+        model$analyses$grouping_ids[analysis_row]
+      )
+      grouping_rows <- match(grouping_ids, model$groupings$id)
+      grouping_rows <- grouping_rows[!is.na(grouping_rows)]
+      fixed_rows <- grouping_rows[
+        !is.na(model$groupings$dataDriven[grouping_rows]) &
+          !model$groupings$dataDriven[grouping_rows] &
+          model$groupings$n_groups[grouping_rows] > 0L
+      ]
+      if (length(fixed_rows) == 0L) NA_integer_ else fixed_rows[[1]]
+    }, integer(1))
+    fixed_rows <- unique(stats::na.omit(fixed_by_analysis))
+    if (length(fixed_rows) == 0L) next
+
+    signatures <- vapply(fixed_rows, function(grouping_row) {
+      .grouping_signature(model$groupings$raw[[grouping_row]])
+    }, character(1))
+    if (length(unique(signatures)) > 1L) {
+      group_counts <- model$groupings$n_groups[fixed_rows]
+      ref <- if (length(unique(group_counts)) > 1L) {
+        "FLAT_AXIS_COLUMN_COUNT_MISMATCH"
+      } else {
+        "FLAT_AXIS_COLUMN_LABEL_MISMATCH"
+      }
+      findings <- .add_finding(
+        findings, "FAIL", "outputs", model$outputs$id[i], "columns",
+        "The analyses displayed on this flat output use different fixed grouping definitions.",
+        "Make every displayed analysis reference the same flat column grouping definition.",
+        ref = ref
+      )
+      next
+    }
+
+    ## The first fixed grouping in orderedGroupings is the flat column axis.
+    ## Resolving through each analysis reference is essential: registration may
+    ## have renamed this definition to a variant id during deduplication.
+    grouping_row <- fixed_rows[[1]]
+    groups <- model$groupings$raw[[grouping_row]][["groups"]] %||% list()
+    group_order <- vapply(groups, function(group) {
+      .int_field(group[["order"]])
+    }, integer(1))
+    groups <- groups[order(group_order, na.last = TRUE)]
+    group_labels <- vapply(groups, function(group) {
+      .chr_field(group[["label"]] %||% group[["name"]])
+    }, character(1))
+    group_labels <- .strip_n_placeholder(group_labels)
+
+    result_labels <- .flat_display_labels(output_node)
+
+    analysis_nodes <- model$analyses$raw[analysis_rows]
+    includes_total <- vapply(analysis_nodes, function(analysis) {
+      isTRUE(analysis[["includeTotal"]])
+    }, logical(1))
+    if (length(unique(includes_total)) > 1L) {
+      findings <- .add_finding(
+        findings, "FAIL", "outputs", model$outputs$id[i], "columns",
+        "The analyses displayed on this flat output disagree on whether a Total column is included.",
+        "Make every displayed analysis use the same includeTotal setting.",
+        ref = "FLAT_AXIS_COLUMN_COUNT_MISMATCH"
+      )
+      next
+    }
+
+    has_total <- includes_total[[1]]
+    expected_count <- length(group_labels) + as.integer(has_total)
+
+    if (length(result_labels) != expected_count) {
+      findings <- .add_finding(
+        findings, "FAIL", "outputs", model$outputs$id[i], "columns",
+        sprintf(
+          "The flat shell displays %d result columns but grouping %s defines %d.",
+          length(result_labels), model$groupings$id[grouping_row], expected_count
+        ),
+        "Make the display columns match the grouping levels and optional Total column.",
+        ref = "FLAT_AXIS_COLUMN_COUNT_MISMATCH"
+      )
+      next
+    }
+
+    displayed_groups <- result_labels
+    total_matches <- integer(0)
+    if (has_total) {
+      total_labels <- vapply(analysis_nodes, function(analysis) {
+        label <- .chr_field(analysis[["totalLabel"]])
+        if (is.na(label) || !nzchar(label)) "Total" else label
+      }, character(1))
+      total_labels <- .strip_n_placeholder(total_labels)
+      if (length(unique(.fold_label(total_labels))) > 1L) {
+        findings <- .add_finding(
+          findings, "FAIL", "outputs", model$outputs$id[i], "columns",
+          "The analyses displayed on this flat output use different Total labels.",
+          "Give every displayed analysis the same Total label.",
+          ref = "FLAT_AXIS_COLUMN_LABEL_MISMATCH"
+        )
+        next
+      }
+
+      total_matches <- which(
+        .fold_label(result_labels) == .fold_label(total_labels[[1]])
+      )
+      if (length(total_matches) == 1L) {
+        displayed_groups <- result_labels[-total_matches]
+      }
+    }
+
+    labels_match <- identical(displayed_groups, group_labels)
+    if (has_total) labels_match <- labels_match && length(total_matches) == 1L
+    if (!labels_match) {
+      findings <- .add_finding(
+        findings, "FAIL", "outputs", model$outputs$id[i], "columns",
+        sprintf(
+          "The flat shell column labels do not match grouping %s.",
+          model$groupings$id[grouping_row]
+        ),
+        "Use the grouping's labels in display order, including the declared Total label.",
+        ref = "FLAT_AXIS_COLUMN_LABEL_MISMATCH"
+      )
+    }
+  }
+
+  findings
+}
+
+#' @noRd
+.check_method_placeholder_slots <- function(findings, model) {
+  method_ids <- model$methods$id[
+    !is.na(model$methods$id) & nzchar(model$methods$id)
+  ]
+  stats_by_method <- stats::setNames(lapply(method_ids, function(method_id) {
+    slots <- .method_operation_slots(model$methods$raw, method_id)
+    available <- vapply(slots, function(slot) {
+      slot$stat_name %||% NA_character_
+    }, character(1))
+    stats::na.omit(available)
+  }), method_ids)
+  method_by_analysis <- stats::setNames(
+    model$analyses$methodId,
+    model$analyses$id
+  )
+
+  check_request <- function(findings, analysis_id, description,
+                            requested = character(0), n_slots = length(requested)) {
+    if (is.na(analysis_id) || !nzchar(analysis_id)) return(findings)
+    method_id <- method_by_analysis[[analysis_id]] %||% NA_character_
+    if (is.na(method_id) || !nzchar(method_id)) return(findings)
+
+    available <- stats_by_method[[method_id]] %||% character(0)
+    missing <- setdiff(requested, available)
+    too_many <- n_slots > length(available)
+    if (length(missing) == 0L && !too_many) return(findings)
+
+    problem <- if (length(missing) > 0L) {
+      sprintf(
+        "%s requests %s, which method %s does not provide.",
+        description, paste(missing, collapse = ", "), method_id
+      )
+    } else {
+      sprintf(
+        "%s has %d slots, but method %s provides %d visible operation%s.",
+        description, n_slots, method_id, length(available),
+        if (length(available) == 1L) "" else "s"
+      )
+    }
+
+    .add_finding(
+      findings, "FAIL", "analyses", analysis_id, "methodId",
+      problem,
+      "Assign a method whose operation slots cover every statistic on this line.",
+      ref = "METHOD_PLACEHOLDER_SLOT_MISMATCH"
+    )
+  }
+
+  for (i in seq_len(nrow(model$outputs))) {
+    output_node <- model$outputs$raw[[i]]
+    layout <- .shell_layout(output_node)
+    if (is.null(layout)) next
+
+    ## Excel persists the concrete placeholder tokens and their statistic
+    ## bindings. Check each distinct row request once, not once per result
+    ## column.
+    cells <- output_node[["_meta"]][["shell_fill"]][["cells"]] %||% list()
+    seen_cells <- character(0)
+    for (cell in cells) {
+      if (!identical(.chr_field(cell[["kind"]]), "result")) next
+      slots <- cell[["slots"]] %||% list()
+      if (length(slots) == 0L) next
+
+      analysis_id <- .chr_field(cell[["analysis_id"]])
+      placeholder <- .chr_field(cell[["placeholder"]])
+      if (is.na(placeholder) || !nzchar(placeholder)) placeholder <- "?"
+      requested <- vapply(slots, function(slot) {
+        .chr_field(slot[["stat_name"]])
+      }, character(1))
+      requested <- unique(requested[!is.na(requested) & nzchar(requested)])
+      key <- paste(
+        analysis_id, placeholder, paste(requested, collapse = ","),
+        length(slots), sep = "|"
+      )
+      if (key %in% seen_cells) next
+      seen_cells <- c(seen_cells, key)
+
+      findings <- check_request(
+        findings,
+        analysis_id,
+        sprintf("Placeholder '%s'", placeholder),
+        requested = requested,
+        n_slots = length(slots)
+      )
+    }
+
+    ## Word has no cell addresses, but its parser records the number of
+    ## placeholders on each authored row. Use that count when no Excel cell map
+    ## is available.
+    if (length(cells) == 0L) {
+      for (j in seq_len(nrow(layout))) {
+        n_slots <- layout$n_slots[j]
+        if (is.na(n_slots) || n_slots == 0L) next
+        findings <- check_request(
+          findings,
+          layout$analysis_id[j],
+          sprintf("Shell row '%s'", layout$label[j]),
+          n_slots = n_slots
+        )
+      }
+    }
+
+    ## Statistic-line labels remain useful for older repair models that predate
+    ## persisted placeholder metadata.
+    rows <- .shell_table_data(output_node, model)$rows
+    for (j in seq_len(nrow(rows))) {
+      requested <- .stats_for_line(rows$label[j])
+      analysis_id <- rows$owner_analysis_id[j]
+      method_id <- rows$method_id[j]
+      if (is.null(requested) || is.na(analysis_id) || is.na(method_id)) next
+
+      available <- stats_by_method[[method_id]] %||% character(0)
+      missing <- setdiff(requested, available)
+      if (length(missing) == 0L) next
+
+      findings <- .add_finding(
+        findings, "FAIL", "analyses", analysis_id, "methodId",
+        sprintf(
+          "Shell line '%s' requests %s, which method %s does not provide.",
+          rows$label[j], paste(missing, collapse = ", "), method_id
+        ),
+        "Assign a method whose operation slots cover every statistic on this line.",
+        ref = "METHOD_PLACEHOLDER_SLOT_MISMATCH"
+      )
+    }
+  }
+
+  findings
+}
+
+#' @noRd
 .check_methods <- function(findings, model) {
   analyses <- model$analyses
 
@@ -805,7 +1117,10 @@ validate_ars_model <- function(model, spec = NULL, report = NULL) {
   findings <- .new_findings()
   findings <- .check_ids(findings, model)
   findings <- .check_references(findings, model)
+  findings <- .check_grouping_shapes(findings, model)
+  findings <- .check_flat_axes(findings, model)
   findings <- .check_methods(findings, model)
+  findings <- .check_method_placeholder_slots(findings, model)
   findings <- .check_unparsed_populations(findings, model)
   findings <- .check_separator_safety(findings, model)
   findings <- .check_result_paths(findings, model)
@@ -823,4 +1138,100 @@ validate_ars_model <- function(model, spec = NULL, report = NULL) {
   findings <- findings[order(severity_rank), , drop = FALSE]
   rownames(findings) <- NULL
   findings
+}
+
+## One representation for every place that decides whether an ARS event may
+## become an executable deliverable. WARN and INFO remain visible, but only a
+## FAIL closes the gate.
+#' @noRd
+.validation_gate <- function(findings) {
+  blocking <- findings[findings$severity %in% "FAIL", , drop = FALSE]
+  refs <- blocking$ref[
+    !is.na(blocking$ref) & nzchar(blocking$ref)
+  ]
+  refs <- unique(refs)
+
+  actions <- blocking$action[
+    !is.na(blocking$action) & nzchar(blocking$action)
+  ]
+  actions <- unique(actions)
+
+  blocked <- nrow(blocking) > 0L
+  summary <- if (blocked) {
+    action_text <- if (length(actions) > 0L) {
+      paste(actions, collapse = " ")
+    } else {
+      "Review the blocking findings and repair the reporting event."
+    }
+    paste0(
+      nrow(blocking), " blocking finding",
+      if (nrow(blocking) == 1L) "" else "s",
+      ". To fix: ", action_text
+    )
+  } else {
+    "No blocking findings. WARN and INFO findings remain available for review."
+  }
+
+  list(
+    blocked = blocked,
+    status = if (blocked) "needs-fixes" else "ready",
+    findings = findings,
+    blocking_findings = blocking,
+    blocking_refs = refs,
+    summary = summary
+  )
+}
+
+#' @noRd
+.model_validation_gate <- function(model, spec = NULL, report = NULL) {
+  .validation_gate(validate_ars_model(model, spec = spec, report = report))
+}
+
+## Refuse to turn a structurally invalid event into a runnable artifact. This is
+## deliberately called at each direct execution boundary, not only by the
+## higher-level workflow, because these helpers are also callable on their own.
+#' @noRd
+.assert_runnable_ars <- function(ars) {
+  model <- if (inherits(ars, "ars_model")) ars else ars_to_model(ars)
+  gate <- .model_validation_gate(model)
+  if (!gate$blocked) return(invisible(gate))
+
+  refs <- if (length(gate$blocking_refs) > 0L) {
+    paste(gate$blocking_refs, collapse = ", ")
+  } else {
+    "unreferenced structural finding"
+  }
+  cli::cli_abort(c(
+    "This reporting event cannot be executed because structural validation failed.",
+    "x" = gate$summary,
+    "i" = paste("Blocking references:", refs),
+    "i" = "Repair the reporting event and validate it again before execution."
+  ))
+}
+
+## Translate model findings into the workflow diagnostics contract without
+## throwing away entity, id and field context.
+#' @noRd
+.validation_gate_diagnostics <- function(gate) {
+  findings <- gate$findings
+  if (is.null(findings) || nrow(findings) == 0L) {
+    return(.EMPTY_DIAGNOSTICS())
+  }
+
+  locations <- vapply(seq_len(nrow(findings)), function(i) {
+    parts <- c(findings$entity[i], findings$id[i], findings$field[i])
+    parts <- parts[!is.na(parts) & nzchar(parts)]
+    if (length(parts) == 0L) NA_character_ else paste(parts, collapse = " / ")
+  }, character(1))
+
+  data.frame(
+    stage = "validate_ars",
+    severity = findings$severity,
+    input = INPUT_ARS,
+    tlf_number = NA_character_,
+    location = locations,
+    problem = findings$problem,
+    action = findings$action,
+    stringsAsFactors = FALSE
+  )
 }

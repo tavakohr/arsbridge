@@ -8,7 +8,7 @@
 ## exercised.
 
 .flows_model <- function() {
-  ars_to_model(test_path("fixtures", "ars_apx_drm_301_deterministic.json"))
+  .valid_fixture_model()
 }
 
 .flows_state <- function(mode = "edit", model = NULL, spec = NULL,
@@ -521,13 +521,13 @@ test_that("edit_ars() on a spec_to_ars() result saves through the full path", {
     ),
     ars_path        = fixture,
     report_path     = NULL,
-    adam_spec_path  = arsbridge_example("adam_spec.xlsx")
+    adam_spec_path  = NULL
   )
 
   ## The mocked session returns one edit, as Save and close would.
   written <- suppressMessages(testthat::with_mocked_bindings(
     runApp = function(app) {
-      model <- ars_to_model(fixture)
+      model <- .flows_model()
       target <- model$analyses$id[1]
       list(
         model    = model_set_field(model, "analyses", target, "label",

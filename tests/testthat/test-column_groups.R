@@ -37,7 +37,10 @@
         list(id = "GRP_U", name = "Unknown Cohort", label = "Unknown Cohort",
              order = 3,
              condition = parse_where_clause("ADSL.COHORTN is missing"))))),
-    methods = list(),
+    methods = list(list(
+      id = "MTH_COUNT_AND_PERCENTAGE",
+      name = "Count and Percentage"
+    )),
     outputs = list(list(id = "OUT_T1", name = "T-1",
                         referencedAnalysisIds = list("AN_SEX"))),
     analyses = list(list(

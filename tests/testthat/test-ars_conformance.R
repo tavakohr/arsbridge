@@ -188,7 +188,7 @@ test_that("saving mentions the conformance count without ever failing on it", {
   path <- file.path(dir, "reporting_event.json")
   file.copy(.conformance_fixture(), path)
 
-  model <- ars_to_model(path)
+  model <- .valid_fixture_model()
   messages <- character(0)
   withCallingHandlers(
     .edit_ars_finish(list(model = model, edit_log = .new_edit_log()), path),

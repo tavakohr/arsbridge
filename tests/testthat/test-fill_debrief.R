@@ -13,6 +13,13 @@ test_that(".fill_census keeps every cell with its position and analysis", {
   records <- list(
     list(output_id = "T1", sheet = "S", ref = "B5", row = 5L, col = 2L,
          col_label = "Drug A", analysis_id = "AN_1", status = "filled",
+         row_label = "Female", method_id = "MTH_COUNT_AND_PERCENTAGE",
+         placeholder = "xx (xx.x)", ars_grouping_id = "GRP_TRT",
+         ars_group_label = "Drug A", variable_level = "F",
+         parent_level = NA_character_,
+         ard_lookup_key = paste(
+           "analysis=AN_1 | slots=OP_N:n,OP_P:p | column=Drug A |",
+           "variable=F | parent=<NA>"),
          text = "3 (60.0)"),
     list(output_id = "T1", sheet = "S", ref = "C5", row = 5L, col = 3L,
          col_label = "Placebo", analysis_id = "AN_1", status = "pending",
@@ -28,13 +35,30 @@ test_that(".fill_census keeps every cell with its position and analysis", {
   expect_setequal(
     names(census),
     c("output_id", "sheet", "ref", "row", "col", "col_label",
-      "analysis_id", "status", "reason"))
+      "analysis_id", "status", "reason", "row_label", "method_id",
+      "placeholder", "ars_grouping_id", "ars_group_label",
+      "variable_level", "parent_level", "ard_lookup_key"))
+  expect_type(census$row, "integer")
+  expect_type(census$col, "integer")
+  expect_true(all(vapply(
+    census[setdiff(names(census), c("row", "col"))],
+    is.character,
+    logical(1)
+  )))
   ## The filled cell is IN the census, with its position, and no reason.
   filled <- census[census$status == "filled", ]
   expect_equal(filled$row, 5L)
   expect_equal(filled$col, 2L)
   expect_equal(filled$col_label, "Drug A")
   expect_equal(filled$analysis_id, "AN_1")
+  expect_equal(filled$row_label, "Female")
+  expect_equal(filled$method_id, "MTH_COUNT_AND_PERCENTAGE")
+  expect_equal(filled$placeholder, "xx (xx.x)")
+  expect_equal(filled$ars_grouping_id, "GRP_TRT")
+  expect_equal(filled$ars_group_label, "Drug A")
+  expect_equal(filled$variable_level, "F")
+  expect_true(is.na(filled$parent_level))
+  expect_match(filled$ard_lookup_key, "slots=OP_N:n,OP_P:p", fixed = TRUE)
   expect_true(is.na(filled$reason))
   ## The addressless skip survives with NA position.
   expect_true(is.na(census$row[census$output_id == "T2"]))
@@ -43,8 +67,40 @@ test_that(".fill_census keeps every cell with its position and analysis", {
 test_that(".fill_census of nothing is an empty frame with the full shape", {
   census <- .fill_census(list())
   expect_equal(nrow(census), 0)
-  expect_true(all(c("output_id", "sheet", "ref", "row", "col", "col_label",
-                    "analysis_id", "status", "reason") %in% names(census)))
+  expect_true(all(c(
+    "output_id", "sheet", "ref", "row", "col", "col_label",
+    "analysis_id", "status", "reason", "row_label", "method_id",
+    "placeholder", "ars_grouping_id", "ars_group_label", "variable_level",
+    "parent_level", "ard_lookup_key"
+  ) %in% names(census)))
+})
+
+
+test_that("a missing nested parent key remains a pending census outcome", {
+  reason <- "the ARD has no row for required parent/nest key 'Respiratory disorders'"
+  census <- .fill_census(list(list(
+    output_id = "T1",
+    sheet = "Table 1",
+    ref = "D6",
+    row = 6L,
+    col = 4L,
+    col_label = "Total",
+    analysis_id = "AN_CHILD",
+    status = "missing_parent_key",
+    reason = reason,
+    row_label = "Shared term",
+    variable_level = "Shared term",
+    parent_level = "Respiratory disorders",
+    ard_lookup_key = paste(
+      "analysis=AN_CHILD | slots=OP_N:n,OP_P:p | column=Total |",
+      "variable=Shared term | parent=Respiratory disorders"
+    )
+  )))
+
+  summary <- ars_fill_summary(census)
+  expect_equal(summary$sheets$pending, 1L)
+  expect_equal(summary$reasons$reason, reason)
+  expect_match(summary$reasons$hint, "parent", ignore.case = TRUE)
 })
 
 
@@ -115,6 +171,7 @@ test_that("every known pending reason carries a hint", {
     "the analysis produced no value for this cell",
     "the row stands for a repeated block, which needs row expansion",
     "no result in the ARD for this cell",
+    "the ARD has no row for required parent/nest key 'Respiratory disorders'",
     "the placeholder text could not be located in the cell",
     ## Header N.
     "no result in this column is shown as a percentage",
@@ -246,7 +303,21 @@ test_that("the fill returns a full census and the run's findings", {
 
 test_that("write_fill_debrief writes the four sheets plus the legend", {
   td <- withr::local_tempdir()
-  census <- .debrief_census()
+  base_census <- .debrief_census()
+  census <- .fill_census(lapply(seq_len(nrow(base_census)), function(i) {
+    as.list(base_census[i, , drop = FALSE])
+  }))
+  census$row_label[[1]] <- "Female"
+  census$method_id[[1]] <- "MTH_COUNT_AND_PERCENTAGE"
+  census$placeholder[[1]] <- "xx (xx.x)"
+  census$ars_grouping_id[[1]] <- "GRP_TRT"
+  census$ars_group_label[[1]] <- "Treatment group"
+  census$variable_level[[1]] <- "F"
+  census$parent_level[[1]] <- "Parent level"
+  census$ard_lookup_key[[1]] <- paste(
+    "analysis=AN_1 | slots=OP_N:n,OP_P:p | column=Drug A |",
+    "variable=F | parent=Parent level"
+  )
   findings <- data.frame(
     stage = "fill_shell", severity = "WARN", input = "shell",
     tlf_number = "T1", location = "Table X",
@@ -265,7 +336,11 @@ test_that("write_fill_debrief writes the four sheets plus the legend", {
   ## The census sheet carries a tintable Status column derived from the
   ## cell status, with the raw status kept beside it.
   cens <- openxlsx2::wb_to_df(wb, sheet = "Fill census")
-  expect_true(all(c("Status", "status", "reason") %in% names(cens)))
+  expect_true(all(c(
+    "Status", "status", "reason", "row_label", "method_id", "placeholder",
+    "ars_grouping_id", "ars_group_label", "variable_level", "parent_level",
+    "ard_lookup_key"
+  ) %in% names(cens)))
   expect_setequal(unique(cens$Status), c("PASS", "WARN"))
 
   ## The reasons sheet pairs every reason with its hint.

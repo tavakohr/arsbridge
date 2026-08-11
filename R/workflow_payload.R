@@ -222,6 +222,16 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
   stage_failed <- NA_character_
   ard <- NULL
   fill <- NULL
+  validation_gate <- NULL
+  current_artifacts <- list(
+    ars_json = NA_character_,
+    validation_report = NA_character_,
+    code_dir = NA_character_,
+    code_paths = character(0),
+    ard_rds = NA_character_,
+    filled_workbook = NA_character_,
+    fill_debrief = NA_character_
+  )
 
   record <- function(stage) {
     diagnostics <<- rbind(diagnostics, stage$diagnostics)
@@ -231,6 +241,27 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
       stage_failed <<- stage$name
     }
     stage
+  }
+
+  ## A successful return carries every artifact path. Receipts cover narrower
+  ## late-failure cases where a writer succeeded but spec_to_ars() did not
+  ## return. They are current-run provenance; persistent file existence alone
+  ## is not, so this callback never lists the output directories.
+  record_artifact_write <- function(receipt) {
+    if (!is.list(receipt)) return(invisible(NULL))
+
+    ars_path <- receipt$ars_json
+    if (is.character(ars_path) && length(ars_path) == 1L &&
+        identical(ars_path, paths$ars_json) && file.exists(ars_path)) {
+      current_artifacts$ars_json <<- ars_path
+    }
+
+    code_paths <- receipt$code_paths
+    if (is.character(code_paths)) {
+      keep <- !is.na(code_paths) & nzchar(code_paths) & file.exists(code_paths)
+      current_artifacts$code_paths <<- code_paths[keep]
+    }
+    invisible(NULL)
   }
 
   ## 1. The reporting event.
@@ -245,11 +276,32 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
       code_dir       = paths$code_dir,
       use_llm        = use_llm,
       api_key        = api_key,
-      verbose        = FALSE))))
+      verbose        = FALSE,
+      .on_artifact_written = record_artifact_write))))
+
+  if (!is.null(build$value)) {
+    validation_gate <- build$value$validation_gate
+
+    gate_diagnostics <- .validation_gate_diagnostics(validation_gate)
+    diagnostics <- unique(rbind(diagnostics, gate_diagnostics))
+    rownames(diagnostics) <- NULL
+
+    if (file.exists(build$value$ars_path %||% "")) {
+      current_artifacts$ars_json <- build$value$ars_path
+    }
+    if (file.exists(build$value$report_path %||% "")) {
+      current_artifacts$validation_report <- build$value$report_path
+    }
+    code_paths <- build$value$code_paths %||% character(0)
+    current_artifacts$code_paths <- code_paths[
+      !is.na(code_paths) & file.exists(code_paths)
+    ]
+  }
+  needs_fixes <- isTRUE(validation_gate$blocked)
 
   ## 2. The results. Skipped, and said so, when there is no data to run
   ##    against -- which is a normal way to use the build, not an error.
-  if (is.null(failure)) {
+  if (is.null(failure) && !needs_fixes) {
     if (is.null(adam_dir) || !nzchar(adam_dir) || !dir.exists(adam_dir)) {
       diagnostics <- rbind(diagnostics, data.frame(
         stage = "execute_ard", severity = "INFO", input = INPUT_DATA,
@@ -276,6 +328,9 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
           computed
         })))
       ard <- run$value
+      if (!is.null(ard) && file.exists(paths$ard_rds)) {
+        current_artifacts$ard_rds <- paths$ard_rds
+      }
       if (is.null(ard) && is.null(failure)) {
         ## ars_to_ard() returns NULL when not one analysis executed -- on a
         ## fully clean shell, for instance. The fill guard below then skips
@@ -314,6 +369,9 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
         adam_dir    = adam_dir,
         overwrite   = TRUE))))
     fill <- filled$value
+    if (!is.null(fill) && file.exists(paths$filled_workbook)) {
+      current_artifacts$filled_workbook <- paths$filled_workbook
+    }
   }
 
   ## The debrief workbook is bookkeeping about the fill, not the fill: its
@@ -322,6 +380,9 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
   if (!is.null(fill)) {
     debrief_error <- tryCatch({
       write_fill_debrief(fill$census, diagnostics, paths$fill_debrief)
+      if (file.exists(paths$fill_debrief)) {
+        current_artifacts$fill_debrief <- paths$fill_debrief
+      }
       NULL
     }, error = function(e) conditionMessage(e))
     if (!is.null(debrief_error)) {
@@ -336,17 +397,12 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
     }
   }
 
-  produced <- function(path) if (file.exists(path)) path else NA_character_
   ## The census carries every cell; the app's unfilled table wants only the
-  ## unresolved ones, in the shape it always had.
+  ## unresolved ones, with the full provenance needed to diagnose them.
   unfilled <- if (!is.null(fill)) {
-    unresolved <- fill$census[!fill$census$status %in% "filled", , drop = FALSE]
-    unresolved[, c("output_id", "sheet", "ref", "status", "reason"),
-               drop = FALSE]
+    fill$census[!fill$census$status %in% "filled", , drop = FALSE]
   } else {
-    data.frame(output_id = character(), sheet = character(), ref = character(),
-               status = character(), reason = character(),
-               stringsAsFactors = FALSE)
+    .fill_census(list())
   }
 
   pending <- if (!is.null(ard)) {
@@ -360,12 +416,13 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
     timings = c(timings, list(total = round(
       as.numeric(difftime(Sys.time(), started, units = "secs")), 3))),
     artifacts = list(
-      ars_json          = produced(paths$ars_json),
-      validation_report = produced(paths$validation_report),
-      code_dir          = if (dir.exists(paths$code_dir)) paths$code_dir else NA_character_,
-      ard_rds           = produced(paths$ard_rds),
-      filled_workbook   = produced(paths$filled_workbook),
-      fill_debrief      = produced(paths$fill_debrief),
+      ars_json          = current_artifacts$ars_json,
+      validation_report = current_artifacts$validation_report,
+      code_dir          = current_artifacts$code_dir,
+      code_paths        = current_artifacts$code_paths,
+      ard_rds           = current_artifacts$ard_rds,
+      filled_workbook   = current_artifacts$filled_workbook,
+      fill_debrief      = current_artifacts$fill_debrief,
       run_log           = log_path %||% NA_character_
     ),
     metadata = list(
@@ -380,6 +437,8 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
       llm_mode_enabled  = isTRUE(use_llm)
     ),
     diagnostics    = diagnostics,
+    validation_gate = validation_gate,
+    needs_fixes    = needs_fixes,
     pending        = pending,
     ## The fill's own headline numbers. A UI deciding "did this build
     ## actually produce a filled workbook?" should not have to re-derive

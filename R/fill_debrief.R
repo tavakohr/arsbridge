@@ -14,28 +14,30 @@
 #' -- a rate needs a denominator, and the denominator is the filled cells.
 #' @noRd
 .fill_census <- function(records) {
-  chr <- function(record, field) {
-    as.character(record[[field]] %||% NA_character_)
-  }
-  int <- function(record, field) {
-    value <- record[[field]]
-    if (is.null(value) || length(value) == 0 || is.na(value[[1]])) {
-      return(NA_integer_)
+  schema <- .fill_record()
+  fields <- names(schema)
+
+  columns <- lapply(fields, function(field) {
+    template <- schema[[field]]
+    if (is.integer(template)) {
+      return(vapply(records, function(record) {
+        value <- record[[field]]
+        if (is.null(value) || length(value) == 0 || is.na(value[[1]])) {
+          return(NA_integer_)
+        }
+        as.integer(value[[1]])
+      }, integer(1)))
     }
-    as.integer(value[[1]])
-  }
-  data.frame(
-    output_id   = vapply(records, chr, character(1), "output_id"),
-    sheet       = vapply(records, chr, character(1), "sheet"),
-    ref         = vapply(records, chr, character(1), "ref"),
-    row         = vapply(records, int, integer(1), "row"),
-    col         = vapply(records, int, integer(1), "col"),
-    col_label   = vapply(records, chr, character(1), "col_label"),
-    analysis_id = vapply(records, chr, character(1), "analysis_id"),
-    status      = vapply(records, chr, character(1), "status"),
-    reason      = vapply(records, chr, character(1), "reason"),
-    stringsAsFactors = FALSE
-  )
+    vapply(records, function(record) {
+      value <- record[[field]]
+      if (is.null(value) || length(value) == 0 || is.na(value[[1]])) {
+        return(NA_character_)
+      }
+      as.character(value[[1]])
+    }, character(1))
+  })
+  names(columns) <- fields
+  as.data.frame(columns, stringsAsFactors = FALSE, optional = TRUE)
 }
 
 #' Roll a fill census up into the three tables a reader actually asks for.
@@ -79,7 +81,7 @@ ars_fill_summary <- function(census) {
       cells   = length(rows),
       filled  = count_by(rows, "filled"),
       partial = count_by(rows, "partial"),
-      pending = count_by(rows, "pending"),
+      pending = count_by(rows, c("pending", "missing_parent_key")),
       skipped = count_by(rows, "skipped"),
       stringsAsFactors = FALSE
     )
@@ -249,6 +251,13 @@ ars_fill_summary <- function(census) {
 ## the offender. Matched by prefix or pattern after the exact lookup misses.
 .FILL_REASON_HINT_FAMILIES <- list(
   list(match = function(reason) {
+    startsWith(reason, "the ARD has no row for required parent/nest key")
+  }, hint = paste(
+    "The nested child result exists for this analysis, statistic, Total column,",
+    "and term, but not under the parent named by the shell row. Check the ARD",
+    "grouping keys for that parent and rerun the analysis."
+  )),
+  list(match = function(reason) {
     startsWith(reason, "the column's analyses report different denominators")
   }, hint = "Two analyses in one column disagree about the population N, so the header cannot pick one. Align the analyses' populations, or split the columns."),
   list(match = function(reason) {
@@ -288,7 +297,7 @@ write_fill_debrief <- function(census, findings, output_path) {
   ## The tint vocabulary is the report's: a filled cell passed, a pending or
   ## partial one needs review, a skipped one was refused.
   tint_of <- c(filled = "PASS", partial = "WARN", pending = "WARN",
-               skipped = "FAIL")
+               missing_parent_key = "WARN", skipped = "FAIL")
   census_sheet <- cbind(
     data.frame(Status = unname(tint_of[census$status]),
                stringsAsFactors = FALSE),

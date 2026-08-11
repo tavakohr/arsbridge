@@ -6,7 +6,7 @@
 ## tables of contents follow along without being touched directly.
 
 .add_model <- function() {
-  ars_to_model(test_path("fixtures", "ars_apx_drm_301_deterministic.json"))
+  .valid_fixture_model()
 }
 
 .add_a_line <- function(model, output_id = "T_14_1_2", ...) {
@@ -484,11 +484,8 @@ test_that("an added line executes into an ARD", {
 
   dir <- withr::local_tempdir()
   path <- file.path(dir, "reporting_event.json")
-  file.copy(
-    test_path("fixtures", "ars_apx_drm_301_deterministic.json"), path
-  )
 
-  model <- ars_to_model(path)
+  model <- .valid_fixture_model()
   updated <- .add_a_line(
     model,
     label = "Sex, n (%) added by hand",

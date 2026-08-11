@@ -38,6 +38,11 @@
   if (!is.null(sheet_row) && !is.na(sheet_row)) {
     entry$sheet_row <- as.integer(sheet_row)
   }
+
+  n_slots <- suppressWarnings(as.integer(row$n_slots %||% NA_integer_))
+  if (!is.na(n_slots)) {
+    entry$n_slots <- n_slots
+  }
   entry
 }
 
@@ -465,11 +470,18 @@
     }
     record$kind        <- "result"
     record$analysis_id <- binding$analysis_id
+    total_label <- .strip_n_placeholder(
+      binding$analysis$totalLabel %||% "Total"
+    )
+    is_total <- isTRUE(binding$analysis$includeTotal) &&
+      identical(tolower(trimws(column$label)),
+                tolower(trimws(total_label)))
     record$group       <- list(
       grouping_id = .fill_grouping_id(binding$analysis),
       order       = column$order,
       label       = column$label
     )
+    if (is_total) record$group$is_total <- TRUE
     if (!is.null(binding$variable_level)) {
       record$variable_level <- binding$variable_level
     }

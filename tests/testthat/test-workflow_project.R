@@ -93,6 +93,58 @@ test_that("step statuses are derived purely from files", {
   expect_true(st4$done[st4$step == "results"])
 })
 
+test_that("a failed current run cannot review a stale reporting event", {
+  td <- withr::local_tempdir()
+  project <- file.path(td, "study")
+  inputs <- .wfp_inputs()
+  arsbridge:::.workflow_init(project, inputs$shell, inputs$spec)
+
+  paths <- arsbridge:::.workflow_paths(project)
+  writeLines("{}", paths$ars)
+  saveRDS(
+    list(
+      status = "error",
+      failed_stage = "spec_to_ars",
+      artifacts = list(ars_json = NA_character_)
+    ),
+    paths$payload
+  )
+
+  status <- arsbridge:::.workflow_status(project)
+  review <- status[status$step == "review", ]
+  expect_false(review$available)
+  expect_null(arsbridge:::.workflow_handoff_payload(project))
+})
+
+test_that("current and archived reporting events remain reviewable", {
+  td <- withr::local_tempdir()
+  project <- file.path(td, "study")
+  inputs <- .wfp_inputs()
+  arsbridge:::.workflow_init(project, inputs$shell, inputs$spec)
+
+  paths <- arsbridge:::.workflow_paths(project)
+  writeLines("{}", paths$ars)
+
+  saveRDS(list(status = "success"), paths$payload)
+  archived_status <- arsbridge:::.workflow_status(project)
+  expect_true(archived_status$available[archived_status$step == "review"])
+  expect_identical(
+    arsbridge:::.workflow_handoff_payload(project)$ars_path,
+    paths$ars
+  )
+
+  saveRDS(
+    list(status = "success", artifacts = list(ars_json = paths$ars)),
+    paths$payload
+  )
+  current_status <- arsbridge:::.workflow_status(project)
+  expect_true(current_status$available[current_status$step == "review"])
+  expect_identical(
+    arsbridge:::.workflow_handoff_payload(project)$ars_path,
+    paths$ars
+  )
+})
+
 test_that("receive_json takes clean and fenced pastes and rejects garbage", {
   td <- withr::local_tempdir()
   dest <- file.path(td, "phase1", "blueprint.json")

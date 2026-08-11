@@ -106,6 +106,39 @@ test_that("a build runs, and its payload drives the results panel", {
   )
 })
 
+test_that("a worker crash replaces the previous successful payload", {
+  td <- withr::local_tempdir()
+  project <- file.path(td, "study")
+  inputs <- .wfa_inputs()
+  arsbridge:::.workflow_init(project, inputs$shell, inputs$spec)
+  paths <- arsbridge:::.workflow_paths(project)
+  previous <- list(
+    status = "success",
+    artifacts = list(code_paths = file.path(paths$code_dir, "OLD_OUTPUT.R"))
+  )
+  saveRDS(previous, paths$payload)
+
+  shiny::testServer(.wfa_server(project), {
+    state$last_result(previous)
+    arsbridge:::.workflow_finish_build(
+      simpleError("worker crashed"), state, bump
+    )
+
+    current <- state$last_result()
+    expect_equal(current$status, "error")
+    expect_match(current$error, "worker crashed", fixed = TRUE)
+    expect_length(current$artifacts$code_paths, 0L)
+    expect_true(all(is.na(unlist(current$artifacts[c(
+      "ars_json", "validation_report", "code_dir", "ard_rds",
+      "filled_workbook", "fill_debrief"
+    )]))))
+
+    persisted <- readRDS(paths$payload)
+    expect_equal(persisted$status, "error")
+    expect_match(persisted$error, "worker crashed", fixed = TRUE)
+  })
+})
+
 test_that("the results panel reads the payload from disk after a restart", {
   ## Nothing is remembered in the session. A user who closes the app and comes
   ## back must still see what the last run produced and what it declined to.
@@ -226,6 +259,159 @@ test_that("the completion notice calls an unfilled workbook what it is", {
                   unfilled_cells = data.frame())
   expect_equal(arsbridge:::.workflow_build_notice(no_fill)$text,
                "Build complete.")
+})
+
+test_that("a blocked build is rendered as needs fixes with retained and skipped work", {
+  td <- withr::local_tempdir()
+  project <- file.path(td, "study")
+  inputs <- .wfa_inputs()
+  arsbridge:::.workflow_init(project, inputs$shell, inputs$spec)
+  paths <- arsbridge:::.workflow_paths(project)
+  writeLines("{}", paths$ars)
+  writeLines("report", paths$report)
+  dir.create(paths$code_dir, recursive = TRUE)
+  writeLines("# stale", file.path(paths$code_dir, "OLD_OUTPUT.R"))
+
+  finding <- data.frame(
+    severity = "FAIL",
+    ref = "FLAT_AXIS_COLUMN_LABEL_MISMATCH",
+    entity = "outputs",
+    id = "T_01",
+    field = "columns",
+    problem = "The displayed labels do not match the grouping.",
+    action = "Align the display labels with the grouping.",
+    stringsAsFactors = FALSE
+  )
+  payload <- list(
+    status = "partial",
+    timings = list(total = 0.2),
+    artifacts = list(
+      ars_json = paths$ars,
+      validation_report = paths$report,
+      code_dir = NA_character_
+    ),
+    diagnostics = data.frame(),
+    validation_gate = list(
+      blocked = TRUE,
+      status = "needs-fixes",
+      blocking_findings = finding,
+      blocking_refs = finding$ref,
+      summary = "One blocking model finding."
+    ),
+    needs_fixes = TRUE
+  )
+
+  notice <- arsbridge:::.workflow_build_notice(payload)
+  expect_match(notice$text, "needs fixes", ignore.case = TRUE)
+
+  shiny::testServer(.wfa_server(project), {
+    state$last_result(payload)
+    session$flushReact()
+
+    html <- as.character(output$results_artifacts$html)
+    expect_match(html, "NEEDS FIXES", fixed = TRUE)
+    expect_match(html, "ARS JSON and validation report were retained", fixed = TRUE)
+    expect_match(html, "runnable code, ARD, filled workbook, and fill debrief were skipped",
+                 fixed = TRUE)
+    expect_match(html, "FLAT_AXIS_COLUMN_LABEL_MISMATCH", fixed = TRUE)
+    expect_match(html, "The displayed labels do not match", fixed = TRUE)
+    expect_match(html, "Align the display labels", fixed = TRUE)
+
+    review_html <- as.character(output$review_paths$html)
+    expect_match(review_html, paths$ars, fixed = TRUE)
+    expect_match(review_html, paths$report, fixed = TRUE)
+    expect_no_match(review_html, "OLD_OUTPUT.R", fixed = TRUE)
+    expect_no_match(review_html, paths$code_dir, fixed = TRUE)
+  })
+})
+
+test_that("successful builds render only current-run scripts", {
+  td <- withr::local_tempdir()
+  project <- file.path(td, "study")
+  inputs <- .wfa_inputs()
+  arsbridge:::.workflow_init(project, inputs$shell, inputs$spec)
+  paths <- arsbridge:::.workflow_paths(project)
+  dir.create(paths$code_dir, recursive = TRUE)
+  stale_path <- file.path(paths$code_dir, "OLD_OUTPUT.R")
+  current_path <- file.path(paths$code_dir, "T_01.R")
+  writeLines("# stale", stale_path)
+  writeLines("# current", current_path)
+
+  payload <- list(
+    status = "success",
+    timings = list(total = 0.2),
+    artifacts = list(
+      ars_json = paths$ars,
+      validation_report = paths$report,
+      code_dir = NA_character_,
+      code_paths = current_path,
+      ard_rds = NA_character_,
+      filled_workbook = NA_character_,
+      fill_debrief = NA_character_,
+      run_log = paths$run_log
+    ),
+    diagnostics = .EMPTY_DIAGNOSTICS(),
+    validation_gate = .validation_gate(.new_findings()),
+    needs_fixes = FALSE
+  )
+
+  shiny::testServer(.wfa_server(project), {
+    state$last_result(payload)
+    session$flushReact()
+
+    review_html <- as.character(output$review_paths$html)
+    expect_match(review_html, current_path, fixed = TRUE)
+    expect_no_match(review_html, stale_path, fixed = TRUE)
+
+    results_html <- as.character(output$results_artifacts$html)
+    expect_match(results_html, current_path, fixed = TRUE)
+    expect_no_match(results_html, stale_path, fixed = TRUE)
+  })
+})
+
+test_that("the unfilled table shows census provenance for current and archived payloads", {
+  td <- withr::local_tempdir()
+  project <- file.path(td, "study")
+  inputs <- .wfa_inputs()
+  arsbridge:::.workflow_init(project, inputs$shell, inputs$spec)
+
+  current <- data.frame(
+    sheet = "Table 1",
+    ref = "C7",
+    status = "pending",
+    reason = "no matching result",
+    row_label = "Category A",
+    method_id = "MTH_COUNT_AND_PERCENTAGE",
+    placeholder = "xx (xx.x)",
+    ars_grouping_id = "GRP_ARM",
+    ars_group_label = "Treatment arm",
+    variable_level = "A",
+    parent_level = "Parent category",
+    ard_lookup_key = "analysis=AN_01 | group=A | parent=Parent category",
+    stringsAsFactors = FALSE
+  )
+  provenance <- c(
+    "output_id", "row", "col", "col_label", "analysis_id",
+    "row_label", "method_id", "placeholder", "ars_grouping_id",
+    "ars_group_label", "variable_level", "parent_level", "ard_lookup_key"
+  )
+
+  shiny::testServer(.wfa_server(project), {
+    state$last_result(list(status = "partial", unfilled_cells = current))
+    session$flushReact()
+    rendered <- as.character(output$results_unfilled)
+    for (column in provenance) {
+      expect_match(rendered, column, fixed = TRUE)
+    }
+
+    archived <- current[, c("sheet", "ref", "status", "reason"), drop = FALSE]
+    state$last_result(list(status = "partial", unfilled_cells = archived))
+    session$flushReact()
+    archived_rendered <- as.character(output$results_unfilled)
+    for (column in provenance) {
+      expect_match(archived_rendered, column, fixed = TRUE)
+    }
+  })
 })
 
 test_that("the skew message names an absent install instead of printing NA", {

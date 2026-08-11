@@ -3,8 +3,12 @@
 ## finding it should produce -- and, just as importantly, that a clean model
 ## produces no blockers.
 
-.ars_validate_model <- function() {
+.ars_validate_legacy_model <- function() {
   ars_to_model(test_path("fixtures", "ars_apx_drm_301_deterministic.json"))
+}
+
+.ars_validate_model <- function() {
+  .valid_fixture_model()
 }
 
 .ars_validate_report <- function() {
@@ -26,6 +30,121 @@ test_that("the generated fixture has no blocking findings", {
   expect_equal(sum(findings$severity == "FAIL"), 0)
   expect_true(all(findings$severity %in% c("FAIL", "WARN", "INFO")))
 })
+
+test_that("a legacy fixed grouping with no groups is a blocker", {
+  model <- .ars_validate_legacy_model()
+
+  findings <- validate_ars_model(model)
+  invalid <- findings[
+    findings$ref %in% "FIXED_GROUPING_EMPTY",
+    ,
+    drop = FALSE
+  ]
+
+  expect_equal(nrow(invalid), 1L)
+  expect_equal(invalid$severity, "FAIL")
+  expect_equal(invalid$id, "GF_TRT01A")
+})
+
+test_that("an empty grouping with omitted dataDriven is fixed and blocked", {
+  model <- .ars_validate_legacy_model()
+  grouping_index <- match("GF_TRT01A", model$groupings$id)
+  model$groupings$dataDriven[grouping_index] <- NA
+  model$groupings$raw[[grouping_index]]$dataDriven <- NULL
+
+  findings <- validate_ars_model(model)
+  invalid <- findings[
+    findings$ref %in% "FIXED_GROUPING_EMPTY",
+    ,
+    drop = FALSE
+  ]
+
+  expect_equal(nrow(invalid), 1L)
+  expect_equal(invalid$severity, "FAIL")
+  expect_equal(invalid$id, "GF_TRT01A")
+})
+
+test_that("direct code emission blocks an empty grouping with omitted dataDriven", {
+  ars_path <- test_path(
+    "fixtures", "ars_apx_drm_301_deterministic.json"
+  )
+  ars <- jsonlite::fromJSON(ars_path, simplifyVector = FALSE)
+  grouping_index <- which(vapply(ars$analysisGroupings, function(grouping) {
+    identical(grouping$id, "GF_TRT01A")
+  }, logical(1)))
+  ars$analysisGroupings[[grouping_index]]$dataDriven <- NULL
+  code_dir <- file.path(withr::local_tempdir(), "code")
+
+  expect_error(
+    write_tlf_code(ars, code_dir),
+    "FIXED_GROUPING_EMPTY",
+    fixed = TRUE
+  )
+  expect_false(dir.exists(code_dir))
+})
+
+test_that("valid statistic lines may bind part of a method's operations", {
+  model <- .ars_validate_model()
+
+  findings <- validate_ars_model(model)
+
+  expect_false(any(findings$ref %in% "METHOD_PLACEHOLDER_SLOT_MISMATCH"))
+})
+
+test_that("a statistic line must be supported by its analysis method", {
+  model <- .ars_validate_model()
+  output_index <- match("T_14_1_2", model$outputs$id)
+  rows <- .shell_table_data(model$outputs$raw[[output_index]], model)$rows
+  mean_row <- rows[rows$label == "Mean (SD)", , drop = FALSE][1, ]
+  analysis_index <- match(mean_row$owner_analysis_id, model$analyses$id)
+  model$analyses$methodId[analysis_index] <- "MTH_SUBJECT_COUNT"
+
+  findings <- validate_ars_model(model)
+  mismatch <- findings[
+    findings$ref %in% "METHOD_PLACEHOLDER_SLOT_MISMATCH" &
+      findings$id == mean_row$owner_analysis_id,
+    ,
+    drop = FALSE
+  ]
+
+  expect_gt(nrow(mismatch), 0L)
+  expect_true(all(mismatch$severity == "FAIL"))
+})
+
+test_that("persisted placeholder slots must be supported for scalar rows", {
+  model <- .ars_validate_model()
+  output_index <- match("T_14_1_2", model$outputs$id)
+  analysis_id <- .split_values(
+    model$outputs$referenced_analysis_ids[output_index]
+  )[[1]]
+  analysis_index <- match(analysis_id, model$analyses$id)
+  model$analyses$methodId[analysis_index] <- "MTH_SUBJECT_COUNT"
+
+  output <- model$outputs$raw[[output_index]]
+  output[["_meta"]][["shell_fill"]] <- list(cells = list(list(
+    kind = "result",
+    analysis_id = analysis_id,
+    placeholder = "xx (xx.x)",
+    slots = list(
+      list(stat_name = "n"),
+      list(stat_name = "p")
+    )
+  )))
+  model$outputs$raw[[output_index]] <- output
+
+  findings <- validate_ars_model(model)
+  mismatch <- findings[
+    findings$ref %in% "METHOD_PLACEHOLDER_SLOT_MISMATCH" &
+      findings$id == analysis_id &
+      grepl("xx (xx.x)", findings$problem, fixed = TRUE),
+    ,
+    drop = FALSE
+  ]
+
+  expect_equal(nrow(mismatch), 1L)
+  expect_match(mismatch$problem, "xx \\(xx.x\\)")
+})
+
 
 test_that("findings come back most severe first", {
   model <- .ars_validate_model()
@@ -304,4 +423,69 @@ test_that("a value containing the composite separator is called out", {
 
 test_that("validate_ars_model() refuses anything that is not a model", {
   expect_error(validate_ars_model(list(a = 1)), "must be an")
+})
+
+test_that("the validation gate blocks only FAIL findings", {
+  findings <- rbind(
+    .add_finding(.new_findings(), "WARN", "analyses", "AN_WARN",
+                 "methodId", "Review this method.", "Choose a native method.",
+                 ref = "WARN_REF"),
+    .add_finding(.new_findings(), "INFO", "outputs", "OUT_INFO",
+                 "columns", "This is informational.", "No action needed.",
+                 ref = "INFO_REF")
+  )
+
+  review_gate <- .validation_gate(findings)
+
+  expect_false(review_gate$blocked)
+  expect_equal(review_gate$status, "ready")
+  expect_equal(nrow(review_gate$blocking_findings), 0L)
+  expect_length(review_gate$blocking_refs, 0L)
+
+  blocking <- .add_finding(
+    findings, "FAIL", "groupings", "GF_EMPTY", "groups",
+    "This fixed grouping has no groups.", "Add groups or make it data-driven.",
+    ref = "FIXED_GROUPING_EMPTY"
+  )
+  blocked_gate <- .validation_gate(blocking)
+
+  expect_true(blocked_gate$blocked)
+  expect_equal(blocked_gate$status, "needs-fixes")
+  expect_equal(blocked_gate$blocking_findings$id, "GF_EMPTY")
+  expect_equal(blocked_gate$blocking_refs, "FIXED_GROUPING_EMPTY")
+  expect_match(blocked_gate$summary, "Add groups or make it data-driven", fixed = TRUE)
+})
+
+test_that("direct execution APIs refuse a structurally blocked event", {
+  ars_path <- test_path(
+    "fixtures", "ars_apx_drm_301_deterministic.json"
+  )
+  adam_dir <- test_path("fixtures", "adam_apx_drm_301")
+  code_dir <- file.path(withr::local_tempdir(), "code")
+  filled_path <- tempfile(fileext = ".xlsx")
+
+  expect_error(
+    write_tlf_code(ars_path, code_dir),
+    "FIXED_GROUPING_EMPTY",
+    fixed = TRUE
+  )
+  expect_false(dir.exists(code_dir))
+
+  expect_error(
+    ars_to_ard(ars_path, adam_dir),
+    "FIXED_GROUPING_EMPTY",
+    fixed = TRUE
+  )
+
+  expect_error(
+    ars_fill_shell(
+      shell_path = test_path("fixtures", "shells_apx_drm_301.xlsx"),
+      ars = ars_path,
+      ard = data.frame(),
+      output_path = filled_path
+    ),
+    "FIXED_GROUPING_EMPTY",
+    fixed = TRUE
+  )
+  expect_false(file.exists(filled_path))
 })

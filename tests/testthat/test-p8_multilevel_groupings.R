@@ -131,11 +131,12 @@ test_that("legacy single by_variable section still builds one grouping", {
     analysisSets = list(), dataSubsets = list(),
     analysisGroupings = list(
       list(id = "GF_TRT01A", name = "TRT01A", groupingDataset = "ADSL",
-           groupingVariable = "TRT01A", dataDriven = FALSE, groups = list()),
+           groupingVariable = "TRT01A", dataDriven = TRUE, groups = list()),
       list(id = "GF_SEX", name = "SEX", groupingDataset = "ADSL",
-           groupingVariable = "SEX", dataDriven = FALSE, groups = list())
+           groupingVariable = "SEX", dataDriven = TRUE, groups = list())
     ),
-    methods = list(), outputs = list(),
+    methods = list(list(id = method_id, name = method_id)),
+    outputs = list(),
     analyses = list(list(
       id = "AN_P8_001", methodId = method_id,
       dataset = "ADSL", variable = variable,

@@ -138,6 +138,43 @@ test_that("write_validation_report adds Diagnostics sheet when records exist", {
   expect_equal(diag_back$severity, "FAIL")
 })
 
+test_that("write_validation_report handles an entirely missing ref column silently", {
+  skip_if_not_installed("openxlsx2")
+  validation <- data.frame(
+    tlf_number = "T-1", status = "PASS", message = "ok",
+    stringsAsFactors = FALSE
+  )
+  findings <- data.frame(
+    severity = "FAIL", entity = "groupings", id = "GF_EMPTY",
+    field = "groups", problem = "This fixed grouping has no groups.",
+    action = "Add groups or make it data-driven.", ref = NA_character_,
+    stringsAsFactors = FALSE
+  )
+  path <- withr::local_tempfile(fileext = ".xlsx")
+
+  expect_silent(
+    write_validation_report(validation, path, ars_findings = findings)
+  )
+
+  expect_true(file.exists(path))
+  wb <- openxlsx2::wb_load(path)
+  ars_back <- openxlsx2::wb_to_df(wb, sheet = "ARS validation")
+  expect_equal(
+    lapply(ars_back, as.character),
+    lapply(findings, as.character)
+  )
+
+  sheet_index <- match("ARS validation", wb$get_sheet_names())
+  cols_xml <- xml2::read_xml(paste0(
+    "<cols>",
+    paste(wb$worksheets[[sheet_index]]$cols_attr, collapse = ""),
+    "</cols>"
+  ))
+  widths <- as.numeric(xml2::xml_attr(xml2::xml_find_all(cols_xml, ".//col"), "width"))
+  expect_true(length(widths) > 0L)
+  expect_true(all(is.finite(widths) & widths > 0))
+})
+
 test_that("write_validation_report omits Diagnostics sheet when empty", {
   skip_if_not_installed("openxlsx2")
   validation <- data.frame(
