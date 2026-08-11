@@ -96,13 +96,22 @@ test_that("a grouping's child groups are listed with their conditions", {
     rendered <- paste(as.character(output$detail_groupings), collapse = " ")
 
     ## The raw-JSON hatch already carried the labels and ids, so only a
-    ## readable filter expression proves the child groups are shown as
-    ## themselves rather than buried in the node.
+    ## readable condition proves the child groups are shown as themselves
+    ## rather than buried in the node.
     expect_match(rendered, "Groups", fixed = TRUE)
-    expect_match(rendered, "TRT01A %in%", fixed = TRUE)
+    ## A simple child is shown as its four editable fields.
+    expect_match(
+      rendered,
+      .entity_input_id("groupings", "GF_TRT01A", "condition_variable",
+                       child = "GRP_DRUG_A"),
+      fixed = TRUE)
 
     ## A compound child reads as the whole expression, not as "compound".
-    expect_match(rendered, ") | (", fixed = TRUE)
+    ## Until phase 4 that was the execution predicate -- `(TRT01A %in% "Drug
+    ## A") | (...)` -- shown read-only; it is now the reviewer's register,
+    ## beside the clause boxes that edit it.
+    expect_match(rendered, "ADSL.TRT01A EQ Drug A OR ADSL.TRT01A EQ Drug B",
+                 fixed = TRUE)
   })
 })
 
@@ -538,7 +547,7 @@ test_that("entity observer reconciliation tracks membership without duplicates",
   })
 }
 
-test_that("a simple child gets condition inputs and a compound one does not", {
+test_that("a simple child gets condition inputs and a compound one gets clauses", {
   skip_if_not_installed("shiny")
   skip_if_not_installed("bslib")
   skip_if_not_installed("DT")
@@ -553,12 +562,18 @@ test_that("a simple child gets condition inputs and a compound one does not", {
       .entity_input_id("groupings", "GF_TRT01A", "condition_variable",
                        child = "GRP_DRUG_A"),
       fixed = TRUE)
-    ## A compound child stays read-only: replacing it with a simple condition
-    ## would drop the other clauses.
+    ## A compound child never gets the FLAT fields -- one condition cannot
+    ## stand for several clauses, and writing it would drop the rest. It is
+    ## edited a clause at a time instead.
     expect_false(grepl(
       .entity_input_id("groupings", "GF_TRT01A", "condition_variable",
                        child = "GRP_EITHER"),
       rendered, fixed = TRUE))
+    expect_match(
+      rendered,
+      .entity_input_id("groupings", "GF_TRT01A", "clause_variable",
+                       child = "GRP_EITHER", clause = 1L),
+      fixed = TRUE)
   })
 })
 
@@ -856,4 +871,197 @@ test_that("every child action is undoable, one step each", {
     expect_length(.cge_groups(state), 3L)
     expect_equal(nrow(state$edit_log()), 0L)
   })
+})
+
+## --- Compound-expression editing (editor phase 4) --------------------------
+##
+## GRP_EITHER carries two OR clauses, so it exercises the editable path;
+## GRP_DRUG_A carries a simple condition, which is where a compound is built
+## from. The clause inputs are addressed by position, so these tests also pin
+## that the panel and the observer agree about what position means.
+
+test_that("a compound child shows its operator and reads as a sentence", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  state <- .cge_state()
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(table_groupings_rows_selected = 1)
+    rendered <- paste(as.character(output$detail_groupings), collapse = " ")
+
+    expect_match(
+      rendered,
+      .entity_input_id("groupings", "GF_TRT01A", "clause_operator",
+                       child = "GRP_EITHER"),
+      fixed = TRUE)
+    ## The preview is the reviewer's register, not R's: the execution
+    ## predicate for the same clause reads `TRT01A %in% "Drug A"`.
+    expect_match(rendered, "ADSL.TRT01A EQ Drug A OR ADSL.TRT01A EQ Drug B",
+                 fixed = TRUE)
+  })
+})
+
+test_that("saving a compound child writes every clause and the operator", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  state <- .cge_state()
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(table_groupings_rows_selected = 1)
+    clause_field <- function(index, name) {
+      .entity_input_id("groupings", "GF_TRT01A", name, child = "GRP_EITHER",
+                       clause = index)
+    }
+    .set_input(session,
+               .entity_input_id("groupings", "GF_TRT01A", "clause_operator",
+                                child = "GRP_EITHER"), "AND")
+    .set_input(session, clause_field(2L, "clause_dataset"), "ADSL")
+    .set_input(session, clause_field(2L, "clause_variable"), "SAFFL")
+    .set_input(session, clause_field(2L, "clause_comparator"), "EQ")
+    .set_input(session, clause_field(2L, "clause_value"), "Y")
+    session$setInputs(group_apply = list(grouping = "GF_TRT01A",
+                                         group = "GRP_EITHER"))
+    session$flushReact()
+  })
+
+  either <- .cge_groups(state)[[2]]
+  expect_equal(either$compoundExpression$logicalOperator, "AND")
+  clauses <- either$compoundExpression$whereClauses
+  expect_length(clauses, 2L)
+  ## The clause that was edited changed; the one that was not kept its value.
+  expect_equal(clauses[[2]]$condition$variable, "SAFFL")
+  expect_equal(clauses[[1]]$condition$value, list("Drug A"))
+})
+
+test_that("adding a clause to a simple child makes it compound", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  state <- .cge_state()
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(table_groupings_rows_selected = 1)
+    session$setInputs(clause_action = list(grouping = "GF_TRT01A",
+                                           group = "GRP_DRUG_A",
+                                           clause = 1L, action = "add"))
+    session$flushReact()
+  })
+
+  drug_a <- .cge_groups(state)[[1]]
+  expect_null(drug_a$condition)
+  ## The condition it already had is kept as the first clause.
+  expect_length(drug_a$compoundExpression$whereClauses, 2L)
+  expect_equal(drug_a$compoundExpression$whereClauses[[1]]$condition$value,
+               list("Drug A"))
+
+  log <- shiny::isolate(state$edit_log())
+  expect_true(any(grepl("GRP_DRUG_A", log$field, fixed = TRUE)))
+})
+
+test_that("deleting back to one clause returns a simple condition", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  state <- .cge_state()
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(table_groupings_rows_selected = 1)
+    session$setInputs(clause_action = list(grouping = "GF_TRT01A",
+                                           group = "GRP_EITHER",
+                                           clause = 1L, action = "delete"))
+    session$flushReact()
+  })
+
+  either <- .cge_groups(state)[[2]]
+  expect_null(either$compoundExpression)
+  expect_equal(either$condition$value, list("Drug B"))
+})
+
+test_that("clauses can be reordered and cloned from the panel", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  state <- .cge_state()
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(table_groupings_rows_selected = 1)
+    session$setInputs(clause_action = list(grouping = "GF_TRT01A",
+                                           group = "GRP_EITHER",
+                                           clause = 1L, action = "down"))
+    session$flushReact()
+    session$setInputs(clause_action = list(grouping = "GF_TRT01A",
+                                           group = "GRP_EITHER",
+                                           clause = 1L, action = "clone"))
+    session$flushReact()
+  })
+
+  clauses <- .cge_groups(state)[[2]]$compoundExpression$whereClauses
+  expect_length(clauses, 3L)
+  ## Drug B moved to the front, then was cloned next to itself.
+  expect_equal(clauses[[1]]$condition$value, list("Drug B"))
+  expect_equal(clauses[[2]]$condition$value, list("Drug B"))
+  expect_equal(clauses[[3]]$condition$value, list("Drug A"))
+})
+
+test_that("an unaddressable clause is refused with a sentence", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  state  <- .cge_state()
+  before <- .cge_groups(state)
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(table_groupings_rows_selected = 1)
+    ## Reading past the end would be a subscript error rather than a refusal.
+    session$setInputs(clause_action = list(grouping = "GF_TRT01A",
+                                           group = "GRP_EITHER",
+                                           clause = 9L, action = "clone"))
+    session$flushReact()
+  })
+
+  expect_equal(.cge_groups(state), before)
+  expect_equal(nrow(shiny::isolate(state$edit_log())), 0L)
+})
+
+test_that("a nested clause is readable, reorderable and never flattened", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  ## A clause that is itself compound: the editor preserves it rather than
+  ## flattening it, so it renders read-only but keeps its structural buttons.
+  state <- .cge_state()
+  nested <- list(compoundExpression = list(
+    logicalOperator = "AND",
+    whereClauses = list(
+      list(condition = list(dataset = "ADSL", variable = "SAFFL",
+                            comparator = "EQ", value = list("Y"))),
+      list(condition = list(dataset = "ADSL", variable = "ITTFL",
+                            comparator = "EQ", value = list("Y"))))))
+  shiny::isolate(state$model(
+    model_add_clause(state$model(), "GF_TRT01A", "GRP_EITHER", nested)))
+
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(table_groupings_rows_selected = 1)
+    rendered <- paste(as.character(output$detail_groupings), collapse = " ")
+
+    ## Read-only: no boxes for its insides, but it reads as what it is.
+    expect_false(grepl(
+      .entity_input_id("groupings", "GF_TRT01A", "clause_variable",
+                       child = "GRP_EITHER", clause = 3L),
+      rendered, fixed = TRUE))
+    expect_match(rendered, "(ADSL.SAFFL EQ Y AND ADSL.ITTFL EQ Y)",
+                 fixed = TRUE)
+
+    ## Saving the child walks past it without touching it.
+    session$setInputs(group_apply = list(grouping = "GF_TRT01A",
+                                         group = "GRP_EITHER"))
+    session$flushReact()
+  })
+
+  clauses <- .cge_groups(state)[[2]]$compoundExpression$whereClauses
+  expect_length(clauses, 3L)
+  expect_equal(clauses[[3]], nested)
 })

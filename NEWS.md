@@ -1,5 +1,19 @@
 # arsbridge (development version)
 
+* **A compound column condition can be edited in the editor.** A group whose
+  columns are defined by an `AND`/`OR` expression used to be shown read-only,
+  with the raw-JSON hatch as the only way to change it -- the one shape a
+  reviewer is least able to repair by hand. Its clauses are now editable one at
+  a time, with the operator beside them and the whole expression previewed as a
+  sentence (`ADSL.COHORTN is missing OR ADSL.COHORTN EQ 99`) rather than as the
+  R predicate that will run, so what the shell meant and what the column does
+  can be compared in the same words. Clauses can be added, cloned, reordered
+  and deleted, and a simple condition grows into a compound by adding a clause
+  to it -- keeping the condition it already had as the first one, which is the
+  only route into a compound expression that does not go through raw JSON.
+  A clause that is itself nested stays read-only and says so, but can still be
+  reordered or removed whole, and saving the group walks past it untouched.
+
 * **A group's compound condition can be edited from R.** `model_add_clause()`,
   `model_remove_clause()`, `model_move_clause()`, `model_set_clause_condition()`
   and `model_set_group_operator()` write the clauses of an `AND`/`OR`
