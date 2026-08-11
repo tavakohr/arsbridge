@@ -560,3 +560,69 @@ data_row(wb4, "Table 14.1.6", 7, "Median", value = "XX.X")
 path4 <- file.path(here, "shells_apx_nheaders.xlsx")
 wb4$save(path4)
 cat("wrote", path4, "\n")
+
+## ---------------------------------------------------------------------------
+## Fixture 5 -- the acceptance shapes, shells_apx_acceptance.xlsx
+## ---------------------------------------------------------------------------
+##
+## The two shell shapes the field failures of 2026-08 arrived as, in one
+## workbook so a single parse produces both and their axes have to coexist.
+##
+## Sheet 1 groups TRT01A the ordinary way: three plain arm headers, so the
+## axis is data-driven and mints GF_TRT01A.
+##
+## Sheet 2 is a SUBGROUP table. Every column carries a compound condition, and
+## the FIRST variable each one references is TRT01A again -- which is how the
+## real failure happened: the axis is named after the variable it references
+## first, so this table's Male/Female columns minted GF_TRT01A too, collided
+## with sheet 1's definition, and were silently dropped. The ARD then carried
+## sheet 1's arm levels, no subgroup header matched them, and every subgroup
+## column stayed a placeholder while Total filled.
+##
+## Both sheets read ADSL only, so tests run them against the existing
+## adam_apx_drm_301 fixture data with no new datasets.
+
+wb5 <- wb_workbook()
+
+## --- Table 14.1.1: the plain treatment axis --------------------------------
+wb5$add_worksheet("Table 14.1.1")
+sheet_banner(wb5, "Table 14.1.1", "Table 14.1.1",
+             "Summary of Subject Disposition", "Safety Population")
+sheet_header(wb5, "Table 14.1.1", 4, "Category",
+             "[columns -> ADSL.TRT01A; source ADSL]")
+data_row(wb5, "Table 14.1.1", 5, "Subjects treated", "[ADSL.SAFFL = 'Y']",
+         value = "xx")
+data_row(wb5, "Table 14.1.1", 6, "Discontinued study",
+         "[ADSL.EOSSTT = 'DISCONTINUED']")
+
+## --- Table 14.4.1: the subgroup axis, compound conditions ------------------
+subgroups <- list(
+  list(label = "Drug 10 mg, Male",
+       annot = "[ADSL.TRT01A = 'Drug 10 mg' AND ADSL.SEX = 'M']"),
+  list(label = "Drug 10 mg, Female",
+       annot = "[ADSL.TRT01A = 'Drug 10 mg' AND ADSL.SEX = 'F']"),
+  list(label = "Drug 20 mg, Male",
+       annot = "[ADSL.TRT01A = 'Drug 20 mg' AND ADSL.SEX = 'M']")
+)
+
+wb5$add_worksheet("Table 14.4.1")
+sheet_banner(wb5, "Table 14.4.1", "Table 14.4.1",
+             "Summary of Subject Disposition by Subgroup", "Safety Population")
+wb5$add_data(sheet = "Table 14.4.1",
+             x = annotated_cell("Category",
+                                "[columns -> ADSL.TRT01A; source ADSL]"),
+             start_row = 4, start_col = 1, col_names = FALSE)
+for (j in seq_along(subgroups)) {
+  wb5$add_data(
+    sheet = "Table 14.4.1",
+    x = annotated_cell(subgroups[[j]]$label, subgroups[[j]]$annot),
+    start_row = 4, start_col = j + 1L, col_names = FALSE)
+}
+data_row(wb5, "Table 14.4.1", 5, "Subjects treated", "[ADSL.SAFFL = 'Y']",
+         value = "xx", arms = subgroups)
+data_row(wb5, "Table 14.4.1", 6, "Discontinued study",
+         "[ADSL.EOSSTT = 'DISCONTINUED']", arms = subgroups)
+
+path5 <- file.path(here, "shells_apx_acceptance.xlsx")
+wb5$save(path5)
+cat("wrote", path5, "\n")
