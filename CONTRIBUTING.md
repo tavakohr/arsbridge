@@ -200,6 +200,23 @@ When you make a design-level change, add or update an ADR in the same PR. Keep
 the standard `ARS → ARD → tfrmt` pipeline — the shell is never the source of
 truth for layout.
 
+## Handing work over
+
+Investigations that outlive a session — especially any that happened on a
+machine whose data cannot leave it — get written up under `notes/handoffs/`.
+Start from [`tools/HANDOFF_TEMPLATE.md`](tools/HANDOFF_TEMPLATE.md).
+
+Two of its blocks are mandatory, and both earn it. **Repository state** records
+`packageVersion("arsbridge")` alongside the `HEAD` sha, because a handoff
+written against a stale install describes a build nobody can identify — half
+the findings of one 2026 RCA turned out to have been fixed days before it was
+written. **Fill debrief** records all three `ars_fill_summary()` frames, which
+name the stage each pending cell died at; without them the next reader
+reconstructs that by hand.
+
+`notes/` is gitignored, so handoffs travel by hand and have to be
+self-contained. The template lives in `tools/` so that it does not.
+
 ## Code of Conduct
 
 Please note that the arsbridge project is released with a

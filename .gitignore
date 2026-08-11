@@ -23,12 +23,15 @@ docs/
 notes/
 
 # Guards, in case a working note is ever written at the top level instead.
-HANDOFF_*.md
-CLAUDE_CODE_PROMPT_*.md
-PLAN_*.md
-REVIEW_*.md
-REEVALUATION_*.md
-IMPROVEMENTS_*.md
+# Anchored, so they guard the top level only: an unanchored pattern matches at
+# every depth and silently swallowed tools/HANDOFF_TEMPLATE.md, which is a
+# tracked file the whole point of which is to be in the repo.
+/HANDOFF_*.md
+/CLAUDE_CODE_PROMPT_*.md
+/PLAN_*.md
+/REVIEW_*.md
+/REEVALUATION_*.md
+/IMPROVEMENTS_*.md
 
 # Study-specific working dirs (NEVER commit client data)
 #
