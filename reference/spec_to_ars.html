@@ -13,7 +13,7 @@ siera::readARS()."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9102</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9100</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -42,7 +42,7 @@ siera::readARS()."></head><body>
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Convert annotated TLF shell and ADaM spec to CDISC ARS JSON</h1>
-      <small class="dont-index">Source: <a href="https://github.com/tavakohr/arsbridge/blob/feat/editor-child-group-crud/R/spec_to_ars.R" class="external-link"><code>R/spec_to_ars.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/tavakohr/arsbridge/blob/main/R/spec_to_ars.R" class="external-link"><code>R/spec_to_ars.R</code></a></small>
       <div class="d-none name"><code>spec_to_ars.Rd</code></div>
     </div>
 
@@ -367,6 +367,31 @@ and the emitted <code>{cards}</code> scripts. Supported condition forms include
 <code>not missing</code>. Rows matching no column are excluded from the group
 columns and counted (WARN); a <code>Total (N=XX) ...</code> header is read as the
 overall column, not a group.</p>
+    </div>
+    <div class="section level2">
+    <h2 id="codelists-coded-values-and-what-a-shell-prints-">Codelists (coded values and what a shell prints)<a class="anchor" aria-label="anchor" href="#codelists-coded-values-and-what-a-shell-prints-"></a></h2>
+
+
+<p>A shell prints <code>Female</code> where ADSL holds <code>F</code>. If the ADaM spec carries a
+codelist for the variable, arsbridge pairs the two here rather than
+leaving it to the fill: the terms travel in the reporting event as
+<code>_meta$value_decodes</code>, and both the emitted <code>{cards}</code> code and the
+executed ARD derive the same <code>factor(levels = codes, labels = decodes)</code>,
+so the ARD reads <code>Female</code> and the shell row matches it exactly.</p>
+<p>A codelist sheet is recognised by its COLUMN HEADERS, never by the sheet
+name: it needs a codelist name, a term (<code>Term</code>, <code>Coded Value</code>, <code>Code</code>,
+<code>Submission Value</code>), and a decoded value (<code>Decoded Value</code>, <code>Decode</code>,
+<code>Display Value</code>); <code>Order</code> and <code>Used By Variables</code> are read when present.
+<code>define.xml</code> <code>CodeList</code> elements are read equivalently. A variable finds
+its codelist by its own <code>Codelist</code> spec column, else by a codelist whose
+<code>Used By Variables</code> names its exact <code>DATASET.VARIABLE</code>.</p>
+<p>Only per-category methods decode – counts, percentages, AE frequencies,
+subject counts – since no other method displays a value that could be
+decoded. Codelists longer than 15 terms still decode, but stop expanding:
+unobserved terms do not become zero rows, and the codelist does not become
+a column axis. When the spec has no codelist for a variable, the fill
+writer falls back to a label-matching heuristic that refuses ambiguous
+pairings rather than guessing; see <code><a href="../articles/reading-engine.html">vignette("reading-engine")</a></code>.</p>
     </div>
     <div class="section level2">
     <h2 id="human-review">Human review<a class="anchor" aria-label="anchor" href="#human-review"></a></h2>
