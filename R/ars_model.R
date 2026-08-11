@@ -1420,10 +1420,15 @@ model_add_grouping <- function(model, dataset, variable, label = NULL) {
     base_id
   }
 
+  label <- .chr_field(label)
+  if (is.na(label) || !nzchar(trimws(label))) {
+    label <- paste0("Grouping by ", variable)
+  }
+
   node <- list(
     id               = id,
     name             = variable,
-    label            = label %||% paste0("Grouping by ", variable),
+    label            = label,
     groupingDataset  = dataset,
     groupingVariable = variable,
     dataDriven       = TRUE,

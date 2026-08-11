@@ -192,3 +192,242 @@ test_that("a JSON replacement that renames the entity is refused", {
     expect_true(subset_id %in% state$model()$data_subsets$id)
   })
 })
+
+
+test_that("a grouping added after startup remains editable", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  state <- .library_state()
+
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(
+      new_grouping_dataset = "ADSL",
+      new_grouping_variable = "AGEGR1",
+      new_grouping_label = "Age groups",
+      confirm_grouping_add = 1
+    )
+    session$flushReact()
+
+    added_id <- attr(state$model(), "last_added")
+    expect_identical(added_id, "GF_AGEGR1")
+
+    input_name <- .entity_input_id("groupings", added_id, "label")
+    .set_input(session, input_name, "Edited after add")
+
+    model <- state$model()
+    row <- model$groupings[model$groupings$id == added_id, , drop = FALSE]
+    expect_identical(row$label, "Edited after add")
+
+    log <- state$edit_log()
+    expect_true(any(
+      log$pool == "groupings" &
+        log$id == added_id &
+        log$field == "label" &
+        log$new == "Edited after add"
+    ))
+
+    ars <- model_to_ars(model)
+    grouping_ids <- vapply(
+      ars$analysisGroupings,
+      function(grouping) grouping$id,
+      character(1)
+    )
+    saved <- ars$analysisGroupings[[match(added_id, grouping_ids)]]
+    expect_identical(saved$label, "Edited after add")
+  })
+})
+
+
+test_that("a grouping cloned after startup can be edited independently", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  state <- .library_state()
+  fixture <- .library_model()
+  base_id <- fixture$groupings$id[1]
+  base_label <- fixture$groupings$label[1]
+
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(table_groupings_rows_selected = 1, grouping_clone = 1)
+    session$flushReact()
+
+    clone_id <- setdiff(state$model()$groupings$id, base_id)
+    expect_length(clone_id, 1)
+    expect_match(clone_id, paste0("^", base_id, "_VARIANT"))
+
+    input_name <- .entity_input_id("groupings", clone_id, "label")
+    .set_input(session, input_name, "Edited clone")
+
+    model <- state$model()
+    expect_identical(
+      model$groupings$label[model$groupings$id == clone_id],
+      "Edited clone"
+    )
+    expect_identical(
+      model$groupings$label[model$groupings$id == base_id],
+      base_label
+    )
+
+    log <- state$edit_log()
+    expect_true(any(
+      log$pool == "groupings" &
+        log$id == clone_id &
+        log$field == "label" &
+        log$new == "Edited clone"
+    ))
+  })
+})
+
+
+test_that("a deleted entity id receives a fresh observer when recreated", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  state <- .library_state()
+
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    added <- model_add_grouping(
+      state$model(), "ADSL", "AGEGR1", "First grouping"
+    )
+    entity_id <- attr(added, "last_added")
+    state$model(added)
+    session$flushReact()
+
+    input_name <- .entity_input_id("groupings", entity_id, "label")
+    .set_input(session, input_name, "First edit")
+    expect_identical(
+      state$model()$groupings$label[
+        state$model()$groupings$id == entity_id
+      ],
+      "First edit"
+    )
+
+    state$model(model_remove_grouping(state$model(), entity_id))
+    session$flushReact()
+    expect_false(entity_id %in% state$model()$groupings$id)
+
+    recreated <- model_add_grouping(
+      state$model(), "ADSL", "AGEGR1", "Recreated grouping"
+    )
+    expect_identical(attr(recreated, "last_added"), entity_id)
+    state$model(recreated)
+    session$flushReact()
+
+    expect_identical(
+      state$model()$groupings$label[
+        state$model()$groupings$id == entity_id
+      ],
+      "Recreated grouping"
+    )
+
+    .set_input(session, input_name, "Edited after re-add")
+    expect_identical(
+      state$model()$groupings$label[
+        state$model()$groupings$id == entity_id
+      ],
+      "Edited after re-add"
+    )
+  })
+})
+
+
+test_that("a catalogue method added after startup remains editable", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  state <- .library_state()
+  method_id <- "MTH_KAPLAN_MEIER_ESTIMATE"
+  expect_false(method_id %in% .library_model()$methods$id)
+
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    state$model(model_add_method_from_catalogue(state$model(), method_id))
+    session$flushReact()
+
+    input_name <- .entity_input_id("methods", method_id, "description")
+    .set_input(session, input_name, "Edited after catalogue insertion")
+
+    model <- state$model()
+    expect_identical(
+      model$methods$description[model$methods$id == method_id],
+      "Edited after catalogue insertion"
+    )
+
+    ars <- model_to_ars(model)
+    method_ids <- vapply(ars$methods, function(method) method$id, character(1))
+    saved <- ars$methods[[match(method_id, method_ids)]]
+    expect_identical(saved$description, "Edited after catalogue insertion")
+  })
+})
+
+
+test_that("a blank grouping label receives its generated default", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  state <- .library_state()
+
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(
+      new_grouping_dataset = "ADSL",
+      new_grouping_variable = "AGEGR1",
+      new_grouping_label = "",
+      confirm_grouping_add = 1
+    )
+    session$flushReact()
+
+    added_id <- attr(state$model(), "last_added")
+    row <- state$model()$groupings[
+      state$model()$groupings$id == added_id,
+      ,
+      drop = FALSE
+    ]
+    expect_identical(row$label, "Grouping by AGEGR1")
+
+    ars <- model_to_ars(state$model())
+    grouping_ids <- vapply(
+      ars$analysisGroupings,
+      function(grouping) grouping$id,
+      character(1)
+    )
+    saved <- ars$analysisGroupings[[match(added_id, grouping_ids)]]
+    expect_identical(saved$label, "Grouping by AGEGR1")
+  })
+})
+
+
+test_that("entity observer reconciliation tracks membership without duplicates", {
+  registry <- new.env(parent = emptyenv())
+  counts <- new.env(parent = emptyenv())
+  counts$created <- character()
+  counts$destroyed <- character()
+
+  make_observer <- function(spec) {
+    key <- spec$key
+    counts$created <- c(counts$created, key)
+    list(destroy = function() {
+      counts$destroyed <- c(counts$destroyed, key)
+    })
+  }
+
+  desired <- list(field_a = list(key = "field_a"))
+  .reconcile_entity_observers(registry, desired, make_observer)
+  expect_identical(counts$created, "field_a")
+  expect_identical(ls(registry), "field_a")
+
+  .reconcile_entity_observers(registry, desired, make_observer)
+  expect_identical(counts$created, "field_a")
+
+  .reconcile_entity_observers(registry, list(), make_observer)
+  expect_identical(counts$destroyed, "field_a")
+  expect_length(ls(registry), 0)
+
+  .reconcile_entity_observers(registry, desired, make_observer)
+  expect_identical(counts$created, c("field_a", "field_a"))
+  expect_identical(ls(registry), "field_a")
+})

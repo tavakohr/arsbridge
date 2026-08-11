@@ -1,5 +1,13 @@
 # arsbridge (development version)
 
+* **Entities created during an editor session remain editable.** The entity
+  library now registers field observers as methods, analysis sets, data subsets,
+  and groupings enter the model, rather than taking a one-time snapshot at app
+  startup. Registrations are retired when entities disappear and recreated when
+  an id returns, so added, cloned, detached, catalogue-inserted, and restored
+  entities keep their edits. Blank labels on new groupings now receive the
+  generated `Grouping by <VARIABLE>` label.
+
 * **Subject-count rows now honor two-statistic placeholders.** An annotation
   such as `Count of unique USUBJID where SAFFL='Y'` previously selected the
   count-only method before consulting the shell's placeholder shape, leaving
