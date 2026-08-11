@@ -1,5 +1,18 @@
 # arsbridge (development version)
 
+* **A group's compound condition can be edited from R.** `model_add_clause()`,
+  `model_remove_clause()`, `model_move_clause()`, `model_set_clause_condition()`
+  and `model_set_group_operator()` write the clauses of an `AND`/`OR`
+  expression, which until now could only be changed through the raw-JSON hatch.
+  A group holds either a simple condition or a compound expression and never
+  both, so the accessors move it between the two shapes as clauses come and go:
+  adding a clause to a group that had a plain condition keeps that condition as
+  the first clause, and removing back down to one unwraps the compound rather
+  than leaving a one-clause expression, which the ARS does not want persisted.
+  A clause that is itself compound is preserved but refuses a flat edit --
+  replacing it would drop its own clauses -- and when such a clause is the last
+  one left its expression is hoisted rather than wrapped again.
+
 * **A subject count over an occurrence frame no longer undercounts terms on the
   legacy path.** `ars_to_ard(legacy = TRUE)` deduplicated a Subject Count and a
   Subject Count (%) on the subject alone, which on a frame that carries several

@@ -1297,6 +1297,270 @@ model_set_group_condition <- function(model, grouping_id, group_id,
   .set_grouping_groups(model, grouping_id, found$index, groups)
 }
 
+## --- Compound expressions --------------------------------------------------
+##
+## A group carries EITHER a `condition` or a `compoundExpression`, never both
+## (§7.4 of the editor spec: one condition representation per group). These
+## accessors move a group between the two shapes as clauses come and go, so
+## the invariant holds after every call rather than being something the caller
+## has to remember.
+##
+## A one-clause compoundExpression is never persisted: ARS validation wants at
+## least two clauses, so adding the second clause is what creates a compound,
+## and removing back down to one unwraps it again.
+
+## The clauses of a compound group, or NULL when it is not compound.
+#' @noRd
+.group_clauses <- function(groups, hit) {
+  ce <- groups[[hit]][["compoundExpression"]]
+  if (is.null(ce)) return(NULL)
+  ce[["whereClauses"]] %||% list()
+}
+
+#' @noRd
+.clause_index <- function(clauses, index, group_id) {
+  index <- suppressWarnings(as.integer(index))
+  if (is.na(index) || index < 1L || index > length(clauses)) {
+    cli::cli_abort(c(
+      "Group {.val {group_id}} has no clause {.val {index}}.",
+      "i" = "It carries {length(clauses)} clause{?s}."
+    ))
+  }
+  index
+}
+
+## Accept either shape a caller might reasonably hold: a WhereClause as
+## .cond() and .cond_multi() return it, or the bare condition object inside
+## one. Both appear in this file already, and guessing wrong is silent, so
+## normalize here rather than making every call site remember.
+#' @noRd
+.as_where_clause <- function(x) {
+  if (is.null(x)) return(NULL)
+  ## Guard the shape before naming into it: `42[["condition"]]` is a
+  ## subscript error, not a NULL, and would mask the message below.
+  if (is.list(x)) {
+    if (!is.null(x[["condition"]]) || !is.null(x[["compoundExpression"]])) {
+      return(x)
+    }
+    if (!is.null(x[["variable"]]) || !is.null(x[["comparator"]])) {
+      return(list(condition = x))
+    }
+  }
+  cli::cli_abort(c(
+    "A clause must be a WhereClause or a condition.",
+    "i" = "Build one with {.fn .cond} / {.fn .cond_multi}, or pass a list with a {.field variable}."
+  ))
+}
+
+## Write a group's clauses back in whichever shape fits how many are left, so
+## the group always holds exactly one of `condition` / `compoundExpression`.
+##
+## The single-clause case has two spellings, and both matter: a lone simple
+## condition becomes the group's own `condition`, while a lone clause that is
+## ITSELF compound has its expression hoisted to the group. Wrapping the
+## latter in a fresh one-clause compound would leave behind exactly the shape
+## this function exists to prevent.
+#' @noRd
+.set_group_clauses <- function(groups, hit, clauses, operator) {
+  group <- groups[[hit]]
+  group[["condition"]] <- NULL
+  group[["compoundExpression"]] <- NULL
+
+  if (length(clauses) == 1L) {
+    only <- clauses[[1]]
+    if (!is.null(only[["compoundExpression"]])) {
+      group[["compoundExpression"]] <- only[["compoundExpression"]]
+    } else {
+      group[["condition"]] <- only[["condition"]]
+    }
+  } else if (length(clauses) > 1L) {
+    group[["compoundExpression"]] <- list(logicalOperator = operator,
+                                          whereClauses = clauses)
+  }
+
+  groups[[hit]] <- group
+  groups
+}
+
+## The clauses a group stands for, whichever shape it is stored in, so the
+## add path does not need to branch on it. A simple condition is one clause;
+## an unconditioned group is none.
+#' @noRd
+.group_as_clauses <- function(group) {
+  if (!is.null(group[["compoundExpression"]])) {
+    return(group[["compoundExpression"]][["whereClauses"]] %||% list())
+  }
+  if (!is.null(group[["condition"]])) {
+    return(list(list(condition = group[["condition"]])))
+  }
+  list()
+}
+
+#' @noRd
+.group_operator <- function(group, default = "OR") {
+  ## .chr_field() answers NA for an absent field, and nzchar(NA) is TRUE, so
+  ## the missing case has to be tested for by name rather than by emptiness.
+  op <- .chr_field(group[["compoundExpression"]][["logicalOperator"]])
+  if (is.na(op) || !nzchar(op)) default else toupper(op)
+}
+
+#' @noRd
+.assert_logical_operator <- function(operator) {
+  operator <- toupper(trimws(operator %||% ""))
+  if (!operator %in% c("AND", "OR")) {
+    cli::cli_abort(c(
+      "A compound expression joins its clauses with {.val AND} or {.val OR}.",
+      "x" = "Got {.val {operator}}."
+    ))
+  }
+  operator
+}
+
+## Set the AND/OR that joins a compound group's clauses.
+#' @noRd
+model_set_group_operator <- function(model, grouping_id, group_id, operator) {
+  .assert_ars_model(model)
+  operator <- .assert_logical_operator(operator)
+  found  <- .grouping_groups(model, grouping_id)
+  groups <- found$groups
+  hit    <- .group_index(groups, group_id, grouping_id)
+
+  if (is.null(groups[[hit]][["compoundExpression"]])) {
+    cli::cli_abort(c(
+      "Group {.val {group_id}} has no compound expression.",
+      "i" = "An operator joins two or more clauses; add a clause first."
+    ))
+  }
+
+  groups[[hit]][["compoundExpression"]][["logicalOperator"]] <- operator
+  .set_grouping_groups(model, grouping_id, found$index, groups)
+}
+
+## Add a clause. This is how a compound expression is built in the first
+## place: a group holding a simple condition becomes a two-clause compound,
+## keeping the condition it already had as the first clause rather than
+## discarding it.
+#' @noRd
+model_add_clause <- function(model, grouping_id, group_id, clause = NULL,
+                             after = NULL, operator = NULL) {
+  .assert_ars_model(model)
+  found  <- .grouping_groups(model, grouping_id)
+  groups <- found$groups
+  hit    <- .group_index(groups, group_id, grouping_id)
+
+  clauses <- .group_as_clauses(groups[[hit]])
+  op      <- .assert_logical_operator(operator %||%
+                                        .group_operator(groups[[hit]]))
+
+  ## An unspecified new clause is an empty EQ, which reads as "is missing" --
+  ## a real condition, and a visible, editable starting point rather than a
+  ## half-built node the reviewer cannot see.
+  clause <- .as_where_clause(clause) %||% list(condition = list(
+    dataset = "", variable = "", comparator = "EQ", value = list()
+  ))
+
+  at <- if (is.null(after)) length(clauses) else
+    max(0L, min(as.integer(after), length(clauses)))
+  clauses <- append(clauses, list(clause), after = at)
+
+  groups <- .set_group_clauses(groups, hit, clauses, op)
+  .set_grouping_groups(model, grouping_id, found$index, groups)
+}
+
+## Remove one clause. Dropping to a single clause unwraps the group back to
+## that clause -- a one-clause compound is not a shape the ARS wants
+## persisted, and refusing instead would trap a reviewer who has simply
+## changed their mind about the second clause.
+#' @noRd
+model_remove_clause <- function(model, grouping_id, group_id, index) {
+  .assert_ars_model(model)
+  found  <- .grouping_groups(model, grouping_id)
+  groups <- found$groups
+  hit    <- .group_index(groups, group_id, grouping_id)
+
+  clauses <- .group_clauses(groups, hit)
+  if (is.null(clauses)) {
+    cli::cli_abort(c(
+      "Group {.val {group_id}} has no compound expression.",
+      "i" = "A simple condition is edited with {.fn model_set_group_condition}."
+    ))
+  }
+  index <- .clause_index(clauses, index, group_id)
+
+  groups <- .set_group_clauses(groups, hit, clauses[-index],
+                               .group_operator(groups[[hit]]))
+  .set_grouping_groups(model, grouping_id, found$index, groups)
+}
+
+## Move a clause by `offset` positions, clamped at the ends so the editor's
+## up/down buttons stay pressable on the first and last rows. Order is worth
+## keeping even though AND and OR commute: it is how the reviewer reads the
+## expression back.
+#' @noRd
+model_move_clause <- function(model, grouping_id, group_id, index, offset) {
+  .assert_ars_model(model)
+  found  <- .grouping_groups(model, grouping_id)
+  groups <- found$groups
+  hit    <- .group_index(groups, group_id, grouping_id)
+
+  clauses <- .group_clauses(groups, hit)
+  if (is.null(clauses)) {
+    cli::cli_abort("Group {.val {group_id}} has no compound expression.")
+  }
+  index  <- .clause_index(clauses, index, group_id)
+  target <- max(1L, min(length(clauses), index + as.integer(offset)))
+  if (identical(target, index)) return(model)
+
+  order  <- seq_along(clauses)
+  order  <- append(order[-index], index, after = target - 1L)
+  groups <- .set_group_clauses(groups, hit, clauses[order],
+                               .group_operator(groups[[hit]]))
+  .set_grouping_groups(model, grouping_id, found$index, groups)
+}
+
+## Edit one clause's simple condition. Refused on a clause that is itself a
+## compound expression: the editor preserves nesting it cannot safely edit
+## rather than flattening it (§14 of the editor spec).
+#' @noRd
+model_set_clause_condition <- function(model, grouping_id, group_id, index,
+                                       dataset, variable, comparator, values) {
+  .assert_ars_model(model)
+  found  <- .grouping_groups(model, grouping_id)
+  groups <- found$groups
+  hit    <- .group_index(groups, group_id, grouping_id)
+
+  clauses <- .group_clauses(groups, hit)
+  if (is.null(clauses)) {
+    cli::cli_abort(c(
+      "Group {.val {group_id}} has no compound expression.",
+      "i" = "A simple condition is edited with {.fn model_set_group_condition}."
+    ))
+  }
+  index <- .clause_index(clauses, index, group_id)
+
+  if (!is.null(clauses[[index]][["compoundExpression"]])) {
+    cli::cli_abort(c(
+      "Clause {.val {index}} of group {.val {group_id}} is itself compound.",
+      "i" = "Edit it as raw JSON: replacing it with a simple condition here would drop its own clauses."
+    ))
+  }
+
+  values <- as.character(values %||% character(0))
+  values <- values[!is.na(values)]
+  ## Same rule as model_set_group_condition(): an empty value list is kept as
+  ## one, because an empty EQ is how a where clause says "is missing".
+  clauses[[index]] <- list(condition = list(
+    dataset    = toupper(trimws(dataset %||% "")),
+    variable   = toupper(trimws(variable %||% "")),
+    comparator = toupper(trimws(comparator %||% "EQ")),
+    value      = as.list(values)
+  ))
+
+  groups <- .set_group_clauses(groups, hit, clauses,
+                               .group_operator(groups[[hit]]))
+  .set_grouping_groups(model, grouping_id, found$index, groups)
+}
+
 ## The outputs whose declared result paths name this group.
 #' @noRd
 .group_path_dependents <- function(model, group_id) {
