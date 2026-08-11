@@ -739,6 +739,11 @@ build_ars_json <- function(sections,
   analysis_sets    <- list(); seen_as  <- character()
   data_subsets     <- list(); seen_ds  <- character()
   grouping_factors <- list(); seen_gf  <- character()
+  ## The same parallel-signature trick the groupings use, for the two other
+  ## pools whose ids are minted from a name or a tag rather than from what
+  ## they filter.
+  as_signatures    <- character()
+  ds_signatures    <- character()
   ## One definition signature per registered grouping, parallel to
   ## grouping_factors, so an axis already in the event is found by what it
   ## MEANS rather than by the id it happens to carry.
@@ -784,6 +789,94 @@ build_ars_json <- function(sections,
     seen_gf       <<- c(seen_gf, gf_obj$id)
     gf_signatures <<- c(gf_signatures, signature)
     gf_obj
+  }
+
+  ## Register one AnalysisSet and hand back the object the event carries.
+  ##
+  ## A set's id comes from the population TEXT while its condition comes from
+  ## the annotation, so two tables that both say "Safety Population" and filter
+  ## differently used to collide -- the first won and every later analysis ran
+  ## the wrong population. That is invisible in the output: the table still
+  ## fills, with the wrong denominator.
+  ##
+  ## The awkward case is the population named but not annotated, which is
+  ## ordinary in real shells: one table spells the filter out and another
+  ## leaves it implied. Those are one set, not two, so an under-specified set
+  ## joins its namesake -- and if the under-specified one arrived FIRST, the
+  ## annotated one replaces it, because the alternative is every analysis
+  ## silently running unfiltered.
+  register_analysis_set <- function(as_obj, tlf_number = NULL) {
+    signature <- .where_signature(as_obj)
+    known     <- match(signature, as_signatures)
+    if (!is.na(known)) return(analysis_sets[[known]])
+
+    incumbent <- match(as_obj$id, seen_as)
+    if (!is.na(incumbent)) {
+      if (.entity_is_unscoped(as_obj)) {
+        return(analysis_sets[[incumbent]])
+      }
+      if (.entity_is_unscoped(analysis_sets[[incumbent]])) {
+        as_obj$order <- analysis_sets[[incumbent]]$order
+        as_obj$level <- analysis_sets[[incumbent]]$level
+        analysis_sets[[incumbent]] <<- as_obj
+        as_signatures[[incumbent]] <<- signature
+        diag_add(
+          stage = "build_ars", severity = "INFO", tlf_number = tlf_number,
+          problem = sprintf(
+            "Population '%s' was carried without a filter until this output annotated one; the filter now applies to every analysis that uses it",
+            as_obj$name %||% as_obj$id),
+          action = "Confirm the earlier outputs really do mean this population"
+        )
+        return(as_obj)
+      }
+
+      as_obj$id <- .next_variant_id(seen_as, as_obj$id)
+      diag_add(
+        stage = "build_ars", severity = "WARN", tlf_number = tlf_number,
+        problem = sprintf(
+          "Population '%s' is defined differently here than in an earlier output; kept as %s",
+          as_obj$name %||% "?", as_obj$id),
+        action = "Two populations sharing one name is usually an authoring slip -- confirm both definitions are meant"
+      )
+    }
+
+    as_obj$order <- length(analysis_sets) + 1L
+    as_obj$level <- 1L
+    analysis_sets[[length(analysis_sets) + 1L]] <<- as_obj
+    seen_as       <<- c(seen_as, as_obj$id)
+    as_signatures <<- c(as_signatures, signature)
+    as_obj
+  }
+
+  ## Register one DataSubset and hand back the object the event carries. The
+  ## id tag is lossy by construction -- dataset, variable and the FIRST value,
+  ## no comparator -- so `AESEV = 'SEVERE'` and `AESEV NE 'SEVERE'` mint the
+  ## same id while meaning opposite things. A clash here is expected rather
+  ## than suspicious, hence INFO.
+  register_data_subset <- function(ds_obj, tlf_number = NULL) {
+    if (is.null(ds_obj)) return(NULL)
+
+    signature <- .where_signature(ds_obj)
+    known     <- match(signature, ds_signatures)
+    if (!is.na(known)) return(data_subsets[[known]])
+
+    if (ds_obj$id %in% seen_ds) {
+      ds_obj$id <- .next_variant_id(seen_ds, ds_obj$id)
+      diag_add(
+        stage = "build_ars", severity = "INFO", tlf_number = tlf_number,
+        problem = sprintf(
+          "Row filter %s differs from an earlier one that shortens to the same id; kept as %s",
+          ds_obj$name %||% "?", ds_obj$id),
+        action = "Both filters are kept -- no action needed unless the two outputs meant one filter"
+      )
+    }
+
+    ds_obj$order <- length(data_subsets) + 1L
+    ds_obj$level <- 1L
+    data_subsets[[length(data_subsets) + 1L]] <<- ds_obj
+    seen_ds       <<- c(seen_ds, ds_obj$id)
+    ds_signatures <<- c(ds_signatures, signature)
+    ds_obj
   }
 
   for (sec in sections) {
@@ -839,13 +932,9 @@ build_ars_json <- function(sections,
     }
 
     ## --- AnalysisSet from population ---
-    as_obj <- .build_analysis_set(sec)
-    if (!as_obj$id %in% seen_as) {
-      as_obj$order <- length(analysis_sets) + 1L
-      as_obj$level <- 1L
-      analysis_sets[[length(analysis_sets) + 1L]] <- as_obj
-      seen_as <- c(seen_as, as_obj$id)
-    }
+    ## Every later reference must use the RETURNED object: this is not always
+    ## the one just built.
+    as_obj <- register_analysis_set(.build_analysis_set(sec), sec$tlf_number)
 
     ## --- GroupingFactors from the (ordered) grouping list ---
     gf_objs <- .build_groupings(sec, codelists = codelists,
@@ -876,6 +965,12 @@ build_ars_json <- function(sections,
     } else {
       .build_method(sec)
     }
+    ## Methods are deliberately NOT registered by definition, unlike the
+    ## groupings, analysis sets and data subsets above. Every id here comes
+    ## from the .STANDARD_METHODS catalogue except .build_method()'s unknown-
+    ## name fallback, and that fallback's whole object is a pure function of
+    ## the name -- so two sections that mint one id necessarily built the same
+    ## method. There is no definition for a signature to tell apart.
     if (!mth_obj$id %in% seen_mth) {
       methods[[length(methods) + 1L]] <- mth_obj
       seen_mth <- c(seen_mth, mth_obj$id)
@@ -970,12 +1065,7 @@ build_ars_json <- function(sections,
           action = "The analysis would compute unfiltered -- pass the typed whereClause through the supplement, or simplify the annotation"
         )
       }
-      if (!is.null(ds_obj2) && !ds_obj2$id %in% seen_ds) {
-        ds_obj2$order <- length(data_subsets) + 1L
-        ds_obj2$level <- 1L
-        data_subsets[[length(data_subsets) + 1L]] <<- ds_obj2
-        seen_ds <<- c(seen_ds, ds_obj2$id)
-      }
+      ds_obj2 <- register_data_subset(ds_obj2, sec$tlf_number)
       ## Method: annotation-inferred form, else the spec's categorical verdict,
       ## else the section method -- the same precedence the primary row uses.
       row2         <- list(label = label %||% "", annotation = annotation,
@@ -1184,13 +1274,9 @@ build_ars_json <- function(sections,
         next
       }
 
-      ds_obj <- .build_data_subset(er, sec$tlf_number, idx)
-      if (!is.null(ds_obj) && !ds_obj$id %in% seen_ds) {
-        ds_obj$order <- length(data_subsets) + 1L
-        ds_obj$level <- 1L
-        data_subsets[[length(data_subsets) + 1L]] <- ds_obj
-        seen_ds <- c(seen_ds, ds_obj$id)
-      }
+      ds_obj <- register_data_subset(
+        .build_data_subset(er, sec$tlf_number, idx), sec$tlf_number
+      )
 
       row_method_id <- mth_obj$id
       row_kind      <- "row"
@@ -1823,6 +1909,34 @@ build_ars_json <- function(sections,
     groups     = groups
   )
   paste(deparse(definition), collapse = "")
+}
+
+#' Canonical signature of what an AnalysisSet or a DataSubset FILTERS --
+#' the thing that makes two of them the same entity, whatever id each was
+#' minted under. `.group_where()` reads both the simple and the compound
+#' shapes, and `canonicalize_condition()` settles spelling, so
+#' `IN (1,2)` and `IN (2,1)` agree.
+#'
+#' A population whose annotation did not parse is defined by that text: two
+#' different unparsed filters are two different populations, even though
+#' neither carries a condition.
+#' @noRd
+.where_signature <- function(node) {
+  definition <- list(
+    where      = canonicalize_condition(.group_where(node)),
+    annotation = as.character(node$annotationText %||% "")
+  )
+  paste(deparse(definition), collapse = "")
+}
+
+#' TRUE when an entity says which population or rows it means, and nothing
+#' about how to select them -- a name with no condition, no compound
+#' expression and no unparsed annotation text.
+#' @noRd
+.entity_is_unscoped <- function(node) {
+  is.null(node$condition) &&
+    is.null(node$compoundExpression) &&
+    !nzchar(node$annotationText %||% "")
 }
 
 #' Move a grouping to a new id. The per-level group ids move with it: a group
