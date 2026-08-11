@@ -113,6 +113,83 @@ test_that("Every standard method has a non-empty codeTemplate", {
   }
 })
 
+test_that("subject count percentage template returns one scalar result for USUBJID", {
+  template <- arsbridge:::.STANDARD_METHODS[[
+    "Subject Count and Percentage"
+  ]]$codeTemplate$code
+  code <- gsub("analysisidhere", "AN_N", template, fixed = TRUE)
+  code <- gsub("anavarhere", "USUBJID", code, fixed = TRUE)
+
+  eval_env <- new.env(parent = globalenv())
+  eval_env$df2_AN_N <- data.frame(
+    USUBJID = sprintf("S%02d", 1:10),
+    stringsAsFactors = FALSE
+  )
+  eval(parse(text = code), envir = eval_env)
+  result <- eval_env$df3_AN_N
+
+  expect_equal(nrow(result), 3)
+  values <- stats::setNames(result$res, result$operation)
+  expect_equal(unname(values[c("OP_N", "OP_DENOM", "OP_PCT")]),
+               c(10, 10, 100))
+})
+
+test_that("two-slot subject-count forms infer count and percentage", {
+  annotations <- c(
+    "Count of unique USUBJID where SAFFL='Y'",
+    "unique USUBJID in ADSL where ADSL.SAFFL='Y'",
+    "ADSL.USUBJID",
+    "ADSL.COMPLFL='Y'"
+  )
+
+  for (annotation in annotations) {
+    inferred <- .infer_row_method(list(annotation = annotation, n_slots = 2L))
+    expect_equal(inferred$method, "Subject Count and Percentage",
+                 info = annotation)
+  }
+})
+
+test_that("one-slot subject-count forms remain count only", {
+  annotations <- c(
+    "Count of unique USUBJID where SAFFL='Y'",
+    "ADSL.COMPLFL='Y'"
+  )
+
+  for (annotation in annotations) {
+    inferred <- .infer_row_method(list(
+      annotation = annotation,
+      n_slots = 1L
+    ))
+    expect_equal(inferred$method, "Subject Count", info = annotation)
+  }
+})
+
+test_that("build uses count and percentage for a two-slot subject-count row", {
+  sec <- .demo_section()
+  sec$analysis_type <- "COUNT"
+  sec$ars_method_name <- "Subject Count"
+  sec$stub_rows <- list(list(
+    label = "Subjects in the safety population, n (%)",
+    annotation = "Count of unique USUBJID where SAFFL='Y'",
+    has_annot = TRUE,
+    n_slots = 2L
+  ))
+  sec$enriched_rows <- list(list(
+    label = "Subjects in the safety population, n (%)",
+    primary_dataset = "ADSL",
+    primary_variable = "USUBJID",
+    data_subset = list(
+      dataset = "ADSL", variable = "SAFFL",
+      comparator = "EQ", value = list("Y")
+    ),
+    variable_role = "ANALYSIS"
+  ))
+
+  re <- build_ars_json(list(sec))
+
+  expect_equal(re$analyses[[1]]$methodId, "MTH_SUBJECT_COUNT_PCT")
+})
+
 test_that("capability-gated section keeps a declarative analysis + method (ADR 0002 ph3)", {
   sec <- .demo_section("T-14-2-1", "EASI75 CMH (primary endpoint)")
   sec$unsupported        <- TRUE

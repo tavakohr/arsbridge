@@ -46,14 +46,25 @@
     )
   },
   MTH_SUBJECT_COUNT = function(df, var, by, denom, subject_key) {
+    distinct_vars <- if (identical(var, subject_key)) {
+      unique(c(subject_key, by))
+    } else {
+      subject_key
+    }
     df_unique <- df |>
-      dplyr::distinct(!!rlang::sym(subject_key), .keep_all = TRUE)
-    if (var == subject_key && !is.null(by)) {
+      dplyr::distinct(
+        dplyr::across(dplyr::all_of(distinct_vars)),
+        .keep_all = TRUE
+      )
+    if (identical(var, subject_key) && length(by)) {
+      df_unique[[subject_key]] <- subject_key
       cards::ard_categorical(
         data = df_unique,
-        variables = all_of(by)
+        variables = all_of(subject_key),
+        by = all_of(by),
+        denominator = denom
       )
-    } else if (var == subject_key) {
+    } else if (identical(var, subject_key)) {
       cards::ard_total_n(df_unique)
     } else {
       cards::ard_categorical(
@@ -66,12 +77,30 @@
   }
 )
 
-## Subject Count with the percentage declared as well. The arithmetic is
-## Subject Count's -- one row per subject, then counted -- so the two methods
-## produce the SAME ARD for the same analysis; what differs is which of those
-## statistics the ARS says the output shows. Sharing the executor is the point:
-## a declaration that changed the numbers would be a different analysis.
-.ARD_EXECUTORS$MTH_SUBJECT_COUNT_PCT <- .ARD_EXECUTORS$MTH_SUBJECT_COUNT
+## Subject Count with the percentage declared as well. Grouped execution is the
+## same distinct-subject calculation as Subject Count. An ungrouped subject-key
+## pass must use a constant categorical level, however, because ard_total_n()
+## emits only N while this method declares n, N, and p.
+.ARD_EXECUTORS$MTH_SUBJECT_COUNT_PCT <- function(df, var, by, denom,
+                                                  subject_key) {
+  if (!identical(var, subject_key) || length(by)) {
+    return(.ARD_EXECUTORS$MTH_SUBJECT_COUNT(
+      df, var, by, denom, subject_key
+    ))
+  }
+
+  df_unique <- df |>
+    dplyr::distinct(
+      dplyr::across(dplyr::all_of(subject_key)),
+      .keep_all = TRUE
+    )
+  df_unique[[subject_key]] <- subject_key
+  cards::ard_categorical(
+    data = df_unique,
+    variables = all_of(subject_key),
+    denominator = denom
+  )
+}
 
 ## ---------------------------------------------------------------------------
 ## Declared-but-unexecutable methods (ADR 0001 descriptor seeds / ADR 0002).
@@ -1095,8 +1124,32 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
             df_population[eval_where_clause(df_population, res$total_where), ,
                           drop = FALSE]
           }
-          a <- cards::bind_ard(a, executor(df_t, analysis_var, NULL,
-                                           df_pop, subject_key))
+          ## Keep every grouping after the column axis as a row key, but do not
+          ## let those row variables split the denominator. This mirrors the
+          ## emitted Total pass: e.g. each Sex row is still out of the overall
+          ## Total population, not out of that sex alone.
+          row_by <- if (length(by_arg) > 1L) by_arg[-1L] else NULL
+          if (!is.null(df_pop) && length(row_by)) {
+            df_pop <- df_pop[, setdiff(names(df_pop), row_by), drop = FALSE]
+          }
+          total_ard <- executor(df_t, analysis_var, row_by, df_pop,
+                                subject_key)
+          total_label <- res$total_label %||% ""
+          if (nzchar(total_label) && length(by_arg)) {
+            row_group_count <- length(by_arg) - 1L
+            if (row_group_count > 0L) {
+              for (i in rev(seq_len(row_group_count))) {
+                total_ard[[paste0("group", i + 1L)]] <-
+                  total_ard[[paste0("group", i)]]
+                total_ard[[paste0("group", i + 1L, "_level")]] <-
+                  total_ard[[paste0("group", i, "_level")]]
+              }
+            }
+            total_ard[["group1"]] <- rep(by_arg[[1]], nrow(total_ard))
+            total_ard[["group1_level"]] <-
+              as.list(rep(total_label, nrow(total_ard)))
+          }
+          a <- cards::bind_ard(a, total_ard)
         }
         a
       } else {
@@ -1122,29 +1175,19 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     })
 
     if (!is.null(ard)) {
-      ## Re-key a subject-count card that tabulated the grouping variable
-      ## itself (ard_categorical(variables = by) when the analysis variable
-      ## is the subject key). Its rows carry no distinguishing identity, so
-      ## several such analyses in one output (a disposition table's
-      ## enrolled / safety / completed / discontinued rows) would collide in
-      ## cards::bind_ard, which drops or refuses duplicated identities. Move
-      ## the treatment value into group1/group1_level and key the row by the
-      ## analysis id.
-      if (!is_stub && identical(method_id, "MTH_SUBJECT_COUNT") &&
-          !is.null(by_arg) && "variable" %in% names(ard)) {
-        g1 <- if ("group1" %in% names(ard)) ard[["group1"]] else
-          rep(NA_character_, nrow(ard))
-        sel <- !is.na(ard[["variable"]]) & ard[["variable"]] == by_arg[1] &
-          is.na(g1)
+      ## Subject-key rows use a constant variable level so treatment and Total
+      ## occupy grouping slots while each analysis keeps a distinct ARD identity.
+      ## The emitted path already stamps the analysis id; normalize every legacy
+      ## constant row, including the ungrouped pass, before cards::bind_ard().
+      if (!is_stub &&
+          method_id %in% c("MTH_SUBJECT_COUNT", "MTH_SUBJECT_COUNT_PCT") &&
+          identical(analysis_var, subject_key) &&
+          all(c("variable", "variable_level") %in% names(ard))) {
+        sel <- !is.na(ard[["variable"]]) &
+          ard[["variable"]] == analysis_var
         if (any(sel)) {
-          if (!"group1" %in% names(ard)) {
-            ard[["group1"]]       <- NA_character_
-            ard[["group1_level"]] <- rep(list(NULL), nrow(ard))
-          }
-          ard[["group1"]][sel]       <- by_arg[1]
-          ard[["group1_level"]][sel] <- ard[["variable_level"]][sel]
-          ard[["variable"]][sel]       <- analysis_var
-          ard[["variable_level"]][sel] <- as.list(rep(analysis_id, sum(sel)))
+          ard[["variable_level"]][sel] <-
+            as.list(rep(analysis_id, sum(sel)))
         }
       }
 

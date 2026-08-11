@@ -96,6 +96,8 @@ test_that("placeholders read like the authored shell document", {
 
 test_that(".shell_placeholder covers the kinds no fixture row exercises", {
   expect_equal(.shell_placeholder("subject_count", "Subjects"), "xxx")
+  expect_equal(.shell_placeholder("subject_count_pct", "Subjects"),
+               "xx (xx.x%)")
   expect_equal(.shell_placeholder("level", "Female"), "xx (xx.x%)")
   expect_equal(.shell_placeholder("manual", "Derived"), .MANUAL_MARKER)
   expect_equal(.shell_placeholder("label", "Pending", owner_kind = "manual"),

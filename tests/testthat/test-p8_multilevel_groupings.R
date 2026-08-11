@@ -199,6 +199,37 @@ test_that("includeTotal preserves non-column groupings on Total rows", {
   )
 })
 
+test_that("legacy subject-key percentage Total retains row grouping", {
+  skip_if_not_installed("cards")
+  td <- withr::local_tempdir()
+  .p8_adsl(td)
+
+  ard <- suppressWarnings(ars_to_ard(
+    .write_p8_ars(
+      td,
+      include_total = TRUE,
+      method_id = "MTH_SUBJECT_COUNT_PCT",
+      variable = "USUBJID"
+    ),
+    td,
+    legacy = TRUE
+  ))
+
+  group1_level <- .flat_chr(ard$group1_level)
+  group2_level <- .flat_chr(ard$group2_level)
+  total_rows <- group1_level == "Total"
+  total_rows[is.na(total_rows)] <- FALSE
+
+  expect_true(any(total_rows))
+  expect_true(all(ard$group2[total_rows] == "SEX"))
+  expect_setequal(unique(group2_level[total_rows]), c("M", "F"))
+
+  total_n <- total_rows & ard$stat_name == "N"
+  total_p <- total_rows & ard$stat_name == "p"
+  expect_true(all(as.numeric(unlist(ard$stat[total_n])) == 8))
+  expect_setequal(unique(as.numeric(unlist(ard$stat[total_p]))), 0.5)
+})
+
 test_that("subject-key Total counts retain their row grouping", {
   skip_if_not_installed("cards")
   td <- withr::local_tempdir()
