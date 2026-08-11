@@ -698,23 +698,68 @@ test_that("header-annotated column groups beat the codelist fallback", {
                c("Cohort One", "Cohort Two"))
 })
 
-test_that("an oversized codelist is skipped with a diagnostic", {
-  diag_reset()
+.cl_big_codelists <- function(n = 20) {
   big <- .cl_codelists()
   big$DCSREAS$terms <- data.frame(
-    term   = as.character(1:20),
-    decode = paste("Reason", 1:20),
-    order  = 1:20, stringsAsFactors = FALSE
+    term   = as.character(seq_len(n)),
+    decode = paste("Reason", seq_len(n)),
+    order  = seq_len(n), stringsAsFactors = FALSE
+  )
+  big
+}
+
+test_that("an oversized codelist still decodes, it just does not expand", {
+  ## The cap exists to stop a 195-term codelist becoming 195 zero-count rows.
+  ## Dropping the DECODE as well was collateral: the ARD then carried raw
+  ## codes, no shell row labelled with a decoded value matched them, and the
+  ## whole block filled as placeholders on nothing but a WARN.
+  diag_reset()
+  re <- build_ars_json(list(.cl_section()), spec_lookup = .cl_lookup(),
+                       codelists = .cl_big_codelists())
+
+  decodes <- re$`_meta`$value_decodes[["ADSL.DCSREASN"]]
+  expect_length(decodes, 20)
+  expect_equal(decodes[[1]]$value, "1")
+  expect_equal(decodes[[1]]$label, "Reason 1")
+
+  ## The authored level slot shows the decode, as it does under the cap.
+  lay <- re$outputs[[1]]$`_meta`$shell_layout
+  lvl <- Filter(function(e) identical(e$kind, "level"), lay)
+  expect_equal(lvl[[1]]$level, "Reason 1")
+  expect_equal(lvl[[1]]$level_code, "1")
+
+  ## Said out loud, but not as a problem: the decode happened.
+  d <- ars_diagnostics()
+  hit <- d[grepl("observed terms", d$problem), , drop = FALSE]
+  expect_equal(nrow(hit), 1L)
+  expect_equal(hit$severity, "INFO")
+})
+
+test_that("an oversized codelist never expands into columns", {
+  ## The half of the cap that must not move: 20 terms is 20 COLUMNS, which is
+  ## wrong on its own terms however useful the decode is. The column axis is
+  ## COHORTN, so it is that codelist which has to be the large one.
+  big <- .cl_codelists()
+  big$COHORT$terms <- data.frame(
+    term   = as.character(seq_len(20)),
+    decode = paste("Cohort", seq_len(20)),
+    order  = seq_len(20), stringsAsFactors = FALSE
   )
   re <- build_ars_json(list(.cl_section()), spec_lookup = .cl_lookup(),
                        codelists = big)
-  expect_false("ADSL.DCSREASN" %in% names(re$`_meta`$value_decodes))
-  ## Authored level slot keeps its raw coded value -- nothing translated.
-  lay <- re$outputs[[1]]$`_meta`$shell_layout
-  lvl <- Filter(function(e) identical(e$kind, "level"), lay)
-  expect_equal(lvl[[1]]$level, "1")
-  d <- ars_diagnostics()
-  expect_true(any(grepl("decode skipped", d$problem)))
+
+  cohort <- Filter(function(g) identical(g$id, "GF_COHORTN"),
+                   re$analysisGroupings)
+  expect_length(cohort[[1]]$groups, 0)
+  expect_true(isTRUE(cohort[[1]]$dataDriven))
+
+  ## Under the cap the same axis does expand -- so the assertion above is
+  ## about the size, not about codelist column groups being broken.
+  small <- build_ars_json(list(.cl_section()), spec_lookup = .cl_lookup(),
+                          codelists = .cl_codelists())
+  small_cohort <- Filter(function(g) identical(g$id, "GF_COHORTN"),
+                         small$analysisGroupings)
+  expect_gt(length(small_cohort[[1]]$groups), 0)
 })
 
 test_that("no codelists means no decodes and unchanged groupings", {

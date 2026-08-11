@@ -682,28 +682,25 @@ build_ars_json <- function(sections,
     cl <- .codelist_for(codelists, ds, bare_var, spec_lookup[[key]])
     terms <- if (is.null(cl) || nrow(cl$terms) == 0) {
       NULL
-    } else if (nrow(cl$terms) > .CODELIST_DECODE_MAX_TERMS) {
-      diag_add(
-        stage = "build_ars", severity = "WARN",
-        problem = sprintf(
-          "Codelist '%s' for %s has %d terms (limit %d) -- decode skipped",
-          cl$name %||% "?", key, nrow(cl$terms), .CODELIST_DECODE_MAX_TERMS),
-        action = "Observed raw values will be shown for this variable; raise the limit or trim the codelist if the decode is wanted"
-      )
-      NULL
     } else {
+      if (nrow(cl$terms) > .CODELIST_DECODE_MAX_TERMS) {
+        ## Decoded, but not expanded: the engine drops the levels the data
+        ## never took, so this shows the observed terms under their proper
+        ## labels rather than 195 rows of zeros. INFO, not WARN -- the values
+        ## are decoded either way, and only the row count differs.
+        diag_add(
+          stage = "build_ars", severity = "INFO",
+          problem = sprintf(
+            "Codelist '%s' for %s has %d terms (limit %d) -- decoded, showing observed terms only",
+            cl$name %||% "?", key, nrow(cl$terms), .CODELIST_DECODE_MAX_TERMS),
+          action = "Terms the data never takes are left out rather than listed as zero rows"
+        )
+      }
       cl$terms
     }
     decode_cache[[key]] <<- if (is.null(terms)) "none" else terms
     terms
   }
-
-  ## Analysis methods whose results are per-category and therefore display
-  ## the variable's values -- the ones a decode applies to.
-  .DECODE_METHOD_IDS <- c("MTH_COUNT_AND_PERCENTAGE",
-                          "MTH_AE_FREQUENCY_COUNT",
-                          "MTH_SUBJECT_COUNT",
-                          "MTH_SUBJECT_COUNT_PCT")
 
   ## `_meta$value_decodes` accumulator: one entry per DATASET.VARIABLE that
   ## some categorical-family analysis displays, each an ordered list of

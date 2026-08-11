@@ -231,6 +231,73 @@ test_that("a shipped decode emits a factor derivation and decodes the ARD", {
   expect_true(all(n_other == 0))
 })
 
+test_that("a large decode shows only the terms the data took", {
+  ## Under the cap every term becomes a row, zero-count ones included, which
+  ## is right for a nine-term discontinuation codelist. Above it, that would
+  ## be 195 rows of nothing -- so the decode still applies and the unobserved
+  ## levels are dropped. Both halves are asserted: the labels ARE decoded,
+  ## and only the observed ones survive.
+  td <- withr::local_tempdir()
+  utils::write.csv(data.frame(
+    USUBJID  = sprintf("%02d", 1:8),
+    TRT01A   = rep(c("Drug A", "Placebo"), each = 4),
+    DCSREASN = c(1, 1, 2, NA, 1, NA, NA, NA),
+    stringsAsFactors = FALSE
+  ), file.path(td, "adsl.csv"), row.names = FALSE)
+
+  spec <- .ac_spec(list(list(
+    id = "AN_1", methodId = "MTH_COUNT_AND_PERCENTAGE",
+    label = "Discontinuation reason", dataset = "ADSL", variable = "DCSREASN",
+    analysisVariable = list(dataset = "ADSL", variable = "DCSREASN"),
+    analysisSetId = "", dataSubsetId = "",
+    orderedGroupings = list(list(order = 1, groupingId = "GF_TRT",
+                                 resultsByGroup = TRUE)),
+    includeTotal = FALSE)))
+  spec$`_meta` <- list(value_decodes = list(
+    "ADSL.DCSREASN" = lapply(1:20, function(i) {
+      list(value = as.character(i), label = paste("Reason", i), order = i)
+    })
+  ))
+
+  paths <- write_tlf_code(.ac_write(spec, td), file.path(td, "code"),
+                          adam_dir = td)
+  txt <- paste(readLines(paths[[1]]), collapse = "\n")
+  expect_true(grepl("droplevels()", txt, fixed = TRUE))
+
+  ard <- .ac_source(paths[[1]])
+  lv <- unique(vapply(ard$variable_level, function(x)
+    if (length(x)) as.character(x[[1]]) else NA_character_, character(1)))
+  lv <- lv[!is.na(lv)]
+  expect_setequal(lv, c("Reason 1", "Reason 2"))
+})
+
+test_that("a small decode keeps its zero-count terms", {
+  ## The guard on the other side: droplevels() must not leak onto a codelist
+  ## small enough to enumerate, where a zero-count row is the point.
+  td <- withr::local_tempdir()
+  utils::write.csv(data.frame(
+    USUBJID  = sprintf("%02d", 1:8),
+    TRT01A   = rep(c("Drug A", "Placebo"), each = 4),
+    DCSREASN = c(1, 1, 2, NA, 1, NA, NA, NA),
+    stringsAsFactors = FALSE
+  ), file.path(td, "adsl.csv"), row.names = FALSE)
+
+  spec <- .ac_spec(list(list(
+    id = "AN_1", methodId = "MTH_COUNT_AND_PERCENTAGE",
+    label = "Discontinuation reason", dataset = "ADSL", variable = "DCSREASN",
+    analysisVariable = list(dataset = "ADSL", variable = "DCSREASN"),
+    analysisSetId = "", dataSubsetId = "",
+    orderedGroupings = list(list(order = 1, groupingId = "GF_TRT",
+                                 resultsByGroup = TRUE)),
+    includeTotal = FALSE)))
+  spec$`_meta` <- .ac_decode_meta()
+
+  paths <- write_tlf_code(.ac_write(spec, td), file.path(td, "code"),
+                          adam_dir = td)
+  txt <- paste(readLines(paths[[1]]), collapse = "\n")
+  expect_false(grepl("droplevels()", txt, fixed = TRUE))
+})
+
 test_that("the decode never touches continuous or bare-flag blocks", {
   td <- withr::local_tempdir()
   .ac_adsl(td)

@@ -166,10 +166,7 @@
   decode <- res$decode
   if (is.null(decode) || length(decode) == 0) return("")
   method <- res$method_id %||% ""
-  if (!method %in% c("MTH_COUNT_AND_PERCENTAGE", "MTH_AE_FREQUENCY_COUNT",
-                     "MTH_SUBJECT_COUNT", "MTH_SUBJECT_COUNT_PCT")) {
-    return("")
-  }
+  if (!method %in% .DECODE_METHOD_IDS) return("")
   var <- .clean_emit_name(res$variable)
   if (is.null(var) || !nzchar(var %||% "")) return("")
   if (identical(toupper(var), toupper(res$subject_key %||% ""))) return("")
@@ -180,12 +177,19 @@
   keep   <- nzchar(values) & nzchar(labels)
   if (!any(keep)) return("")
 
+  ## Above the expansion cap the codelist is still applied, but only the
+  ## terms the data took become rows -- otherwise a 195-term COUNTRY codelist
+  ## is 195 rows of zeros. Under the cap the zero-count rows are the point,
+  ## so the levels stay.
+  drop_unused <- sum(keep) > .CODELIST_DECODE_MAX_TERMS
+
   paste0(
     " |>\n    dplyr::mutate(", .bt(var), " = factor(\n",
     "      as.character(", .bt(var), "),\n",
     "      levels = ", .r_chr_vec(values[keep]), ",\n",
     "      labels = ", .r_chr_vec(labels[keep]), "\n",
-    "    ))"
+    "    ))",
+    if (drop_unused) " |>\n    droplevels()" else ""
   )
 }
 
