@@ -283,9 +283,13 @@
 #' Pair a categorical block's shell row labels with the data values they name.
 #'
 #' A shell writes the decode and the data holds the code: the rows say
-#' "Female" and "Male" while ADSL.SEX holds "F" and "M". Nothing in the ARS
-#' carries the codelist, so the two have to be reconciled here or the most
-#' ordinary table in clinical reporting fills nothing.
+#' "Female" and "Male" while ADSL.SEX holds "F" and "M".
+#'
+#' Normally the ARS settles this long before the fill. A spec CODELISTS sheet
+#' becomes `_meta$value_decodes`, and both engines turn it into a factor whose
+#' labels are the decoded values, so the ARD already reads "Female" and there
+#' is nothing left to reconcile. This is the last resort for the case that
+#' cannot: a spec with no codelist for the variable at all.
 #'
 #' The reconciliation is deliberately allowed to FAIL rather than guess. A
 #' label is paired with a data value only when:

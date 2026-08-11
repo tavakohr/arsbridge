@@ -1,5 +1,16 @@
 # arsbridge (development version)
 
+* **A large codelist still decodes.** Above the 15-term expansion cap the
+  decode was dropped entirely, not just the expansion: the ARD then carried
+  raw codes, no shell row labelled with a decoded value matched one, and the
+  whole block filled as placeholders behind a single WARN. The cap now governs
+  only what it was written for -- a 195-term codelist must not become 195
+  rows -- while the decode still applies and the engine drops the levels the
+  data never took. So a large codelist shows the terms actually observed,
+  under their proper labels. Column groups are unaffected: they were always
+  capped separately, and still are. The diagnostic is now INFO and says which
+  behaviour was chosen.
+
 * **A Total column on an ordinary treatment axis is no longer invisible.**
   When a table declares its column axis on the stub header
   (`[columns -> ADSL.TRT01A]`) and leaves the column headers as plain text,

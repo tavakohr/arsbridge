@@ -1085,8 +1085,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     ## key, never a bare-flag count. Applied after the all-missing skip so
     ## both paths judge that condition on the raw column.
     if (legacy && !is_stub && !is.null(res$decode) && length(res$decode) > 0 &&
-        method_id %in% c("MTH_COUNT_AND_PERCENTAGE", "MTH_AE_FREQUENCY_COUNT",
-                         "MTH_SUBJECT_COUNT", "MTH_SUBJECT_COUNT_PCT") &&
+        method_id %in% .DECODE_METHOD_IDS &&
         !identical(toupper(analysis_var), toupper(subject_key)) &&
         !.is_bare_flag(res) &&
         analysis_var %in% names(df_filtered)) {
@@ -1101,6 +1100,11 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
           levels = dec_values[dec_keep],
           labels = dec_labels[dec_keep]
         )
+        ## Same rule as the emitter's droplevels(): above the expansion cap
+        ## only the observed terms become rows.
+        if (sum(dec_keep) > .CODELIST_DECODE_MAX_TERMS) {
+          df_filtered[[analysis_var]] <- droplevels(df_filtered[[analysis_var]])
+        }
       }
     }
 
