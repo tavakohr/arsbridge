@@ -160,6 +160,34 @@ test_that("the bundle demos the whole chain offline: build, execute, fill", {
       paste0("^", length(subjects), " \\("), info = arm[[2]])
   }
 
+  ## The Total column, beside a NESTED block -- the pairing that failed in the
+  ## field, where the parent SOC rows filled and the child term rows did not.
+  ## Its header carries no annotation, which is the ordinary convention, so a
+  ## displayed Total here rests on the parser noticing a bare label.
+  total_col <- nested$col[nested$row == 4 & nested$text == "Total"]
+  expect_length(total_col, 1L)
+  total_at <- function(row) {
+    nested$text[nested$row == row & nested$col == total_col]
+  }
+
+  ## Every body row the block produced has a Total, parents and children
+  ## alike. A Total that fills for parents only is the exact field failure.
+  stub_rows <- nested[nested$col == 1 & nested$row >= 7, , drop = FALSE]
+  stub_rows <- stub_rows[!grepl("^A subject is counted", stub_rows$text), ,
+                         drop = FALSE]
+  for (i in seq_len(nrow(stub_rows))) {
+    value <- total_at(stub_rows$row[i])
+    expect_length(value, 1L)
+    expect_match(value, "^[0-9]", info = stub_rows$text[i])
+  }
+
+  ## And it counts the whole safety population, not one arm: the oracle is
+  ## the raw dataset again, never the sum of the columns beside it -- that
+  ## would agree with a broken denominator.
+  all_teae <- length(unique(teae$USUBJID[
+    teae$AESOC == "NERVOUS SYSTEM DISORDERS"]))
+  expect_match(total_at(soc_row), paste0("^", all_teae, " \\("))
+
   ard <- readRDS(payload$artifacts$ard_rds)
   tf <- suppressMessages(suppressWarnings(
     ars_to_tfrmt(payload$artifacts$ars_json, ard, "T_14_3_2")))

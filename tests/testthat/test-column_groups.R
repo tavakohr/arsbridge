@@ -333,6 +333,35 @@ test_that("a Total column may be scoped by a different variable", {
   expect_equal(where_to_filter_expr(sec$total_condition), 'SAFFL %in% c("Y")')
 })
 
+test_that("a Total column is seen on a data-driven axis too", {
+  ## The ordinary treatment table: the axis is declared on the stub header
+  ## ("[columns -> ADSL.TRT01A]"), so no COLUMN header carries an annotation
+  ## and there are no group conditions to union. The Total column is still
+  ## displayed, and a displayed column that produces nothing is the failure
+  ## this whole area exists to prevent.
+  sec <- .ocol_resolve(
+    c("Placebo", "Drug 10 mg", "Drug 20 mg", "Total"),
+    rep("", 4)
+  )
+
+  expect_true(isTRUE(sec$include_total_hint))
+  expect_equal(sec$total_label, "Total")
+  ## Nothing to union and nothing authored, so the pass is scoped by the
+  ## analysis set alone -- which is the only remaining meaning of "Total".
+  expect_null(sec$total_condition)
+  ## No column carried a condition, so the axis stays data-driven: this must
+  ## not invent group levels out of the header labels.
+  expect_null(sec$column_groups)
+})
+
+test_that("a data-driven axis with no Total column stays silent", {
+  sec <- .ocol_resolve(c("Placebo", "Drug 10 mg", "Drug 20 mg"), rep("", 3))
+
+  expect_false(isTRUE(sec$include_total_hint))
+  expect_null(sec$total_label)
+  expect_null(sec$total_condition)
+})
+
 test_that("Overall counts as an overall column, and no total column is silent", {
   overall <- .ocol_resolve(c(.ocol_labels[1:3], "Overall (N=XX)"),
                            c(.ocol_axis, "[ADSL.COHORTN IN (1,2)]"))

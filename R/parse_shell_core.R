@@ -1004,7 +1004,16 @@ bind_annotations <- function(sec) {
   labels      <- pending$labels
   annotations <- pending$annotations
   has_annot   <- nzchar(annotations)
-  if (!any(has_annot)) return(sec)
+  if (!any(has_annot)) {
+    ## A data-driven axis: the stub header names the variable
+    ## ("[columns -> ADSL.TRT01A]") and the column headers are plain text, so
+    ## there are no per-level definitions to resolve here. A displayed Total
+    ## column still has to be SEEN. It was not: this returned before the
+    ## overall column was ever looked for, so the ARS carried no Total, every
+    ## Total cell stayed a placeholder, and nothing said a displayed column
+    ## had been dropped -- on the most ordinary column axis there is.
+    return(.resolve_overall_column(sec, list(), labels, list()))
+  }
 
   ## One candidate per annotated grid column: which variable it references
   ## and whether its annotation parses into a real condition. Consecutive
