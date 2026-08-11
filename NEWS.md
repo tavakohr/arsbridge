@@ -1,5 +1,16 @@
 # arsbridge (development version)
 
+* **A grouping's child groups can be edited from R.** `model_add_group()`,
+  `model_remove_group()`, `model_move_group()`, `model_set_group_field()` and
+  `model_set_group_condition()` write the grouping node directly, the way a
+  method's operations already worked, so the columns a reader sees
+  (`n_groups`, `group_labels`) are re-derived rather than left stale. Two of
+  them do what the flat column path cannot: a condition can be *created* on a
+  child that had none, and an empty value list is kept as one, which is how a
+  where-clause says "is missing". A child named by a declared result path
+  refuses to be removed, and a relabelled child keeps its id, because result
+  paths reference those ids.
+
 * **A large codelist still decodes.** Above the 15-term expansion cap the
   decode was dropped entirely, not just the expansion: the ARD then carried
   raw codes, no shell row labelled with a decoded value matched one, and the
