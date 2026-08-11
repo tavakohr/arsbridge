@@ -2,6 +2,20 @@
 
 ## arsbridge (development version)
 
+- **A subject count over an occurrence frame no longer undercounts terms
+  on the legacy path.** `ars_to_ard(legacy = TRUE)` deduplicated a
+  Subject Count and a Subject Count (%) on the subject alone, which on a
+  frame that carries several rows per subject – an AE dataset, one term
+  per row – kept whichever row came first and reported that subject’s
+  every other term as zero. A subject with a headache and a nausea
+  counted only towards the headache. The term now joins the
+  deduplication, as it always has in the emitted
+  [cards](https://github.com/insightsengineering/cards) block and in the
+  neighbouring AE Frequency method, so the two engines agree on an
+  occurrence frame and the count is the number of subjects reporting
+  each term. The default path was never affected; the equivalence suite
+  exercised the method only on ADSL, so nothing caught it.
+
 - **Child groups can be added, cloned, reordered and deleted in the
   editor.** With the previous entry, a grouping’s column levels can now
   be authored without the raw-JSON hatch. Deleting a group that a
