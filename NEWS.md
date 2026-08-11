@@ -1,5 +1,17 @@
 # arsbridge (development version)
 
+* **A Total column scoped on a subject-level variable now computes on the
+  legacy engine.** A shell whose Total header is annotated with an ADSL
+  variable (`[ADSL.COHORTN IN (1,2)]`) names a column an occurrence dataset
+  cannot answer from its own rows, and `legacy = TRUE` was evaluating the
+  clause row by row against the AE frame -- where a variable the frame lacks
+  reads as FALSE for every row. The Total pass therefore selected nothing, and
+  because an empty frame cannot be tabulated, the whole analysis failed rather
+  than just its Total column. Both frames are now masked against their own
+  dataset, the AEs on the analysis dataset and the population on ADSL, which is
+  what the emitted code always did. Cross-dataset dataset names are also
+  compared case-insensitively, as the emitter compares them.
+
 * **The editor shows a grouping's child groups.** The entity library listed
   how many groups a grouping had and what they were called, but never the
   groups themselves. Selecting a grouping now lists each child with its order,
