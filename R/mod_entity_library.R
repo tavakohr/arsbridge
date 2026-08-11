@@ -178,7 +178,7 @@ mod_entity_library_server <- function(id, state) {
     })
 
     if (identical(state$mode, "edit")) {
-      .observe_entity_inputs(input, state)
+      .observe_entity_inputs(input, state, session)
       .observe_grouping_actions(input, state, session)
     }
   })
@@ -418,6 +418,18 @@ mod_entity_library_server <- function(id, state) {
 ## and re-renders this panel. A per-keystroke observer would therefore destroy
 ## the input being typed into, and a four-field condition is meaningless until
 ## all four are in hand anyway.
+## The same payload with an `action`, so up / down / clone / delete share one
+## observer instead of minting four per child.
+#' @noRd
+.entity_action_js <- function(input_id, grouping_id, group_id, action) {
+  paste0(
+    "Shiny.setInputValue('", input_id, "', ",
+    "{grouping: '", grouping_id, "', group: '", group_id, "', ",
+    "action: '", action, "'}, ",
+    "{priority: 'event'}); return false;"
+  )
+}
+
 #' @noRd
 .entity_group_js <- function(input_id, grouping_id, group_id = NULL) {
   payload <- paste0("{grouping: '", grouping_id, "'",
@@ -580,8 +592,12 @@ mod_entity_library_server <- function(id, state) {
 }
 
 #' @noRd
-.observe_entity_inputs <- function(input, state) {
+.observe_entity_inputs <- function(input, state, session) {
   registry <- new.env(parent = emptyenv())
+  ## Which grouping the Add-a-group modal belongs to. The modal's own inputs
+  ## cannot carry it, and the panel may re-render between opening and
+  ## confirming.
+  group_add_target <- shiny::reactiveVal(NULL)
 
   create_observer <- function(spec) {
     .observe_entity_field(input, state, spec)
@@ -659,6 +675,111 @@ mod_entity_library_server <- function(id, state) {
     shiny::showNotification("Group saved.", type = "message", duration = 4)
   })
 
+  ## Up / down / clone / delete, one observer for every child of every
+  ## grouping -- the action rides in the payload.
+  shiny::observeEvent(input$group_action, {
+    grouping_id <- input$group_action$grouping
+    group_id    <- input$group_action$group
+    action      <- input$group_action$action
+    model       <- state$model()
+
+    result <- tryCatch(switch(
+      action,
+      up     = list(model_move_group(model, grouping_id, group_id, -1L),
+                    "(moved up)"),
+      down   = list(model_move_group(model, grouping_id, group_id, 1L),
+                    "(moved down)"),
+      clone  = list(.clone_child_group(model, grouping_id, group_id),
+                    "(cloned)"),
+      delete = list(model_remove_group(model, grouping_id, group_id),
+                    "(deleted)"),
+      NULL
+    ), error = function(e) e)
+
+    if (inherits(result, "error")) {
+      ## A refusal names what is in the way -- a result path that would be
+      ## left dangling -- rather than the button simply doing nothing.
+      shiny::showNotification(conditionMessage(result), type = "error",
+                              duration = 10)
+      return()
+    }
+    if (is.null(result)) return()
+
+    updated <- result[[1]]
+    new_id  <- attr(updated, "last_added") %||% group_id
+    .record_structural_edit(state, updated, "groupings", grouping_id,
+                            paste0("group ", new_id), "(present)", result[[2]])
+  })
+
+  ## Add a child. The dataset and variable default to the grouping's own, so
+  ## the ordinary case is a label and a value.
+  shiny::observeEvent(input$group_add, {
+    grouping_id <- input$group_add$grouping
+    model <- state$model()
+    row   <- model$groupings[match(grouping_id, model$groupings$id), ]
+
+    shiny::showModal(shiny::modalDialog(
+      title = "Add a group",
+      shiny::textInput(session$ns("new_group_label"), "Label"),
+      bslib::layout_columns(
+        col_widths = c(3, 3, 3, 3),
+        shiny::textInput(session$ns("new_group_dataset"), "Dataset",
+                         value = .blank_na(row$groupingDataset)),
+        shiny::textInput(session$ns("new_group_variable"), "Variable",
+                         value = .blank_na(row$groupingVariable)),
+        shiny::selectizeInput(
+          session$ns("new_group_comparator"), "Comparator",
+          choices = c("EQ", "NE", "IN", "NOTIN", "GT", "GE", "LT", "LE")
+        ),
+        shiny::textInput(session$ns("new_group_value"), "Value(s)")
+      ),
+      shiny::p(class = "text-muted small",
+               "The label is what the column prints. Separate multiple ",
+               "values with a semicolon; leave them empty to mean a missing ",
+               "value."),
+      footer = shiny::tagList(
+        shiny::modalButton("Cancel"),
+        shiny::actionButton(session$ns("confirm_group_add"), "Add",
+                            class = "btn-primary")
+      )
+    ))
+    group_add_target(grouping_id)
+  })
+
+  shiny::observeEvent(input$confirm_group_add, {
+    grouping_id <- group_add_target()
+    if (is.null(grouping_id)) return()
+
+    label <- trimws(input$new_group_label %||% "")
+    if (!nzchar(label)) {
+      shiny::showNotification("The group needs a label: it is what the column prints.",
+                              type = "warning")
+      return()
+    }
+    shiny::removeModal()
+
+    values <- .split_values(.blank_na(input$new_group_value))
+    updated <- tryCatch(
+      model_add_group(
+        state$model(), grouping_id, label,
+        condition = .cond_multi(input$new_group_dataset %||% "",
+                                input$new_group_variable %||% "",
+                                input$new_group_comparator %||% "EQ",
+                                values)
+      ),
+      error = function(e) e
+    )
+    if (inherits(updated, "error")) {
+      shiny::showNotification(conditionMessage(updated), type = "error",
+                              duration = 10)
+      return()
+    }
+
+    new_id <- attr(updated, "last_added")
+    .record_structural_edit(state, updated, "groupings", grouping_id,
+                            paste0("group ", new_id), "(none)", "(added)")
+  })
+
   ## The way out of a fixed grouping with no groups. Explicit and logged: the
   ## alternative is changing what the columns mean without being asked.
   shiny::observeEvent(input$group_make_data_driven, {
@@ -668,6 +789,30 @@ mod_entity_library_server <- function(id, state) {
     .record_structural_edit(state, updated, "groupings", grouping_id,
                             "dataDriven", "FALSE", "TRUE")
   })
+}
+
+## Copy one child group, next to the one it was copied from.
+##
+## " (copy)" on the label is what gives it a distinct id -- ids are minted
+## from labels -- so it is the mechanism, not decoration, and the label must
+## be edited before a second copy of the same group can be made.
+#' @noRd
+.clone_child_group <- function(model, grouping_id, group_id) {
+  index  <- .row_index(model$groupings, grouping_id, "groupings")
+  groups <- model$groupings$raw[[index]][["groups"]] %||% list()
+  hit <- which(vapply(groups, function(g) identical(.chr_field(g[["id"]]),
+                                                    group_id), logical(1)))
+  if (length(hit) == 0) {
+    cli::cli_abort("Grouping {.val {grouping_id}} has no group {.val {group_id}}.")
+  }
+
+  source <- groups[[hit[[1]]]]
+  label  <- paste0(.chr_field(source[["label"]] %||% source[["name"]]), " (copy)")
+  clause <- source[c(intersect(names(source),
+                               c("condition", "compoundExpression")))]
+  model_add_group(model, grouping_id, label,
+                  condition = if (length(clause)) clause else NULL,
+                  after = hit[[1]])
 }
 
 ## How a child group reads now, for the edit log: the filter it stands for,
@@ -835,6 +980,14 @@ mod_entity_library_server <- function(id, state) {
       )
     }
 
+    action <- function(label, name, class = "btn-outline-secondary") {
+      shiny::tags$button(
+        type = "button", class = paste("btn btn-sm", class),
+        onclick = .entity_action_js(ns("group_action"), row$id, group_id, name),
+        label
+      )
+    }
+
     shiny::div(
       class = "border rounded p-2 mb-2",
       shiny::div(
@@ -844,17 +997,31 @@ mod_entity_library_server <- function(id, state) {
                          value = .blank_na(label))
       ),
       body,
-      if (is.null(group[["compoundExpression"]])) {
-        shiny::tags$button(
-          type = "button", class = "btn btn-sm btn-outline-primary",
-          onclick = .entity_group_js(ns("group_apply"), row$id, group_id),
-          "Save this group"
-        )
-      }
+      shiny::div(
+        class = "d-flex gap-2 mt-2",
+        if (is.null(group[["compoundExpression"]])) {
+          shiny::tags$button(
+            type = "button", class = "btn btn-sm btn-outline-primary",
+            onclick = .entity_group_js(ns("group_apply"), row$id, group_id),
+            "Save this group"
+          )
+        },
+        action("Up", "up"),
+        action("Down", "down"),
+        action("Clone", "clone"),
+        action("Delete", "delete", "btn-outline-danger")
+      )
     )
   })
 
-  shiny::div(cards)
+  shiny::div(
+    cards,
+    shiny::tags$button(
+      type = "button", class = "btn btn-sm btn-outline-primary",
+      onclick = .entity_group_js(ns("group_add"), row$id),
+      "Add group"
+    )
+  )
 }
 
 ## A grouping's child groups, or a sentence saying why there are none.

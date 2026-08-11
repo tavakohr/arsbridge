@@ -701,3 +701,159 @@ test_that("a fixed childless grouping cannot be saved", {
   expect_true(gate$blocked)
   expect_true("FIXED_GROUPING_EMPTY" %in% gate$blocking_refs)
 })
+
+
+## --- Child-group CRUD ------------------------------------------------------
+
+test_that("a child group can be added from the panel", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  state <- .cge_state()
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(table_groupings_rows_selected = 1)
+    ## Two steps, as in the app: the modal opens, and only then is it
+    ## confirmed. Firing both in one flush would let the confirm run before
+    ## the modal recorded which grouping it belongs to.
+    session$setInputs(group_add = list(grouping = "GF_TRT01A"))
+    session$flushReact()
+    session$setInputs(
+      new_group_label = "Drug C",
+      new_group_dataset = "ADSL",
+      new_group_variable = "TRT01A",
+      new_group_comparator = "EQ",
+      new_group_value = "Drug C",
+      confirm_group_add = 1
+    )
+    session$flushReact()
+  })
+
+  groups <- .cge_groups(state)
+  expect_length(groups, 4L)
+  expect_equal(groups[[4]]$label, "Drug C")
+  expect_equal(groups[[4]]$condition$value, list("Drug C"))
+  expect_equal(groups[[4]]$order, 4L)
+
+  log <- shiny::isolate(state$edit_log())
+  expect_equal(nrow(log), 1L)
+  expect_true(grepl("GRP_TRT01A_DRUG_C", log$field[1], fixed = TRUE))
+  expect_equal(log$new[1], "(added)")
+})
+
+test_that("a child group can be cloned and the original left alone", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  state <- .cge_state()
+  before <- .cge_groups(state)[[1]]
+
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(table_groupings_rows_selected = 1)
+    session$setInputs(group_action = list(grouping = "GF_TRT01A",
+                                          group = "GRP_DRUG_A",
+                                          action = "clone"))
+    session$flushReact()
+  })
+
+  groups <- .cge_groups(state)
+  expect_length(groups, 4L)
+  expect_equal(groups[[1]], before)
+  ## The copy sits next to what it was copied from, with its own id.
+  expect_match(groups[[2]]$label, "copy")
+  expect_false(identical(groups[[2]]$id, before$id))
+  expect_equal(groups[[2]]$condition, before$condition)
+})
+
+test_that("child groups reorder from the panel", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  state <- .cge_state()
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(table_groupings_rows_selected = 1)
+    session$setInputs(group_action = list(grouping = "GF_TRT01A",
+                                          group = "GRP_UNDEFINED",
+                                          action = "up"))
+    session$flushReact()
+  })
+
+  groups <- .cge_groups(state)
+  expect_equal(vapply(groups, function(g) g$id, ""),
+               c("GRP_DRUG_A", "GRP_UNDEFINED", "GRP_EITHER"))
+  orders <- vapply(groups, function(g) as.integer(g$order), integer(1))
+  expect_equal(orders, 1:3)
+})
+
+test_that("deleting the last child of a fixed grouping is allowed and blocked", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  ## Allowed, because "clear these and define new ones" is a real sequence.
+  ## Blocked at the save, because the model it produces defines no columns.
+  state <- .cge_state()
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(table_groupings_rows_selected = 1)
+    for (child in c("GRP_DRUG_A", "GRP_EITHER", "GRP_UNDEFINED")) {
+      session$setInputs(group_action = list(grouping = "GF_TRT01A",
+                                            group = child,
+                                            action = "delete"))
+      session$flushReact()
+    }
+
+    expect_length(.cge_groups(state), 0L)
+    expect_true(any(state$findings()$ref %in% "FIXED_GROUPING_EMPTY"))
+
+    rendered <- paste(as.character(output$detail_groupings), collapse = " ")
+    expect_match(rendered, "Mark data-driven", fixed = TRUE)
+  })
+})
+
+test_that("a child named by a result path is refused, with the output named", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  model <- .library_model_nested()
+  node <- model$outputs$raw[[1]]
+  node$resultGroupPaths <- list(paths = list(list(
+    pathId = "P1", groupIds = list("GRP_DRUG_A")
+  )))
+  model$outputs$raw[[1]] <- node
+  state <- .editor_state(model, NULL, NULL, NULL, "edit")
+
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(table_groupings_rows_selected = 1)
+    session$setInputs(group_action = list(grouping = "GF_TRT01A",
+                                          group = "GRP_DRUG_A",
+                                          action = "delete"))
+    session$flushReact()
+  })
+
+  ## Nothing removed, and nothing logged as if it had been.
+  expect_length(.cge_groups(state), 3L)
+  expect_equal(nrow(shiny::isolate(state$edit_log())), 0L)
+})
+
+test_that("every child action is undoable, one step each", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  state <- .cge_state()
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(table_groupings_rows_selected = 1)
+    session$setInputs(group_action = list(grouping = "GF_TRT01A",
+                                          group = "GRP_UNDEFINED",
+                                          action = "delete"))
+    session$flushReact()
+    expect_length(.cge_groups(state), 2L)
+
+    .undo(state)
+    expect_length(.cge_groups(state), 3L)
+    expect_equal(nrow(state$edit_log()), 0L)
+  })
+})
