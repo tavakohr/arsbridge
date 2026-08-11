@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9098</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9099</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -370,6 +370,154 @@ spec</td>
 intentional stops that name the exact annotation to fix: correct the
 shell or add the variable to the ADaM spec, then re-run. The pipeline is
 designed to be run iteratively.</p>
+<hr>
+</div>
+<div class="section level2">
+<h2 id="coded-values-and-codelists">Coded values and codelists<a class="anchor" aria-label="anchor" href="#coded-values-and-codelists"></a>
+</h2>
+<p>A clinical shell prints what a reviewer reads — “Female”, “Severe”,
+“Death” — while the dataset holds what the study collected:
+<code>F</code>, <code>SEVERE</code>, <code>1</code>. Something has to
+pair the two, or the most ordinary table in clinical reporting fills
+nothing.</p>
+<p>arsbridge does it from the ADaM spec, at build time, and carries the
+answer in the reporting event.</p>
+<div class="section level3">
+<h3 id="where-a-codelist-comes-from">Where a codelist comes from<a class="anchor" aria-label="anchor" href="#where-a-codelist-comes-from"></a>
+</h3>
+<p>Sheets are classified <strong>by their column headers, never by their
+name</strong>. A sheet qualifies as a codelist sheet when three columns
+map: a codelist name, a term, and a decoded value. Any of these
+spellings work, case-insensitively:</p>
+<table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
+<thead><tr class="header">
+<th>role</th>
+<th>accepted headers</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>name</td>
+<td>
+<code>Codelist Name</code>, <code>Codelist ID</code>,
+<code>Codelist</code>, <code>ID</code>
+</td>
+</tr>
+<tr class="even">
+<td>term</td>
+<td>
+<code>Term</code>, <code>Term (Code)</code>,
+<code>Coded Value</code>, <code>Code</code>,
+<code>Submission Value</code>
+</td>
+</tr>
+<tr class="odd">
+<td>decode</td>
+<td>
+<code>Decoded Value</code>, <code>Decode</code>,
+<code>Display Value</code>
+</td>
+</tr>
+<tr class="even">
+<td>order</td>
+<td><code>Order</code></td>
+</tr>
+<tr class="odd">
+<td>used by</td>
+<td>
+<code>Used By Variables</code>, <code>Used By</code>,
+<code>Variables</code>
+</td>
+</tr>
+</tbody>
+</table>
+<p>So a sheet called <code>CT</code>, or
+<code>Controlled Terminology</code>, or <code>CODELISTS</code>, is read
+the same way — and a <em>variables</em> sheet is never mistaken for one,
+because the codelist test runs first and requires all three columns.</p>
+<p>A <code>define.xml</code> is read equivalently: <code>CodeList</code>
+/ <code>CodeListItem</code> with <code>Decode/TranslatedText</code>,
+linked through <code>CodeListRef</code>.</p>
+<p>A variable finds its codelist by the name in its own
+<code>Codelist</code> spec column, falling back to any codelist whose
+<code>Used By Variables</code> names the exact
+<code>DATASET.VARIABLE</code>.</p>
+</div>
+<div class="section level3">
+<h3 id="what-it-produces-and-who-uses-it">What it produces, and who uses it<a class="anchor" aria-label="anchor" href="#what-it-produces-and-who-uses-it"></a>
+</h3>
+<p>The terms travel in the reporting event as
+<code>_meta$value_decodes</code>, one entry per
+<code>DATASET.VARIABLE</code>, each an ordered list of
+<code>{value, label, order}</code>. From there:</p>
+<ul>
+<li>
+<strong>the emitted {cards} code</strong> turns it into
+<code>factor(as.character(VAR), levels = &lt;codes&gt;, labels = &lt;decodes&gt;)</code>,
+so the ARD carries <code>"Female"</code>, not <code>"F"</code>;</li>
+<li>
+<strong>the legacy engine</strong> derives the identical factor,
+which is what keeps emitted and executed the same;</li>
+<li>
+<strong>the column axis</strong> falls back to the codelist when the
+shell’s headers carry no conditions of their own, giving labelled,
+condition-defined columns instead of raw coded ones. Header annotations
+always win.</li>
+</ul>
+<p>By the time the fill writer runs, there is normally nothing left to
+reconcile.</p>
+</div>
+<div class="section level3">
+<h3 id="which-analyses-decode">Which analyses decode<a class="anchor" aria-label="anchor" href="#which-analyses-decode"></a>
+</h3>
+<p>Only the methods whose results <em>are</em> categories:
+<code>MTH_COUNT_AND_PERCENTAGE</code>,
+<code>MTH_AE_FREQUENCY_COUNT</code>, <code>MTH_SUBJECT_COUNT</code>,
+<code>MTH_SUBJECT_COUNT_PCT</code>. A continuous summary reports a mean,
+a listing is a different pipeline entirely, and the inferential methods
+report no category label — none of them display a value that could be
+decoded. The subject key is never decoded either: its “categories” are
+subjects.</p>
+</div>
+<div class="section level3">
+<h3 id="the-two-caps">The two caps<a class="anchor" aria-label="anchor" href="#the-two-caps"></a>
+</h3>
+<p><code>.CODELIST_DECODE_MAX_TERMS</code> (15) governs
+<strong>expansion</strong>, and it governs it in two places:</p>
+<ul>
+<li>
+<strong>rows</strong> — under the cap every term becomes a row,
+including the ones the data never took, at <code>n = 0</code>. That is
+right for a nine-term discontinuation codelist and wrong for a 195-term
+COUNTRY one, so above the cap the engine drops the unobserved levels and
+shows only the terms observed. Either way the labels are decoded.</li>
+<li>
+<strong>columns</strong> — above the cap the codelist never becomes
+a column axis at all. Twenty terms is twenty columns, which is wrong
+however useful the decode is.</li>
+</ul>
+</div>
+<div class="section level3">
+<h3 id="when-there-is-no-codelist">When there is no codelist<a class="anchor" aria-label="anchor" href="#when-there-is-no-codelist"></a>
+</h3>
+<p>If the spec defines none for the variable, the fill writer falls back
+to a label-matching heuristic, and that heuristic is deliberately
+allowed to fail rather than guess. A shell label pairs with a data value
+when it matches exactly, or when exactly <strong>one</strong> remaining
+value is a case-insensitive prefix of it and the pairing is one-to-one
+across the whole block.</p>
+<p>“Female”/“Male” against <code>F</code>/<code>M</code> pairs.
+“Mild”/“Moderate” against <code>M</code> does not — both labels start
+with the same letter, so the pairing is ambiguous, and the whole block’s
+pairing is dropped rather than resolved by row order. Every pairing that
+<em>is</em> used is reported, because a cell filled by inference should
+be visible to whoever signs the output.</p>
+<p>The fix is not to make the heuristic cleverer. It is to give the spec
+a codelist, and let the decode happen where it can be checked.</p>
+</div>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

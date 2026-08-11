@@ -339,6 +339,32 @@ and the emitted `{cards}` scripts. Supported condition forms include
 columns and counted (WARN); a `Total (N=XX) ...` header is read as the
 overall column, not a group.
 
+## Codelists (coded values and what a shell prints)
+
+A shell prints `Female` where ADSL holds `F`. If the ADaM spec carries a
+codelist for the variable, arsbridge pairs the two here rather than
+leaving it to the fill: the terms travel in the reporting event as
+`_meta$value_decodes`, and both the emitted `{cards}` code and the
+executed ARD derive the same `factor(levels = codes, labels = decodes)`,
+so the ARD reads `Female` and the shell row matches it exactly.
+
+A codelist sheet is recognised by its COLUMN HEADERS, never by the sheet
+name: it needs a codelist name, a term (`Term`, `Coded Value`, `Code`,
+`Submission Value`), and a decoded value (`Decoded Value`, `Decode`,
+`Display Value`); `Order` and `Used By Variables` are read when present.
+`define.xml` `CodeList` elements are read equivalently. A variable finds
+its codelist by its own `Codelist` spec column, else by a codelist whose
+`Used By Variables` names its exact `DATASET.VARIABLE`.
+
+Only per-category methods decode – counts, percentages, AE frequencies,
+subject counts – since no other method displays a value that could be
+decoded. Codelists longer than 15 terms still decode, but stop
+expanding: unobserved terms do not become zero rows, and the codelist
+does not become a column axis. When the spec has no codelist for a
+variable, the fill writer falls back to a label-matching heuristic that
+refuses ambiguous pairings rather than guessing; see
+[`vignette("reading-engine")`](https://tavakohr.github.io/arsbridge/articles/reading-engine.md).
+
 ## Human review
 
 The generated ARS JSON is a draft. A qualified clinical programmer MUST
