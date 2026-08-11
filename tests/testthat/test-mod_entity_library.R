@@ -19,6 +19,40 @@
   do.call(session$setInputs, args)
 }
 
+## The frozen fixture's only grouping is data-driven and childless, which is
+## precisely the case the nested view has nothing to show for. This gives it
+## the two shapes a child group arrives in -- a simple condition and a
+## compound expression -- plus one that carries neither.
+.library_model_nested <- function() {
+  ars <- .read_json(test_path("fixtures", "ars_apx_drm_301_deterministic.json"))
+  index <- which(vapply(
+    ars$analysisGroupings,
+    function(node) identical(node$id, "GF_TRT01A"),
+    logical(1)
+  ))
+
+  drug_a <- list(dataset = "ADSL", variable = "TRT01A",
+                 comparator = "EQ", value = list("Drug A"))
+  drug_b <- list(dataset = "ADSL", variable = "TRT01A",
+                 comparator = "EQ", value = list("Drug B"))
+
+  ars$analysisGroupings[[index]]$dataDriven <- FALSE
+  ars$analysisGroupings[[index]]$groups <- list(
+    list(id = "GRP_DRUG_A", name = "Drug A", label = "Drug A",
+         level = 1L, order = 1L, condition = drug_a),
+    list(id = "GRP_EITHER", name = "Either drug", label = "Either drug",
+         level = 1L, order = 2L,
+         compoundExpression = list(
+           logicalOperator = "OR",
+           whereClauses = list(list(condition = drug_a),
+                               list(condition = drug_b))
+         )),
+    list(id = "GRP_UNDEFINED", name = "Undefined", label = "Undefined",
+         level = 1L, order = 3L)
+  )
+  ars_to_model(ars)
+}
+
 
 test_that("selecting an entity shows its editable definition", {
   skip_if_not_installed("shiny")
@@ -48,6 +82,58 @@ test_that("the read-only viewer shows the definition without inputs", {
 
     expect_false(grepl("Apply JSON", rendered, fixed = TRUE))
     expect_match(rendered, "Condition")
+  })
+})
+
+test_that("a grouping's child groups are listed with their conditions", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("DT")
+
+  state <- .editor_state(.library_model_nested(), NULL, NULL, NULL, "edit")
+
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(table_groupings_rows_selected = 1)
+    rendered <- paste(as.character(output$detail_groupings), collapse = " ")
+
+    ## The raw-JSON hatch already carried the labels and ids, so only a
+    ## readable filter expression proves the child groups are shown as
+    ## themselves rather than buried in the node.
+    expect_match(rendered, "Groups", fixed = TRUE)
+    expect_match(rendered, "TRT01A %in%", fixed = TRUE)
+
+    ## A compound child reads as the whole expression, not as "compound".
+    expect_match(rendered, ") | (", fixed = TRUE)
+  })
+})
+
+test_that("a child group with no condition of its own shows none", {
+  model <- .library_model_nested()
+  index <- match("GF_TRT01A", model$groupings$id)
+  groups <- .groups_table(model$groupings$raw[[index]]$groups)
+
+  expect_identical(nrow(groups), 3L)
+  expect_identical(groups$id, c("GRP_DRUG_A", "GRP_EITHER", "GRP_UNDEFINED"))
+  expect_identical(groups$order, c(1L, 2L, 3L))
+
+  ## An absent where-clause is no condition at all. Passing it to
+  ## where_to_filter_expr() would call it TRUE, which reads as "every row".
+  expect_identical(groups$condition[[3]], NA_character_)
+})
+
+test_that("a data-driven grouping says where its levels come from", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("DT")
+
+  ## View mode, so the read-only panel is exercised alongside the editable
+  ## one the test above drives.
+  state <- .editor_state(.valid_fixture_model(), NULL, NULL, NULL, "view")
+
+  shiny::testServer(mod_entity_library_server, args = list(state = state), {
+    session$setInputs(table_groupings_rows_selected = 1)
+    rendered <- paste(as.character(output$detail_groupings), collapse = " ")
+
+    expect_match(rendered, "from the data", fixed = TRUE)
+    expect_false(grepl("Apply JSON", rendered, fixed = TRUE))
   })
 })
 

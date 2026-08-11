@@ -430,10 +430,17 @@ mod_entity_library_server <- function(id, state) {
   }
 
   if (identical(pool, "groupings")) {
-    return(bslib::layout_columns(
-      col_widths = c(6, 6),
-      field_input("groupingDataset", "Dataset", row$groupingDataset),
-      field_input("groupingVariable", "Variable", row$groupingVariable)
+    return(shiny::tagList(
+      bslib::layout_columns(
+        col_widths = c(6, 6),
+        field_input("groupingDataset", "Dataset", row$groupingDataset),
+        field_input("groupingVariable", "Variable", row$groupingVariable)
+      ),
+      shiny::h6(class = "mt-3", "Groups"),
+      shiny::div(class = "text-muted small",
+                 "The child groups this grouping defines. Editing them is ",
+                 "still the raw-JSON hatch below."),
+      .groups_view(row$raw[[1]][["groups"]] %||% list(), row$dataDriven)
     ))
   }
 
@@ -635,10 +642,11 @@ mod_entity_library_server <- function(id, state) {
       .detail_row("Variable",
                   paste0(row$groupingDataset, ".", row$groupingVariable)),
       .detail_row("Data driven", row$dataDriven),
-      .detail_row("Groups", row$group_labels),
       if (length(dependents) > 0) {
         .detail_row("Used by", paste(dependents, collapse = ", "))
-      }
+      },
+      shiny::h6(class = "mt-3", "Groups"),
+      .groups_view(row$raw[[1]][["groups"]] %||% list(), row$dataDriven)
     ))
   }
 
@@ -651,6 +659,74 @@ mod_entity_library_server <- function(id, state) {
     },
     .detail_row("Compound expression", row$is_compound)
   )
+}
+
+## A grouping's child groups, or a sentence saying why there are none.
+##
+## The summary counted them and listed their labels, which left the panel
+## saying "3 groups" while showing none of them. An empty collection means
+## two different things, so it is worth a sentence either way: a data-driven
+## grouping discovers its levels at run time, while a fixed one that declares
+## none defines no result columns at all -- which validation blocks.
+#' @noRd
+.groups_view <- function(groups, data_driven = NA) {
+  if (length(groups) > 0) {
+    return(DT::datatable(
+      .groups_table(groups),
+      rownames = FALSE, selection = "none",
+      options = list(dom = "t", paging = FALSE)
+    ))
+  }
+
+  message <- if (isTRUE(data_driven)) {
+    "No fixed groups: the levels come from the data at run time."
+  } else {
+    paste("No groups, and not data-driven: this grouping defines no result",
+          "columns.")
+  }
+  shiny::div(class = "small text-muted", message)
+}
+
+## One row per child group. `level` earns its column because a nested
+## grouping puts a child under a parent, and reading the table without it
+## would flatten the hierarchy into a list of peers.
+#' @noRd
+.groups_table <- function(groups) {
+  empty <- data.frame(
+    order = integer(0), level = integer(0), id = character(0),
+    label = character(0), condition = character(0),
+    stringsAsFactors = FALSE
+  )
+  if (length(groups) == 0) return(empty)
+
+  rows <- lapply(groups, function(group) {
+    data.frame(
+      order     = .int_field(group[["order"]]),
+      level     = .int_field(group[["level"]]),
+      id        = .chr_field(group[["id"]]),
+      label     = .chr_field(group[["label"]] %||% group[["name"]]),
+      condition = .group_condition_text(group),
+      stringsAsFactors = FALSE
+    )
+  })
+  do.call(rbind, rows)
+}
+
+## The filter a child group stands for, in the same words the analysis-set
+## and data-subset panels use. A group carrying neither shape has no
+## condition: handing an empty where-clause to where_to_filter_expr() would
+## call it TRUE, which reads as "every row" rather than "unspecified".
+#' @noRd
+.group_condition_text <- function(group) {
+  where <- if (!is.null(group[["compoundExpression"]])) {
+    list(compoundExpression = group[["compoundExpression"]])
+  } else if (!is.null(group[["condition"]])) {
+    list(condition = group[["condition"]])
+  } else {
+    return(NA_character_)
+  }
+
+  tryCatch(where_to_filter_expr(where), error = function(e) NA_character_)
 }
 
 ## A method's operations as a table. Kept as its own helper because phase 2

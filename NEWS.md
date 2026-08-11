@@ -1,5 +1,14 @@
 # arsbridge (development version)
 
+* **The editor shows a grouping's child groups.** The entity library listed
+  how many groups a grouping had and what they were called, but never the
+  groups themselves. Selecting a grouping now lists each child with its order,
+  level, id, label, and the filter its condition stands for -- compound
+  expressions included, read as the whole expression. A grouping with no
+  children says which kind of empty it is: levels discovered from the data, or
+  a fixed grouping that defines no result columns. Editing children is still
+  the raw-JSON hatch.
+
 * **Blocking ARS findings now stop runnable deliverables.** The ARS JSON and
   validation report are retained, while code, ARD, shell fill, and fill debrief
   are skipped until the model is repaired; editor saves use the same gate. Three
