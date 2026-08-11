@@ -800,3 +800,184 @@ test_that("child accessors name the grouping or the group they cannot find", {
     model_set_group_field(model, "GF_TRT01A", "GRP_NOPE", "label", "X"),
     "GRP_NOPE")
 })
+
+## --- Compound expressions (editor phase 4) ---------------------------------
+##
+## A group holds EITHER a condition or a compoundExpression. These tests pin
+## the transitions between the two shapes, because that is where a clause can
+## be silently dropped or an invalid one-clause compound left behind.
+
+## The Unknown Cohort group from the editor spec: two clauses joined by OR,
+## the first an empty EQ standing for "is missing".
+.ce_model <- function() {
+  ars <- .read_json(.ars_fixture_path())
+  index <- which(vapply(ars$analysisGroupings,
+                        function(node) identical(node$id, "GF_TRT01A"),
+                        logical(1)))
+  ars$analysisGroupings[[index]]$dataDriven <- FALSE
+  ars$analysisGroupings[[index]]$groups <- list(
+    list(id = "GRP_TRT01A_DRUG_A", name = "Drug A", label = "Drug A",
+         level = 1L, order = 1L,
+         condition = list(dataset = "ADSL", variable = "TRT01A",
+                          comparator = "EQ", value = list("Drug A"))),
+    list(id = "GRP_TRT01A_UNKNOWN", name = "Unknown", label = "Unknown",
+         level = 1L, order = 2L,
+         compoundExpression = list(
+           logicalOperator = "OR",
+           whereClauses = list(
+             list(condition = list(dataset = "ADSL", variable = "COHORTN",
+                                   comparator = "EQ", value = list())),
+             list(condition = list(dataset = "ADSL", variable = "COHORTN",
+                                   comparator = "EQ", value = list("99")))
+           )))
+  )
+  ars_to_model(ars)
+}
+
+.ce_group <- function(model, group_id = "GRP_TRT01A_UNKNOWN") {
+  groups <- .cg_groups(model)
+  groups[[which(vapply(groups, function(g) identical(g$id, group_id),
+                       logical(1)))]]
+}
+
+test_that("adding a clause turns a simple condition into a compound", {
+  model <- .ce_model()
+  model <- model_add_clause(
+    model, "GF_TRT01A", "GRP_TRT01A_DRUG_A",
+    .cond("ADSL", "TRT01A", "EQ", "Drug A (open label)"))
+
+  group <- .ce_group(model, "GRP_TRT01A_DRUG_A")
+  ## The condition it already had is kept as the first clause, not discarded.
+  expect_null(group$condition)
+  expect_length(group$compoundExpression$whereClauses, 2L)
+  expect_equal(group$compoundExpression$whereClauses[[1]]$condition$value,
+               list("Drug A"))
+  expect_equal(group$compoundExpression$whereClauses[[2]]$condition$value,
+               list("Drug A (open label)"))
+})
+
+test_that("a clause is accepted as a WhereClause or as a bare condition", {
+  bare <- list(dataset = "ADSL", variable = "COHORTN",
+               comparator = "EQ", value = list("7"))
+  wrapped <- model_add_clause(.ce_model(), "GF_TRT01A", "GRP_TRT01A_UNKNOWN",
+                              list(condition = bare))
+  direct  <- model_add_clause(.ce_model(), "GF_TRT01A", "GRP_TRT01A_UNKNOWN",
+                              bare)
+  expect_equal(.ce_group(wrapped)$compoundExpression,
+               .ce_group(direct)$compoundExpression)
+  expect_length(.ce_group(direct)$compoundExpression$whereClauses, 3L)
+})
+
+test_that("removing down to one clause unwraps the compound", {
+  model <- model_remove_clause(.ce_model(), "GF_TRT01A",
+                               "GRP_TRT01A_UNKNOWN", 1L)
+
+  group <- .ce_group(model)
+  ## One clause is not a compound worth persisting -- ARS wants at least two.
+  expect_null(group$compoundExpression)
+  expect_equal(group$condition$value, list("99"))
+  expect_equal(group$condition$variable, "COHORTN")
+})
+
+test_that("a lone nested clause is hoisted, not re-wrapped", {
+  ## The survivor is itself a compound. Wrapping it in a one-clause compound
+  ## would leave exactly the shape the accessors exist to prevent.
+  model  <- .ce_model()
+  nested <- list(compoundExpression = list(
+    logicalOperator = "AND",
+    whereClauses = list(
+      list(condition = list(dataset = "ADSL", variable = "SAFFL",
+                            comparator = "EQ", value = list("Y"))),
+      list(condition = list(dataset = "ADSL", variable = "COHORTN",
+                            comparator = "EQ", value = list("1"))))))
+
+  model <- model_add_clause(model, "GF_TRT01A", "GRP_TRT01A_UNKNOWN", nested)
+  model <- model_remove_clause(model, "GF_TRT01A", "GRP_TRT01A_UNKNOWN", 1L)
+  model <- model_remove_clause(model, "GF_TRT01A", "GRP_TRT01A_UNKNOWN", 1L)
+
+  group <- .ce_group(model)
+  expect_null(group$condition)
+  expect_equal(group$compoundExpression$logicalOperator, "AND")
+  expect_length(group$compoundExpression$whereClauses, 2L)
+})
+
+test_that("clauses reorder and the operator can change", {
+  model <- .ce_model()
+  model <- model_move_clause(model, "GF_TRT01A", "GRP_TRT01A_UNKNOWN", 1L, 1L)
+  clauses <- .ce_group(model)$compoundExpression$whereClauses
+  expect_equal(clauses[[1]]$condition$value, list("99"))
+  expect_equal(clauses[[2]]$condition$value, list())
+
+  ## Clamped at the ends, so the editor's buttons stay pressable.
+  same <- model_move_clause(model, "GF_TRT01A", "GRP_TRT01A_UNKNOWN", 1L, -5L)
+  expect_equal(.ce_group(same)$compoundExpression$whereClauses,
+               .ce_group(model)$compoundExpression$whereClauses)
+
+  model <- model_set_group_operator(model, "GF_TRT01A",
+                                    "GRP_TRT01A_UNKNOWN", "and")
+  expect_equal(.ce_group(model)$compoundExpression$logicalOperator, "AND")
+})
+
+test_that("an empty clause value list is a condition, not a cleared one", {
+  model <- model_set_clause_condition(.ce_model(), "GF_TRT01A",
+                                      "GRP_TRT01A_UNKNOWN", 2L,
+                                      "adsl", "cohortn", "eq", character(0))
+  clause <- .ce_group(model)$compoundExpression$whereClauses[[2]]
+  ## An empty EQ is how a where clause says "is missing".
+  expect_equal(clause$condition$value, list())
+  expect_equal(clause$condition$dataset, "ADSL")
+  expect_equal(clause$condition$variable, "COHORTN")
+})
+
+test_that("a nested clause refuses a flat condition", {
+  nested <- list(compoundExpression = list(
+    logicalOperator = "AND",
+    whereClauses = list(
+      list(condition = list(dataset = "ADSL", variable = "SAFFL",
+                            comparator = "EQ", value = list("Y"))))))
+  model <- model_add_clause(.ce_model(), "GF_TRT01A", "GRP_TRT01A_UNKNOWN",
+                            nested)
+  expect_error(
+    model_set_clause_condition(model, "GF_TRT01A", "GRP_TRT01A_UNKNOWN", 3L,
+                               "ADSL", "COHORTN", "EQ", "1"),
+    "compound")
+  ## Refused, and the nesting is still there.
+  expect_length(.ce_group(model)$compoundExpression$whereClauses, 3L)
+})
+
+test_that("compound accessors refuse what they cannot address", {
+  model <- .ce_model()
+  expect_error(
+    model_set_group_operator(model, "GF_TRT01A", "GRP_TRT01A_UNKNOWN", "XOR"),
+    "AND")
+  ## A simple-condition group has no operator and no clauses to move.
+  expect_error(
+    model_set_group_operator(model, "GF_TRT01A", "GRP_TRT01A_DRUG_A", "OR"),
+    "no compound expression")
+  expect_error(
+    model_remove_clause(model, "GF_TRT01A", "GRP_TRT01A_DRUG_A", 1L),
+    "no compound expression")
+  expect_error(
+    model_move_clause(model, "GF_TRT01A", "GRP_TRT01A_UNKNOWN", 9L, 1L),
+    "no clause")
+  expect_error(
+    model_add_clause(model, "GF_TRT01A", "GRP_TRT01A_UNKNOWN", 42),
+    "must be a WhereClause")
+})
+
+test_that("a compound group survives a parent-field edit and a round trip", {
+  model <- .ce_model()
+  model <- model_set_field(model, "groupings", "GF_TRT01A",
+                           "groupingVariable", "TRT01P")
+
+  ars <- model_to_ars(model)
+  node <- ars$analysisGroupings[[
+    which(vapply(ars$analysisGroupings,
+                 function(g) identical(g$id, "GF_TRT01A"), logical(1)))]]
+  group <- node$groups[[2]]
+  expect_equal(group$compoundExpression$logicalOperator, "OR")
+  expect_length(group$compoundExpression$whereClauses, 2L)
+  ## The empty value array is meaningful and must survive as an empty array.
+  expect_equal(group$compoundExpression$whereClauses[[1]]$condition$value,
+               list())
+})
