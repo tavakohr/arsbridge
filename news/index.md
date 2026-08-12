@@ -2,6 +2,28 @@
 
 ## arsbridge (development version)
 
+- **The where-clause evaluator is a package function, not a closure.**
+  `.eval_where_clause()`, `.eval_condition()` and `.clean_var_name()`
+  were defined inside
+  [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md),
+  which put them out of reach of everything else in the package.
+  `.complete_zero_groups()` is defined at namespace level and called
+  from inside that closure, so its call to the evaluator resolved
+  lexically to nothing: the branch that completes a zero-count column
+  the shell declared by CONDITION – rather than by the variable’s own
+  values – would have died with `could not find function`. Nothing
+  reaches that branch today, because both the emitted code and the
+  legacy path derive the grouping as
+  `factor(levels = every declared label)` and so no declared column is
+  ever missing from the result; the defect was latent, and R CMD check
+  had been reporting it as an undefined global. The three functions now
+  live in `utils_where_clause.R` beside the predicate-string emitter
+  they are the executable half of, unchanged in behaviour. Having them
+  reachable also makes the deterministic-equivalence guarantee testable
+  directly: emitter and executor are now asserted to agree on every
+  annotation in `test-where_to_filter_expr`, where before one half was
+  pinned to masks typed out by hand and the other trusted to match.
+
 - **An entity’s findings say which child they are about, and stop
   burying the editor.** The spec check reports once per clause, which is
   right – each is a separate place to fix – but the panel rendered only
