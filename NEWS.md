@@ -1,5 +1,28 @@
 # arsbridge (development version)
 
+* **A column axis is read from what varies, not from what is named first.**
+  When every group column ANDs the same restriction onto its own value --
+  `ADSL.COHORTN=1 AND ADSL.CGHGR1N=1`, `... AND ADSL.CGHGR1N=2`, and so on --
+  the converter took the first variable each header named. That is `COHORTN`
+  every time, so the grouping came out called "Grouping by COHORTN" with
+  every one of its levels holding `COHORTN=1`, and the variable that actually
+  distinguishes the columns never appeared. The columns still selected the
+  right subjects, because each level kept its whole condition; it was the axis
+  IDENTITY that was wrong, and nothing said so. The shared predicate is now
+  recognised and the varying variable names the axis, reported as an INFO.
+  Each level keeps its full condition exactly as before -- nothing is
+  factored out of the groups, only the axis is named differently.
+
+  Recognition is deliberately narrow: every level header must be an AND of
+  exactly two plain conditions, one of which is identical across all of them,
+  leaving exactly one variable that varies. OR-joined headers, deeper nesting
+  and three-way splits are left to the previous behaviour untouched and
+  silently, since they are not this pattern. When the pattern IS present but
+  the axis is not decidable -- no shared predicate, or two variables varying
+  at once -- it is a WARN that names the reason and changes nothing, because
+  a guessed axis would look deliberate and a wrong one is invisible in the
+  output.
+
 * **The test suite no longer writes into the user's cache directory.** The
   editor autosaves to `tools::R_user_dir("arsbridge", "cache")` on purpose --
   the crash it protects against takes `tempdir()` with it -- but under test
