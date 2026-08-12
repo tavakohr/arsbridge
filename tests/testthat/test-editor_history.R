@@ -327,3 +327,103 @@ test_that("writing an autosave adds nothing to the real user cache", {
   after <- list.files(real, all.files = TRUE, no.. = TRUE)
   expect_identical(after, before)
 })
+
+# Retention. An autosave is cleared on save and on "start fresh", so what
+# accumulates is what nobody came back for. These pin that the sweep bounds
+# that pile without touching work still worth offering.
+
+## The suite redirects the cache once for the whole run, which is right for
+## keeping the machine clean but wrong here: these tests age files and then
+## count what a sweep took, so one test's stale file would be swept by the
+## next test's call. Each gets its own directory.
+.local_autosave_dir <- function(envir = parent.frame()) {
+  withr::local_options(
+    list(arsbridge.autosave_dir = withr::local_tempdir(.local_envir = envir)),
+    .local_envir = envir
+  )
+}
+
+## Put an autosave on disk and backdate it, standing in for a session that
+## died that many days ago.
+.aged_autosave <- function(days_old, envir = parent.frame()) {
+  path <- file.path(withr::local_tempdir(.local_envir = envir),
+                    "reporting_event.json")
+  state <- .history_state(path)
+  apply_edit(state, "analyses", state$model()$analyses$id[1], "label", "Edited")
+  rds <- .write_autosave(state)
+  Sys.setFileTime(rds, Sys.time() - as.difftime(days_old, units = "days"))
+  list(source = path, rds = rds)
+}
+
+test_that("an autosave nobody came back for is swept once it expires", {
+  skip_if_not_installed("shiny")
+  .with_reactives()
+  .local_autosave_dir()
+
+  stale <- .aged_autosave(31)
+  expect_true(file.exists(stale$rds))
+
+  swept <- .sweep_autosaves()
+
+  expect_false(file.exists(stale$rds))
+  expect_identical(normalizePath(swept, mustWork = FALSE),
+                   normalizePath(stale$rds, mustWork = FALSE))
+  ## And the offer goes with it -- the sweep is what decides, not the reader.
+  expect_null(.read_autosave(stale$source))
+})
+
+test_that("work still inside the window is left alone", {
+  skip_if_not_installed("shiny")
+  .with_reactives()
+  .local_autosave_dir()
+
+  fresh <- .aged_autosave(29)
+  expect_length(.sweep_autosaves(), 0)
+  expect_true(file.exists(fresh$rds))
+  expect_false(is.null(.read_autosave(fresh$source)))
+})
+
+test_that("the retention window is configurable", {
+  skip_if_not_installed("shiny")
+  .with_reactives()
+  .local_autosave_dir()
+
+  aged <- .aged_autosave(10)
+  ## Untouched by the default window, gone under a shorter one.
+  expect_length(.sweep_autosaves(), 0)
+  expect_true(file.exists(aged$rds))
+
+  withr::with_options(list(arsbridge.autosave_max_age_days = 7), {
+    expect_length(.sweep_autosaves(), 1)
+  })
+  expect_false(file.exists(aged$rds))
+})
+
+test_that("the sweep only deletes files it wrote", {
+  skip_if_not_installed("shiny")
+  .with_reactives()
+  .local_autosave_dir()
+
+  ## The cache directory is shared -- the recent-projects list lives beside
+  ## these -- so age alone must not be the whole test for deletion.
+  stale <- .aged_autosave(60)
+  bystander <- file.path(.autosave_dir(), "recent_projects.json")
+  writeLines("[]", bystander)
+  Sys.setFileTime(bystander, Sys.time() - as.difftime(60, units = "days"))
+
+  .sweep_autosaves()
+
+  expect_false(file.exists(stale$rds))
+  expect_true(file.exists(bystander))
+})
+
+test_that("sweeping an empty or absent cache is harmless", {
+  withr::with_options(
+    list(arsbridge.autosave_dir = file.path(tempfile("no_cache_"), "nested")),
+    expect_length(.sweep_autosaves(), 0)
+  )
+  withr::with_options(
+    list(arsbridge.autosave_dir = withr::local_tempdir()),
+    expect_length(.sweep_autosaves(), 0)
+  )
+})
