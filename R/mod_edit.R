@@ -388,6 +388,125 @@ apply_edit <- function(state, pool, id, field, value) {
   value
 }
 
+## An edit-log cell for a grouping list, spelling an absent list out rather
+## than leaving the reader an empty cell to interpret.
+#' @noRd
+.log_value <- function(value) {
+  if (is.na(value)) "(not set)" else as.character(value)
+}
+
+## A semicolon-separated grouping list in the reviewer's words. The ids stay
+## visible because they are what the ARS file holds and what a dangling
+## reference has to be recognised by.
+#' @noRd
+.grouping_phrase <- function(model, value) {
+  ids <- .split_values(value)
+  if (length(ids) == 0) return("no groupings")
+
+  named <- vapply(ids, function(id) {
+    index <- match(id, model$groupings$id)
+    if (is.na(index)) return(paste0(id, " (not in this reporting event)"))
+
+    label <- model$groupings$label[index]
+    if (is.na(label) || !nzchar(label)) label <- model$groupings$name[index]
+    if (is.na(label) || !nzchar(label)) return(id)
+    paste0(label, " (", id, ")")
+  }, character(1), USE.NAMES = FALSE)
+
+  paste(named, collapse = ", ")
+}
+
+## What applying one line's groupings across its output would change.
+##
+## Kept out of the observers so the preview and the edit that follows are
+## computed by the same code: a preview that can disagree with the action it
+## describes is worse than no preview. Returns NULL when the line is not in
+## an output -- there is no "this output" to scope the action to -- and a
+## zero-row `changes` frame when every sibling already matches.
+#' @noRd
+.bulk_grouping_plan <- function(model, analysis_id) {
+  analyses <- model$analyses
+  index <- match(analysis_id, analyses$id)
+  if (is.na(index)) return(NULL)
+
+  output_id <- analyses$output_id[index]
+  if (is.na(output_id)) return(NULL)
+  new_value <- analyses$grouping_ids[index]
+
+  ## Siblings only: an analysis in another output keeps its own groupings,
+  ## which is the whole point of scoping this to one output.
+  siblings <- !is.na(analyses$output_id) &
+    analyses$output_id == output_id &
+    analyses$id != analysis_id
+
+  target_rows <- which(siblings)
+  old_values  <- analyses$grouping_ids[target_rows]
+  differs     <- !vapply(old_values, identical, logical(1), new_value)
+  target_rows <- target_rows[differs]
+
+  changes <- data.frame(
+    id        = analyses$id[target_rows],
+    label     = vapply(target_rows, function(i) {
+      label <- analyses$label[i]
+      if (is.na(label) || !nzchar(label)) analyses$id[i] else label
+    }, character(1)),
+    old_value = analyses$grouping_ids[target_rows],
+    old_label = vapply(analyses$grouping_ids[target_rows], function(value) {
+      .grouping_phrase(model, value)
+    }, character(1), USE.NAMES = FALSE),
+    stringsAsFactors = FALSE
+  )
+  rownames(changes) <- NULL
+
+  list(
+    output_id    = output_id,
+    output_label = .output_phrase(model, output_id),
+    new_value    = new_value,
+    new_label    = .grouping_phrase(model, new_value),
+    changes      = changes
+  )
+}
+
+## The output an action is scoped to, named the way the reviewer sees it in
+## the outputs list.
+#' @noRd
+.output_phrase <- function(model, output_id) {
+  index <- match(output_id, model$outputs$id)
+  if (is.na(index)) return(output_id)
+
+  label <- model$outputs$label[index]
+  if (is.na(label) || !nzchar(label)) label <- model$outputs$name[index]
+  if (is.na(label) || !nzchar(label)) return(output_id)
+  paste0(label, " (", output_id, ")")
+}
+
+## The change preview: one row per affected line, current groupings beside
+## what they would become, so the reviewer confirms a diff and not a count.
+#' @noRd
+.bulk_grouping_preview_table <- function(plan) {
+  rows <- lapply(seq_len(nrow(plan$changes)), function(i) {
+    change <- plan$changes[i, ]
+    shiny::tags$tr(
+      shiny::tags$td(change$label),
+      shiny::tags$td(class = "text-muted", change$old_label),
+      shiny::tags$td(shiny::tags$strong(plan$new_label))
+    )
+  })
+
+  shiny::div(
+    class = "table-responsive",
+    shiny::tags$table(
+      class = "table table-sm small",
+      shiny::tags$thead(shiny::tags$tr(
+        shiny::tags$th("Analysis"),
+        shiny::tags$th("Grouped by now"),
+        shiny::tags$th("Grouped by after")
+      )),
+      shiny::tags$tbody(rows)
+    )
+  )
+}
+
 ## Wire one input per editable field. Every observer ignores its first firing
 ## (that is just the input being created) and writes through apply_edit(),
 ## which drops no-ops.
@@ -443,27 +562,24 @@ apply_edit <- function(state, pool, id, field, value) {
   ## Bulk grouping assignment: copy this line's ordered "Grouped by" onto
   ## every other analysis of the same output, after a preview of what will
   ## change. One history push, so one undo reverses the whole action.
+  ##
+  ## The plan behind the open dialog is held here so the confirm step can
+  ## check that the model still agrees with what the reviewer was shown.
+  previewed_plan <- shiny::reactiveVal(NULL)
+
   shiny::observeEvent(input$apply_groupings_all, {
     id <- selected_id()
     if (is.null(id)) return()
-    model <- state$model()
-    idx <- match(id, model$analyses$id)
-    if (is.na(idx)) return()
+    plan <- .bulk_grouping_plan(state$model(), id)
 
-    out_id <- model$analyses$output_id[idx]
-    value  <- model$analyses$grouping_ids[idx]
-    if (is.na(out_id)) return()
-
-    same_output <- !is.na(model$analyses$output_id) &
-      model$analyses$output_id == out_id & model$analyses$id != id
-    targets <- model$analyses$id[same_output]
-    differs <- vapply(targets, function(other) {
-      !identical(model$analyses$grouping_ids[match(other, model$analyses$id)],
-                 value)
-    }, logical(1))
-    targets <- targets[differs]
-
-    if (length(targets) == 0) {
+    if (is.null(plan)) {
+      shiny::showNotification(
+        "This line is not attached to an output, so there is nothing to apply it to.",
+        type = "warning", duration = 5
+      )
+      return()
+    }
+    if (nrow(plan$changes) == 0) {
       shiny::showNotification(
         "Every line in this output already has these groupings.",
         type = "message", duration = 5
@@ -471,19 +587,18 @@ apply_edit <- function(state, pool, id, field, value) {
       return()
     }
 
-    labels <- vapply(targets, function(other) {
-      lbl <- model$analyses$label[match(other, model$analyses$id)]
-      if (is.na(lbl) || !nzchar(lbl)) other else lbl
-    }, character(1))
+    previewed_plan(plan)
     shiny::showModal(shiny::modalDialog(
       title = "Apply groupings to the whole output?",
       shiny::p(
-        shiny::tags$code(if (is.na(value)) "(no groupings)" else value),
-        " will replace the groupings of ", shiny::strong(length(targets)),
-        " other line(s):"
+        "Target output: ", shiny::strong(plan$output_label), ". ",
+        shiny::strong(nrow(plan$changes)),
+        " of its other line(s) will be regrouped as ",
+        shiny::strong(plan$new_label), "."
       ),
-      shiny::tags$ul(class = "small",
-                     lapply(labels, function(x) shiny::tags$li(x))),
+      .bulk_grouping_preview_table(plan),
+      shiny::p(class = "small text-muted mb-0",
+               "Lines in other outputs are not touched."),
       footer = shiny::tagList(
         shiny::modalButton("Cancel"),
         shiny::actionButton(session$ns("confirm_apply_groupings_all"),
@@ -497,29 +612,60 @@ apply_edit <- function(state, pool, id, field, value) {
     id <- selected_id()
     if (is.null(id)) return()
     model <- state$model()
-    idx <- match(id, model$analyses$id)
-    if (is.na(idx)) return()
-    out_id <- model$analyses$output_id[idx]
-    value  <- model$analyses$grouping_ids[idx]
 
-    same_output <- !is.na(model$analyses$output_id) &
-      model$analyses$output_id == out_id & model$analyses$id != id
-    targets <- model$analyses$id[same_output]
+    shown   <- previewed_plan()
+    current <- .bulk_grouping_plan(model, id)
+    previewed_plan(NULL)
+    if (is.null(shown) || is.null(current)) return()
+
+    ## The model can move while the dialog sits open -- an autosave restore,
+    ## an undo, a second window. Applying a stale plan would change lines the
+    ## reviewer never saw, so a drifted plan is re-previewed, never applied.
+    if (!identical(shown, current)) {
+      if (nrow(current$changes) == 0) {
+        shiny::showNotification(
+          "Those lines changed while the dialog was open; there is nothing left to apply.",
+          type = "warning", duration = 8
+        )
+        return()
+      }
+      previewed_plan(current)
+      shiny::showModal(shiny::modalDialog(
+        title = "These lines changed -- check the new preview",
+        shiny::p(
+          class = "text-warning",
+          "The reporting event changed while the dialog was open, so this is",
+          " no longer the change you confirmed. Here is what would happen now."
+        ),
+        shiny::p(
+          "Target output: ", shiny::strong(current$output_label), ". ",
+          shiny::strong(nrow(current$changes)),
+          " of its other line(s) will be regrouped as ",
+          shiny::strong(current$new_label), "."
+        ),
+        .bulk_grouping_preview_table(current),
+        footer = shiny::tagList(
+          shiny::modalButton("Cancel"),
+          shiny::actionButton(session$ns("confirm_apply_groupings_all"),
+                              "Apply to all", class = "btn-primary")
+        )
+      ))
+      return()
+    }
 
     updated <- model
     log_rows <- list()
-    for (other in targets) {
-      old <- updated$analyses$grouping_ids[match(other, updated$analyses$id)]
-      if (identical(old, value)) next
-      updated <- model_set_field(updated, "analyses", other,
-                                 "grouping_ids", value)
+    for (i in seq_len(nrow(current$changes))) {
+      change <- current$changes[i, ]
+      updated <- model_set_field(updated, "analyses", change$id,
+                                 "grouping_ids", current$new_value)
       log_rows[[length(log_rows) + 1L]] <- data.frame(
         time  = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
         pool  = "analyses",
-        id    = other,
+        id    = change$id,
         field = "grouping_ids",
-        old   = if (is.na(old)) "(not set)" else as.character(old),
-        new   = if (is.na(value)) "(not set)" else as.character(value),
+        old   = .log_value(change$old_value),
+        new   = .log_value(current$new_value),
         stringsAsFactors = FALSE
       )
     }
