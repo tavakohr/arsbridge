@@ -2,6 +2,18 @@
 
 ## arsbridge (development version)
 
+- **A validation finding says which output it is about, and opens it.**
+  The table identified a finding only by id, while the sidebar and the
+  detail header call the same thing by its label – so `F_14_3_1` and
+  `Mean (+/- SE) Pulse Rate Over Time by Treatment` read as two
+  unrelated problems, and the count in the header looked unconnected to
+  the badge beside the output. The finding now carries the name the rest
+  of the app uses, next to the id. Selecting a row also lands somewhere:
+  it already set the selection, but the panel that shows it is on
+  another tab, so the click appeared to do nothing. A finding about a
+  shared entity now opens the Entities tab with its row selected, and
+  one about an output or an analysis opens Details.
+
 - **A compound column condition can be edited in the editor.** A group
   whose columns are defined by an `AND`/`OR` expression used to be shown
   read-only, with the raw-JSON hatch as the only way to change it – the
