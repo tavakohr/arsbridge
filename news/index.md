@@ -2,6 +2,37 @@
 
 ## arsbridge (development version)
 
+- **The converted reporting event is pinned by golden files, so silent
+  drift fails the build.** Focused tests pin behaviours – a grouping
+  resolves, a denominator counts the right subjects – but nothing pinned
+  the DOCUMENT, so a change in groupings, conditions, analysis sets,
+  output references, methods, columns or result metadata that no single
+  test happened to assert passed the suite and shipped. Measured, not
+  assumed: changing the deliverable filename every output declares, from
+  `T-14-1-1.rtf` to `T_14_1_1.rtf`, left all 5843 tests green, because
+  only `fileType` was ever asserted and never the name. Three goldens
+  now cover the CDSC-ALZ-201 study through both readers and the APX
+  acceptance shell, all on the deterministic tier – an LLM is a moving
+  oracle and cannot be pinned this way. Comparison is structural on a
+  canonical form rather than byte-for-byte, because a change in how JSON
+  is indented is not a converter change and a gate that fails on one
+  gets muted. What canonicalisation removes is ordering noise in
+  id-keyed collections and two volatile fields, and nothing else: arrays
+  whose position carries meaning – `orderedGroupings`, whose first
+  element IS the column axis, `referencedAnalysisIds`, a grouping’s
+  `groups`, the table of contents – stay ordered and are compared
+  ordered. Before either volatile field is replaced with a sentinel its
+  form is asserted, so a generator that stops carrying a version or a
+  timestamp that arrives in local time fails rather than being
+  normalised away; ids are asserted present and unique before any
+  collection is sorted, because sorting assumes the id identifies the
+  element and a duplicate id is a defect to report rather than an input
+  to tidy; and a separate assertion keeps absolute and temporary paths
+  out of the output, which is what makes a committed golden portable in
+  the first place. Regeneration is a deliberate
+  `data-raw/regenerate_goldens.R`, never an environment variable the
+  test run honours.
+
 - **Crash-recovery files no longer accumulate forever.** An autosave is
   cleared when the file is saved and when the reviewer chooses to start
   fresh, so what survived was what nobody came back for – a session that
