@@ -190,3 +190,49 @@
   if (!is.null(path) && file.exists(path)) unlink(path)
   invisible(NULL)
 }
+
+## How long a crashed session's work is kept. An autosave is cleared when the
+## file is saved and when the reviewer starts fresh, so the ones that survive
+## are the ones nobody came back for -- a session that died on a study never
+## reopened. Nothing pruned them, so the cache grew by one file per study for
+## the life of the installation.
+##
+## Thirty days because a recovery file's worth decays fast: work resumed at
+## all is resumed within days, and an offer to restore changes from months ago
+## is one a reviewer cannot judge -- they no longer remember what those
+## changes were. It matters more than tidiness that this is bounded. Unlike
+## the recent-projects list, which holds paths and nothing else, an autosave
+## holds the whole model and edit log, so a stale one is study content sitting
+## in a cache directory indefinitely.
+.AUTOSAVE_MAX_AGE_DAYS <- 30
+
+#' Delete autosaves nobody is coming back for.
+#'
+#' Age is read from the file's mtime rather than the `saved_at` inside it, so
+#' the sweep does not have to deserialize -- and read -- every study's work to
+#' decide what to keep. The two agree: `.write_autosave()` stamps both at once.
+#'
+#' Only this module's own files are considered. The cache directory is shared,
+#' and a sweep that deleted by age alone would eventually take something it
+#' never wrote.
+#'
+#' Silent on failure, like the write it mirrors: a cache that cannot be tidied
+#' is not a reason to interrupt a review.
+#' @noRd
+.sweep_autosaves <- function(max_age_days = getOption(
+                               "arsbridge.autosave_max_age_days",
+                               .AUTOSAVE_MAX_AGE_DAYS)) {
+  dir <- .autosave_dir()
+  if (!dir.exists(dir)) return(invisible(character()))
+
+  files <- list.files(dir, pattern = "^editor-.*\\.rds$", full.names = TRUE)
+  if (length(files) == 0) return(invisible(character()))
+
+  age_days <- as.numeric(
+    difftime(Sys.time(), file.mtime(files), units = "days"))
+  expired <- files[!is.na(age_days) & age_days > max_age_days]
+  if (length(expired) == 0) return(invisible(character()))
+
+  tryCatch(unlink(expired), error = function(e) NULL)
+  invisible(expired)
+}

@@ -812,6 +812,12 @@ mod_save_server <- function(id, state) {
     ## rather than letting the reviewer discover the loss themselves. Asked
     ## once, when the editor opens.
     shiny::observeEvent(TRUE, once = TRUE, {
+      ## Expired work is dropped BEFORE this file's own is read, so the rule
+      ## is one rule: an autosave past its age is gone, including this one.
+      ## Offering a restore the sweep would delete the moment the reviewer
+      ## opened another study would be the worse of the two behaviours.
+      .sweep_autosaves()
+
       recovered <- .read_autosave(state$source_path)
       if (is.null(recovered)) return()
 
