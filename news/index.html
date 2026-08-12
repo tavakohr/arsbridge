@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9110</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9112</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -41,7 +41,8 @@
 
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="development version" id="arsbridge-development-version">arsbridge (development version)<a class="anchor" aria-label="anchor" href="#arsbridge-development-version"></a></h2>
-<ul><li>
+<ul><li><p><strong>An entity’s findings say which child they are about, and stop burying the editor.</strong> The spec check reports once per clause, which is right – each is a separate place to fix – but the panel rendered only the sentence, never the field. So a grouping with three compound children showed <code>Variable ADSL.CGHGR1N is not in the ADaM spec.</code> four times and <code>ADSL.COHORTN</code> three times, seven identical-looking rows with nothing saying which child each belonged to, stacked above the editor and pushing the child-group cards off the bottom of the panel. Findings that share a message now collapse into one row that lists the parts it affects – <code>Affects: Variable, Low, Medium, High</code> – naming children by the label their cards carry rather than by group id. Seven rows become two. When an entity genuinely has more than three distinct problems the block folds behind a one-line summary, so the fields the reviewer came for stay on screen; nothing is dropped, it is one click away.</p></li>
+<li>
 <p><strong>A column axis is read from what varies, not from what is named first.</strong> When every group column ANDs the same restriction onto its own value – <code>ADSL.COHORTN=1 AND ADSL.CGHGR1N=1</code>, <code>... AND ADSL.CGHGR1N=2</code>, and so on – the converter took the first variable each header named. That is <code>COHORTN</code> every time, so the grouping came out called “Grouping by COHORTN” with every one of its levels holding <code>COHORTN=1</code>, and the variable that actually distinguishes the columns never appeared. The columns still selected the right subjects, because each level kept its whole condition; it was the axis IDENTITY that was wrong, and nothing said so. The shared predicate is now recognised and the varying variable names the axis, reported as an INFO. Each level keeps its full condition exactly as before – nothing is factored out of the groups, only the axis is named differently.</p>
 <p>Recognition is deliberately narrow: every level header must be an AND of exactly two plain conditions, one of which is identical across all of them, leaving exactly one variable that varies. OR-joined headers, deeper nesting and three-way splits are left to the previous behaviour untouched and silently, since they are not this pattern. When the pattern IS present but the axis is not decidable – no shared predicate, or two variables varying at once – it is a WARN that names the reason and changes nothing, because a guessed axis would look deliberate and a wrong one is invisible in the output.</p>
 </li>

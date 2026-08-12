@@ -2,6 +2,22 @@
 
 ## arsbridge (development version)
 
+- **An entity’s findings say which child they are about, and stop
+  burying the editor.** The spec check reports once per clause, which is
+  right – each is a separate place to fix – but the panel rendered only
+  the sentence, never the field. So a grouping with three compound
+  children showed `Variable ADSL.CGHGR1N is not in the ADaM spec.` four
+  times and `ADSL.COHORTN` three times, seven identical-looking rows
+  with nothing saying which child each belonged to, stacked above the
+  editor and pushing the child-group cards off the bottom of the panel.
+  Findings that share a message now collapse into one row that lists the
+  parts it affects – `Affects: Variable, Low, Medium, High` – naming
+  children by the label their cards carry rather than by group id. Seven
+  rows become two. When an entity genuinely has more than three distinct
+  problems the block folds behind a one-line summary, so the fields the
+  reviewer came for stay on screen; nothing is dropped, it is one click
+  away.
+
 - **A column axis is read from what varies, not from what is named
   first.** When every group column ANDs the same restriction onto its
   own value – `ADSL.COHORTN=1 AND ADSL.CGHGR1N=1`,
