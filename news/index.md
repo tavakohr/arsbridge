@@ -2,6 +2,20 @@
 
 ## arsbridge (development version)
 
+- **A column condition that names a variable the ADaM spec does not have
+  is reported.** The spec overlay read only the flat condition columns,
+  so it never looked inside a grouping’s child groups, and it skipped a
+  compound analysis set or data subset outright. A child group’s
+  condition is exactly where a wrong variable is easiest to write and
+  hardest to notice: the column still renders, it is simply empty, and
+  nothing upstream says why. Every where clause is now walked to any
+  depth, so `ADSL.TRT01AN` in a column that should have said
+  `ADSL.TRT01A` is a WARN naming the child it came from rather than a
+  silent empty column. A variable repeated across clauses is one
+  finding, not one per clause. This checks that the VARIABLE exists; it
+  does not check the values compared against it, so a real variable with
+  an impossible value still passes here.
+
 - **A validation finding says which output it is about, and opens it.**
   The table identified a finding only by id, while the sidebar and the
   detail header call the same thing by its label – so `F_14_3_1` and
