@@ -280,3 +280,50 @@ test_that("a corrupt recovery file is ignored rather than fatal", {
 
   expect_null(.read_autosave(path))
 })
+
+# The suite must leave the machine it ran on exactly as it found it. These
+# pin the redirection itself, because the thing being prevented -- a stray
+# .rds under the real user cache -- is invisible from inside a passing test.
+
+test_that("the autosave directory is redirected off the real user cache", {
+  redirected <- .autosave_dir()
+  real <- withr::with_options(
+    list(arsbridge.autosave_dir = NULL),
+    tools::R_user_dir("arsbridge", "cache")
+  )
+
+  expect_false(identical(normalizePath(redirected, mustWork = FALSE),
+                         normalizePath(real, mustWork = FALSE)))
+
+  # And it is genuinely somewhere disposable, not just a different fixed path.
+  expect_true(startsWith(normalizePath(redirected, mustWork = FALSE),
+                         normalizePath(tempdir(), mustWork = FALSE)))
+})
+
+test_that("writing an autosave adds nothing to the real user cache", {
+  skip_if_not_installed("shiny")
+  .with_reactives()
+
+  real <- withr::with_options(
+    list(arsbridge.autosave_dir = NULL),
+    tools::R_user_dir("arsbridge", "cache")
+  )
+  before <- list.files(real, all.files = TRUE, no.. = TRUE)
+
+  path <- file.path(withr::local_tempdir(), "reporting_event.json")
+  state <- .history_state(path)
+  withr::defer(.clear_autosave(path))
+
+  apply_edit(state, "analyses", state$model()$analyses$id[1], "label", "Edited")
+  .write_autosave(state)
+
+  # The autosave was really written -- otherwise this test would pass by
+  # doing nothing at all.
+  expect_false(is.null(.read_autosave(path)))
+  expect_true(file.exists(.autosave_path(path)))
+  expect_true(startsWith(normalizePath(.autosave_path(path), mustWork = FALSE),
+                         normalizePath(tempdir(), mustWork = FALSE)))
+
+  after <- list.files(real, all.files = TRUE, no.. = TRUE)
+  expect_identical(after, before)
+})
