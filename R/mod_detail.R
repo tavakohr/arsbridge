@@ -639,20 +639,112 @@ mod_detail_server <- function(id, state) {
   )
 }
 
+## How many rows the findings block may occupy before it hides itself. An
+## entity's findings sit ABOVE its editor, so a long stack pushes the fields
+## the reviewer came for off the bottom of the panel.
+.FINDINGS_ROWS_SHOWN <- 3L
+
+## Child-group id -> the label a reviewer knows it by. Empty for entities
+## that have no children, which is most of them.
 #' @noRd
-.findings_list <- function(findings) {
-  shiny::div(
+.child_labels <- function(entity) {
+  groups <- entity[["groups"]] %||% list()
+  if (length(groups) == 0) return(stats::setNames(character(0), character(0)))
+
+  ids <- vapply(groups, function(g) .chr_field(g[["id"]]), character(1))
+  labels <- vapply(groups, function(g) {
+    label <- .chr_field(g[["label"]] %||% g[["name"]])
+    if (is.na(label) || !nzchar(label)) .chr_field(g[["id"]]) else label
+  }, character(1))
+
+  keep <- !is.na(ids) & nzchar(ids)
+  stats::setNames(labels[keep], ids[keep])
+}
+
+## The part of an entity a finding is about, named the way the panel names
+## it. A finding on a child group carries "group <id> condition"; the id is
+## no use to a reader looking at a card headed "Low".
+#' @noRd
+.finding_scope <- function(field, child_labels) {
+  if (is.na(field) || !nzchar(field)) return(NA_character_)
+
+  parts <- regmatches(field, regexec("^group (.+) condition$", field))[[1]]
+  if (length(parts) != 2L) return(field)
+
+  ## Single-bracket lookup: `[[` on a name the vector does not carry is an
+  ## error, and a finding about a child that has since been renamed or
+  ## deleted must still render -- as its raw id.
+  label <- unname(child_labels[parts[[2]]])
+  if (length(label) != 1L || is.na(label) || !nzchar(label)) {
+    parts[[2]]
+  } else {
+    label
+  }
+}
+
+## Findings for one entity, collapsed to one row per distinct problem.
+##
+## The spec check reports per clause, which is right -- each is a separate
+## place to fix -- but a grouping with three compound children then shows the
+## same sentence six times over, and the panel rendered only the sentence. So
+## six distinct findings read as one repeated six times, with nothing saying
+## which child each belonged to. One row per problem, listing the parts it
+## affects, says strictly more in less space.
+#' @noRd
+.findings_list <- function(findings, entity = NULL) {
+  labels <- if (is.null(entity)) {
+    stats::setNames(character(0), character(0))
+  } else {
+    .child_labels(entity)
+  }
+
+  fields <- if ("field" %in% names(findings)) {
+    as.character(findings$field)
+  } else {
+    rep(NA_character_, nrow(findings))
+  }
+  scope <- vapply(fields, .finding_scope, character(1),
+                  child_labels = labels, USE.NAMES = FALSE)
+
+  key <- paste(findings$severity, findings$problem, findings$action, sep = "\r")
+  rows <- lapply(unique(key), function(k) {
+    hit <- which(key == k)
+    affects <- unique(scope[hit])
+    affects <- affects[!is.na(affects) & nzchar(affects)]
+
+    shiny::div(
+      class = paste0(
+        "alert alert-", .severity_class(findings$severity[hit[1]]),
+        " py-2 px-3 mb-2 small"
+      ),
+      shiny::strong(findings$problem[hit[1]]),
+      if (length(affects) > 0) {
+        shiny::div(class = "mt-1",
+                   shiny::tags$em("Affects: "),
+                   paste(affects, collapse = " · "))
+      },
+      shiny::br(),
+      findings$action[hit[1]]
+    )
+  })
+
+  block <- shiny::div(class = "mt-2", rows)
+  if (length(rows) <= .FINDINGS_ROWS_SHOWN) return(block)
+
+  ## Too many to sit above the editor. Summarise, and keep every one of them
+  ## one click away rather than dropping any.
+  counts <- table(findings$severity)
+  summary <- paste(
+    vapply(names(counts), function(s) paste(counts[[s]], s), character(1)),
+    collapse = ", "
+  )
+  shiny::tags$details(
     class = "mt-2",
-    lapply(seq_len(nrow(findings)), function(i) {
-      shiny::div(
-        class = paste0(
-          "alert alert-", .severity_class(findings$severity[i]),
-          " py-2 px-3 mb-2 small"
-        ),
-        shiny::strong(findings$problem[i]),
-        shiny::br(),
-        findings$action[i]
-      )
-    })
+    shiny::tags$summary(
+      class = "small",
+      shiny::strong(paste(nrow(findings), "to review on this entity")),
+      shiny::span(class = "text-muted", paste0(" -- ", summary))
+    ),
+    block
   )
 }
