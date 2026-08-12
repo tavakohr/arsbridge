@@ -281,32 +281,151 @@ test_that("KNOWN DEFECT: a valid compound clause across two foreign datasets", {
   expect_false(isTRUE(all.equal(got_n, correct_n)))
 })
 
-test_that("KNOWN DEFECT: a dataset field carrying two values is read two ways", {
-  ## `"dataset": ["ADSL","ADCM"]` is malformed -- the ARS schema has dataset as
-  ## a scalar -- but the two implementations disagree about it rather than
-  ## rejecting it, which is the duplication this refactor removes.
+test_that("a dataset field carrying two values is read once, and reported", {
+  ## This WAS a KNOWN DEFECT: `.where_datasets()` coerced through
+  ## `.as_scalar_char()` and kept only the first dataset, while the executor's
+  ## own `get_referenced_datasets()` returned the raw field and intersected
+  ## every referenced dataset's subjects. One spec, two filters.
   ##
-  ##   .where_datasets()          coerces through .as_scalar_char() -> "ADSL",
-  ##                              silently dropping ADCM;
-  ##   get_referenced_datasets()  returns the raw field -> both, and then
-  ##                              intersects their subject sets.
-  ##
-  ## After the refactor a single implementation keeps the scalar reading AND
-  ## warns, so this test is rewritten rather than deleted.
+  ## The duplicate is gone and `.where_datasets()` is the single source of
+  ## truth, so the scalar reading now holds on both sides -- the ARS schema has
+  ## `dataset` as a scalar. The deliberate behaviour change is that narrowing
+  ## is no longer silent.
   multi <- list(condition = .wc_cond(list("ADSL", "ADCM"), "SAFFL", "Y"))
 
-  ## The emitter's half, callable directly.
+  ## Both halves agree.
   expect_identical(.where_datasets(multi), "ADSL")
 
-  ## The executor's half, observable only through a run: reading both datasets
-  ## and intersecting empties the population, so it does NOT agree with the
-  ## single-dataset reading above.
   td       <- .wc_adam()
-  as_multi <- .wc_run(.wc_spec(multi), td)
-  as_adsl  <- .wc_run(.wc_spec(.wc_condition("ADSL", "SAFFL", "Y")), td)
+  as_multi <- .wc_run(.wc_spec(multi), td, name = "multi.json")
+  diagnostics <- ars_diagnostics()
+  as_adsl  <- .wc_run(.wc_spec(.wc_condition("ADSL", "SAFFL", "Y")), td,
+                      name = "adsl.json")
 
-  n_multi <- .wc_stat(as_multi, "Drug A", "Headache", "n")
-  n_adsl  <- .wc_stat(as_adsl,  "Drug A", "Headache", "n")
+  expect_equal(.wc_stat(as_multi, "Drug A", "Headache", "n"),
+               .wc_stat(as_adsl,  "Drug A", "Headache", "n"))
+  expect_equal(.wc_stat(as_multi, "Drug A", "Headache", "N"),
+               .wc_stat(as_adsl,  "Drug A", "Headache", "N"))
 
-  expect_false(isTRUE(all.equal(n_multi, n_adsl)))
+  ## And the malformed cardinality is reported rather than swallowed.
+  hit <- diagnostics[grepl("names 2 datasets", diagnostics$problem), ,
+                     drop = FALSE]
+  expect_gt(nrow(hit), 0)
+  expect_true(all(hit$severity == "WARN"))
+  expect_match(hit$problem[[1]], "ADSL, ADCM", fixed = TRUE)
+  expect_match(hit$action[[1]], "Only ADSL is used", fixed = TRUE)
+})
+
+# ---- the promoted helpers, called directly ---------------------------------
+#
+# None of this was reachable before: .where_keep_mask() and its store were
+# closures inside ars_to_ard(). Everything above drives them through a whole
+# conversion, which is the honest way to pin behaviour but a slow and indirect
+# way to pin edges. These call them.
+
+.wc_store <- function(envir = parent.frame()) {
+  .adam_store(.wc_adam(envir = envir))
+}
+
+test_that("the store reads a dataset by name, case-insensitively", {
+  store <- .wc_store()
+  expect_s3_class(store$get("ADSL"), "data.frame")
+  expect_equal(nrow(store$get("adsl")), 8L)
+  expect_null(store$get(NULL))
+  expect_null(store$get(""))
+})
+
+test_that("the store FAILs by name for a dataset that is not there", {
+  ## Same severity and wording the closure emitted; pinned again here because
+  ## this is now the only place it lives.
+  diag_reset()
+  store <- .wc_store()
+  expect_null(suppressWarnings(store$get("ADXX")))
+
+  hit <- ars_diagnostics()
+  hit <- hit[grepl("ADXX", hit$problem), , drop = FALSE]
+  expect_equal(nrow(hit), 1L)
+  expect_equal(hit$severity[[1]], "FAIL")
+  expect_match(hit$problem[[1]], "Dataset ADXX not found in ADaM directory",
+               fixed = TRUE)
+})
+
+test_that("a same-dataset clause is a row-wise mask", {
+  store <- .wc_store()
+  adae  <- store$get("ADAE")
+  mask  <- .where_keep_mask(adae, "ADAE",
+                            list(condition = .wc_cond("ADAE", "AEDECOD",
+                                                      "Headache")),
+                            store, "USUBJID")
+  expect_equal(mask, adae$AEDECOD == "Headache")
+})
+
+test_that("a foreign clause is answered there and carried back by subject", {
+  store <- .wc_store()
+  adae  <- store$get("ADAE")
+  adsl  <- store$get("ADSL")
+  mask  <- .where_keep_mask(adae, "ADAE",
+                            list(condition = .wc_cond("ADSL", "COHORTN", 1)),
+                            store, "USUBJID")
+
+  ## Not row-wise: ADAE has no COHORTN, so evaluating it here would keep
+  ## nothing at all.
+  expect_equal(mask, adae$USUBJID %in% adsl$USUBJID[adsl$COHORTN == 1])
+  expect_true(any(mask))
+  expect_false(all(mask))
+})
+
+test_that("a NULL clause and an empty frame are handled without special cases", {
+  store <- .wc_store()
+  adae  <- store$get("ADAE")
+  expect_equal(.where_keep_mask(adae, "ADAE", NULL, store, "USUBJID"),
+               rep(TRUE, nrow(adae)))
+  expect_equal(.where_keep_mask(NULL, "ADAE", NULL, store, "USUBJID"),
+               logical(0))
+})
+
+test_that("a dataset the store cannot read leaves the mask unfiltered", {
+  ## Preserved behaviour, not endorsed: the clause is dropped rather than
+  ## failing closed. Recorded with the deferred defects.
+  diag_reset()
+  store <- .wc_store()
+  adae  <- store$get("ADAE")
+  mask  <- suppressWarnings(.where_keep_mask(
+    adae, "ADAE", list(condition = .wc_cond("ADXX", "FLAG", "Y")),
+    store, "USUBJID"))
+  expect_equal(mask, rep(TRUE, nrow(adae)))
+})
+
+test_that("the raw dataset reader sees cardinality the coerced one hides", {
+  simple   <- list(condition = .wc_cond("ADSL", "SAFFL", "Y"))
+  multi    <- list(condition = .wc_cond(list("ADSL", "ADCM"), "SAFFL", "Y"))
+  compound <- list(compoundExpression = list(
+    logicalOperator = "AND",
+    whereClauses = list(list(condition = .wc_cond("ADSL", "SAFFL", "Y")),
+                        list(condition = .wc_cond("ADCM", "CONTRTFL", "Y")))))
+
+  expect_equal(.where_datasets_raw(simple), list("ADSL"))
+  expect_equal(.where_datasets_raw(multi), list(list("ADSL", "ADCM")))
+  expect_equal(.where_datasets_raw(compound), list("ADSL", "ADCM"))
+  expect_equal(.where_datasets_raw(NULL), list())
+
+  ## A well-formed compound naming two datasets is NOT malformed cardinality:
+  ## two fields of one value each, so nothing is reported.
+  diag_reset()
+  expect_equal(.where_datasets_checked(compound), c("ADSL", "ADCM"))
+  expect_equal(nrow(ars_diagnostics()), 0L)
+})
+
+test_that("apply_where_clause returns the frame the mask selects", {
+  store <- .wc_store()
+  kept  <- .apply_where_clause("ADAE",
+                               list(condition = .wc_cond("ADAE", "AEDECOD",
+                                                         "Headache")),
+                               store, "USUBJID")
+  expect_equal(nrow(kept), sum(store$get("ADAE")$AEDECOD == "Headache"))
+  ## No clause is the whole frame; an unreadable dataset is NULL, not an error.
+  expect_equal(nrow(.apply_where_clause("ADAE", NULL, store, "USUBJID")),
+               nrow(store$get("ADAE")))
+  expect_null(suppressWarnings(
+    .apply_where_clause("ADXX", NULL, store, "USUBJID")))
 })

@@ -1,5 +1,25 @@
 # arsbridge (development version)
 
+* **A where-clause names its datasets in one place, and says so when a spec
+  names two.** Reading ADaM by name, and applying a where-clause across
+  datasets, lived inside `ars_to_ard()` as four closures -- out of reach of
+  every other function and of any test. The executor carried its own copy of
+  the dataset-reference rule, and the two copies differed: `.where_datasets()`
+  coerces each `dataset` through `.as_scalar_char()`, while the copy returned
+  the raw field. A `dataset` written as more than one value therefore made the
+  emitter filter on the first and the executor intersect them all -- one spec,
+  two filters, and nothing to say which was running. The copy is gone;
+  `.where_datasets()` is the single source of truth. Because the ARS schema
+  has `dataset` as a scalar, the scalar reading wins, and the one deliberate
+  behaviour change is that narrowing is no longer silent: a `dataset` field
+  naming more than one dataset now raises a WARN saying which datasets were
+  named and which one is used. Every valid spec produces numerically identical
+  results -- percentages included -- and the three ARS goldens are unchanged.
+  The promoted helpers can now be called directly, which is the practical
+  payoff: the cross-dataset rule that decides every denominator has unit tests
+  for the first time, rather than only being reachable by running a whole
+  conversion.
+
 * **The converted reporting event is pinned by golden files, so silent drift
   fails the build.** Focused tests pin behaviours -- a grouping resolves, a
   denominator counts the right subjects -- but nothing pinned the DOCUMENT, so
