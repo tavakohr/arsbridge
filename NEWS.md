@@ -1,5 +1,17 @@
 # arsbridge (development version)
 
+* **The test suite no longer writes into the user's cache directory.** The
+  editor autosaves to `tools::R_user_dir("arsbridge", "cache")` on purpose --
+  the crash it protects against takes `tempdir()` with it -- but under test
+  that is exactly wrong. Every `testServer()` run that reached
+  `.write_autosave()` left an `.rds` behind under a fresh path key, and
+  nothing ever pruned them; 255 had accumulated on one developer machine.
+  `.autosave_dir()` now reads `getOption("arsbridge.autosave_dir")` before
+  falling back to the real cache, exactly as `.workflow_recent_path()` already
+  did for the recent-projects list, and `tests/testthat/setup.R` points it at
+  a temporary directory for the whole run. Nothing changes for an interactive
+  session: with the option unset, autosaves live where they always have.
+
 * **Bulk grouping assignment shows what each line would become, not just how
   many.** The confirmation named the new groupings and counted the lines, but
   it never said which output the action was scoped to, and it never showed

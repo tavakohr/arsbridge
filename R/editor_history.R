@@ -102,9 +102,17 @@
 ## because the case worth protecting against is R itself going away -- and
 ## tempdir() goes with it.
 
+#' Where autosaves live.
+#'
+#' Behind an option for the same reason the recent-projects list is
+#' (`.workflow_recent_path()`): a test suite must never write into the real
+#' user cache. `tests/testthat/setup.R` points this at a temporary directory
+#' for the whole run, so a `testServer()` test that reaches
+#' `.write_autosave()` leaves nothing behind on the machine running it.
 #' @noRd
 .autosave_dir <- function() {
-  tools::R_user_dir("arsbridge", "cache")
+  getOption("arsbridge.autosave_dir",
+            tools::R_user_dir("arsbridge", "cache"))
 }
 
 ## A short, stable fingerprint of a path. Two different studies whose files
