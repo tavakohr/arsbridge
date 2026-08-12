@@ -589,3 +589,91 @@ test_that("the ui builders and js helpers produce what the app mounts", {
   expect_match(as.character(.detail_row("Label", NULL)), "--")
   expect_match(as.character(.json_block(list(a = 1))), "pre")
 })
+
+
+## --- the validation table as a work list ------------------------------------
+##
+## A finding is only useful if it says which thing is wrong and takes you
+## there. The id alone does not: the sidebar calls an output by its label, so
+## "F_14_3_1" and "Mean (+/- SE) Pulse Rate..." read as two unrelated things.
+
+test_that("a finding carries the name the rest of the app uses", {
+  model <- .flows_model()
+  findings <- .new_findings()
+  findings <- .add_finding(findings, "WARN", "outputs", model$outputs$id[1],
+                           "columns", "problem", "action")
+
+  named <- .with_finding_names(findings, model)
+
+  expect_true("name" %in% names(named))
+  expect_equal(named$name[1],
+               model$outputs$label[1] %||% model$outputs$name[1])
+  ## Read in the order a reviewer asks: what it is, which one, what is wrong.
+  expect_equal(names(named)[1:4], c("severity", "entity", "id", "name"))
+})
+
+test_that("a finding whose entity has gone keeps the row and drops the name", {
+  model <- .flows_model()
+  findings <- .new_findings()
+  findings <- .add_finding(findings, "WARN", "outputs", "OUT_DELETED",
+                           "columns", "problem", "action")
+  findings <- .add_finding(findings, "INFO", "not_a_pool", "X",
+                           "f", "problem", "action")
+
+  named <- .with_finding_names(findings, model)
+
+  ## The finding is still true even when its subject is not resolvable, so
+  ## saying nothing beats guessing -- and beats dropping it.
+  expect_equal(nrow(named), 2L)
+  expect_true(all(is.na(named$name)))
+})
+
+test_that("an empty finding set survives the name lookup", {
+  expect_equal(nrow(.with_finding_names(.new_findings(), .flows_model())), 0L)
+})
+
+test_that("selecting a finding opens the entity it is about", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  model <- .flows_model()
+  state <- .flows_state(model = model)
+
+  ## A shared entity lives in the Entities tab, so the jump goes through the
+  ## request the library already listens for.
+  grouping_id <- model$groupings$id[1]
+  findings <- .add_finding(.new_findings(), "WARN", "groupings", grouping_id,
+                           "groups", "problem", "action")
+  state$findings(findings)
+
+  shiny::testServer(mod_validation_server, args = list(state = state), {
+    session$setInputs(findings_rows_selected = 1)
+    expect_equal(shiny::isolate(state$selected())$id, grouping_id)
+    request <- shiny::isolate(state$entity_request())
+    expect_equal(request$pool, "groupings")
+    expect_equal(request$id, grouping_id)
+  })
+})
+
+test_that("selecting an output finding selects it without an entity jump", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("DT")
+
+  model <- .flows_model()
+  state <- .flows_state(model = model)
+  output_id <- model$outputs$id[1]
+
+  ## An output is not in the Entities tab, so it must NOT be requested there
+  ## -- the library would ignore it and the reviewer would land nowhere.
+  state$findings(.add_finding(.new_findings(), "WARN", "outputs", output_id,
+                              "columns", "problem", "action"))
+
+  shiny::testServer(mod_validation_server, args = list(state = state), {
+    session$setInputs(findings_rows_selected = 1)
+    expect_equal(shiny::isolate(state$selected())$pool, "outputs")
+    expect_equal(shiny::isolate(state$selected())$id, output_id)
+    expect_null(shiny::isolate(state$entity_request()))
+  })
+})
