@@ -1,0 +1,5181 @@
+{
+  "id": "CDSC-ALZ-201",
+  "name": "CDSC-ALZ-201",
+  "version": 1,
+  "otherListsOfContents": [
+    {
+      "name": "List of Planned Outputs",
+      "label": "LOPO",
+      "contentsList": {
+        "listItems": [
+          {
+            "name": "Subject Disposition",
+            "level": 1,
+            "order": 1,
+            "outputId": "T_14_1_1"
+          },
+          {
+            "name": "Demographics and Baseline Characteristics",
+            "level": 1,
+            "order": 2,
+            "outputId": "T_14_1_2"
+          },
+          {
+            "name": "Overview of Treatment-Emergent Adverse Events",
+            "level": 1,
+            "order": 3,
+            "outputId": "T_14_3_1"
+          },
+          {
+            "name": "Treatment-Emergent Adverse Events by System Organ Class and Preferred Term",
+            "level": 1,
+            "order": 4,
+            "outputId": "T_14_3_2"
+          },
+          {
+            "name": "Study Drug Exposure",
+            "level": 1,
+            "order": 5,
+            "outputId": "T_14_2_1"
+          },
+          {
+            "name": "Listing of Adverse Events",
+            "level": 1,
+            "order": 6,
+            "outputId": "L_16_2_7_1"
+          },
+          {
+            "name": "Listing of Concomitant Medications",
+            "level": 1,
+            "order": 7,
+            "outputId": "L_16_2_4_1"
+          },
+          {
+            "name": "Mean (+/- SE) Pulse Rate Over Time by Treatment",
+            "level": 1,
+            "order": 8,
+            "outputId": "F_14_3_1"
+          }
+        ]
+      }
+    }
+  ],
+  "mainListOfContents": {
+    "name": "List of Planned Analyses",
+    "label": "LOPA",
+    "contentsList": {
+      "listItems": [
+        {
+          "name": "Subject Disposition",
+          "level": 1,
+          "order": 1,
+          "outputId": "T_14_1_1",
+          "sublist": {
+            "listItems": [
+              {
+                "name": "AN_T_14_1_1_001",
+                "analysisId": "AN_T_14_1_1_001",
+                "level": 2,
+                "order": 1
+              },
+              {
+                "name": "AN_T_14_1_1_002",
+                "analysisId": "AN_T_14_1_1_002",
+                "level": 2,
+                "order": 2
+              },
+              {
+                "name": "AN_T_14_1_1_003",
+                "analysisId": "AN_T_14_1_1_003",
+                "level": 2,
+                "order": 3
+              }
+            ]
+          }
+        },
+        {
+          "name": "Demographics and Baseline Characteristics",
+          "level": 1,
+          "order": 2,
+          "outputId": "T_14_1_2",
+          "sublist": {
+            "listItems": [
+              {
+                "name": "AN_T_14_1_2_001",
+                "analysisId": "AN_T_14_1_2_001",
+                "level": 2,
+                "order": 1
+              },
+              {
+                "name": "AN_T_14_1_2_002",
+                "analysisId": "AN_T_14_1_2_002",
+                "level": 2,
+                "order": 2
+              },
+              {
+                "name": "AN_T_14_1_2_002",
+                "analysisId": "AN_T_14_1_2_002",
+                "level": 2,
+                "order": 3
+              }
+            ]
+          }
+        },
+        {
+          "name": "Overview of Treatment-Emergent Adverse Events",
+          "level": 1,
+          "order": 3,
+          "outputId": "T_14_3_1",
+          "sublist": {
+            "listItems": [
+              {
+                "name": "AN_T_14_3_1_001",
+                "analysisId": "AN_T_14_3_1_001",
+                "level": 2,
+                "order": 1
+              },
+              {
+                "name": "AN_T_14_3_1_002",
+                "analysisId": "AN_T_14_3_1_002",
+                "level": 2,
+                "order": 2
+              },
+              {
+                "name": "AN_T_14_3_1_003",
+                "analysisId": "AN_T_14_3_1_003",
+                "level": 2,
+                "order": 3
+              }
+            ]
+          }
+        },
+        {
+          "name": "Treatment-Emergent Adverse Events by System Organ Class and Preferred Term",
+          "level": 1,
+          "order": 4,
+          "outputId": "T_14_3_2",
+          "sublist": {
+            "listItems": [
+              {
+                "name": "AN_T_14_3_2_001",
+                "analysisId": "AN_T_14_3_2_001",
+                "level": 2,
+                "order": 1
+              },
+              {
+                "name": "AN_T_14_3_2_002",
+                "analysisId": "AN_T_14_3_2_002",
+                "level": 2,
+                "order": 2
+              },
+              {
+                "name": "AN_T_14_3_2_003",
+                "analysisId": "AN_T_14_3_2_003",
+                "level": 2,
+                "order": 3
+              }
+            ]
+          }
+        },
+        {
+          "name": "Study Drug Exposure",
+          "level": 1,
+          "order": 5,
+          "outputId": "T_14_2_1",
+          "sublist": {
+            "listItems": [
+              {
+                "name": "AN_T_14_2_1_001",
+                "analysisId": "AN_T_14_2_1_001",
+                "level": 2,
+                "order": 1
+              },
+              {
+                "name": "AN_T_14_2_1_002",
+                "analysisId": "AN_T_14_2_1_002",
+                "level": 2,
+                "order": 2
+              },
+              {
+                "name": "AN_T_14_2_1_002",
+                "analysisId": "AN_T_14_2_1_002",
+                "level": 2,
+                "order": 3
+              }
+            ]
+          }
+        },
+        {
+          "name": "Listing of Adverse Events",
+          "level": 1,
+          "order": 6,
+          "outputId": "L_16_2_7_1",
+          "sublist": {
+            "listItems": [
+              {
+                "name": "AN_L_16_2_7_1_001",
+                "analysisId": "AN_L_16_2_7_1_001",
+                "level": 2,
+                "order": 1
+              },
+              {
+                "name": "AN_L_16_2_7_1_002",
+                "analysisId": "AN_L_16_2_7_1_002",
+                "level": 2,
+                "order": 2
+              },
+              {
+                "name": "AN_L_16_2_7_1_003",
+                "analysisId": "AN_L_16_2_7_1_003",
+                "level": 2,
+                "order": 3
+              },
+              {
+                "name": "AN_L_16_2_7_1_004",
+                "analysisId": "AN_L_16_2_7_1_004",
+                "level": 2,
+                "order": 4
+              },
+              {
+                "name": "AN_L_16_2_7_1_005",
+                "analysisId": "AN_L_16_2_7_1_005",
+                "level": 2,
+                "order": 5
+              }
+            ]
+          }
+        },
+        {
+          "name": "Listing of Concomitant Medications",
+          "level": 1,
+          "order": 7,
+          "outputId": "L_16_2_4_1",
+          "sublist": {
+            "listItems": [
+              {
+                "name": "AN_L_16_2_4_1_001",
+                "analysisId": "AN_L_16_2_4_1_001",
+                "level": 2,
+                "order": 1
+              },
+              {
+                "name": "AN_L_16_2_4_1_002",
+                "analysisId": "AN_L_16_2_4_1_002",
+                "level": 2,
+                "order": 2
+              },
+              {
+                "name": "AN_L_16_2_4_1_003",
+                "analysisId": "AN_L_16_2_4_1_003",
+                "level": 2,
+                "order": 3
+              },
+              {
+                "name": "AN_L_16_2_4_1_004",
+                "analysisId": "AN_L_16_2_4_1_004",
+                "level": 2,
+                "order": 4
+              },
+              {
+                "name": "AN_L_16_2_4_1_005",
+                "analysisId": "AN_L_16_2_4_1_005",
+                "level": 2,
+                "order": 5
+              }
+            ]
+          }
+        },
+        {
+          "name": "Mean (+/- SE) Pulse Rate Over Time by Treatment",
+          "level": 1,
+          "order": 8,
+          "outputId": "F_14_3_1",
+          "sublist": {
+            "listItems": []
+          }
+        }
+      ]
+    }
+  },
+  "analysisSets": [
+    {
+      "id": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "name": "Safety Population (ADSL.SAFFL='Y')",
+      "label": "Safety Population (ADSL.SAFFL='Y')",
+      "condition": {
+        "dataset": "ADSL",
+        "variable": "SAFFL",
+        "comparator": "EQ",
+        "value": [
+          "Y"
+        ]
+      },
+      "order": 1,
+      "level": 1
+    }
+  ],
+  "dataSubsets": [
+    {
+      "id": "DS_ADAE_AESER_Y",
+      "name": "ADAE_AESER_Y",
+      "label": "ADAE_AESER_Y",
+      "condition": {
+        "dataset": "ADAE",
+        "variable": "AESER",
+        "comparator": "EQ",
+        "value": [
+          "Y"
+        ]
+      },
+      "order": 5,
+      "level": 1
+    },
+    {
+      "id": "DS_ADAE_TRTEMFL_Y",
+      "name": "ADAE_TRTEMFL_Y",
+      "label": "ADAE_TRTEMFL_Y",
+      "condition": {
+        "dataset": "ADAE",
+        "variable": "TRTEMFL",
+        "comparator": "EQ",
+        "value": [
+          "Y"
+        ]
+      },
+      "order": 4,
+      "level": 1
+    },
+    {
+      "id": "DS_ADEX_PARAMCD_AVDDSE",
+      "name": "ADEX_PARAMCD_AVDDSE",
+      "label": "ADEX_PARAMCD_AVDDSE",
+      "condition": {
+        "dataset": "ADEX",
+        "variable": "PARAMCD",
+        "comparator": "EQ",
+        "value": [
+          "AVDDSE"
+        ]
+      },
+      "order": 7,
+      "level": 1
+    },
+    {
+      "id": "DS_ADEX_PARAMCD_TDURD",
+      "name": "ADEX_PARAMCD_TDURD",
+      "label": "ADEX_PARAMCD_TDURD",
+      "condition": {
+        "dataset": "ADEX",
+        "variable": "PARAMCD",
+        "comparator": "EQ",
+        "value": [
+          "TDURD"
+        ]
+      },
+      "order": 6,
+      "level": 1
+    },
+    {
+      "id": "DS_ADSL_EOSSTT_COMPLETED",
+      "name": "ADSL_EOSSTT_COMPLETED",
+      "label": "ADSL_EOSSTT_COMPLETED",
+      "condition": {
+        "dataset": "ADSL",
+        "variable": "EOSSTT",
+        "comparator": "EQ",
+        "value": [
+          "COMPLETED"
+        ]
+      },
+      "order": 2,
+      "level": 1
+    },
+    {
+      "id": "DS_ADSL_EOSSTT_DISCONTINUED",
+      "name": "ADSL_EOSSTT_DISCONTINUED",
+      "label": "ADSL_EOSSTT_DISCONTINUED",
+      "condition": {
+        "dataset": "ADSL",
+        "variable": "EOSSTT",
+        "comparator": "EQ",
+        "value": [
+          "DISCONTINUED"
+        ]
+      },
+      "order": 3,
+      "level": 1
+    },
+    {
+      "id": "DS_ADSL_SAFFL_Y",
+      "name": "ADSL_SAFFL_Y",
+      "label": "ADSL_SAFFL_Y",
+      "condition": {
+        "dataset": "ADSL",
+        "variable": "SAFFL",
+        "comparator": "EQ",
+        "value": [
+          "Y"
+        ]
+      },
+      "order": 1,
+      "level": 1
+    }
+  ],
+  "analysisGroupings": [
+    {
+      "id": "GF_AESOC",
+      "name": "AESOC",
+      "label": "Grouping by AESOC",
+      "groupingDataset": "ADAE",
+      "groupingVariable": "AESOC",
+      "dataDriven": true,
+      "groups": []
+    },
+    {
+      "id": "GF_TRT01A",
+      "name": "TRT01A",
+      "label": "Grouping by TRT01A",
+      "groupingDataset": "ADSL",
+      "groupingVariable": "TRT01A",
+      "dataDriven": true,
+      "groups": []
+    }
+  ],
+  "methods": [
+    {
+      "id": "MTH_AE_FREQUENCY_COUNT",
+      "name": "AE Frequency Count",
+      "label": "AE Frequency Count",
+      "description": "Unique subjects with event, n (%)",
+      "operations": [
+        {
+          "id": "OP_N",
+          "name": "n",
+          "label": "n",
+          "order": 1,
+          "resultPattern": "XXX",
+          "referencedOperationRelationships": [
+            {
+              "id": "OP_N_SELF",
+              "operationId": "OP_N",
+              "description": "",
+              "referencedOperationRole": {
+                "controlledTerm": "NUMERATOR"
+              }
+            }
+          ]
+        },
+        {
+          "id": "OP_PCT",
+          "name": "(%)",
+          "label": "(%)",
+          "order": 2,
+          "resultPattern": "XX.X",
+          "referencedOperationRelationships": [
+            {
+              "id": "OP_PCT_SELF",
+              "operationId": "OP_PCT",
+              "description": "",
+              "referencedOperationRole": {
+                "controlledTerm": "NUMERATOR"
+              }
+            }
+          ]
+        }
+      ],
+      "codeTemplate": {
+        "context": "R (siera)",
+        "code": "denom_n <- length(unique(df2_analysisidhere$USUBJID))\ndf3_analysisidhere <- df2_analysisidhere |>\n  dplyr::distinct(USUBJID, anavarhere) |>\n  dplyr::group_by(anavarhere) |>\n  dplyr::summarise(OP_N = dplyr::n(), .groups = 'drop') |>\n  dplyr::mutate(OP_PCT = 100 * OP_N / denom_n) |>\n  tidyr::pivot_longer(\n    dplyr::starts_with('OP_'),\n    names_to  = 'operation',\n    values_to = 'res'\n  ) |>\n  dplyr::mutate(pattern = 'XXX')",
+        "parameters": [
+          {
+            "name": "anavarhere",
+            "valueSource": "ana_var",
+            "description": "Event-categorising variable (e.g. AEDECOD)"
+          }
+        ]
+      }
+    },
+    {
+      "id": "MTH_COUNT_AND_PERCENTAGE",
+      "name": "Count and Percentage",
+      "label": "Count and Percentage",
+      "description": "n (%) per category",
+      "operations": [
+        {
+          "id": "OP_N",
+          "name": "Count",
+          "label": "Count",
+          "order": 1,
+          "resultPattern": "XXX",
+          "referencedOperationRelationships": [
+            {
+              "id": "OP_N_SELF",
+              "operationId": "OP_N",
+              "description": "",
+              "referencedOperationRole": {
+                "controlledTerm": "NUMERATOR"
+              }
+            }
+          ]
+        },
+        {
+          "id": "OP_PCT",
+          "name": "Percentage",
+          "label": "Percentage",
+          "order": 2,
+          "resultPattern": "XX.X",
+          "referencedOperationRelationships": [
+            {
+              "id": "OP_PCT_SELF",
+              "operationId": "OP_PCT",
+              "description": "",
+              "referencedOperationRole": {
+                "controlledTerm": "NUMERATOR"
+              }
+            }
+          ]
+        },
+        {
+          "id": "OP_DENOM",
+          "name": "Denominator",
+          "label": "Denominator",
+          "order": 3,
+          "resultPattern": "XXX",
+          "referencedOperationRelationships": [
+            {
+              "id": "OP_DENOM_SELF",
+              "operationId": "OP_DENOM",
+              "description": "",
+              "referencedOperationRole": {
+                "controlledTerm": "NUMERATOR"
+              }
+            }
+          ]
+        }
+      ],
+      "codeTemplate": {
+        "context": "R (siera)",
+        "code": "denom_n <- length(unique(df2_analysisidhere$USUBJID))\ndf3_analysisidhere <- df2_analysisidhere |>\n  dplyr::group_by(anavarhere) |>\n  dplyr::summarise(\n    OP_N     = dplyr::n_distinct(USUBJID),\n    OP_DENOM = denom_n,\n    .groups  = 'drop'\n  ) |>\n  dplyr::mutate(OP_PCT = 100 * OP_N / OP_DENOM) |>\n  tidyr::pivot_longer(\n    dplyr::starts_with('OP_'),\n    names_to  = 'operation',\n    values_to = 'res'\n  ) |>\n  dplyr::mutate(pattern = 'XXX')",
+        "parameters": [
+          {
+            "name": "anavarhere",
+            "valueSource": "ana_var",
+            "description": "Categorical variable being counted"
+          }
+        ]
+      }
+    },
+    {
+      "id": "MTH_LISTING",
+      "name": "Listing",
+      "label": "Listing",
+      "description": "Subject-level data listing",
+      "operations": [
+        {
+          "id": "OP_PASS",
+          "name": "Passthrough",
+          "label": "Passthrough",
+          "order": 1,
+          "resultPattern": "X",
+          "referencedOperationRelationships": [
+            {
+              "id": "OP_PASS_SELF",
+              "operationId": "OP_PASS",
+              "description": "",
+              "referencedOperationRole": {
+                "controlledTerm": "NUMERATOR"
+              }
+            }
+          ]
+        }
+      ],
+      "codeTemplate": {
+        "context": "R (siera)",
+        "code": "## Listing: pass through the filtered ADaM rows as-is.\ndf3_analysisidhere <- df2_analysisidhere |>\n  dplyr::mutate(operation = 'OP_PASS', res = NA_real_, pattern = 'X')",
+        "parameters": []
+      }
+    },
+    {
+      "id": "MTH_SUBJECT_COUNT",
+      "name": "Subject Count",
+      "label": "Subject Count",
+      "description": "Unique subject count",
+      "operations": [
+        {
+          "id": "OP_N",
+          "name": "n",
+          "label": "n",
+          "order": 1,
+          "resultPattern": "XXX",
+          "referencedOperationRelationships": [
+            {
+              "id": "OP_N_SELF",
+              "operationId": "OP_N",
+              "description": "",
+              "referencedOperationRole": {
+                "controlledTerm": "NUMERATOR"
+              }
+            }
+          ]
+        }
+      ],
+      "codeTemplate": {
+        "context": "R (siera)",
+        "code": "df3_analysisidhere <- df2_analysisidhere |>\n  dplyr::distinct(USUBJID) |>\n  dplyr::summarise(res = dplyr::n()) |>\n  dplyr::mutate(operation = 'OP_N', pattern = 'XXX')",
+        "parameters": []
+      }
+    },
+    {
+      "id": "MTH_SUBJECT_COUNT_PCT",
+      "name": "Subject Count and Percentage",
+      "label": "Subject Count and Percentage",
+      "description": "Unique subject count with percentage of the denominator",
+      "operations": [
+        {
+          "id": "OP_N",
+          "name": "Count",
+          "label": "Count",
+          "order": 1,
+          "resultPattern": "XXX",
+          "referencedOperationRelationships": [
+            {
+              "id": "OP_N_SELF",
+              "operationId": "OP_N",
+              "description": "",
+              "referencedOperationRole": {
+                "controlledTerm": "NUMERATOR"
+              }
+            }
+          ]
+        },
+        {
+          "id": "OP_PCT",
+          "name": "Percentage",
+          "label": "Percentage",
+          "order": 2,
+          "resultPattern": "XX.X",
+          "referencedOperationRelationships": [
+            {
+              "id": "OP_PCT_SELF",
+              "operationId": "OP_PCT",
+              "description": "",
+              "referencedOperationRole": {
+                "controlledTerm": "NUMERATOR"
+              }
+            }
+          ]
+        },
+        {
+          "id": "OP_DENOM",
+          "name": "Denominator",
+          "label": "Denominator",
+          "order": 3,
+          "resultPattern": "XXX",
+          "referencedOperationRelationships": [
+            {
+              "id": "OP_DENOM_SELF",
+              "operationId": "OP_DENOM",
+              "description": "",
+              "referencedOperationRole": {
+                "controlledTerm": "NUMERATOR"
+              }
+            }
+          ]
+        }
+      ],
+      "codeTemplate": {
+        "context": "R (siera)",
+        "code": "denom_n <- length(unique(df2_analysisidhere$USUBJID))\ndf3_analysisidhere <- df2_analysisidhere |>\n  dplyr::distinct(USUBJID) |>\n  dplyr::summarise(\n    OP_N     = dplyr::n(),\n    OP_DENOM = denom_n,\n    .groups  = 'drop'\n  ) |>\n  dplyr::mutate(OP_PCT = 100 * OP_N / OP_DENOM) |>\n  tidyr::pivot_longer(\n    dplyr::starts_with('OP_'),\n    names_to  = 'operation',\n    values_to = 'res'\n  ) |>\n  dplyr::mutate(pattern = 'XXX')",
+        "parameters": []
+      }
+    },
+    {
+      "id": "MTH_SUMMARY_STATISTICS_CONTINUOUS",
+      "name": "Summary Statistics - Continuous",
+      "label": "Summary Statistics - Continuous",
+      "description": "n, mean, SD, median, Q1, Q3, min, max",
+      "operations": [
+        {
+          "id": "OP_N",
+          "name": "n",
+          "label": "n",
+          "order": 1,
+          "resultPattern": "XXX",
+          "referencedOperationRelationships": [
+            {
+              "id": "OP_N_SELF",
+              "operationId": "OP_N",
+              "description": "",
+              "referencedOperationRole": {
+                "controlledTerm": "NUMERATOR"
+              }
+            }
+          ]
+        },
+        {
+          "id": "OP_MEAN",
+          "name": "Mean",
+          "label": "Mean",
+          "order": 2,
+          "resultPattern": "XXX.X",
+          "referencedOperationRelationships": [
+            {
+              "id": "OP_MEAN_SELF",
+              "operationId": "OP_MEAN",
+              "description": "",
+              "referencedOperationRole": {
+                "controlledTerm": "NUMERATOR"
+              }
+            }
+          ]
+        },
+        {
+          "id": "OP_SD",
+          "name": "SD",
+          "label": "SD",
+          "order": 3,
+          "resultPattern": "XXX.XX",
+          "referencedOperationRelationships": [
+            {
+              "id": "OP_SD_SELF",
+              "operationId": "OP_SD",
+              "description": "",
+              "referencedOperationRole": {
+                "controlledTerm": "NUMERATOR"
+              }
+            }
+          ]
+        },
+        {
+          "id": "OP_MEDIAN",
+          "name": "Median",
+          "label": "Median",
+          "order": 4,
+          "resultPattern": "XXX.X",
+          "referencedOperationRelationships": [
+            {
+              "id": "OP_MEDIAN_SELF",
+              "operationId": "OP_MEDIAN",
+              "description": "",
+              "referencedOperationRole": {
+                "controlledTerm": "NUMERATOR"
+              }
+            }
+          ]
+        },
+        {
+          "id": "OP_Q1",
+          "name": "Q1",
+          "label": "Q1",
+          "order": 5,
+          "resultPattern": "XXX.X",
+          "referencedOperationRelationships": [
+            {
+              "id": "OP_Q1_SELF",
+              "operationId": "OP_Q1",
+              "description": "",
+              "referencedOperationRole": {
+                "controlledTerm": "NUMERATOR"
+              }
+            }
+          ]
+        },
+        {
+          "id": "OP_Q3",
+          "name": "Q3",
+          "label": "Q3",
+          "order": 6,
+          "resultPattern": "XXX.X",
+          "referencedOperationRelationships": [
+            {
+              "id": "OP_Q3_SELF",
+              "operationId": "OP_Q3",
+              "description": "",
+              "referencedOperationRole": {
+                "controlledTerm": "NUMERATOR"
+              }
+            }
+          ]
+        },
+        {
+          "id": "OP_MIN",
+          "name": "Min",
+          "label": "Min",
+          "order": 7,
+          "resultPattern": "XXX",
+          "referencedOperationRelationships": [
+            {
+              "id": "OP_MIN_SELF",
+              "operationId": "OP_MIN",
+              "description": "",
+              "referencedOperationRole": {
+                "controlledTerm": "NUMERATOR"
+              }
+            }
+          ]
+        },
+        {
+          "id": "OP_MAX",
+          "name": "Max",
+          "label": "Max",
+          "order": 8,
+          "resultPattern": "XXX",
+          "referencedOperationRelationships": [
+            {
+              "id": "OP_MAX_SELF",
+              "operationId": "OP_MAX",
+              "description": "",
+              "referencedOperationRole": {
+                "controlledTerm": "NUMERATOR"
+              }
+            }
+          ]
+        }
+      ],
+      "codeTemplate": {
+        "context": "R (siera)",
+        "code": "df3_analysisidhere <- df2_analysisidhere |>\n  dplyr::select(USUBJID, anavarhere) |>\n  unique() |>\n  dplyr::summarise(\n    OP_N      = sum(!is.na(anavarhere)),\n    OP_MEAN   = mean(anavarhere, na.rm = TRUE),\n    OP_SD     = stats::sd(anavarhere, na.rm = TRUE),\n    OP_MEDIAN = stats::median(anavarhere, na.rm = TRUE),\n    OP_Q1     = stats::quantile(anavarhere, 0.25, na.rm = TRUE),\n    OP_Q3     = stats::quantile(anavarhere, 0.75, na.rm = TRUE),\n    OP_MIN    = suppressWarnings(min(anavarhere, na.rm = TRUE)),\n    OP_MAX    = suppressWarnings(max(anavarhere, na.rm = TRUE))\n  ) |>\n  tidyr::pivot_longer(dplyr::everything(), names_to = 'operation', values_to = 'res') |>\n  dplyr::mutate(pattern = 'XXX.X')",
+        "parameters": [
+          {
+            "name": "anavarhere",
+            "valueSource": "ana_var",
+            "description": "Analysis variable name (resolved from Analyses.variable)"
+          }
+        ]
+      }
+    }
+  ],
+  "analyses": [
+    {
+      "id": "AN_L_16_2_4_1_001",
+      "name": "Analysis 1 for L-16-2-4-1",
+      "label": "Subject",
+      "description": "Subject",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADCM",
+      "variable": "USUBJID",
+      "analysisVariable": {
+        "dataset": "ADCM",
+        "variable": "USUBJID"
+      },
+      "dataSubsetId": "",
+      "orderedGroupings": [],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_L_16_2_4_1_001"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_L_16_2_4_1_001"
+        }
+      ],
+      "methodId": "MTH_LISTING",
+      "annotation": "ADCM.USUBJID",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": false,
+      "totalWhere": null,
+      "totalLabel": null,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    },
+    {
+      "id": "AN_L_16_2_4_1_002",
+      "name": "Analysis 2 for L-16-2-4-1",
+      "label": "Treatment",
+      "description": "Treatment",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADCM",
+      "variable": "TRTA",
+      "analysisVariable": {
+        "dataset": "ADCM",
+        "variable": "TRTA"
+      },
+      "dataSubsetId": "",
+      "orderedGroupings": [],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_L_16_2_4_1_002"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_L_16_2_4_1_002"
+        }
+      ],
+      "methodId": "MTH_LISTING",
+      "annotation": "ADCM.TRTA",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": false,
+      "totalWhere": null,
+      "totalLabel": null,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    },
+    {
+      "id": "AN_L_16_2_4_1_003",
+      "name": "Analysis 3 for L-16-2-4-1",
+      "label": "Reported term",
+      "description": "Reported term",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADCM",
+      "variable": "CMTRT",
+      "analysisVariable": {
+        "dataset": "ADCM",
+        "variable": "CMTRT"
+      },
+      "dataSubsetId": "",
+      "orderedGroupings": [],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_L_16_2_4_1_003"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_L_16_2_4_1_003"
+        }
+      ],
+      "methodId": "MTH_LISTING",
+      "annotation": "ADCM.CMTRT",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": false,
+      "totalWhere": null,
+      "totalLabel": null,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    },
+    {
+      "id": "AN_L_16_2_4_1_004",
+      "name": "Analysis 4 for L-16-2-4-1",
+      "label": "WHODrug PT",
+      "description": "WHODrug PT",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADCM",
+      "variable": "CMDECOD",
+      "analysisVariable": {
+        "dataset": "ADCM",
+        "variable": "CMDECOD"
+      },
+      "dataSubsetId": "",
+      "orderedGroupings": [],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_L_16_2_4_1_004"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_L_16_2_4_1_004"
+        }
+      ],
+      "methodId": "MTH_LISTING",
+      "annotation": "ADCM.CMDECOD",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": false,
+      "totalWhere": null,
+      "totalLabel": null,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    },
+    {
+      "id": "AN_L_16_2_4_1_005",
+      "name": "Analysis 5 for L-16-2-4-1",
+      "label": "Indication",
+      "description": "Indication",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADCM",
+      "variable": "CMINDC",
+      "analysisVariable": {
+        "dataset": "ADCM",
+        "variable": "CMINDC"
+      },
+      "dataSubsetId": "",
+      "orderedGroupings": [],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_L_16_2_4_1_005"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_L_16_2_4_1_005"
+        }
+      ],
+      "methodId": "MTH_LISTING",
+      "annotation": "ADCM.CMINDC",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": false,
+      "totalWhere": null,
+      "totalLabel": null,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    },
+    {
+      "id": "AN_L_16_2_7_1_001",
+      "name": "Analysis 1 for L-16-2-7-1",
+      "label": "Subject",
+      "description": "Subject",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADAE",
+      "variable": "USUBJID",
+      "analysisVariable": {
+        "dataset": "ADAE",
+        "variable": "USUBJID"
+      },
+      "dataSubsetId": "",
+      "orderedGroupings": [],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_L_16_2_7_1_001"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_L_16_2_7_1_001"
+        }
+      ],
+      "methodId": "MTH_LISTING",
+      "annotation": "ADAE.USUBJID",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": false,
+      "totalWhere": null,
+      "totalLabel": null,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    },
+    {
+      "id": "AN_L_16_2_7_1_002",
+      "name": "Analysis 2 for L-16-2-7-1",
+      "label": "Treatment",
+      "description": "Treatment",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADAE",
+      "variable": "TRT01A",
+      "analysisVariable": {
+        "dataset": "ADAE",
+        "variable": "TRT01A"
+      },
+      "dataSubsetId": "",
+      "orderedGroupings": [],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_L_16_2_7_1_002"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_L_16_2_7_1_002"
+        }
+      ],
+      "methodId": "MTH_LISTING",
+      "annotation": "ADAE.TRT01A",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": false,
+      "totalWhere": null,
+      "totalLabel": null,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    },
+    {
+      "id": "AN_L_16_2_7_1_003",
+      "name": "Analysis 3 for L-16-2-7-1",
+      "label": "AE term",
+      "description": "AE term",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADAE",
+      "variable": "AEDECOD",
+      "analysisVariable": {
+        "dataset": "ADAE",
+        "variable": "AEDECOD"
+      },
+      "dataSubsetId": "",
+      "orderedGroupings": [],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_L_16_2_7_1_003"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_L_16_2_7_1_003"
+        }
+      ],
+      "methodId": "MTH_LISTING",
+      "annotation": "ADAE.AEDECOD",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": false,
+      "totalWhere": null,
+      "totalLabel": null,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    },
+    {
+      "id": "AN_L_16_2_7_1_004",
+      "name": "Analysis 4 for L-16-2-7-1",
+      "label": "Severity",
+      "description": "Severity",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADAE",
+      "variable": "ASEV",
+      "analysisVariable": {
+        "dataset": "ADAE",
+        "variable": "ASEV"
+      },
+      "dataSubsetId": "",
+      "orderedGroupings": [],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_L_16_2_7_1_004"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_L_16_2_7_1_004"
+        }
+      ],
+      "methodId": "MTH_LISTING",
+      "annotation": "ADAE.ASEV",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": false,
+      "totalWhere": null,
+      "totalLabel": null,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    },
+    {
+      "id": "AN_L_16_2_7_1_005",
+      "name": "Analysis 5 for L-16-2-7-1",
+      "label": "Serious",
+      "description": "Serious",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADAE",
+      "variable": "AESER",
+      "analysisVariable": {
+        "dataset": "ADAE",
+        "variable": "AESER"
+      },
+      "dataSubsetId": "",
+      "orderedGroupings": [],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_L_16_2_7_1_005"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_L_16_2_7_1_005"
+        }
+      ],
+      "methodId": "MTH_LISTING",
+      "annotation": "ADAE.AESER",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": false,
+      "totalWhere": null,
+      "totalLabel": null,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    },
+    {
+      "id": "AN_T_14_1_1_001",
+      "name": "Analysis 1 for T-14-1-1",
+      "label": "Subjects in safety population",
+      "description": "Subjects in safety population",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADSL",
+      "variable": "SAFFL",
+      "analysisVariable": {
+        "dataset": "ADSL",
+        "variable": "SAFFL"
+      },
+      "dataSubsetId": "DS_ADSL_SAFFL_Y",
+      "orderedGroupings": [
+        {
+          "order": 1,
+          "groupingId": "GF_TRT01A",
+          "resultsByGroup": true
+        }
+      ],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_T_14_1_1_001"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_T_14_1_1_001"
+        }
+      ],
+      "methodId": "MTH_SUBJECT_COUNT",
+      "annotation": "ADSL.SAFFL = 'Y'",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": false,
+      "totalWhere": null,
+      "totalLabel": null,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    },
+    {
+      "id": "AN_T_14_1_1_002",
+      "name": "Analysis 2 for T-14-1-1",
+      "label": "Completed study",
+      "description": "Completed study",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADSL",
+      "variable": "EOSSTT",
+      "analysisVariable": {
+        "dataset": "ADSL",
+        "variable": "EOSSTT"
+      },
+      "dataSubsetId": "DS_ADSL_EOSSTT_COMPLETED",
+      "orderedGroupings": [
+        {
+          "order": 1,
+          "groupingId": "GF_TRT01A",
+          "resultsByGroup": true
+        }
+      ],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_T_14_1_1_002"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_T_14_1_1_002"
+        }
+      ],
+      "methodId": "MTH_SUBJECT_COUNT_PCT",
+      "annotation": "ADSL.EOSSTT = 'COMPLETED'",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": false,
+      "totalWhere": null,
+      "totalLabel": null,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    },
+    {
+      "id": "AN_T_14_1_1_003",
+      "name": "Analysis 3 for T-14-1-1",
+      "label": "Discontinued study",
+      "description": "Discontinued study",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADSL",
+      "variable": "EOSSTT",
+      "analysisVariable": {
+        "dataset": "ADSL",
+        "variable": "EOSSTT"
+      },
+      "dataSubsetId": "DS_ADSL_EOSSTT_DISCONTINUED",
+      "orderedGroupings": [
+        {
+          "order": 1,
+          "groupingId": "GF_TRT01A",
+          "resultsByGroup": true
+        }
+      ],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_T_14_1_1_003"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_T_14_1_1_003"
+        }
+      ],
+      "methodId": "MTH_SUBJECT_COUNT_PCT",
+      "annotation": "ADSL.EOSSTT = 'DISCONTINUED'",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": false,
+      "totalWhere": null,
+      "totalLabel": null,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    },
+    {
+      "id": "AN_T_14_1_2_001",
+      "name": "Analysis 1 for T-14-1-2",
+      "label": "Age (years)",
+      "description": "Age (years)",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADSL",
+      "variable": "AGE",
+      "analysisVariable": {
+        "dataset": "ADSL",
+        "variable": "AGE"
+      },
+      "dataSubsetId": "",
+      "orderedGroupings": [
+        {
+          "order": 1,
+          "groupingId": "GF_TRT01A",
+          "resultsByGroup": true
+        }
+      ],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_T_14_1_2_001"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_T_14_1_2_001"
+        }
+      ],
+      "methodId": "MTH_SUMMARY_STATISTICS_CONTINUOUS",
+      "annotation": "ADSL.AGE",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": false,
+      "totalWhere": null,
+      "totalLabel": null,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    },
+    {
+      "id": "AN_T_14_1_2_002",
+      "name": "Analysis 2 for T-14-1-2",
+      "label": "Sex, n (%)",
+      "description": "Sex, n (%)",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADSL",
+      "variable": "SEX",
+      "analysisVariable": {
+        "dataset": "ADSL",
+        "variable": "SEX"
+      },
+      "dataSubsetId": "",
+      "orderedGroupings": [
+        {
+          "order": 1,
+          "groupingId": "GF_TRT01A",
+          "resultsByGroup": true
+        }
+      ],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_T_14_1_2_002"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_T_14_1_2_002"
+        }
+      ],
+      "methodId": "MTH_COUNT_AND_PERCENTAGE",
+      "annotation": "ADSL.SEX",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": false,
+      "totalWhere": null,
+      "totalLabel": null,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    },
+    {
+      "id": "AN_T_14_2_1_001",
+      "name": "Analysis 1 for T-14-2-1",
+      "label": "Duration of exposure (days)",
+      "description": "Duration of exposure (days)",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADEX",
+      "variable": "AVAL",
+      "analysisVariable": {
+        "dataset": "ADEX",
+        "variable": "AVAL"
+      },
+      "dataSubsetId": "DS_ADEX_PARAMCD_TDURD",
+      "orderedGroupings": [
+        {
+          "order": 1,
+          "groupingId": "GF_TRT01A",
+          "resultsByGroup": true
+        }
+      ],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_T_14_2_1_001"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_T_14_2_1_001"
+        }
+      ],
+      "methodId": "MTH_SUMMARY_STATISTICS_CONTINUOUS",
+      "annotation": "ADEX.AVAL WHERE ADEX.PARAMCD='TDURD'",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": false,
+      "totalWhere": null,
+      "totalLabel": null,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    },
+    {
+      "id": "AN_T_14_2_1_002",
+      "name": "Analysis 2 for T-14-2-1",
+      "label": "Average daily dose (mg)",
+      "description": "Average daily dose (mg)",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADEX",
+      "variable": "AVAL",
+      "analysisVariable": {
+        "dataset": "ADEX",
+        "variable": "AVAL"
+      },
+      "dataSubsetId": "DS_ADEX_PARAMCD_AVDDSE",
+      "orderedGroupings": [
+        {
+          "order": 1,
+          "groupingId": "GF_TRT01A",
+          "resultsByGroup": true
+        }
+      ],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_T_14_2_1_002"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_T_14_2_1_002"
+        }
+      ],
+      "methodId": "MTH_SUMMARY_STATISTICS_CONTINUOUS",
+      "annotation": "ADEX.AVAL WHERE ADEX.PARAMCD='AVDDSE'",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": false,
+      "totalWhere": null,
+      "totalLabel": null,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    },
+    {
+      "id": "AN_T_14_3_1_001",
+      "name": "Analysis 1 for T-14-3-1",
+      "label": "Any TEAE",
+      "description": "Any TEAE",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADAE",
+      "variable": "TRTEMFL",
+      "analysisVariable": {
+        "dataset": "ADAE",
+        "variable": "TRTEMFL"
+      },
+      "dataSubsetId": "DS_ADAE_TRTEMFL_Y",
+      "orderedGroupings": [
+        {
+          "order": 1,
+          "groupingId": "GF_TRT01A",
+          "resultsByGroup": true
+        }
+      ],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_T_14_3_1_001"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_T_14_3_1_001"
+        }
+      ],
+      "methodId": "MTH_SUBJECT_COUNT_PCT",
+      "annotation": "ADAE.TRTEMFL = 'Y'",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": false,
+      "totalWhere": null,
+      "totalLabel": null,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    },
+    {
+      "id": "AN_T_14_3_1_002",
+      "name": "Analysis 2 for T-14-3-1",
+      "label": "Serious TEAE",
+      "description": "Serious TEAE",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADAE",
+      "variable": "AESER",
+      "analysisVariable": {
+        "dataset": "ADAE",
+        "variable": "AESER"
+      },
+      "dataSubsetId": "DS_ADAE_AESER_Y",
+      "orderedGroupings": [
+        {
+          "order": 1,
+          "groupingId": "GF_TRT01A",
+          "resultsByGroup": true
+        }
+      ],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_T_14_3_1_002"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_T_14_3_1_002"
+        }
+      ],
+      "methodId": "MTH_SUBJECT_COUNT_PCT",
+      "annotation": "ADAE.AESER = 'Y'",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": false,
+      "totalWhere": null,
+      "totalLabel": null,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    },
+    {
+      "id": "AN_T_14_3_1_003",
+      "name": "Analysis 3 for T-14-3-1",
+      "label": "TEAE by severity, n (%)",
+      "description": "TEAE by severity, n (%)",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADAE",
+      "variable": "ASEV",
+      "analysisVariable": {
+        "dataset": "ADAE",
+        "variable": "ASEV"
+      },
+      "dataSubsetId": "",
+      "orderedGroupings": [
+        {
+          "order": 1,
+          "groupingId": "GF_TRT01A",
+          "resultsByGroup": true
+        }
+      ],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_T_14_3_1_003"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_T_14_3_1_003"
+        }
+      ],
+      "methodId": "MTH_AE_FREQUENCY_COUNT",
+      "annotation": "ADAE.ASEV; once/subject ADAE.AOCCIFL",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": false,
+      "totalWhere": null,
+      "totalLabel": null,
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    },
+    {
+      "id": "AN_T_14_3_2_001",
+      "name": "Analysis 1 for T-14-3-2",
+      "label": "Subjects with any TEAE",
+      "description": "Subjects with any TEAE",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADAE",
+      "variable": "TRTEMFL",
+      "analysisVariable": {
+        "dataset": "ADAE",
+        "variable": "TRTEMFL"
+      },
+      "dataSubsetId": "DS_ADAE_TRTEMFL_Y",
+      "orderedGroupings": [
+        {
+          "order": 1,
+          "groupingId": "GF_TRT01A",
+          "resultsByGroup": true
+        }
+      ],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_T_14_3_2_001"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_T_14_3_2_001"
+        }
+      ],
+      "methodId": "MTH_SUBJECT_COUNT_PCT",
+      "annotation": "ADAE.TRTEMFL = 'Y'",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": true,
+      "totalWhere": null,
+      "totalLabel": "Total",
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    },
+    {
+      "id": "AN_T_14_3_2_002",
+      "name": "Analysis 2 for T-14-3-2",
+      "label": "<System Organ Class>",
+      "description": "<System Organ Class>",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADAE",
+      "variable": "AESOC",
+      "analysisVariable": {
+        "dataset": "ADAE",
+        "variable": "AESOC"
+      },
+      "dataSubsetId": "DS_ADAE_TRTEMFL_Y",
+      "orderedGroupings": [
+        {
+          "order": 1,
+          "groupingId": "GF_TRT01A",
+          "resultsByGroup": true
+        }
+      ],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_T_14_3_2_002"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_T_14_3_2_002"
+        }
+      ],
+      "methodId": "MTH_AE_FREQUENCY_COUNT",
+      "annotation": "ADAE.AESOC WHERE ADAE.TRTEMFL='Y'",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": true,
+      "totalWhere": null,
+      "totalLabel": "Total",
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    },
+    {
+      "id": "AN_T_14_3_2_003",
+      "name": "Analysis 3 for T-14-3-2",
+      "label": "<Preferred Term>",
+      "description": "<Preferred Term>",
+      "version": 1,
+      "categoryIds": [],
+      "analysisSetId": "AS_SAFETY_POPULATION_ADSL_SAFFL_Y",
+      "dataset": "ADAE",
+      "variable": "AEDECOD",
+      "analysisVariable": {
+        "dataset": "ADAE",
+        "variable": "AEDECOD"
+      },
+      "dataSubsetId": "DS_ADAE_TRTEMFL_Y",
+      "orderedGroupings": [
+        {
+          "order": 1,
+          "groupingId": "GF_TRT01A",
+          "resultsByGroup": true
+        },
+        {
+          "order": 2,
+          "groupingId": "GF_AESOC",
+          "resultsByGroup": true
+        }
+      ],
+      "referencedAnalysisOperations": [
+        {
+          "referencedOperationRelationshipId": "SELF_NUM",
+          "analysisId": "AN_T_14_3_2_003"
+        },
+        {
+          "referencedOperationRelationshipId": "SELF_DEN",
+          "analysisId": "AN_T_14_3_2_003"
+        }
+      ],
+      "methodId": "MTH_AE_FREQUENCY_COUNT",
+      "annotation": "ADAE.AEDECOD WHERE ADAE.TRTEMFL='Y'",
+      "sapDescription": "",
+      "variableRole": "ANALYSIS",
+      "includeTotal": true,
+      "totalWhere": null,
+      "totalLabel": "Total",
+      "reason": {
+        "controlledTerm": "SPECIFIED IN SAP"
+      },
+      "purpose": {
+        "controlledTerm": "EXPLORATORY OUTCOME MEASURE"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "id": "F_14_3_1",
+      "name": "F-14-3-1",
+      "label": "Mean (+/- SE) Pulse Rate Over Time by Treatment",
+      "version": 1,
+      "outputType": "FIGURE",
+      "displays": [
+        {
+          "order": 1,
+          "display": {
+            "id": "F_14_3_1_D1",
+            "name": "Mean (+/- SE) Pulse Rate Over Time by Treatment",
+            "displayTitle": "Mean (+/- SE) Pulse Rate Over Time by Treatment",
+            "columns": [],
+            "displaySections": [
+              {
+                "sectionType": "Footnote",
+                "orderedSubSections": []
+              }
+            ]
+          }
+        }
+      ],
+      "fileSpecifications": [
+        {
+          "name": "F-14-3-1.rtf",
+          "fileType": {
+            "controlledTerm": "rtf"
+          }
+        }
+      ],
+      "referencedAnalysisIds": [],
+      "_meta": {
+        "source_datasets": [
+          "ADVS"
+        ],
+        "shell_fill": {
+          "source": {
+            "sheet": "Figure 14.3.1",
+            "format": "xlsx",
+            "first_body_row": 5,
+            "header_row": "NA",
+            "header_rows": []
+          },
+          "columns": [],
+          "cells": [],
+          "figure": {
+            "series_anchor": 7,
+            "directives": [
+              {
+                "key": "x_axis",
+                "value": "ADVS.AVISITN (label ADVS.AVISIT)"
+              },
+              {
+                "key": "y_axis",
+                "value": "mean of ADVS.AVAL"
+              },
+              {
+                "key": "series",
+                "value": "ADVS.TRTA"
+              },
+              {
+                "key": "filter",
+                "value": "ADVS.PARAMCD='PULSE'"
+              },
+              {
+                "key": "error_bars",
+                "value": "SE = sd(ADVS.AVAL) / sqrt(n)"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "L_16_2_4_1",
+      "name": "L-16-2-4-1",
+      "label": "Listing of Concomitant Medications",
+      "version": 1,
+      "outputType": "LISTING",
+      "displays": [
+        {
+          "order": 1,
+          "display": {
+            "id": "L_16_2_4_1_D1",
+            "name": "Listing of Concomitant Medications",
+            "displayTitle": "Listing of Concomitant Medications",
+            "columns": [
+              {
+                "label": "Subject"
+              },
+              {
+                "label": "Treatment"
+              },
+              {
+                "label": "Reported term"
+              },
+              {
+                "label": "WHODrug PT"
+              },
+              {
+                "label": "Indication"
+              }
+            ],
+            "displaySections": [
+              {
+                "sectionType": "Footnote",
+                "orderedSubSections": []
+              }
+            ]
+          }
+        }
+      ],
+      "fileSpecifications": [
+        {
+          "name": "L-16-2-4-1.rtf",
+          "fileType": {
+            "controlledTerm": "rtf"
+          }
+        }
+      ],
+      "referencedAnalysisIds": [
+        "AN_L_16_2_4_1_001",
+        "AN_L_16_2_4_1_002",
+        "AN_L_16_2_4_1_003",
+        "AN_L_16_2_4_1_004",
+        "AN_L_16_2_4_1_005"
+      ],
+      "_meta": {
+        "source_datasets": [
+          "ADCM"
+        ],
+        "shell_fill": {
+          "source": {
+            "sheet": "Listing 16.2.4.1",
+            "format": "xlsx",
+            "first_body_row": 5,
+            "header_row": 4,
+            "header_rows": 4
+          },
+          "columns": [
+            {
+              "col": 2,
+              "order": 1,
+              "label": "Treatment"
+            },
+            {
+              "col": 3,
+              "order": 2,
+              "label": "Reported term"
+            },
+            {
+              "col": 4,
+              "order": 3,
+              "label": "WHODrug PT"
+            },
+            {
+              "col": 5,
+              "order": 4,
+              "label": "Indication"
+            }
+          ],
+          "cells": [],
+          "listing": {
+            "header_row": 4,
+            "template_row": 5,
+            "footnote_row": "NA",
+            "columns": [
+              {
+                "col": 1,
+                "label": "Subject",
+                "annotation": "ADCM.USUBJID"
+              },
+              {
+                "col": 2,
+                "label": "Treatment",
+                "annotation": "ADCM.TRTA"
+              },
+              {
+                "col": 3,
+                "label": "Reported term",
+                "annotation": "ADCM.CMTRT"
+              },
+              {
+                "col": 4,
+                "label": "WHODrug PT",
+                "annotation": "ADCM.CMDECOD"
+              },
+              {
+                "col": 5,
+                "label": "Indication",
+                "annotation": "ADCM.CMINDC"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "L_16_2_7_1",
+      "name": "L-16-2-7-1",
+      "label": "Listing of Adverse Events",
+      "version": 1,
+      "outputType": "LISTING",
+      "displays": [
+        {
+          "order": 1,
+          "display": {
+            "id": "L_16_2_7_1_D1",
+            "name": "Listing of Adverse Events",
+            "displayTitle": "Listing of Adverse Events",
+            "columns": [
+              {
+                "label": "Subject"
+              },
+              {
+                "label": "Treatment"
+              },
+              {
+                "label": "AE term"
+              },
+              {
+                "label": "Severity"
+              },
+              {
+                "label": "Serious"
+              }
+            ],
+            "displaySections": [
+              {
+                "sectionType": "Footnote",
+                "orderedSubSections": []
+              }
+            ]
+          }
+        }
+      ],
+      "fileSpecifications": [
+        {
+          "name": "L-16-2-7-1.rtf",
+          "fileType": {
+            "controlledTerm": "rtf"
+          }
+        }
+      ],
+      "referencedAnalysisIds": [
+        "AN_L_16_2_7_1_001",
+        "AN_L_16_2_7_1_002",
+        "AN_L_16_2_7_1_003",
+        "AN_L_16_2_7_1_004",
+        "AN_L_16_2_7_1_005"
+      ],
+      "_meta": {
+        "source_datasets": [
+          "ADAE"
+        ],
+        "shell_fill": {
+          "source": {
+            "sheet": "Listing 16.2.7.1",
+            "format": "xlsx",
+            "first_body_row": 5,
+            "header_row": 4,
+            "header_rows": 4
+          },
+          "columns": [
+            {
+              "col": 2,
+              "order": 1,
+              "label": "Treatment"
+            },
+            {
+              "col": 3,
+              "order": 2,
+              "label": "AE term"
+            },
+            {
+              "col": 4,
+              "order": 3,
+              "label": "Severity"
+            },
+            {
+              "col": 5,
+              "order": 4,
+              "label": "Serious"
+            }
+          ],
+          "cells": [],
+          "listing": {
+            "header_row": 4,
+            "template_row": 5,
+            "footnote_row": "NA",
+            "columns": [
+              {
+                "col": 1,
+                "label": "Subject",
+                "annotation": "ADAE.USUBJID"
+              },
+              {
+                "col": 2,
+                "label": "Treatment",
+                "annotation": "ADAE.TRT01A"
+              },
+              {
+                "col": 3,
+                "label": "AE term",
+                "annotation": "ADAE.AEDECOD"
+              },
+              {
+                "col": 4,
+                "label": "Severity",
+                "annotation": "ADAE.ASEV"
+              },
+              {
+                "col": 5,
+                "label": "Serious",
+                "annotation": "ADAE.AESER"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "T_14_1_1",
+      "name": "T-14-1-1",
+      "label": "Subject Disposition",
+      "version": 1,
+      "outputType": "TABLE",
+      "displays": [
+        {
+          "order": 1,
+          "display": {
+            "id": "T_14_1_1_D1",
+            "name": "Subject Disposition",
+            "displayTitle": "Subject Disposition",
+            "columns": [
+              {
+                "label": "Category"
+              },
+              {
+                "label": "Placebo (N=XX)"
+              },
+              {
+                "label": "Xanomeline Low Dose"
+              },
+              {
+                "label": "Xanomeline High Dose"
+              }
+            ],
+            "displaySections": [
+              {
+                "sectionType": "Footnote",
+                "orderedSubSections": [
+                  {
+                    "order": 1,
+                    "subSection": {
+                      "id": "T_14_1_1_D1_FN1",
+                      "text": "Percentages are based on the number of subjects in the safety population."
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "fileSpecifications": [
+        {
+          "name": "T-14-1-1.rtf",
+          "fileType": {
+            "controlledTerm": "rtf"
+          }
+        }
+      ],
+      "referencedAnalysisIds": [
+        "AN_T_14_1_1_001",
+        "AN_T_14_1_1_002",
+        "AN_T_14_1_1_003"
+      ],
+      "_meta": {
+        "source_datasets": [
+          "ADSL"
+        ],
+        "shell_layout": [
+          {
+            "order": 1,
+            "label": "Subjects in safety population",
+            "indent": 0,
+            "analysis_id": "AN_T_14_1_1_001",
+            "kind": "filtered_count",
+            "sheet_row": 5,
+            "n_slots": 1
+          },
+          {
+            "order": 2,
+            "label": "Completed study",
+            "indent": 0,
+            "analysis_id": "AN_T_14_1_1_002",
+            "kind": "filtered_count_pct",
+            "sheet_row": 6,
+            "n_slots": 2
+          },
+          {
+            "order": 3,
+            "label": "Discontinued study",
+            "indent": 0,
+            "analysis_id": "AN_T_14_1_1_003",
+            "kind": "filtered_count_pct",
+            "sheet_row": 7,
+            "n_slots": 2
+          }
+        ],
+        "shell_fill": {
+          "source": {
+            "sheet": "Table 14.1.1",
+            "format": "xlsx",
+            "first_body_row": 5,
+            "header_row": 4,
+            "header_rows": 4
+          },
+          "columns": [
+            {
+              "col": 2,
+              "order": 1,
+              "label": "Placebo"
+            },
+            {
+              "col": 3,
+              "order": 2,
+              "label": "Xanomeline Low Dose"
+            },
+            {
+              "col": 4,
+              "order": 3,
+              "label": "Xanomeline High Dose"
+            }
+          ],
+          "cells": [
+            {
+              "row": 5,
+              "col": 2,
+              "ref": "B5",
+              "placeholder": "xx",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_1_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 1,
+                "label": "Placebo"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                }
+              ]
+            },
+            {
+              "row": 5,
+              "col": 3,
+              "ref": "C5",
+              "placeholder": "xx",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_1_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 2,
+                "label": "Xanomeline Low Dose"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                }
+              ]
+            },
+            {
+              "row": 5,
+              "col": 4,
+              "ref": "D5",
+              "placeholder": "xx",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_1_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 3,
+                "label": "Xanomeline High Dose"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                }
+              ]
+            },
+            {
+              "row": 6,
+              "col": 2,
+              "ref": "B6",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_1_002",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 1,
+                "label": "Placebo"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 6,
+              "col": 3,
+              "ref": "C6",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_1_002",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 2,
+                "label": "Xanomeline Low Dose"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 6,
+              "col": 4,
+              "ref": "D6",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_1_002",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 3,
+                "label": "Xanomeline High Dose"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 7,
+              "col": 2,
+              "ref": "B7",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_1_003",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 1,
+                "label": "Placebo"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 7,
+              "col": 3,
+              "ref": "C7",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_1_003",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 2,
+                "label": "Xanomeline Low Dose"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 7,
+              "col": 4,
+              "ref": "D7",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_1_003",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 3,
+                "label": "Xanomeline High Dose"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "T_14_1_2",
+      "name": "T-14-1-2",
+      "label": "Demographics and Baseline Characteristics",
+      "version": 1,
+      "outputType": "TABLE",
+      "displays": [
+        {
+          "order": 1,
+          "display": {
+            "id": "T_14_1_2_D1",
+            "name": "Demographics and Baseline Characteristics",
+            "displayTitle": "Demographics and Baseline Characteristics",
+            "columns": [
+              {
+                "label": "Characteristic"
+              },
+              {
+                "label": "Placebo"
+              },
+              {
+                "label": "Xanomeline Low Dose"
+              },
+              {
+                "label": "Xanomeline High Dose"
+              }
+            ],
+            "displaySections": [
+              {
+                "sectionType": "Footnote",
+                "orderedSubSections": [
+                  {
+                    "order": 1,
+                    "subSection": {
+                      "id": "T_14_1_2_D1_FN1",
+                      "text": "Age is at informed consent."
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "fileSpecifications": [
+        {
+          "name": "T-14-1-2.rtf",
+          "fileType": {
+            "controlledTerm": "rtf"
+          }
+        }
+      ],
+      "referencedAnalysisIds": [
+        "AN_T_14_1_2_001",
+        "AN_T_14_1_2_002"
+      ],
+      "_meta": {
+        "source_datasets": [
+          "ADSL"
+        ],
+        "shell_layout": [
+          {
+            "order": 1,
+            "label": "Age (years)",
+            "indent": 0,
+            "analysis_id": "AN_T_14_1_2_001",
+            "kind": "continuous",
+            "sheet_row": 5
+          },
+          {
+            "order": 2,
+            "label": "Mean (SD)",
+            "indent": 0,
+            "analysis_id": null,
+            "kind": "label",
+            "sheet_row": 6,
+            "n_slots": 2
+          },
+          {
+            "order": 3,
+            "label": "Median",
+            "indent": 0,
+            "analysis_id": null,
+            "kind": "label",
+            "sheet_row": 7,
+            "n_slots": 1
+          },
+          {
+            "order": 4,
+            "label": "Min, Max",
+            "indent": 0,
+            "analysis_id": null,
+            "kind": "label",
+            "sheet_row": 8,
+            "n_slots": 2
+          },
+          {
+            "order": 5,
+            "label": "Sex, n (%)",
+            "indent": 0,
+            "analysis_id": "AN_T_14_1_2_002",
+            "kind": "categorical",
+            "sheet_row": 10
+          },
+          {
+            "order": 6,
+            "label": "Female",
+            "indent": 0,
+            "analysis_id": null,
+            "kind": "label",
+            "sheet_row": 11,
+            "n_slots": 2
+          },
+          {
+            "order": 7,
+            "label": "Male",
+            "indent": 0,
+            "analysis_id": null,
+            "kind": "label",
+            "sheet_row": 12,
+            "n_slots": 2
+          }
+        ],
+        "shell_fill": {
+          "source": {
+            "sheet": "Table 14.1.2",
+            "format": "xlsx",
+            "first_body_row": 5,
+            "header_row": 4,
+            "header_rows": 4
+          },
+          "columns": [
+            {
+              "col": 2,
+              "order": 1,
+              "label": "Placebo"
+            },
+            {
+              "col": 3,
+              "order": 2,
+              "label": "Xanomeline Low Dose"
+            },
+            {
+              "col": 4,
+              "order": 3,
+              "label": "Xanomeline High Dose"
+            }
+          ],
+          "cells": [
+            {
+              "row": 6,
+              "col": 2,
+              "ref": "B6",
+              "placeholder": "xx.x xx.xx",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_2_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 1,
+                "label": "Placebo"
+              },
+              "stat_line": "Mean (SD)",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 1,
+                  "stop": 4,
+                  "operation_id": "OP_MEAN",
+                  "stat_name": "mean"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.xx",
+                  "type": "value",
+                  "decimals": 2,
+                  "start": 7,
+                  "stop": 11,
+                  "operation_id": "OP_SD",
+                  "stat_name": "sd"
+                }
+              ]
+            },
+            {
+              "row": 6,
+              "col": 3,
+              "ref": "C6",
+              "placeholder": "xx.x xx.xx",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_2_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 2,
+                "label": "Xanomeline Low Dose"
+              },
+              "stat_line": "Mean (SD)",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 1,
+                  "stop": 4,
+                  "operation_id": "OP_MEAN",
+                  "stat_name": "mean"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.xx",
+                  "type": "value",
+                  "decimals": 2,
+                  "start": 7,
+                  "stop": 11,
+                  "operation_id": "OP_SD",
+                  "stat_name": "sd"
+                }
+              ]
+            },
+            {
+              "row": 6,
+              "col": 4,
+              "ref": "D6",
+              "placeholder": "xx.x xx.xx",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_2_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 3,
+                "label": "Xanomeline High Dose"
+              },
+              "stat_line": "Mean (SD)",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 1,
+                  "stop": 4,
+                  "operation_id": "OP_MEAN",
+                  "stat_name": "mean"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.xx",
+                  "type": "value",
+                  "decimals": 2,
+                  "start": 7,
+                  "stop": 11,
+                  "operation_id": "OP_SD",
+                  "stat_name": "sd"
+                }
+              ]
+            },
+            {
+              "row": 7,
+              "col": 2,
+              "ref": "B7",
+              "placeholder": "xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_2_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 1,
+                "label": "Placebo"
+              },
+              "stat_line": "Median",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 1,
+                  "stop": 4,
+                  "operation_id": "OP_MEDIAN",
+                  "stat_name": "median"
+                }
+              ]
+            },
+            {
+              "row": 7,
+              "col": 3,
+              "ref": "C7",
+              "placeholder": "xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_2_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 2,
+                "label": "Xanomeline Low Dose"
+              },
+              "stat_line": "Median",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 1,
+                  "stop": 4,
+                  "operation_id": "OP_MEDIAN",
+                  "stat_name": "median"
+                }
+              ]
+            },
+            {
+              "row": 7,
+              "col": 4,
+              "ref": "D7",
+              "placeholder": "xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_2_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 3,
+                "label": "Xanomeline High Dose"
+              },
+              "stat_line": "Median",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 1,
+                  "stop": 4,
+                  "operation_id": "OP_MEDIAN",
+                  "stat_name": "median"
+                }
+              ]
+            },
+            {
+              "row": 8,
+              "col": 2,
+              "ref": "B8",
+              "placeholder": "xx xx",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_2_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 1,
+                "label": "Placebo"
+              },
+              "stat_line": "Min, Max",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_MIN",
+                  "stat_name": "min"
+                },
+                {
+                  "order": 2,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 5,
+                  "stop": 6,
+                  "operation_id": "OP_MAX",
+                  "stat_name": "max"
+                }
+              ]
+            },
+            {
+              "row": 8,
+              "col": 3,
+              "ref": "C8",
+              "placeholder": "xx xx",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_2_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 2,
+                "label": "Xanomeline Low Dose"
+              },
+              "stat_line": "Min, Max",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_MIN",
+                  "stat_name": "min"
+                },
+                {
+                  "order": 2,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 5,
+                  "stop": 6,
+                  "operation_id": "OP_MAX",
+                  "stat_name": "max"
+                }
+              ]
+            },
+            {
+              "row": 8,
+              "col": 4,
+              "ref": "D8",
+              "placeholder": "xx xx",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_2_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 3,
+                "label": "Xanomeline High Dose"
+              },
+              "stat_line": "Min, Max",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_MIN",
+                  "stat_name": "min"
+                },
+                {
+                  "order": 2,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 5,
+                  "stop": 6,
+                  "operation_id": "OP_MAX",
+                  "stat_name": "max"
+                }
+              ]
+            },
+            {
+              "row": 11,
+              "col": 2,
+              "ref": "B11",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_2_002",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 1,
+                "label": "Placebo"
+              },
+              "variable_level": "Female",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 11,
+              "col": 3,
+              "ref": "C11",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_2_002",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 2,
+                "label": "Xanomeline Low Dose"
+              },
+              "variable_level": "Female",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 11,
+              "col": 4,
+              "ref": "D11",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_2_002",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 3,
+                "label": "Xanomeline High Dose"
+              },
+              "variable_level": "Female",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 12,
+              "col": 2,
+              "ref": "B12",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_2_002",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 1,
+                "label": "Placebo"
+              },
+              "variable_level": "Male",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 12,
+              "col": 3,
+              "ref": "C12",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_2_002",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 2,
+                "label": "Xanomeline Low Dose"
+              },
+              "variable_level": "Male",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 12,
+              "col": 4,
+              "ref": "D12",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_1_2_002",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 3,
+                "label": "Xanomeline High Dose"
+              },
+              "variable_level": "Male",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "T_14_2_1",
+      "name": "T-14-2-1",
+      "label": "Study Drug Exposure",
+      "version": 1,
+      "outputType": "TABLE",
+      "displays": [
+        {
+          "order": 1,
+          "display": {
+            "id": "T_14_2_1_D1",
+            "name": "Study Drug Exposure",
+            "displayTitle": "Study Drug Exposure",
+            "columns": [
+              {
+                "label": "Statistic"
+              },
+              {
+                "label": "Placebo"
+              },
+              {
+                "label": "Xanomeline Low Dose"
+              },
+              {
+                "label": "Xanomeline High Dose"
+              }
+            ],
+            "displaySections": [
+              {
+                "sectionType": "Footnote",
+                "orderedSubSections": [
+                  {
+                    "order": 1,
+                    "subSection": {
+                      "id": "T_14_2_1_D1_FN1",
+                      "text": "Exposure is derived from ADEX; one record per subject per parameter."
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "fileSpecifications": [
+        {
+          "name": "T-14-2-1.rtf",
+          "fileType": {
+            "controlledTerm": "rtf"
+          }
+        }
+      ],
+      "referencedAnalysisIds": [
+        "AN_T_14_2_1_001",
+        "AN_T_14_2_1_002"
+      ],
+      "_meta": {
+        "source_datasets": [
+          "ADEX"
+        ],
+        "shell_layout": [
+          {
+            "order": 1,
+            "label": "Duration of exposure (days)",
+            "indent": 0,
+            "analysis_id": "AN_T_14_2_1_001",
+            "kind": "continuous",
+            "sheet_row": 5
+          },
+          {
+            "order": 2,
+            "label": "Mean (SD)",
+            "indent": 0,
+            "analysis_id": null,
+            "kind": "label",
+            "sheet_row": 6,
+            "n_slots": 2
+          },
+          {
+            "order": 3,
+            "label": "Median",
+            "indent": 0,
+            "analysis_id": null,
+            "kind": "label",
+            "sheet_row": 7,
+            "n_slots": 1
+          },
+          {
+            "order": 4,
+            "label": "Min, Max",
+            "indent": 0,
+            "analysis_id": null,
+            "kind": "label",
+            "sheet_row": 8,
+            "n_slots": 2
+          },
+          {
+            "order": 5,
+            "label": "Average daily dose (mg)",
+            "indent": 0,
+            "analysis_id": "AN_T_14_2_1_002",
+            "kind": "continuous",
+            "sheet_row": 10
+          },
+          {
+            "order": 6,
+            "label": "Mean (SD)",
+            "indent": 0,
+            "analysis_id": null,
+            "kind": "label",
+            "sheet_row": 11,
+            "n_slots": 2
+          },
+          {
+            "order": 7,
+            "label": "Median",
+            "indent": 0,
+            "analysis_id": null,
+            "kind": "label",
+            "sheet_row": 12,
+            "n_slots": 1
+          }
+        ],
+        "shell_fill": {
+          "source": {
+            "sheet": "Table 14.2.1",
+            "format": "xlsx",
+            "first_body_row": 5,
+            "header_row": 4,
+            "header_rows": 4
+          },
+          "columns": [
+            {
+              "col": 2,
+              "order": 1,
+              "label": "Placebo"
+            },
+            {
+              "col": 3,
+              "order": 2,
+              "label": "Xanomeline Low Dose"
+            },
+            {
+              "col": 4,
+              "order": 3,
+              "label": "Xanomeline High Dose"
+            }
+          ],
+          "cells": [
+            {
+              "row": 6,
+              "col": 2,
+              "ref": "B6",
+              "placeholder": "xx.x xx.xx",
+              "kind": "result",
+              "analysis_id": "AN_T_14_2_1_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 1,
+                "label": "Placebo"
+              },
+              "stat_line": "Mean (SD)",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 1,
+                  "stop": 4,
+                  "operation_id": "OP_MEAN",
+                  "stat_name": "mean"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.xx",
+                  "type": "value",
+                  "decimals": 2,
+                  "start": 7,
+                  "stop": 11,
+                  "operation_id": "OP_SD",
+                  "stat_name": "sd"
+                }
+              ]
+            },
+            {
+              "row": 6,
+              "col": 3,
+              "ref": "C6",
+              "placeholder": "xx.x xx.xx",
+              "kind": "result",
+              "analysis_id": "AN_T_14_2_1_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 2,
+                "label": "Xanomeline Low Dose"
+              },
+              "stat_line": "Mean (SD)",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 1,
+                  "stop": 4,
+                  "operation_id": "OP_MEAN",
+                  "stat_name": "mean"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.xx",
+                  "type": "value",
+                  "decimals": 2,
+                  "start": 7,
+                  "stop": 11,
+                  "operation_id": "OP_SD",
+                  "stat_name": "sd"
+                }
+              ]
+            },
+            {
+              "row": 6,
+              "col": 4,
+              "ref": "D6",
+              "placeholder": "xx.x xx.xx",
+              "kind": "result",
+              "analysis_id": "AN_T_14_2_1_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 3,
+                "label": "Xanomeline High Dose"
+              },
+              "stat_line": "Mean (SD)",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 1,
+                  "stop": 4,
+                  "operation_id": "OP_MEAN",
+                  "stat_name": "mean"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.xx",
+                  "type": "value",
+                  "decimals": 2,
+                  "start": 7,
+                  "stop": 11,
+                  "operation_id": "OP_SD",
+                  "stat_name": "sd"
+                }
+              ]
+            },
+            {
+              "row": 7,
+              "col": 2,
+              "ref": "B7",
+              "placeholder": "xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_2_1_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 1,
+                "label": "Placebo"
+              },
+              "stat_line": "Median",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 1,
+                  "stop": 4,
+                  "operation_id": "OP_MEDIAN",
+                  "stat_name": "median"
+                }
+              ]
+            },
+            {
+              "row": 7,
+              "col": 3,
+              "ref": "C7",
+              "placeholder": "xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_2_1_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 2,
+                "label": "Xanomeline Low Dose"
+              },
+              "stat_line": "Median",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 1,
+                  "stop": 4,
+                  "operation_id": "OP_MEDIAN",
+                  "stat_name": "median"
+                }
+              ]
+            },
+            {
+              "row": 7,
+              "col": 4,
+              "ref": "D7",
+              "placeholder": "xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_2_1_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 3,
+                "label": "Xanomeline High Dose"
+              },
+              "stat_line": "Median",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 1,
+                  "stop": 4,
+                  "operation_id": "OP_MEDIAN",
+                  "stat_name": "median"
+                }
+              ]
+            },
+            {
+              "row": 8,
+              "col": 2,
+              "ref": "B8",
+              "placeholder": "xx xx",
+              "kind": "result",
+              "analysis_id": "AN_T_14_2_1_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 1,
+                "label": "Placebo"
+              },
+              "stat_line": "Min, Max",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_MIN",
+                  "stat_name": "min"
+                },
+                {
+                  "order": 2,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 5,
+                  "stop": 6,
+                  "operation_id": "OP_MAX",
+                  "stat_name": "max"
+                }
+              ]
+            },
+            {
+              "row": 8,
+              "col": 3,
+              "ref": "C8",
+              "placeholder": "xx xx",
+              "kind": "result",
+              "analysis_id": "AN_T_14_2_1_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 2,
+                "label": "Xanomeline Low Dose"
+              },
+              "stat_line": "Min, Max",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_MIN",
+                  "stat_name": "min"
+                },
+                {
+                  "order": 2,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 5,
+                  "stop": 6,
+                  "operation_id": "OP_MAX",
+                  "stat_name": "max"
+                }
+              ]
+            },
+            {
+              "row": 8,
+              "col": 4,
+              "ref": "D8",
+              "placeholder": "xx xx",
+              "kind": "result",
+              "analysis_id": "AN_T_14_2_1_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 3,
+                "label": "Xanomeline High Dose"
+              },
+              "stat_line": "Min, Max",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_MIN",
+                  "stat_name": "min"
+                },
+                {
+                  "order": 2,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 5,
+                  "stop": 6,
+                  "operation_id": "OP_MAX",
+                  "stat_name": "max"
+                }
+              ]
+            },
+            {
+              "row": 11,
+              "col": 2,
+              "ref": "B11",
+              "placeholder": "xx.x xx.xx",
+              "kind": "result",
+              "analysis_id": "AN_T_14_2_1_002",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 1,
+                "label": "Placebo"
+              },
+              "stat_line": "Mean (SD)",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 1,
+                  "stop": 4,
+                  "operation_id": "OP_MEAN",
+                  "stat_name": "mean"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.xx",
+                  "type": "value",
+                  "decimals": 2,
+                  "start": 7,
+                  "stop": 11,
+                  "operation_id": "OP_SD",
+                  "stat_name": "sd"
+                }
+              ]
+            },
+            {
+              "row": 11,
+              "col": 3,
+              "ref": "C11",
+              "placeholder": "xx.x xx.xx",
+              "kind": "result",
+              "analysis_id": "AN_T_14_2_1_002",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 2,
+                "label": "Xanomeline Low Dose"
+              },
+              "stat_line": "Mean (SD)",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 1,
+                  "stop": 4,
+                  "operation_id": "OP_MEAN",
+                  "stat_name": "mean"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.xx",
+                  "type": "value",
+                  "decimals": 2,
+                  "start": 7,
+                  "stop": 11,
+                  "operation_id": "OP_SD",
+                  "stat_name": "sd"
+                }
+              ]
+            },
+            {
+              "row": 11,
+              "col": 4,
+              "ref": "D11",
+              "placeholder": "xx.x xx.xx",
+              "kind": "result",
+              "analysis_id": "AN_T_14_2_1_002",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 3,
+                "label": "Xanomeline High Dose"
+              },
+              "stat_line": "Mean (SD)",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 1,
+                  "stop": 4,
+                  "operation_id": "OP_MEAN",
+                  "stat_name": "mean"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.xx",
+                  "type": "value",
+                  "decimals": 2,
+                  "start": 7,
+                  "stop": 11,
+                  "operation_id": "OP_SD",
+                  "stat_name": "sd"
+                }
+              ]
+            },
+            {
+              "row": 12,
+              "col": 2,
+              "ref": "B12",
+              "placeholder": "xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_2_1_002",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 1,
+                "label": "Placebo"
+              },
+              "stat_line": "Median",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 1,
+                  "stop": 4,
+                  "operation_id": "OP_MEDIAN",
+                  "stat_name": "median"
+                }
+              ]
+            },
+            {
+              "row": 12,
+              "col": 3,
+              "ref": "C12",
+              "placeholder": "xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_2_1_002",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 2,
+                "label": "Xanomeline Low Dose"
+              },
+              "stat_line": "Median",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 1,
+                  "stop": 4,
+                  "operation_id": "OP_MEDIAN",
+                  "stat_name": "median"
+                }
+              ]
+            },
+            {
+              "row": 12,
+              "col": 4,
+              "ref": "D12",
+              "placeholder": "xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_2_1_002",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 3,
+                "label": "Xanomeline High Dose"
+              },
+              "stat_line": "Median",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 1,
+                  "stop": 4,
+                  "operation_id": "OP_MEDIAN",
+                  "stat_name": "median"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "T_14_3_1",
+      "name": "T-14-3-1",
+      "label": "Overview of Treatment-Emergent Adverse Events",
+      "version": 1,
+      "outputType": "TABLE",
+      "displays": [
+        {
+          "order": 1,
+          "display": {
+            "id": "T_14_3_1_D1",
+            "name": "Overview of Treatment-Emergent Adverse Events",
+            "displayTitle": "Overview of Treatment-Emergent Adverse Events",
+            "columns": [
+              {
+                "label": "Category"
+              },
+              {
+                "label": "Placebo"
+              },
+              {
+                "label": "Xanomeline Low Dose"
+              },
+              {
+                "label": "Xanomeline High Dose"
+              }
+            ],
+            "displaySections": [
+              {
+                "sectionType": "Footnote",
+                "orderedSubSections": [
+                  {
+                    "order": 1,
+                    "subSection": {
+                      "id": "T_14_3_1_D1_FN1",
+                      "text": "A subject is counted once in each severity they report. Percentages are of the safety population."
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "fileSpecifications": [
+        {
+          "name": "T-14-3-1.rtf",
+          "fileType": {
+            "controlledTerm": "rtf"
+          }
+        }
+      ],
+      "referencedAnalysisIds": [
+        "AN_T_14_3_1_001",
+        "AN_T_14_3_1_002",
+        "AN_T_14_3_1_003"
+      ],
+      "_meta": {
+        "source_datasets": [
+          "ADAE"
+        ],
+        "shell_layout": [
+          {
+            "order": 1,
+            "label": "Any TEAE",
+            "indent": 0,
+            "analysis_id": "AN_T_14_3_1_001",
+            "kind": "filtered_count_pct",
+            "sheet_row": 5,
+            "n_slots": 2
+          },
+          {
+            "order": 2,
+            "label": "Serious TEAE",
+            "indent": 0,
+            "analysis_id": "AN_T_14_3_1_002",
+            "kind": "filtered_count_pct",
+            "sheet_row": 6,
+            "n_slots": 2
+          },
+          {
+            "order": 3,
+            "label": "TEAE by severity, n (%)",
+            "indent": 0,
+            "analysis_id": "AN_T_14_3_1_003",
+            "kind": "categorical",
+            "sheet_row": 8
+          },
+          {
+            "order": 4,
+            "label": "Mild",
+            "indent": 0,
+            "analysis_id": null,
+            "kind": "label",
+            "sheet_row": 9,
+            "n_slots": 2
+          },
+          {
+            "order": 5,
+            "label": "Moderate",
+            "indent": 0,
+            "analysis_id": null,
+            "kind": "label",
+            "sheet_row": 10,
+            "n_slots": 2
+          },
+          {
+            "order": 6,
+            "label": "Severe",
+            "indent": 0,
+            "analysis_id": null,
+            "kind": "label",
+            "sheet_row": 11,
+            "n_slots": 2
+          }
+        ],
+        "shell_fill": {
+          "source": {
+            "sheet": "Table 14.3.1",
+            "format": "xlsx",
+            "first_body_row": 5,
+            "header_row": 4,
+            "header_rows": 4
+          },
+          "columns": [
+            {
+              "col": 2,
+              "order": 1,
+              "label": "Placebo"
+            },
+            {
+              "col": 3,
+              "order": 2,
+              "label": "Xanomeline Low Dose"
+            },
+            {
+              "col": 4,
+              "order": 3,
+              "label": "Xanomeline High Dose"
+            }
+          ],
+          "cells": [
+            {
+              "row": 5,
+              "col": 2,
+              "ref": "B5",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_1_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 1,
+                "label": "Placebo"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 5,
+              "col": 3,
+              "ref": "C5",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_1_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 2,
+                "label": "Xanomeline Low Dose"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 5,
+              "col": 4,
+              "ref": "D5",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_1_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 3,
+                "label": "Xanomeline High Dose"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 6,
+              "col": 2,
+              "ref": "B6",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_1_002",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 1,
+                "label": "Placebo"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 6,
+              "col": 3,
+              "ref": "C6",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_1_002",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 2,
+                "label": "Xanomeline Low Dose"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 6,
+              "col": 4,
+              "ref": "D6",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_1_002",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 3,
+                "label": "Xanomeline High Dose"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 9,
+              "col": 2,
+              "ref": "B9",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_1_003",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 1,
+                "label": "Placebo"
+              },
+              "variable_level": "Mild",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 9,
+              "col": 3,
+              "ref": "C9",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_1_003",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 2,
+                "label": "Xanomeline Low Dose"
+              },
+              "variable_level": "Mild",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 9,
+              "col": 4,
+              "ref": "D9",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_1_003",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 3,
+                "label": "Xanomeline High Dose"
+              },
+              "variable_level": "Mild",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 10,
+              "col": 2,
+              "ref": "B10",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_1_003",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 1,
+                "label": "Placebo"
+              },
+              "variable_level": "Moderate",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 10,
+              "col": 3,
+              "ref": "C10",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_1_003",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 2,
+                "label": "Xanomeline Low Dose"
+              },
+              "variable_level": "Moderate",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 10,
+              "col": 4,
+              "ref": "D10",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_1_003",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 3,
+                "label": "Xanomeline High Dose"
+              },
+              "variable_level": "Moderate",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 11,
+              "col": 2,
+              "ref": "B11",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_1_003",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 1,
+                "label": "Placebo"
+              },
+              "variable_level": "Severe",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 11,
+              "col": 3,
+              "ref": "C11",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_1_003",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 2,
+                "label": "Xanomeline Low Dose"
+              },
+              "variable_level": "Severe",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 11,
+              "col": 4,
+              "ref": "D11",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_1_003",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 3,
+                "label": "Xanomeline High Dose"
+              },
+              "variable_level": "Severe",
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "T_14_3_2",
+      "name": "T-14-3-2",
+      "label": "Treatment-Emergent Adverse Events by System Organ Class and Preferred Term",
+      "version": 1,
+      "outputType": "TABLE",
+      "displays": [
+        {
+          "order": 1,
+          "display": {
+            "id": "T_14_3_2_D1",
+            "name": "Treatment-Emergent Adverse Events by System Organ Class and Preferred Term",
+            "displayTitle": "Treatment-Emergent Adverse Events by System Organ Class and Preferred Term",
+            "columns": [
+              {
+                "label": "System Organ Class / Preferred Term"
+              },
+              {
+                "label": "Placebo"
+              },
+              {
+                "label": "Xanomeline Low Dose"
+              },
+              {
+                "label": "Xanomeline High Dose"
+              },
+              {
+                "label": "Total"
+              }
+            ],
+            "displaySections": [
+              {
+                "sectionType": "Footnote",
+                "orderedSubSections": [
+                  {
+                    "order": 1,
+                    "subSection": {
+                      "id": "T_14_3_2_D1_FN1",
+                      "text": "A subject is counted once per system organ class and once per term."
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "fileSpecifications": [
+        {
+          "name": "T-14-3-2.rtf",
+          "fileType": {
+            "controlledTerm": "rtf"
+          }
+        }
+      ],
+      "referencedAnalysisIds": [
+        "AN_T_14_3_2_001",
+        "AN_T_14_3_2_002",
+        "AN_T_14_3_2_003"
+      ],
+      "_meta": {
+        "source_datasets": [
+          "ADAE"
+        ],
+        "shell_layout": [
+          {
+            "order": 1,
+            "label": "Subjects with any TEAE",
+            "indent": 0,
+            "analysis_id": "AN_T_14_3_2_001",
+            "kind": "filtered_count_pct",
+            "sheet_row": 5,
+            "n_slots": 2
+          },
+          {
+            "order": 2,
+            "label": "<System Organ Class>",
+            "indent": 0,
+            "analysis_id": "AN_T_14_3_2_002",
+            "kind": "nested_parent",
+            "sheet_row": 7,
+            "n_slots": 2
+          },
+          {
+            "order": 3,
+            "label": "<Preferred Term>",
+            "indent": 0,
+            "analysis_id": "AN_T_14_3_2_003",
+            "kind": "nested_child",
+            "sheet_row": 8,
+            "n_slots": 2,
+            "parent_order": 2
+          }
+        ],
+        "overall_column": {
+          "label": "Total",
+          "scope": "analysis_set",
+          "annotation": ""
+        },
+        "shell_fill": {
+          "source": {
+            "sheet": "Table 14.3.2",
+            "format": "xlsx",
+            "first_body_row": 5,
+            "header_row": 4,
+            "header_rows": 4
+          },
+          "columns": [
+            {
+              "col": 2,
+              "order": 1,
+              "label": "Placebo"
+            },
+            {
+              "col": 3,
+              "order": 2,
+              "label": "Xanomeline Low Dose"
+            },
+            {
+              "col": 4,
+              "order": 3,
+              "label": "Xanomeline High Dose"
+            },
+            {
+              "col": 5,
+              "order": 4,
+              "label": "Total"
+            }
+          ],
+          "cells": [
+            {
+              "row": 5,
+              "col": 2,
+              "ref": "B5",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_2_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 1,
+                "label": "Placebo"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 5,
+              "col": 3,
+              "ref": "C5",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_2_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 2,
+                "label": "Xanomeline Low Dose"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 5,
+              "col": 4,
+              "ref": "D5",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_2_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 3,
+                "label": "Xanomeline High Dose"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 5,
+              "col": 5,
+              "ref": "E5",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_2_001",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 4,
+                "label": "Total",
+                "is_total": true
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 7,
+              "col": 2,
+              "ref": "B7",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_2_002",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 1,
+                "label": "Placebo"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 7,
+              "col": 3,
+              "ref": "C7",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_2_002",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 2,
+                "label": "Xanomeline Low Dose"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 7,
+              "col": 4,
+              "ref": "D7",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_2_002",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 3,
+                "label": "Xanomeline High Dose"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 7,
+              "col": 5,
+              "ref": "E7",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_2_002",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 4,
+                "label": "Total",
+                "is_total": true
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 8,
+              "col": 2,
+              "ref": "B8",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_2_003",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 1,
+                "label": "Placebo"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 8,
+              "col": 3,
+              "ref": "C8",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_2_003",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 2,
+                "label": "Xanomeline Low Dose"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 8,
+              "col": 4,
+              "ref": "D8",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_2_003",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 3,
+                "label": "Xanomeline High Dose"
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            },
+            {
+              "row": 8,
+              "col": 5,
+              "ref": "E8",
+              "placeholder": "xx xx.x",
+              "kind": "result",
+              "analysis_id": "AN_T_14_3_2_003",
+              "group": {
+                "grouping_id": "GF_TRT01A",
+                "order": 4,
+                "label": "Total",
+                "is_total": true
+              },
+              "slots": [
+                {
+                  "order": 1,
+                  "token": "xx",
+                  "type": "value",
+                  "decimals": 0,
+                  "start": 1,
+                  "stop": 2,
+                  "operation_id": "OP_N",
+                  "stat_name": "n"
+                },
+                {
+                  "order": 2,
+                  "token": "xx.x",
+                  "type": "value",
+                  "decimals": 1,
+                  "start": 5,
+                  "stop": 8,
+                  "operation_id": "OP_PCT",
+                  "stat_name": "p"
+                }
+              ]
+            }
+          ],
+          "nested": {
+            "parent": {
+              "row": 7,
+              "analysis_id": "AN_T_14_3_2_002",
+              "label": "<System Organ Class>"
+            },
+            "child": {
+              "row": 8,
+              "analysis_id": "AN_T_14_3_2_003",
+              "label": "<Preferred Term>"
+            },
+            "sort": null
+          }
+        }
+      }
+    }
+  ],
+  "_meta": {
+    "generator": "arsbridge <VERSION>",
+    "generated_at_utc": "<GENERATED_AT_UTC>",
+    "ars_model_version": "1.0",
+    "extraction_mode": "deterministic",
+    "supplement_trust": null,
+    "value_decodes": {
+      "ADSL.SEX": [
+        {
+          "value": "F",
+          "label": "Female",
+          "order": 1
+        },
+        {
+          "value": "M",
+          "label": "Male",
+          "order": 2
+        }
+      ],
+      "ADAE.AESER": [
+        {
+          "value": "Y",
+          "label": "Yes",
+          "order": 1
+        },
+        {
+          "value": "N",
+          "label": "No",
+          "order": 2
+        }
+      ],
+      "ADAE.ASEV": [
+        {
+          "value": "MILD",
+          "label": "Mild",
+          "order": 1
+        },
+        {
+          "value": "MODERATE",
+          "label": "Moderate",
+          "order": 2
+        },
+        {
+          "value": "SEVERE",
+          "label": "Severe",
+          "order": 3
+        }
+      ]
+    },
+    "requires_human_review": true,
+    "sections_needing_review": [],
+    "unsupported_outputs": []
+  }
+}
