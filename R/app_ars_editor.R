@@ -165,7 +165,7 @@
       bslib::nav_select("main_tabs", "Entities", session = session)
     })
     mod_column_tree_server("columns", state)
-    mod_validation_server("validation", state)
+    mod_validation_server("validation", state, session)
     mod_json_server("json", state)
     mod_status_server("status", state, session)
 

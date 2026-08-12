@@ -15,7 +15,12 @@ mod_validation_ui <- function(id) {
 }
 
 #' @noRd
-mod_validation_server <- function(id, state) {
+## `parent_session` is the app's own session, so selecting a finding can
+## switch the top-level tab -- the tabs belong to the app, not to this module.
+## It follows mod_status_server(), which takes the same argument for the same
+## reason, and defaults to NULL so the module is still testable on its own.
+#' @noRd
+mod_validation_server <- function(id, state, parent_session = NULL) {
   shiny::moduleServer(id, function(input, output, session) {
     output$summary <- shiny::renderUI({
       findings <- state$findings()
@@ -60,11 +65,23 @@ mod_validation_server <- function(id, state) {
         findings <- state$findings()
         ## `ref` is machine-readable context for the app, not something a
         ## reviewer needs to read.
+        shown <- findings[, setdiff(names(findings), "ref"), drop = FALSE]
+        ## An id alone ("F_14_3_1") is not what the sidebar calls the output
+        ## ("Mean (+/- SE) Pulse Rate Over Time by Treatment"), so the same
+        ## finding read as two unrelated things depending on where you saw
+        ## it. Carry the name the rest of the app uses, next to the id.
+        shown <- .with_finding_names(shown, state$model())
+
         DT::datatable(
-          findings[, setdiff(names(findings), "ref"), drop = FALSE],
+          shown,
           rownames = FALSE,
           selection = "single",
-          options = list(pageLength = 20, scrollX = TRUE)
+          options = list(pageLength = 20, scrollX = TRUE),
+          caption = shiny::tags$caption(
+            style = "caption-side: top; padding: 0 0 .5rem 0;",
+            class = "small text-muted",
+            "Select a row to open the entity it is about."
+          )
         )
       },
       server = TRUE
@@ -95,8 +112,62 @@ mod_validation_server <- function(id, state) {
       if (!row$id %in% model[[row$entity]]$id) return()
 
       state$selected(list(pool = row$entity, id = row$id))
+
+      ## Setting the selection is not enough to feel like navigation: the
+      ## panel it drives is on another tab, so from here the click looked
+      ## like nothing happened. Go to the tab that actually shows this
+      ## entity -- Entities for the shared pools, which brings its row with
+      ## it, and Details for an output or an analysis.
+      if (row$entity %in% .library_pools()) {
+        state$entity_request(list(pool = row$entity, id = row$id))
+      } else if (!is.null(parent_session)) {
+        bslib::nav_select("main_tabs", "Details", session = parent_session)
+      }
     })
   })
+}
+
+## The pools whose entities live in the Entities tab. Everything else an
+## output or an analysis names is reached through the sidebar and the Details
+## tab, which is why a finding cannot simply always jump to Entities.
+#' @noRd
+.library_pools <- function() {
+  c("methods", "analysis_sets", "data_subsets", "groupings")
+}
+
+## Put the entity's own name beside its id, in the column order a reviewer
+## reads: what it is, then which one, then what is wrong.
+##
+## The name is whatever the rest of the app calls it -- `label` where there is
+## one, else `name` -- so the validation table, the sidebar and the detail
+## header all say the same words about the same thing. A finding whose id no
+## longer resolves keeps an empty name rather than dropping the row: the
+## finding is still true, and saying nothing is better than guessing.
+#' @noRd
+.with_finding_names <- function(findings, model) {
+  if (nrow(findings) == 0 || !all(c("entity", "id") %in% names(findings))) {
+    return(findings)
+  }
+
+  findings$name <- vapply(seq_len(nrow(findings)), function(i) {
+    pool <- findings$entity[[i]]
+    if (is.na(pool) || !pool %in% names(model)) return(NA_character_)
+    df <- model[[pool]]
+    if (!is.data.frame(df) || !"id" %in% names(df)) return(NA_character_)
+
+    index <- match(findings$id[[i]], df$id)
+    if (is.na(index)) return(NA_character_)
+    for (field in c("label", "name")) {
+      if (field %in% names(df)) {
+        value <- .chr_field(df[[field]][[index]])
+        if (!is.na(value) && nzchar(value)) return(value)
+      }
+    }
+    NA_character_
+  }, character(1))
+
+  lead <- intersect(c("severity", "entity", "id", "name"), names(findings))
+  findings[, c(lead, setdiff(names(findings), lead)), drop = FALSE]
 }
 
 ## A gap is the one finding that names something that should exist but does
