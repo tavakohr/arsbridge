@@ -355,7 +355,9 @@ mod_entity_library_server <- function(id, state) {
                "line and detach it first.")
       )
     },
-    if (nrow(own) > 0) .findings_list(own),
+    ## The raw node goes with the findings so a finding about a child group
+    ## can name the child the way the cards below do.
+    if (nrow(own) > 0) .findings_list(own, row$raw[[1]]),
 
     ## Every pool shares a name and a label; the rest is per-pool.
     bslib::layout_columns(
@@ -954,7 +956,7 @@ mod_entity_library_server <- function(id, state) {
         paste("used by", usage, if (usage == 1) "analysis" else "analyses")
       )
     ),
-    if (nrow(own) > 0) .findings_list(own),
+    if (nrow(own) > 0) .findings_list(own, row$raw[[1]]),
     shiny::div(class = "mt-2", .entity_detail_rows(row, pool, model)),
     shiny::tags$details(
       class = "mt-2",

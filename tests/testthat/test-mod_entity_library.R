@@ -1065,3 +1065,128 @@ test_that("a nested clause is readable, reorderable and never flattened", {
   expect_length(clauses, 3L)
   expect_equal(clauses[[3]], nested)
 })
+
+# --- the findings block above an entity's editor ------------------------------
+#
+# The spec check reports per clause, so a grouping with three compound children
+# produces the same sentence six times. Rendered one row each, that reads as a
+# single repeated warning -- and it pushes the editor below the fold.
+
+.fl_findings <- function(problems, fields) {
+  data.frame(
+    severity = rep("WARN", length(problems)),
+    entity   = "groupings",
+    id       = "GF_CGHGR1N",
+    field    = fields,
+    problem  = problems,
+    action   = "Correct the variable, or confirm it is derived downstream.",
+    stringsAsFactors = FALSE
+  )
+}
+
+.fl_grouping <- function() {
+  list(groups = list(
+    list(id = "GRP_LOW",  label = "Low"),
+    list(id = "GRP_MED",  label = "Medium"),
+    list(id = "GRP_HIGH", label = "High")
+  ))
+}
+
+.fl_compound_case <- function() {
+  .fl_findings(
+    problems = c("Variable ADSL.CGHGR1N is not in the ADaM spec.",
+                 "Variable ADSL.COHORTN is not in the ADaM spec.",
+                 "Variable ADSL.CGHGR1N is not in the ADaM spec.",
+                 "Variable ADSL.COHORTN is not in the ADaM spec.",
+                 "Variable ADSL.CGHGR1N is not in the ADaM spec.",
+                 "Variable ADSL.COHORTN is not in the ADaM spec.",
+                 "Variable ADSL.CGHGR1N is not in the ADaM spec."),
+    fields = c("groupingVariable",
+               "group GRP_LOW condition",  "group GRP_LOW condition",
+               "group GRP_MED condition",  "group GRP_MED condition",
+               "group GRP_HIGH condition", "group GRP_HIGH condition")
+  )
+}
+
+test_that("repeated findings on compound children collapse to one row each", {
+  skip_if_not_installed("shiny")
+
+  html <- as.character(
+    arsbridge:::.findings_list(.fl_compound_case(), .fl_grouping())
+  )
+
+  # Seven findings, two distinct problems, so two rows -- not seven.
+  expect_identical(
+    lengths(regmatches(html, gregexpr("alert alert-", html, fixed = TRUE))),
+    2L
+  )
+  # Two rows is not a long stack, so nothing is hidden behind a click.
+  expect_false(grepl("<details", html, fixed = TRUE))
+})
+
+test_that("a finding says which child group it is about, by label", {
+  skip_if_not_installed("shiny")
+
+  html <- as.character(
+    arsbridge:::.findings_list(.fl_compound_case(), .fl_grouping())
+  )
+
+  # The labels the cards below are headed with, not the raw group ids.
+  expect_true(grepl("Low", html, fixed = TRUE))
+  expect_true(grepl("Medium", html, fixed = TRUE))
+  expect_true(grepl("High", html, fixed = TRUE))
+  expect_false(grepl("GRP_LOW", html, fixed = TRUE))
+
+  # A finding on the grouping itself keeps naming the field it is about.
+  expect_true(grepl("groupingVariable", html, fixed = TRUE))
+})
+
+test_that("a child that is not in the entity falls back to its id", {
+  skip_if_not_installed("shiny")
+
+  # A finding about a child that has since been renamed away must still
+  # render -- looking it up must not be an error.
+  expect_identical(
+    arsbridge:::.finding_scope("group GRP_GONE condition",
+                               c(GRP_LOW = "Low")),
+    "GRP_GONE"
+  )
+  expect_identical(
+    arsbridge:::.finding_scope("groupingVariable", character(0)),
+    "groupingVariable"
+  )
+  expect_true(is.na(arsbridge:::.finding_scope(NA_character_, character(0))))
+})
+
+test_that("many distinct findings collapse behind a summary", {
+  skip_if_not_installed("shiny")
+
+  # Four distinct problems, one per child plus the grouping: past the row
+  # limit, so the block hides itself rather than burying the editor.
+  findings <- .fl_findings(
+    problems = c("First problem.", "Second problem.",
+                 "Third problem.", "Fourth problem."),
+    fields = c("groupingVariable", "group GRP_LOW condition",
+               "group GRP_MED condition", "group GRP_HIGH condition")
+  )
+
+  html <- as.character(arsbridge:::.findings_list(findings, .fl_grouping()))
+
+  expect_true(grepl("<details", html, fixed = TRUE))
+  expect_true(grepl("4 to review on this entity", html, fixed = TRUE))
+  # Hidden, never dropped: all four rows are still in the markup.
+  expect_identical(
+    lengths(regmatches(html, gregexpr("alert alert-", html, fixed = TRUE))),
+    4L
+  )
+})
+
+test_that("an entity with no children still renders its findings", {
+  skip_if_not_installed("shiny")
+
+  findings <- .fl_findings("Something is wrong.", "name")
+  html <- as.character(arsbridge:::.findings_list(findings))
+
+  expect_true(grepl("Something is wrong.", html, fixed = TRUE))
+  expect_false(grepl("<details", html, fixed = TRUE))
+})
