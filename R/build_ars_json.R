@@ -2265,7 +2265,7 @@ build_ars_json <- function(sections,
 
 .build_data_subset <- function(enrichment, tlf_number, index) {
   ## A compound supplement filter (v3) that could not flatten to a single
-  ## condition is emitted as a compoundExpression DataSubset. eval_where_clause()
+  ## condition is emitted as a compoundExpression DataSubset. .eval_where_clause()
   ## and where_to_filter_expr() both consume this shape, so the engine and the
   ## code emitter execute it with no extra translation.
   comp <- enrichment$data_subset_compound

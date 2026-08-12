@@ -1269,7 +1269,7 @@ model_set_group_field <- function(model, grouping_id, group_id, field, value) {
 ## Set a child group's simple condition, CREATING it when the group had none
 ## -- which the flat where-clause path cannot do, since it only patches a
 ## condition that already exists. An empty `values` is kept as an empty value
-## list rather than ignored: eval_condition() reads an empty EQ as "is
+## list rather than ignored: .eval_condition() reads an empty EQ as "is
 ## missing", which is a real condition a shell can mean.
 #' @noRd
 model_set_group_condition <- function(model, grouping_id, group_id,

@@ -300,15 +300,147 @@ flat_data_subset <- function(annotation) {
   )
 }
 
+## --- WhereClause -> logical mask ------------------------------------------
+##
+## What the EXECUTOR computes: the row mask a WhereClause puts on a data frame
+## in memory. These sit here, beside the predicate-string emitter below, so
+## the two halves of the equivalence guarantee are read together rather than
+## a file apart.
+##
+## They lived inside ars_to_ard() as closures, which put them out of reach of
+## every other function in the package: .complete_zero_groups() is defined at
+## namespace level and called from inside that closure, and its call to the
+## evaluator resolved lexically to nothing at all. Completing a zero group
+## whose column was declared by CONDITION therefore died with
+## "could not find function", where completing a data-driven one worked. A
+## package-level function is reachable from both, and testable on its own.
+
+#' Resolve a possibly `.`-qualified variable name against a frame's columns.
+#'
+#' A shell annotates `ADSL.SAFFL`; the loaded frame carries `SAFFL`. The
+#' qualified name is kept when the frame really has it, so a column literally
+#' named with a dot is not renamed out from under the caller.
+#' @noRd
+.clean_var_name <- function(var_name, df_names) {
+  if (is.null(var_name) || !nzchar(var_name)) return(var_name)
+  if (var_name %in% df_names) return(var_name)
+  if (grepl(".", var_name, fixed = TRUE)) {
+    parts <- strsplit(var_name, ".", fixed = TRUE)[[1]]
+    short_var <- parts[length(parts)]
+    if (short_var %in% df_names) return(short_var)
+  }
+  var_name
+}
+
+#' One WhereClauseCondition -> a logical mask over `df`.
+#'
+#' A variable the frame does not carry reads as FALSE for every row, not as an
+#' error: a cross-dataset condition is answered on its own dataset and carried
+#' back by subject key (see where_keep_mask() in ars_to_ard.R), so reaching
+#' here with an absent variable means the condition selects nothing.
+#'
+#' Mirrored by .condition_to_expr() below -- change the two together.
+#' @noRd
+.eval_condition <- function(df, cond_obj) {
+  var_name <- cond_obj[["variable"]]
+  comp <- cond_obj[["comparator"]]
+  val_list <- cond_obj[["value"]]
+
+  if (is.null(var_name) || !nzchar(var_name)) {
+    return(rep(TRUE, nrow(df)))
+  }
+
+  var_name <- .clean_var_name(var_name, names(df))
+
+  if (!var_name %in% names(df)) {
+    return(rep(FALSE, nrow(df)))
+  }
+
+  col_val <- df[[var_name]]
+  val <- unlist(val_list)
+
+  if (comp %in% c("EQ", "IN")) {
+    if (length(val) == 0) {
+      is.na(col_val) | col_val == ""
+    } else {
+      col_val %in% val
+    }
+  } else if (comp %in% c("NE", "NOTIN")) {
+    if (length(val) == 0) {
+      !is.na(col_val) & col_val != ""
+    } else {
+      !(col_val %in% val)
+    }
+  } else if (comp == "LT") {
+    col_val < as.numeric(val)
+  } else if (comp == "LE") {
+    col_val <= as.numeric(val)
+  } else if (comp == "GT") {
+    col_val > as.numeric(val)
+  } else if (comp == "GE") {
+    col_val >= as.numeric(val)
+  } else if (comp == "CONTAINS") {
+    ## arsbridge extension comparator: case-insensitive substring match
+    ## against any of the supplied values.
+    if (length(val) == 0) {
+      rep(FALSE, nrow(df))
+    } else {
+      Reduce(`|`, lapply(val, function(v) {
+        grepl(tolower(v), tolower(as.character(col_val)), fixed = TRUE)
+      }))
+    }
+  } else {
+    rep(TRUE, nrow(df))
+  }
+}
+
+#' A WhereClause -- condition, compound expression, or a bare condition object
+#' -- as a logical mask over `df`. A NULL clause selects every row.
+#'
+#' Mirrored by where_to_filter_expr() below -- change the two together.
+#' @noRd
+.eval_where_clause <- function(df, where_clause) {
+  if (is.null(where_clause)) {
+    return(rep(TRUE, nrow(df)))
+  }
+  if (!is.null(where_clause[["condition"]])) {
+    return(.eval_condition(df, where_clause[["condition"]]))
+  }
+  if (!is.null(where_clause[["compoundExpression"]])) {
+    comp_expr <- where_clause[["compoundExpression"]]
+    op <- comp_expr[["logicalOperator"]]
+    clauses <- comp_expr[["whereClauses"]]
+
+    if (length(clauses) == 0) {
+      return(rep(TRUE, nrow(df)))
+    }
+
+    results <- lapply(clauses, function(clause) .eval_where_clause(df, clause))
+
+    if (identical(op, "AND")) {
+      Reduce(`&`, results)
+    } else if (identical(op, "OR")) {
+      Reduce(`|`, results)
+    } else {
+      rep(TRUE, nrow(df))
+    }
+  } else {
+    if (!is.null(where_clause[["variable"]])) {
+      return(.eval_condition(df, where_clause))
+    }
+    rep(TRUE, nrow(df))
+  }
+}
+
 ## --- WhereClause -> R predicate source text -------------------------------
 ##
 ## where_to_filter_expr() turns a WhereClause into a dplyr/base predicate STRING
 ## that, evaluated against a dataset, reproduces the logical mask of
-## eval_where_clause()/eval_condition() in ars_to_ard.R EXACTLY. The cards
-## emitter (R/ars_to_code.R) drops these strings into `dplyr::filter(...)`, so
+## .eval_where_clause()/.eval_condition() ABOVE, exactly. The cards emitter
+## (R/ars_to_code.R) drops these strings into `dplyr::filter(...)`, so
 ## the code arsbridge emits filters identically to how arsbridge executes --
 ## the deterministic-equivalence guarantee of Plan B. Keep the two in lock-step:
-## any change to eval_condition() must be mirrored here (see test-where_to_filter_expr).
+## any change to .eval_condition() must be mirrored here (see test-where_to_filter_expr).
 
 #' Datasets referenced anywhere in a WhereClause (mirrors the
 #' get_referenced_datasets() closure in ars_to_ard.R). Used by the emitter to
@@ -336,7 +468,7 @@ flat_data_subset <- function(annotation) {
                      collapse = ", "), ")")
 }
 
-#' One WhereClauseCondition -> predicate string (mirrors eval_condition()).
+#' One WhereClauseCondition -> predicate string (mirrors .eval_condition()).
 #' @noRd
 .condition_to_expr <- function(cond) {
   var  <- .as_scalar_char(cond[["variable"]])
@@ -370,7 +502,7 @@ flat_data_subset <- function(annotation) {
 
 #' Convert an ARS WhereClause into a predicate string.
 #'
-#' Mirrors `eval_where_clause()` in ars_to_ard.R: `NULL` -> "TRUE" (no filter);
+#' Mirrors `.eval_where_clause()` above: `NULL` -> "TRUE" (no filter);
 #' a `condition` -> the comparator predicate; a `compoundExpression` -> the
 #' parenthesised atoms joined by ` & ` (AND) or ` | ` (OR); an unrecognised
 #' operator -> "TRUE".

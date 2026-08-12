@@ -255,7 +255,7 @@
       hit <- Filter(function(d) identical(as.character(d$label %||% ""), level),
                     defs)
       if (length(hit) == 0) return(rep(FALSE, length(in_pop)))
-      isTRUE_vec <- eval_where_clause(df_population, hit[[1]]$condition)
+      isTRUE_vec <- .eval_where_clause(df_population, hit[[1]]$condition)
       !is.na(isTRUE_vec) & isTRUE_vec
     }
   } else {
@@ -614,104 +614,6 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     }
   }
 
-  # Helper functions to clean and evaluate filters
-  clean_var_name <- function(var_name, df_names) {
-    if (is.null(var_name) || !nzchar(var_name)) return(var_name)
-    if (var_name %in% df_names) return(var_name)
-    if (grepl(".", var_name, fixed = TRUE)) {
-      parts <- strsplit(var_name, ".", fixed = TRUE)[[1]]
-      short_var <- parts[length(parts)]
-      if (short_var %in% df_names) return(short_var)
-    }
-    var_name
-  }
-
-  eval_condition <- function(df, cond_obj) {
-    var_name <- cond_obj[["variable"]]
-    comp <- cond_obj[["comparator"]]
-    val_list <- cond_obj[["value"]]
-
-    if (is.null(var_name) || !nzchar(var_name)) {
-      return(rep(TRUE, nrow(df)))
-    }
-
-    var_name <- clean_var_name(var_name, names(df))
-
-    if (!var_name %in% names(df)) {
-      return(rep(FALSE, nrow(df)))
-    }
-
-    col_val <- df[[var_name]]
-    val <- unlist(val_list)
-
-    if (comp %in% c("EQ", "IN")) {
-      if (length(val) == 0) {
-        is.na(col_val) | col_val == ""
-      } else {
-        col_val %in% val
-      }
-    } else if (comp %in% c("NE", "NOTIN")) {
-      if (length(val) == 0) {
-        !is.na(col_val) & col_val != ""
-      } else {
-        !(col_val %in% val)
-      }
-    } else if (comp == "LT") {
-      col_val < as.numeric(val)
-    } else if (comp == "LE") {
-      col_val <= as.numeric(val)
-    } else if (comp == "GT") {
-      col_val > as.numeric(val)
-    } else if (comp == "GE") {
-      col_val >= as.numeric(val)
-    } else if (comp == "CONTAINS") {
-      ## arsbridge extension comparator: case-insensitive substring match
-      ## against any of the supplied values.
-      if (length(val) == 0) {
-        rep(FALSE, nrow(df))
-      } else {
-        Reduce(`|`, lapply(val, function(v) {
-          grepl(tolower(v), tolower(as.character(col_val)), fixed = TRUE)
-        }))
-      }
-    } else {
-      rep(TRUE, nrow(df))
-    }
-  }
-
-  eval_where_clause <- function(df, where_clause) {
-    if (is.null(where_clause)) {
-      return(rep(TRUE, nrow(df)))
-    }
-    if (!is.null(where_clause[["condition"]])) {
-      return(eval_condition(df, where_clause[["condition"]]))
-    }
-    if (!is.null(where_clause[["compoundExpression"]])) {
-      comp_expr <- where_clause[["compoundExpression"]]
-      op <- comp_expr[["logicalOperator"]]
-      clauses <- comp_expr[["whereClauses"]]
-
-      if (length(clauses) == 0) {
-        return(rep(TRUE, nrow(df)))
-      }
-
-      results <- lapply(clauses, function(clause) eval_where_clause(df, clause))
-
-      if (identical(op, "AND")) {
-        Reduce(`&`, results)
-      } else if (identical(op, "OR")) {
-        Reduce(`|`, results)
-      } else {
-        rep(TRUE, nrow(df))
-      }
-    } else {
-      if (!is.null(where_clause[["variable"]])) {
-        return(eval_condition(df, where_clause))
-      }
-      rep(TRUE, nrow(df))
-    }
-  }
-
   get_referenced_datasets <- function(where_clause) {
     if (is.null(where_clause)) {
       return(character(0))
@@ -735,7 +637,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
   ##
   ## A clause naming only the target dataset is evaluated row by row. A clause
   ## naming another one is answered on THAT dataset and carried back by
-  ## subject key, because eval_condition() reads a variable the frame does not
+  ## subject key, because .eval_condition() reads a variable the frame does not
   ## have as FALSE for every row -- so an ADSL condition applied directly to an
   ## occurrence frame keeps nothing at all. This is the one place that rule
   ## lives; apply_where_clause() and the Total pass both go through it, and
@@ -750,14 +652,14 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
 
     ## Case-insensitive, as the emitter compares them.
     if (all(toupper(ref_datasets) == toupper(target_ds_name %||% ""))) {
-      return(eval_where_clause(df, where_clause))
+      return(.eval_where_clause(df, where_clause))
     }
 
     valid_subjects <- NULL
     for (ref_ds in ref_datasets) {
       ref_df <- get_df(ref_ds)
       if (is.null(ref_df)) next
-      keep <- eval_where_clause(ref_df, where_clause)
+      keep <- .eval_where_clause(ref_df, where_clause)
       ref_df_filtered <- ref_df[keep, , drop = FALSE]
 
       if (subject_key %in% names(ref_df_filtered)) {
@@ -898,7 +800,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       df_filtered <- apply_where_clause(analysis_ds, subset_where)
     }
 
-    analysis_var <- unname(clean_var_name(analysis_var, names(df_filtered)))
+    analysis_var <- unname(.clean_var_name(analysis_var, names(df_filtered)))
     if (!analysis_var %in% names(df_filtered)) {
       cli::cli_warn("Skipping analysis {.val {analysis_id}}: variable {.val {analysis_var}} not in dataset {.val {analysis_ds}}.")
       diag_add(
@@ -915,7 +817,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     # Resolve groupings (raw names from the shared resolver; cleaned below)
     grouping_vars <- res$by
 
-    grouping_vars <- unname(sapply(grouping_vars, clean_var_name, df_names = names(df_filtered)))
+    grouping_vars <- unname(sapply(grouping_vars, .clean_var_name, df_names = names(df_filtered)))
     dropped_groupings <- grouping_vars[!grouping_vars %in% names(df_filtered)]
     if (length(dropped_groupings) > 0) {
       diag_add(
@@ -949,7 +851,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     ## engine-equivalence guarantee holds.
     group_defs <- list()
     for (raw_var in names(res$group_defs %||% list())) {
-      clean <- unname(clean_var_name(raw_var, names(df_filtered)))
+      clean <- unname(.clean_var_name(raw_var, names(df_filtered)))
       defs  <- res$group_defs[[raw_var]]
       if (!clean %in% (by_arg %||% character())) next
       adsl_only <- all(vapply(defs, function(d) {
@@ -967,7 +869,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       ## a factor NA, which cards drops from the grouped pass) -- say how
       ## many, once per analysis, so a shrinking column set is never silent.
       matched <- Reduce(`|`, lapply(defs, function(d) {
-        eval_where_clause(df_filtered, d$condition)
+        .eval_where_clause(df_filtered, d$condition)
       }))
       n_unmatched <- sum(!matched)
       if (n_unmatched > 0) {
@@ -985,7 +887,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
           labels <- vapply(defs, function(d) d$label, character(1))
           lbl <- rep(NA_character_, nrow(df))
           for (d in defs) {
-            hit <- eval_where_clause(df, d$condition)
+            hit <- .eval_where_clause(df, d$condition)
             lbl[is.na(lbl) & hit] <- d$label
           }
           df[[grp_var]] <- factor(lbl, levels = labels)
@@ -1004,7 +906,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     ## execute, so .EXEC_DESCRIPTORS$available() returns FALSE and the cell is
     ## reserved as manual_pending instead.
     strata_clean <- if (!is.null(res$strata) && nzchar(res$strata))
-      unname(clean_var_name(res$strata, names(df_filtered))) else NULL
+      unname(.clean_var_name(res$strata, names(df_filtered))) else NULL
     res$strata <- if (!is.null(strata_clean) &&
                       strata_clean %in% names(df_filtered)) strata_clean else NULL
 
