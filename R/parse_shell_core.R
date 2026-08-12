@@ -902,6 +902,141 @@ bind_annotations <- function(sec) {
         perl = TRUE)
 }
 
+## --- compound column headers -------------------------------------------------
+##
+## A shell may scope every column of a table to one cohort and then split it:
+##
+##   Low:    ADSL.COHORTN=1 AND ADSL.CGHGR1N=1
+##   Medium: ADSL.COHORTN=1 AND ADSL.CGHGR1N=2
+##   High:   ADSL.COHORTN=1 AND ADSL.CGHGR1N=3
+##
+## Read header by header, the first variable named is COHORTN every time, so
+## the naive axis is the one variable that does NOT vary -- a grouping called
+## "Grouping by COHORTN" whose every level holds COHORTN=1. The columns are
+## still selected correctly, because each level keeps its full condition; it
+## is the axis IDENTITY that is wrong, and nothing said so.
+##
+## The axis is the variable that varies once the shared part is set aside.
+
+## One clause as a comparable string. Canonicalized first, so IN (1,2) and
+## IN (2,1) are the same clause and casing never decides a match.
+#' @noRd
+.clause_key <- function(clause) {
+  canonical <- canonicalize_condition(clause)
+  if (is.null(canonical) || is.null(canonical[["condition"]])) return(NA_character_)
+  paste(deparse(canonical[["condition"]]), collapse = "")
+}
+
+## The two-variable AND case, and only that one: a compound of exactly two
+## simple clauses joined by AND. Anything else -- OR, a nested compound, three
+## clauses -- returns NULL and is left to the existing first-variable rule.
+#' @noRd
+.and_pair <- function(condition) {
+  compound <- condition[["compoundExpression"]]
+  if (is.null(compound)) return(NULL)
+  if (!identical(toupper(.as_scalar_char(compound[["logicalOperator"]]) %||% ""),
+                 "AND")) {
+    return(NULL)
+  }
+
+  clauses <- compound[["whereClauses"]] %||% list()
+  if (length(clauses) != 2L) return(NULL)
+  ## Both members must be plain conditions; a nested compound is out of scope.
+  if (!all(vapply(clauses, function(c) !is.null(c[["condition"]]), logical(1)))) {
+    return(NULL)
+  }
+  clauses
+}
+
+## Infer the column axis from headers that share a common predicate.
+##
+## Returns NULL when the pattern does not apply at all -- that is not a
+## finding, it is simply the ordinary case. When the pattern IS present but
+## the axis cannot be named without guessing, returns a list with
+## `ambiguous = TRUE` and a reason, so the caller can warn and fall back
+## rather than pick something plausible.
+##
+## The rule, and it is deliberately strict: every conditioned level header
+## must be an AND of exactly two simple clauses; exactly one clause must be
+## identical across all of them; and the clauses left over must all name one
+## single variable, different from the shared one. Anything else is a guess.
+#' @noRd
+.infer_common_predicate_axis <- function(candidates) {
+  levels <- Filter(function(cand) {
+    nzchar(cand$variable %||% "") && !is.null(cand$condition) &&
+      !.is_overall_label(cand$label)
+  }, candidates)
+  if (length(levels) < 2L) return(NULL)
+
+  pairs <- lapply(levels, function(cand) .and_pair(cand$condition))
+  ## The pattern is "present" only when EVERY level is a two-clause AND. One
+  ## plain header among them means this is not the compound-column shape.
+  if (any(vapply(pairs, is.null, logical(1)))) return(NULL)
+
+  keys <- lapply(pairs, function(clauses) {
+    vapply(clauses, .clause_key, character(1))
+  })
+  if (any(vapply(keys, function(k) any(is.na(k)), logical(1)))) return(NULL)
+
+  shared <- Reduce(intersect, keys)
+  if (length(shared) == 0L) {
+    return(list(ambiguous = TRUE,
+                reason = "no predicate is common to every column header"))
+  }
+  if (length(shared) > 1L) {
+    ## Every header identical, or both clauses shared: nothing varies, so
+    ## nothing identifies the columns.
+    return(list(ambiguous = TRUE,
+                reason = "the column headers do not differ from one another"))
+  }
+
+  ## What is left of each header once the shared clause is removed.
+  varying <- list()
+  for (i in seq_along(pairs)) {
+    keep <- which(keys[[i]] != shared)
+    ## A header whose two clauses are both the shared one leaves nothing to
+    ## vary by.
+    if (length(keep) != 1L) {
+      return(list(ambiguous = TRUE,
+                  reason = "a column header repeats the common predicate"))
+    }
+    varying[[length(varying) + 1L]] <- pairs[[i]][[keep]][["condition"]]
+  }
+
+  axis_vars <- unique(vapply(varying, function(cond) {
+    paste0(toupper(.as_scalar_char(cond[["dataset"]]) %||% ""), ".",
+           toupper(.as_scalar_char(cond[["variable"]]) %||% ""))
+  }, character(1)))
+
+  if (length(axis_vars) != 1L) {
+    return(list(
+      ambiguous = TRUE,
+      reason = sprintf("the columns vary by more than one variable (%s)",
+                       paste(sort(axis_vars), collapse = ", "))
+    ))
+  }
+
+  shared_clause <- pairs[[1]][[which(keys[[1]] == shared)[1]]]
+  common_var <- paste0(
+    toupper(.as_scalar_char(shared_clause[["condition"]][["dataset"]]) %||% ""),
+    ".",
+    toupper(.as_scalar_char(shared_clause[["condition"]][["variable"]]) %||% "")
+  )
+  ## The shared clause and the varying one naming the same variable is not a
+  ## factorisation, it is one variable compared twice.
+  if (identical(common_var, axis_vars)) {
+    return(list(ambiguous = TRUE,
+                reason = "the common and varying clauses name the same variable"))
+  }
+
+  list(
+    ambiguous  = FALSE,
+    axis       = axis_vars,
+    common     = common_var,
+    n_levels   = length(levels)
+  )
+}
+
 #' Record the overall column on a section: whether it exists, and its scope.
 #'
 #' `candidates` are the annotated headers, `bare_labels` the unannotated ones,
@@ -1058,7 +1193,41 @@ bind_annotations <- function(sec) {
     return(sec)
   }
 
-  if (length(qualifying) > 1) {
+  ## Compound headers first: when every level header ANDs a shared predicate
+  ## onto its own value, the axis is the part that VARIES. Read one header at
+  ## a time the shared part looks like the axis, because it is named first,
+  ## and the counting rule below would pick it.
+  inferred <- .infer_common_predicate_axis(candidates)
+  inferred_axis <- NULL
+
+  if (!is.null(inferred) && !isTRUE(inferred$ambiguous)) {
+    inferred_axis <- inferred$axis
+    diag_add(
+      stage = "parse_shell", severity = "INFO", input = INPUT_SHELL,
+      problem = sprintf(
+        "Column headers share the predicate %s; %s varies across %d columns and was taken as the column axis.",
+        inferred$common, inferred$axis, inferred$n_levels),
+      tlf_number = sec$tlf_number, location = sec$title %||% "",
+      action = "Each column keeps its full condition; only the axis is named from the varying variable."
+    )
+  } else if (!is.null(inferred)) {
+    ## The shape is there but the axis is not decidable. Say so and fall
+    ## through -- a guessed axis is worse than the old behaviour, because it
+    ## looks deliberate.
+    .diag_gap(
+      stage = "parse_shell", severity = "WARN", input = INPUT_SHELL,
+      problem = sprintf(
+        "Column headers combine two conditions each, but the column axis cannot be inferred: %s.",
+        inferred$reason),
+      why = "Naming one of them the axis would be a guess, and a wrong axis is not visible in the output.",
+      fix = "Annotate the columns so they share one condition and differ in exactly one other.",
+      tlf_number = sec$tlf_number, location = sec$title %||% ""
+    )
+  }
+
+  if (!is.null(inferred_axis)) {
+    axis_var <- inferred_axis
+  } else if (length(qualifying) > 1) {
     ## Most headers wins; first in document order breaks a tie.
     ordered <- names(sort(var_counts[qualifying], decreasing = TRUE))
     axis_var <- ordered[[1]]
@@ -1075,6 +1244,25 @@ bind_annotations <- function(sec) {
     axis_var <- qualifying[[1]]
   }
 
+  ## Which headers define the levels of that axis. Normally a header claims
+  ## the axis by naming it; under an inferred axis every conditioned level
+  ## header does, since the axis variable is the one none of them names first.
+  is_axis_header <- if (is.null(inferred_axis)) {
+    function(cand) identical(cand$variable, axis_var)
+  } else {
+    function(cand) nzchar(cand$variable %||% "") && !is.null(cand$condition)
+  }
+
+  ## The same question for the coverage check below, which must also see the
+  ## headers that did NOT parse -- they are the ones at risk of being lost.
+  ## Under an inferred axis such a header names no variable we can match on,
+  ## so every annotated non-overall header counts and a shortfall still shows.
+  claims_axis <- if (is.null(inferred_axis)) {
+    function(cand) identical(cand$variable, axis_var)
+  } else {
+    function(cand) nzchar(cand$variable %||% "")
+  }
+
   ## A Total/Overall column is never one of the group LEVELS, however it is
   ## annotated. Its scope overlaps the levels by construction, and the emitted
   ## grouping is a first-match-wins case_when factor -- so a Total level would
@@ -1082,7 +1270,7 @@ bind_annotations <- function(sec) {
   ## It becomes the overall-column pass instead, below.
   groups <- list()
   for (cand in conditioned) {
-    if (!identical(cand$variable, axis_var)) next
+    if (!is_axis_header(cand)) next
     if (.is_overall_label(cand$label)) next
     ## Display level label: the header text without its (N=XX) placeholder.
     level_label <- .strip_n_placeholder(cand$label)
@@ -1096,7 +1284,7 @@ bind_annotations <- function(sec) {
   ## did not parse into a condition is a display column silently lost from the
   ## column axis. Surface the shortfall so a shell whose (e.g.) missing-value
   ## header uses an unsupported form is caught rather than quietly narrowed.
-  axis_headers <- Filter(function(cand) identical(cand$variable, axis_var) &&
+  axis_headers <- Filter(function(cand) claims_axis(cand) &&
                            !.is_overall_label(cand$label), candidates)
   dropped <- length(axis_headers) - length(groups)
   if (dropped > 0) {

@@ -1054,3 +1054,59 @@ corrupt_annotation_paragraph(
   value_part = "”Severe”"
 )
 cat("Wrote:", out_corrupted, "\n")
+
+## ---------------------------------------------------------------------------
+## Common-predicate column headers (spec section 25). Every group column ANDs
+## the same cohort restriction onto its own dose-group value, and the Total
+## column carries the shared restriction alone. Read one header at a time the
+## axis looks like COHORTN, because that is the variable each header names
+## first -- but COHORTN is constant across the columns and CGHGR1N is what
+## actually distinguishes them. All content is synthetic (CDSC-ALZ-201).
+## ---------------------------------------------------------------------------
+
+doc_common_pred <- read_docx() |>
+  body_add_par("Table 14.5.1 Demographics by Dose Group – Cohort 1") |>
+  body_add_table(
+    value = data.frame(
+      ` ` = c("Age (years)  ADSL.AGE",
+              "  n",
+              "  Mean (SD)",
+              "Sex, n (%)  ADSL.SEX",
+              "  Male",
+              "  Female"),
+      `Low (N=XX) ADSL.COHORTN=1 AND ADSL.CGHGR1N=1`    = rep("", 6),
+      `Medium (N=XX) ADSL.COHORTN=1 AND ADSL.CGHGR1N=2` = rep("", 6),
+      `High (N=XX) ADSL.COHORTN=1 AND ADSL.CGHGR1N=3`   = rep("", 6),
+      `Total (N=XX) ADSL.COHORTN=1`                     = rep("", 6),
+      check.names = FALSE,
+      stringsAsFactors = FALSE
+    ),
+    style = "table_template"
+  ) |>
+  body_add_par("Source: ADSL")
+out_common_pred <- file.path(here, "annotated_shell_common_predicate.docx")
+print(doc_common_pred, target = out_common_pred)
+cat("Wrote:", out_common_pred, "\n")
+
+## The same shape, but the columns vary by TWO variables once the shared
+## COHORTN=1 is set aside. There is no single axis to name, so the converter
+## must say so and leave the existing behaviour alone rather than pick one.
+
+doc_ambiguous <- read_docx() |>
+  body_add_par("Table 14.5.2 Demographics by Subgroup – Cohort 1") |>
+  body_add_table(
+    value = data.frame(
+      ` ` = c("Age (years)  ADSL.AGE",
+              "  n",
+              "  Mean (SD)"),
+      `Low dose (N=XX) ADSL.COHORTN=1 AND ADSL.CGHGR1N=1` = rep("", 3),
+      `Elderly (N=XX) ADSL.COHORTN=1 AND ADSL.AGEGR1N=2`  = rep("", 3),
+      check.names = FALSE,
+      stringsAsFactors = FALSE
+    ),
+    style = "table_template"
+  ) |>
+  body_add_par("Source: ADSL")
+out_ambiguous <- file.path(here, "annotated_shell_common_predicate_ambiguous.docx")
+print(doc_ambiguous, target = out_ambiguous)
+cat("Wrote:", out_ambiguous, "\n")
