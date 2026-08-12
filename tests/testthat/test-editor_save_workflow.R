@@ -159,6 +159,133 @@ test_that("bulk grouping assignment copies one line's groupings across the outpu
   })
 })
 
+# A source line whose groupings differ from every sibling in its output, so
+# there is always something for the plan to report.
+.swf_regrouped <- function(model = .swf_model()) {
+  counts <- table(model$analyses$output_id[!is.na(model$analyses$output_id)])
+  out_id <- names(counts)[counts >= 2][1]
+  if (is.na(out_id)) return(NULL)
+
+  source_id <- model$analyses$id[!is.na(model$analyses$output_id) &
+                                   model$analyses$output_id == out_id][1]
+  model <- arsbridge:::model_add_grouping(model, "ADSL", "AGEGR1")
+  grouping_id <- attr(model, "last_added")
+  model <- model_set_field(model, "analyses", source_id,
+                           "grouping_ids", grouping_id)
+
+  list(model = model, output_id = out_id, source_id = source_id,
+       grouping_id = grouping_id)
+}
+
+test_that("the bulk grouping plan stays inside one output", {
+  fixture <- .swf_regrouped()
+  skip_if(is.null(fixture), "fixture has no output with two analyses")
+
+  plan <- arsbridge:::.bulk_grouping_plan(fixture$model, fixture$source_id)
+  analyses <- fixture$model$analyses
+
+  expect_true(nrow(plan$changes) > 0)
+  expect_identical(plan$output_id, fixture$output_id)
+  expect_identical(plan$new_value, fixture$grouping_id)
+
+  # Every target belongs to the source line's output, and the source line is
+  # not among them -- it already has the groupings being copied.
+  target_outputs <- analyses$output_id[match(plan$changes$id, analyses$id)]
+  expect_true(all(target_outputs == fixture$output_id))
+  expect_false(fixture$source_id %in% plan$changes$id)
+
+  # And no line from any other output is planned, which is the guarantee
+  # section 11 asks for.
+  elsewhere <- analyses$id[is.na(analyses$output_id) |
+                             analyses$output_id != fixture$output_id]
+  expect_length(intersect(plan$changes$id, elsewhere), 0L)
+})
+
+test_that("the bulk grouping plan reports only lines that would change", {
+  fixture <- .swf_regrouped()
+  skip_if(is.null(fixture), "fixture has no output with two analyses")
+
+  # Bring one sibling into line by hand; the plan should stop listing it.
+  before <- arsbridge:::.bulk_grouping_plan(fixture$model, fixture$source_id)
+  settled <- before$changes$id[1]
+  model <- model_set_field(fixture$model, "analyses", settled,
+                           "grouping_ids", fixture$grouping_id)
+
+  after <- arsbridge:::.bulk_grouping_plan(model, fixture$source_id)
+  expect_false(settled %in% after$changes$id)
+  expect_identical(nrow(after$changes), nrow(before$changes) - 1L)
+
+  # The preview shows one row per changed line, plus the header row.
+  html <- as.character(arsbridge:::.bulk_grouping_preview_table(after))
+  expect_identical(
+    lengths(regmatches(html, gregexpr("<tr>", html, fixed = TRUE))),
+    nrow(after$changes) + 1L
+  )
+})
+
+test_that("a line outside any output has no bulk grouping plan", {
+  model <- .swf_model()
+
+  expect_null(arsbridge:::.bulk_grouping_plan(model, "NO_SUCH_ANALYSIS"))
+
+  detached <- model
+  detached$analyses$output_id[1] <- NA_character_
+  expect_null(
+    arsbridge:::.bulk_grouping_plan(detached, detached$analyses$id[1])
+  )
+})
+
+test_that("grouping references read as names, and a dangling one says so", {
+  model <- .swf_model()
+  grouping_id <- model$groupings$id[1]
+
+  phrase <- arsbridge:::.grouping_phrase(model, grouping_id)
+  expect_match(phrase, grouping_id, fixed = TRUE)
+
+  expect_identical(arsbridge:::.grouping_phrase(model, NA_character_),
+                   "no groupings")
+  expect_match(arsbridge:::.grouping_phrase(model, "GF_GONE"),
+               "not in this reporting event")
+
+  # Two groupings read as a list, in the order the analysis holds them.
+  pair <- paste(model$groupings$id[1:2], collapse = ";")
+  expect_match(arsbridge:::.grouping_phrase(model, pair), ", ", fixed = TRUE)
+})
+
+test_that("bulk assignment re-previews rather than applying a stale plan", {
+  fixture <- .swf_regrouped()
+  skip_if(is.null(fixture), "fixture has no output with two analyses")
+
+  state <- .swf_state(model = fixture$model)
+
+  shiny::testServer(arsbridge:::mod_detail_server, args = list(state = state), {
+    state$selected(list(pool = "analyses", id = fixture$source_id))
+    session$setInputs(apply_groupings_all = 1)
+
+    # The reviewer is looking at the preview when the source line's own
+    # groupings change underneath it. Confirming now must not write the
+    # groupings that were previewed.
+    plan <- arsbridge:::.bulk_grouping_plan(state$model(), fixture$source_id)
+    apply_edit(state, "analyses", fixture$source_id, "grouping_ids",
+               NA_character_)
+    before <- state$model()$analyses
+
+    session$setInputs(confirm_apply_groupings_all = 1)
+
+    after <- state$model()$analyses
+    expect_identical(after$grouping_ids, before$grouping_ids)
+    expect_false(any(after$grouping_ids[match(plan$changes$id, after$id)] ==
+                       fixture$grouping_id, na.rm = TRUE))
+
+    # Confirming the refreshed preview does go through.
+    session$setInputs(confirm_apply_groupings_all = 2)
+    applied <- state$model()$analyses
+    targets <- !is.na(applied$output_id) &
+      applied$output_id == fixture$output_id
+    expect_true(all(is.na(applied$grouping_ids[targets])))
+  })
+})
+
 test_that("grouping add, clone, and delete behave and respect dependencies", {
   model <- .swf_model()
 

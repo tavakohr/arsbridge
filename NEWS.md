@@ -1,5 +1,18 @@
 # arsbridge (development version)
 
+* **Bulk grouping assignment shows what each line would become, not just how
+  many.** The confirmation named the new groupings and counted the lines, but
+  it never said which output the action was scoped to, and it never showed
+  what those lines were grouped by already -- so the reviewer confirmed a
+  count and discovered the diff afterwards, in the edit log. The dialog now
+  names the target output and lists every affected line beside its current
+  groupings and the ones it would get, both spelled as labels rather than
+  bare ids. The preview and the edit that follows are computed by one
+  function, so they cannot describe different things. If the reporting event
+  moves while the dialog is open -- an undo, an autosave restore, a second
+  window -- confirming re-previews the changed plan instead of applying the
+  one that was displayed.
+
 * **A column condition that names a variable the ADaM spec does not have is
   reported.** The spec overlay read only the flat condition columns, so it
   never looked inside a grouping's child groups, and it skipped a compound
