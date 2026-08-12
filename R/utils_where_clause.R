@@ -442,9 +442,16 @@ flat_data_subset <- function(annotation) {
 ## the deterministic-equivalence guarantee of Plan B. Keep the two in lock-step:
 ## any change to .eval_condition() must be mirrored here (see test-where_to_filter_expr).
 
-#' Datasets referenced anywhere in a WhereClause (mirrors the
-#' get_referenced_datasets() closure in ars_to_ard.R). Used by the emitter to
-#' decide direct-filter vs cross-dataset subject restriction.
+#' Datasets referenced anywhere in a WhereClause. Used to decide direct-filter
+#' vs cross-dataset subject restriction.
+#'
+#' The single source of truth for both halves: the emitter reads it directly,
+#' the executor through `.where_datasets_checked()`, which adds a diagnostic
+#' for malformed cardinality. It used to be mirrored by a
+#' `get_referenced_datasets()` closure inside ars_to_ard(), and the two
+#' differed -- this one coerces each `dataset` through `.as_scalar_char()`,
+#' the closure returned the raw field -- so a `dataset` written as more than
+#' one value produced two different filters from one spec.
 #' @noRd
 .where_datasets <- function(where) {
   if (is.null(where)) return(character(0))

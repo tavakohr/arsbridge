@@ -497,6 +497,202 @@
   invisible(NULL)
 }
 
+## --- reading ADaM, and applying a where-clause across datasets --------------
+##
+## These four lived inside ars_to_ard() as closures, which put them out of
+## reach of every other function and of any test. That is not a theoretical
+## cost: `.complete_zero_groups()` called the evaluator from namespace level,
+## resolved lexically to nothing, and its declared-column branch died with
+## "could not find function" -- the same shape of defect these carried.
+##
+## `.where_keep_mask()` decides the population, and therefore every
+## denominator, on BOTH execution paths. Behaviour for valid input is
+## unchanged and pinned numerically in test-where_clause_execution.R.
+
+#' A cache over the ADaM directory: name in, data frame out.
+#'
+#' The store owns the FAIL diagnostic for a dataset that is not there, exactly
+#' as the closure it replaces did -- `diag_add()` is a package-level function
+#' writing to the run's diagnostics, not something captured from a frame, so
+#' severity, wording and control flow are the same by construction.
+#'
+#' Two behaviours are preserved deliberately rather than corrected here,
+#' because this is a behaviour-preserving move and both predate it:
+#'
+#'   * a MISSING dataset is not cached. `dfs[[name]] <- NULL` removes the
+#'     element in R rather than storing a NULL, so the next lookup re-reads the
+#'     directory and re-reports. That is why a run against an absent dataset
+#'     emits the FAIL more than once.
+#'   * the caller is not forced to stop. `.where_keep_mask()` skips a
+#'     referenced dataset it cannot read and, if no dataset yielded subjects,
+#'     returns every row -- so the population filter is simply not applied.
+#'
+#' Both are recorded in notes/plans/POST_ROADMAP_risks_and_order.md.
+#' @noRd
+.adam_store <- function(adam_dir) {
+  dfs <- list()
+
+  get <- function(name) {
+    if (is.null(name) || !nzchar(name)) return(NULL)
+    name_upper <- toupper(name)
+    if (!name_upper %in% names(dfs)) {
+      files <- list.files(adam_dir, full.names = TRUE)
+      basenames <- tolower(basename(files))
+      csv_file <- files[basenames == tolower(paste0(name_upper, ".csv"))]
+      xpt_file <- files[basenames == tolower(paste0(name_upper, ".xpt"))]
+      sas_file <- files[basenames == tolower(paste0(name_upper, ".sas7bdat"))]
+
+      if (length(xpt_file) > 0) {
+        ## .read_dataset reads .xpt/.sas7bdat/.csv and, on a read failure,
+        ## records a FAIL diagnostic naming the dataset and returns NULL (this
+        ## analysis is then skipped) rather than throwing a cryptic base-R
+        ## error. Native SAS formats are preferred over .csv when both exist.
+        dfs[[name_upper]] <<- .read_dataset(xpt_file[1], name_upper)
+      } else if (length(sas_file) > 0) {
+        dfs[[name_upper]] <<- .read_dataset(sas_file[1], name_upper)
+      } else if (length(csv_file) > 0) {
+        dfs[[name_upper]] <<- .read_dataset(csv_file[1], name_upper)
+      } else {
+        cli::cli_warn("Dataset {.val {name_upper}} not found in {.path {adam_dir}}.")
+        diag_add(
+          stage = "execute_ard", severity = "FAIL", input = INPUT_DATA,
+          problem = sprintf("Dataset %s not found in ADaM directory", name_upper),
+          location = adam_dir,
+          action = "All analyses against this dataset were skipped"
+        )
+        dfs[[name_upper]] <<- NULL
+      }
+    }
+    dfs[[name_upper]]
+  }
+
+  list(get = get)
+}
+
+#' The datasets a where-clause references, read once for both halves.
+#'
+#' `.where_datasets()` is the single source of truth. The executor used to
+#' carry its own copy, and the two differed in one respect: this one coerces
+#' every `dataset` through `.as_scalar_char()`, while the copy returned the
+#' raw field. A `dataset` written as more than one value therefore meant the
+#' emitter filtered on the first and the executor intersected them all -- the
+#' same spec, two filters.
+#'
+#' The ARS schema has `dataset` as a scalar, so the scalar reading wins. What
+#' changes is that narrowing is no longer silent: cardinality > 1 is malformed
+#' input and is reported.
+#' @noRd
+.where_datasets_checked <- function(where_clause, location = NA_character_) {
+  ## One diagnostic per malformed field, so the count names DATASETS rather
+  ## than however many fields happened to be wrong.
+  for (field in Filter(function(x) length(x) > 1L,
+                       .where_datasets_raw(where_clause))) {
+    values <- as.character(unlist(field, use.names = FALSE))
+    diag_add(
+      stage = "execute_ard", severity = "WARN", input = INPUT_ARS,
+      problem = sprintf(
+        "A where-clause `dataset` field names %d datasets: %s",
+        length(values), paste(values, collapse = ", ")),
+      location = location,
+      action = sprintf("Only %s is used, matching the emitted code",
+                       values[[1]])
+    )
+  }
+  .where_datasets(where_clause)
+}
+
+## Every `dataset` field as written, uncoerced, so cardinality can be judged
+## before `.where_datasets()` flattens it away.
+#' @noRd
+.where_datasets_raw <- function(where_clause) {
+  if (is.null(where_clause)) return(list())
+  if (!is.null(where_clause[["condition"]])) {
+    field <- where_clause[["condition"]][["dataset"]]
+    return(if (is.null(field)) list() else list(field))
+  }
+  if (!is.null(where_clause[["compoundExpression"]])) {
+    clauses <- where_clause[["compoundExpression"]][["whereClauses"]]
+    return(unlist(lapply(clauses, .where_datasets_raw), recursive = FALSE))
+  }
+  if (!is.null(where_clause[["dataset"]])) {
+    return(list(where_clause[["dataset"]]))
+  }
+  list()
+}
+
+#' The mask a where-clause puts on one frame that is already in hand.
+#'
+#' A clause naming only the target dataset is evaluated row by row. A clause
+#' naming another one is answered on THAT dataset and carried back by subject
+#' key, because `.eval_condition()` reads a variable the frame does not have as
+#' FALSE for every row -- so an ADSL condition applied directly to an
+#' occurrence frame keeps nothing at all. This is the one place that rule
+#' lives; `.apply_where_clause()` and the Total pass both go through it, and
+#' the emitted code says the same thing in dplyr (`.apply_where_expr()`).
+#'
+#' Unchanged from the closure it replaces, including the two ways it declines
+#' to filter rather than failing: a referenced dataset that cannot be read is
+#' skipped, and one without the subject key is reported and skipped. In both
+#' cases, if nothing yielded subjects, every row is kept. See the deferred
+#' defects in notes/plans/POST_ROADMAP_risks_and_order.md.
+#' @noRd
+.where_keep_mask <- function(df, target_ds_name, where_clause, store,
+                             subject_key) {
+  if (is.null(df)) return(logical(0))
+  all_rows <- rep(TRUE, nrow(df))
+  if (is.null(where_clause)) return(all_rows)
+
+  ref_datasets <- .where_datasets_checked(where_clause, target_ds_name)
+  if (length(ref_datasets) == 0) return(all_rows)
+
+  ## Case-insensitive, as the emitter compares them.
+  if (all(toupper(ref_datasets) == toupper(target_ds_name %||% ""))) {
+    return(.eval_where_clause(df, where_clause))
+  }
+
+  valid_subjects <- NULL
+  for (ref_ds in ref_datasets) {
+    ref_df <- store$get(ref_ds)
+    if (is.null(ref_df)) next
+    keep <- .eval_where_clause(ref_df, where_clause)
+    ref_df_filtered <- ref_df[keep, , drop = FALSE]
+
+    if (subject_key %in% names(ref_df_filtered)) {
+      ds_subjs <- unique(ref_df_filtered[[subject_key]])
+      if (is.null(valid_subjects)) {
+        valid_subjects <- ds_subjs
+      } else {
+        valid_subjects <- intersect(valid_subjects, ds_subjs)
+      }
+    } else {
+      diag_add(
+        stage = "execute_ard", severity = "WARN", input = INPUT_DATA,
+        problem = sprintf("Subject key %s not present in dataset %s referenced by a where-clause",
+                          subject_key, ref_ds),
+        location = target_ds_name,
+        action = "Cross-dataset filter from this dataset NOT applied"
+      )
+    }
+  }
+
+  if (is.null(valid_subjects) || !subject_key %in% names(df)) {
+    return(all_rows)
+  }
+  df[[subject_key]] %in% valid_subjects
+}
+
+#' A dataset read from the store and filtered by a where-clause.
+#' @noRd
+.apply_where_clause <- function(target_ds_name, where_clause, store,
+                                subject_key) {
+  df <- store$get(target_ds_name)
+  if (is.null(df) || is.null(where_clause)) {
+    return(df)
+  }
+  df[.where_keep_mask(df, target_ds_name, where_clause, store, subject_key), ,
+     drop = FALSE]
+}
+
 #' Execute ARS JSON and return an ARD object using 'cards'
 #'
 #' Reads a CDISC ARS JSON specification and executes the analyses defined within
@@ -548,42 +744,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
   spec <- .read_json(ars_path)
   .assert_runnable_ars(spec)
 
-  # Cache list for loaded datasets
-  dfs <- list()
-  get_df <- function(name) {
-    if (is.null(name) || !nzchar(name)) return(NULL)
-    name_upper <- toupper(name)
-    if (!name_upper %in% names(dfs)) {
-      files <- list.files(adam_dir, full.names = TRUE)
-      basenames <- tolower(basename(files))
-      csv_file <- files[basenames == tolower(paste0(name_upper, ".csv"))]
-      xpt_file <- files[basenames == tolower(paste0(name_upper, ".xpt"))]
-      sas_file <- files[basenames == tolower(paste0(name_upper, ".sas7bdat"))]
-
-      if (length(xpt_file) > 0) {
-        ## .read_dataset reads .xpt/.sas7bdat/.csv and, on a read failure, records
-        ## a FAIL diagnostic naming the dataset and returns NULL (this analysis is
-        ## then skipped) rather than throwing a cryptic base-R error. Native SAS
-        ## formats are preferred over .csv when both are present.
-        dfs[[name_upper]] <<- .read_dataset(xpt_file[1], name_upper)
-      } else if (length(sas_file) > 0) {
-        dfs[[name_upper]] <<- .read_dataset(sas_file[1], name_upper)
-      } else if (length(csv_file) > 0) {
-        dfs[[name_upper]] <<- .read_dataset(csv_file[1], name_upper)
-      } else {
-        cli::cli_warn("Dataset {.val {name_upper}} not found in {.path {adam_dir}}.")
-        diag_add(
-          stage = "execute_ard", severity = "FAIL", input = INPUT_DATA,
-          problem = sprintf("Dataset %s not found in ADaM directory", name_upper),
-          location = adam_dir,
-          action = "All analyses against this dataset were skipped"
-        )
-        dfs[[name_upper]] <<- NULL
-      }
-    }
-    dfs[[name_upper]]
-  }
-
+  store <- .adam_store(adam_dir)
   # Scalar character helper (shared file-level implementation in resolve_analysis.R).
   as_scalar_char <- .as_scalar_char
 
@@ -612,86 +773,6 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
         fix = "Run validate_ars_model() on this event -- it names the broken path/group reference -- then fix or regenerate."
       )
     }
-  }
-
-  get_referenced_datasets <- function(where_clause) {
-    if (is.null(where_clause)) {
-      return(character(0))
-    }
-    if (!is.null(where_clause[["condition"]])) {
-      cond <- where_clause[["condition"]]
-      return(cond[["dataset"]] %||% character(0))
-    }
-    if (!is.null(where_clause[["compoundExpression"]])) {
-      comp_expr <- where_clause[["compoundExpression"]]
-      clauses <- comp_expr[["whereClauses"]]
-      return(unique(unlist(lapply(clauses, get_referenced_datasets))))
-    }
-    if (!is.null(where_clause[["dataset"]])) {
-      return(where_clause[["dataset"]])
-    }
-    character(0)
-  }
-
-  ## The mask a where-clause puts on one frame that is already in hand.
-  ##
-  ## A clause naming only the target dataset is evaluated row by row. A clause
-  ## naming another one is answered on THAT dataset and carried back by
-  ## subject key, because .eval_condition() reads a variable the frame does not
-  ## have as FALSE for every row -- so an ADSL condition applied directly to an
-  ## occurrence frame keeps nothing at all. This is the one place that rule
-  ## lives; apply_where_clause() and the Total pass both go through it, and
-  ## the emitted code says the same thing in dplyr (.apply_where_expr()).
-  where_keep_mask <- function(df, target_ds_name, where_clause) {
-    if (is.null(df)) return(logical(0))
-    all_rows <- rep(TRUE, nrow(df))
-    if (is.null(where_clause)) return(all_rows)
-
-    ref_datasets <- get_referenced_datasets(where_clause)
-    if (length(ref_datasets) == 0) return(all_rows)
-
-    ## Case-insensitive, as the emitter compares them.
-    if (all(toupper(ref_datasets) == toupper(target_ds_name %||% ""))) {
-      return(.eval_where_clause(df, where_clause))
-    }
-
-    valid_subjects <- NULL
-    for (ref_ds in ref_datasets) {
-      ref_df <- get_df(ref_ds)
-      if (is.null(ref_df)) next
-      keep <- .eval_where_clause(ref_df, where_clause)
-      ref_df_filtered <- ref_df[keep, , drop = FALSE]
-
-      if (subject_key %in% names(ref_df_filtered)) {
-        ds_subjs <- unique(ref_df_filtered[[subject_key]])
-        if (is.null(valid_subjects)) {
-          valid_subjects <- ds_subjs
-        } else {
-          valid_subjects <- intersect(valid_subjects, ds_subjs)
-        }
-      } else {
-        diag_add(
-          stage = "execute_ard", severity = "WARN", input = INPUT_DATA,
-          problem = sprintf("Subject key %s not present in dataset %s referenced by a where-clause",
-                            subject_key, ref_ds),
-          location = target_ds_name,
-          action = "Cross-dataset filter from this dataset NOT applied"
-        )
-      }
-    }
-
-    if (is.null(valid_subjects) || !subject_key %in% names(df)) {
-      return(all_rows)
-    }
-    df[[subject_key]] %in% valid_subjects
-  }
-
-  apply_where_clause <- function(target_ds_name, where_clause) {
-    df <- get_df(target_ds_name)
-    if (is.null(df) || is.null(where_clause)) {
-      return(df)
-    }
-    df[where_keep_mask(df, target_ds_name, where_clause), , drop = FALSE]
   }
 
   # Walk analyses and execute
@@ -767,7 +848,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       next
     }
 
-    df_base <- get_df(analysis_ds)
+    df_base <- store$get(analysis_ds)
     if (is.null(df_base)) {
       cli::cli_warn("Skipping analysis {.val {analysis_id}}: dataset {.val {analysis_ds}} not loaded.")
       next
@@ -779,13 +860,13 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     # Apply filters
     df_filtered <- df_base
     if (!is.null(pop_where)) {
-      df_filtered <- apply_where_clause(analysis_ds, pop_where)
+      df_filtered <- .apply_where_clause(analysis_ds, pop_where, store, subject_key)
     }
 
     df_population <- NULL
-    adsl_df <- get_df("ADSL")
+    adsl_df <- store$get("ADSL")
     if (!is.null(adsl_df)) {
-      df_population <- apply_where_clause("ADSL", pop_where)
+      df_population <- .apply_where_clause("ADSL", pop_where, store, subject_key)
     }
     if (is.null(df_population)) {
       df_population <- df_filtered
@@ -797,7 +878,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     df_domain <- df_filtered
 
     if (!is.null(subset_where)) {
-      df_filtered <- apply_where_clause(analysis_ds, subset_where)
+      df_filtered <- .apply_where_clause(analysis_ds, subset_where, store, subject_key)
     }
 
     analysis_var <- unname(.clean_var_name(analysis_var, names(df_filtered)))
@@ -1050,13 +1131,15 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
           ## .denom_expr() emits. A Total header annotated with a subject-level
           ## variable ([ADSL.COHORTN IN (1,2)] is the shape shells write) names
           ## a column the occurrence frame cannot answer by itself, so this
-          ## goes through where_keep_mask() rather than evaluating the clause
+          ## goes through .where_keep_mask() rather than evaluating the clause
           ## row by row.
-          keep_t <- where_keep_mask(df_filtered, analysis_ds, res$total_where)
+          keep_t <- .where_keep_mask(df_filtered, analysis_ds, res$total_where,
+                                     store, subject_key)
           df_t   <- df_filtered[keep_t, , drop = FALSE]
           df_pop <- if (is.null(df_population)) NULL else {
             df_population[
-              where_keep_mask(df_population, "ADSL", res$total_where), ,
+              .where_keep_mask(df_population, "ADSL", res$total_where,
+                               store, subject_key), ,
               drop = FALSE
             ]
           }
