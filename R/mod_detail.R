@@ -721,7 +721,7 @@ mod_detail_server <- function(id, state) {
       if (length(affects) > 0) {
         shiny::div(class = "mt-1",
                    shiny::tags$em("Affects: "),
-                   paste(affects, collapse = " · "))
+                   paste(affects, collapse = " \u00b7 "))
       },
       shiny::br(),
       findings$action[hit[1]]
