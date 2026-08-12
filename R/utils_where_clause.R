@@ -432,6 +432,187 @@ flat_data_subset <- function(annotation) {
   }
 }
 
+## --- WhereClause -> restriction plan ---------------------------------------
+##
+## One structure both halves consume, so "executed filtering == emitted
+## filtering" is structural rather than two implementations kept in step by
+## discipline. The executor interprets the plan against loaded frames; the
+## emitter renders the same plan as dplyr source text.
+##
+## The rule the plan encodes, and why it is not per-atom:
+##
+##   A maximal subtree naming ONE dataset is evaluated ROW-WISE on that
+##   dataset. Only then, if that dataset is foreign, are qualifying rows
+##   projected to subject ids and turned into a membership mask on the target.
+##
+## Decomposing a same-dataset AND into independent existential subject tests
+## would destroy same-record semantics. Given ADCM rows
+##
+##   S01: CMDECOD=ASPIRIN   CONTRTFL=N
+##   S01: CMDECOD=IBUPROFEN CONTRTFL=Y
+##
+## the clause `ADCM.CMDECOD='ASPIRIN' AND ADCM.CONTRTFL='Y'` must NOT keep
+## S01 -- no single conmed record satisfies both. Row-wise evaluation is the
+## behaviour arsbridge has always had for a single foreign dataset; the plan
+## extends it across datasets instead of replacing it.
+
+.PLAN_UNSUPPORTED_AMBIGUOUS <- "ambiguous_row_coherence"
+.PLAN_UNSUPPORTED_OPERATOR  <- "unknown_logical_operator"
+.PLAN_UNSUPPORTED_CONDITION <- "multi_dataset_condition"
+
+#' Plan a where-clause against the dataset it will filter.
+#'
+#' @return `list(ok = TRUE, node = <plan>)`, or `list(ok = FALSE, reason =,
+#'   detail =)` with a stable reason string. Both outcomes are explicit: an
+#'   unsupported clause is a planning RESULT, not an error thrown somewhere in
+#'   the middle of an execution, so the executor and the emitter can both
+#'   refuse it in the same way and for the same recorded reason.
+#'
+#' Plan nodes:
+#'   list(kind = "all")                          -- no restriction
+#'   list(kind = "row",     where =)             -- row-wise on the target
+#'   list(kind = "subject", dataset =, where =)  -- row-wise there, then
+#'                                                  subject membership here
+#'   list(kind = "op",      op =, children =)    -- combine masks elementwise
+#' @noRd
+.where_restriction_plan <- function(where, target_ds, subject_key = "USUBJID") {
+  if (is.null(where)) return(list(ok = TRUE, node = list(kind = "all")))
+
+  node <- .plan_node(where, target_ds)
+
+  unsupported <- .plan_first_unsupported(node)
+  if (!is.null(unsupported)) {
+    return(list(ok = FALSE, reason = unsupported$reason,
+                detail = unsupported$detail))
+  }
+
+  ## Row coherence is only at stake where an existential projection happens,
+  ## which is the foreign case. Two `row` leaves naming the target are each
+  ## evaluated against the same row and so cannot disagree about which record
+  ## they meant.
+  foreign <- .plan_subject_datasets(node)
+  repeated <- unique(foreign[duplicated(foreign)])
+  if (length(repeated) > 0) {
+    return(list(
+      ok = FALSE, reason = .PLAN_UNSUPPORTED_AMBIGUOUS,
+      detail = sprintf(
+        paste0("%s appears in more than one branch that AND-regrouping cannot ",
+               "rejoin, so whether its predicates must hold on the SAME record ",
+               "is not determined by the expression"),
+        paste(repeated, collapse = ", "))))
+  }
+
+  list(ok = TRUE, node = node)
+}
+
+## One node, recursively. Multi-dataset nodes must be boolean; a single
+## condition naming several datasets is malformed and cannot be planned.
+#' @noRd
+.plan_node <- function(where, target_ds) {
+  datasets <- .where_datasets(where)
+  if (length(datasets) == 0) return(list(kind = "all"))
+
+  if (length(datasets) == 1L) {
+    if (identical(toupper(datasets), toupper(target_ds %||% ""))) {
+      return(list(kind = "row", where = where))
+    }
+    return(list(kind = "subject", dataset = datasets, where = where))
+  }
+
+  compound <- where[["compoundExpression"]]
+  if (is.null(compound)) {
+    return(list(kind = "unsupported", reason = .PLAN_UNSUPPORTED_CONDITION,
+                detail = paste(datasets, collapse = ", ")))
+  }
+
+  op <- .as_scalar_char(compound[["logicalOperator"]]) %||% ""
+  if (!op %in% c("AND", "OR")) {
+    return(list(kind = "unsupported", reason = .PLAN_UNSUPPORTED_OPERATOR,
+                detail = op))
+  }
+
+  children <- compound[["whereClauses"]] %||% list()
+  if (identical(op, "AND")) {
+    ## Associativity, then commutativity -- and only under AND. Regrouping
+    ## across an OR would require distribution, which changes the answer.
+    children <- .plan_flatten_and(children)
+    children <- .plan_regroup_same_dataset(children)
+  }
+
+  list(kind = "op", op = op,
+       children = lapply(children, .plan_node, target_ds = target_ds))
+}
+
+## Nested ANDs are one AND. `(A AND B) AND C` -> A, B, C.
+#' @noRd
+.plan_flatten_and <- function(children) {
+  out <- list()
+  for (child in children) {
+    compound <- child[["compoundExpression"]]
+    if (!is.null(compound) &&
+        identical(.as_scalar_char(compound[["logicalOperator"]]) %||% "", "AND")) {
+      out <- c(out, .plan_flatten_and(compound[["whereClauses"]] %||% list()))
+    } else {
+      out <- c(out, list(child))
+    }
+  }
+  out
+}
+
+## Same-dataset siblings of one AND become one subtree, so they are evaluated
+## against the same record. `(ADCM.A AND ADSL.S) AND ADCM.B` regroups to
+## `(ADCM.A AND ADCM.B) AND ADSL.S`.
+#' @noRd
+.plan_regroup_same_dataset <- function(children) {
+  signature <- vapply(children, function(child) {
+    datasets <- .where_datasets(child)
+    if (length(datasets) == 1L) toupper(datasets) else NA_character_
+  }, character(1))
+
+  out <- list()
+  handled <- rep(FALSE, length(children))
+  for (i in seq_along(children)) {
+    if (handled[[i]]) next
+    if (is.na(signature[[i]])) {
+      out <- c(out, list(children[[i]]))
+      handled[[i]] <- TRUE
+      next
+    }
+    same <- which(!handled & !is.na(signature) & signature == signature[[i]])
+    handled[same] <- TRUE
+    if (length(same) == 1L) {
+      out <- c(out, list(children[[i]]))
+    } else {
+      out <- c(out, list(list(compoundExpression = list(
+        logicalOperator = "AND", whereClauses = unname(children[same])))))
+    }
+  }
+  out
+}
+
+## The first unsupported node anywhere in the plan, or NULL.
+#' @noRd
+.plan_first_unsupported <- function(node) {
+  if (identical(node$kind, "unsupported")) {
+    return(list(reason = node$reason, detail = node$detail))
+  }
+  if (!identical(node$kind, "op")) return(NULL)
+  for (child in node$children) {
+    hit <- .plan_first_unsupported(child)
+    if (!is.null(hit)) return(hit)
+  }
+  NULL
+}
+
+## Datasets reached through a subject projection, in plan order.
+#' @noRd
+.plan_subject_datasets <- function(node) {
+  if (identical(node$kind, "subject")) return(toupper(node$dataset))
+  if (!identical(node$kind, "op")) return(character(0))
+  unlist(lapply(node$children, .plan_subject_datasets), use.names = FALSE) %||%
+    character(0)
+}
+
 ## --- WhereClause -> R predicate source text -------------------------------
 ##
 ## where_to_filter_expr() turns a WhereClause into a dplyr/base predicate STRING

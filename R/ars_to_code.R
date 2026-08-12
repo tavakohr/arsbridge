@@ -71,19 +71,63 @@
   if (is.null(where)) return(expr)
   refs <- .where_datasets(where)
   if (length(refs) == 0) return(expr)
-  pred <- where_to_filter_expr(where)
-  if (identical(pred, "TRUE")) return(expr)
 
-  if (all(toupper(refs) == toupper(ds))) {
-    return(paste0(expr, " |>\n    dplyr::filter(", pred, ")"))
+  ## The same plan the executor interprets, rendered as dplyr instead of run.
+  ## Before this, the emitter took refs[1] and filtered that ONE dataset by a
+  ## predicate naming columns from all of them -- so a clause spanning two
+  ## foreign datasets emitted code that referenced a column its frame did not
+  ## have.
+  plan <- .where_restriction_plan(where, ds, subject_key)
+  if (!isTRUE(plan$ok)) {
+    ## Unplannable is unplannable in both halves. Emitting anything here would
+    ## let the generated script produce a number under a different reading of
+    ## the clause than the executor refused to guess at.
+    return(NULL)
   }
-  ## Cross-dataset: keep subjects who satisfy the clause in the foreign data.
-  ref <- refs[1]
-  sk  <- subject_key
-  paste0(
-    expr, " |>\n    dplyr::filter(", sk, " %in% (",
-    ref, " |> dplyr::filter(", pred, ") |> dplyr::pull(", sk, ")))"
-  )
+
+  pred <- .plan_pred_expr(plan$node, ds, subject_key)
+  if (is.null(pred) || identical(pred, "TRUE")) return(expr)
+  paste0(expr, " |>\n    dplyr::filter(", pred, ")")
+}
+
+## One plan node as a predicate string over the target frame. Rendering to a
+## single predicate rather than a chain of filters is what lets OR across
+## datasets be expressed at all.
+#' @noRd
+.plan_pred_expr <- function(node, ds, subject_key) {
+  if (identical(node$kind, "all")) return("TRUE")
+
+  if (identical(node$kind, "row")) {
+    return(where_to_filter_expr(node$where))
+  }
+
+  if (identical(node$kind, "subject")) {
+    ## The whole subtree filtered on its own dataset, so two predicates on one
+    ## record stay on one record -- then projected to subjects.
+    inner <- where_to_filter_expr(node$where)
+    return(paste0(subject_key, " %in% (", node$dataset,
+                  " |> dplyr::filter(", inner,
+                  ") |> dplyr::pull(", subject_key, "))"))
+  }
+
+  parts <- vapply(node$children, .plan_pred_expr, character(1),
+                  ds = ds, subject_key = subject_key)
+  parts <- parts[!is.na(parts) & nzchar(parts)]
+  if (length(parts) == 0) return("TRUE")
+  joiner <- if (identical(node$op, "OR")) " | " else " & "
+  paste0("(", paste(parts, collapse = paste0(")", joiner, "(")), ")")
+}
+
+## A clause neither half can plan stops emission. The executor refuses these
+## before it gets here, but ars_to_code() is also a user-facing path: writing a
+## script that filters under a different reading of the clause than the
+## executor would accept is exactly what must not happen.
+#' @noRd
+.emit_require_plan <- function(expr, res, what) {
+  if (!is.null(expr)) return(expr)
+  stop(sprintf(
+    "Analysis %s: its %s where-clause cannot be planned, so no script was emitted.",
+    res$analysis_id %||% "?", what), call. = FALSE)
 }
 
 ## TRUE when every per-level condition references only ADSL (or nothing).
@@ -199,11 +243,16 @@
 #' @noRd
 .data_expr <- function(res) {
   e <- res$dataset
-  e <- .apply_where_expr(e, res$dataset, res$pop_where, res$subject_key)
-  e <- .apply_where_expr(e, res$dataset, res$subset_where, res$subject_key)
-  ## Declared-path mode: the current path's composed condition scopes the
-  ## frame to exactly one display column's subjects.
-  e <- .apply_where_expr(e, res$dataset, res$path_where, res$subject_key)
+  for (where in list(res$pop_where, res$subset_where,
+                     ## Declared-path mode: the current path's composed
+                     ## condition scopes the frame to exactly one display
+                     ## column's subjects.
+                     res$path_where)) {
+    e <- .apply_where_expr(e, res$dataset, where, res$subject_key)
+    ## NULL propagates: a clause neither half can plan must not become a
+    ## script that computes something anyway.
+    if (is.null(e)) return(NULL)
+  }
   paste0(e, .group_mutate_expr(res), .decode_mutate_expr(res))
 }
 
@@ -231,10 +280,12 @@
 #' @noRd
 .denom_expr <- function(res) {
   e <- .apply_where_expr("ADSL", "ADSL", res$pop_where, res$subject_key)
+  if (is.null(e)) return(NULL)
   ## Declared-path mode: percentages are out of the path's own population --
   ## a subtotal's N is the parent-condition count, the grand total's N the
   ## analysis-set count.
   e <- .apply_where_expr(e, "ADSL", res$path_where, res$subject_key)
+  if (is.null(e)) return(NULL)
   paste0(
     e,
     .denom_join_expr(res),
@@ -449,8 +500,8 @@
 .method_call <- function(res, b) {
   var    <- .clean_emit_name(res$variable)
   sk     <- res$subject_key
-  data_e <- .data_expr(res)
-  denom  <- .denom_expr(res)
+  data_e <- .emit_require_plan(.data_expr(res), res, "analysis")
+  denom  <- .emit_require_plan(.denom_expr(res), res, "denominator")
   method <- res$method_id %||% ""
   qvar   <- encodeString(var, quote = "\"")
 
@@ -697,7 +748,7 @@
   objs   <- character(0)
   for (res in reslist) {
     b  <- .emit_block(res)
-    de <- .denom_expr(res)
+    de <- .emit_require_plan(.denom_expr(res), res, "denominator")
     if (de != "ADSL" && de %in% names(pop_names)) {
       ## Replace the (multi-line) inline denom with its frame name.
       b$code <- gsub(de, pop_names[[de]], b$code, fixed = TRUE)
@@ -726,7 +777,7 @@
   header <- c("library(cards)", "library(dplyr)", "library(haven)",
               sprintf("adam_dir <- %s", encodeString(adam_dir, quote = "\"")))
   loaders <- vapply(datasets, .loader_line, character(1))
-  de <- .denom_expr(res)
+  de <- .emit_require_plan(.denom_expr(res), res, "denominator")
   b  <- .emit_block(res)
   code <- b$code
   pop_def <- NULL

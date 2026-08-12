@@ -630,11 +630,14 @@
 #' lives; `.apply_where_clause()` and the Total pass both go through it, and
 #' the emitted code says the same thing in dplyr (`.apply_where_expr()`).
 #'
-#' Unchanged from the closure it replaces, including the two ways it declines
-#' to filter rather than failing: a referenced dataset that cannot be read is
-#' skipped, and one without the subject key is reported and skipped. In both
-#' cases, if nothing yielded subjects, every row is kept. See the deferred
-#' defects in notes/plans/POST_ROADMAP_risks_and_order.md.
+#' It interprets the plan `.where_restriction_plan()` builds, which the emitter
+#' renders as dplyr for the same clause, so the two cannot drift apart.
+#'
+#' Two ways of declining to filter are carried over unchanged, and are the
+#' deferred defects rather than the design: a referenced dataset that cannot be
+#' read is skipped, and one without the subject key is reported and skipped --
+#' in both cases that branch of the plan contributes no restriction. See
+#' notes/plans/POST_ROADMAP_risks_and_order.md.
 #' @noRd
 .where_keep_mask <- function(df, target_ds_name, where_clause, store,
                              subject_key) {
@@ -642,43 +645,68 @@
   all_rows <- rep(TRUE, nrow(df))
   if (is.null(where_clause)) return(all_rows)
 
-  ref_datasets <- .where_datasets_checked(where_clause, target_ds_name)
-  if (length(ref_datasets) == 0) return(all_rows)
-
-  ## Case-insensitive, as the emitter compares them.
-  if (all(toupper(ref_datasets) == toupper(target_ds_name %||% ""))) {
-    return(.eval_where_clause(df, where_clause))
+  ## Reported here, not in the planner, so planning stays pure: malformed
+  ## `dataset` cardinality is a diagnostic about the spec being run.
+  if (length(.where_datasets_checked(where_clause, target_ds_name)) == 0) {
+    return(all_rows)
   }
 
-  valid_subjects <- NULL
-  for (ref_ds in ref_datasets) {
-    ref_df <- store$get(ref_ds)
-    if (is.null(ref_df)) next
-    keep <- .eval_where_clause(ref_df, where_clause)
+  plan <- .where_restriction_plan(where_clause, target_ds_name, subject_key)
+  if (!isTRUE(plan$ok)) {
+    ## An expression whose row semantics are not determined must not be
+    ## guessed at. NULL means "no mask could be built"; the caller refuses the
+    ## analysis rather than computing something defensible-looking.
+    .diag_gap(
+      stage = "execute_ard", severity = "FAIL", input = INPUT_ARS,
+      problem = sprintf("Where-clause on %s cannot be planned (%s): %s",
+                        target_ds_name %||% "?", plan$reason, plan$detail),
+      why = "Its predicates could be read as needing the same record or different ones, and the two readings give different populations.",
+      fix = "Rewrite the condition so each dataset's predicates sit in one AND group, or split the analysis.",
+      location = target_ds_name)
+    return(NULL)
+  }
+
+  .plan_mask(plan$node, df, store, subject_key, target_ds_name)
+}
+
+## Interpret one plan node as a mask over `df`.
+#' @noRd
+.plan_mask <- function(node, df, store, subject_key, target_ds_name) {
+  all_rows <- rep(TRUE, nrow(df))
+
+  if (identical(node$kind, "all")) return(all_rows)
+
+  if (identical(node$kind, "row")) {
+    return(.eval_where_clause(df, node$where))
+  }
+
+  if (identical(node$kind, "subject")) {
+    ref_df <- store$get(node$dataset)
+    if (is.null(ref_df)) return(all_rows)
+
+    ## The whole subtree, row-wise on its own dataset: this is what keeps two
+    ## predicates on one conmed record from becoming two separate records.
+    keep <- .eval_where_clause(ref_df, node$where)
     ref_df_filtered <- ref_df[keep, , drop = FALSE]
 
-    if (subject_key %in% names(ref_df_filtered)) {
-      ds_subjs <- unique(ref_df_filtered[[subject_key]])
-      if (is.null(valid_subjects)) {
-        valid_subjects <- ds_subjs
-      } else {
-        valid_subjects <- intersect(valid_subjects, ds_subjs)
-      }
-    } else {
+    if (!subject_key %in% names(ref_df_filtered)) {
       diag_add(
         stage = "execute_ard", severity = "WARN", input = INPUT_DATA,
         problem = sprintf("Subject key %s not present in dataset %s referenced by a where-clause",
-                          subject_key, ref_ds),
+                          subject_key, node$dataset),
         location = target_ds_name,
         action = "Cross-dataset filter from this dataset NOT applied"
       )
+      return(all_rows)
     }
+    if (!subject_key %in% names(df)) return(all_rows)
+    return(df[[subject_key]] %in% unique(ref_df_filtered[[subject_key]]))
   }
 
-  if (is.null(valid_subjects) || !subject_key %in% names(df)) {
-    return(all_rows)
-  }
-  df[[subject_key]] %in% valid_subjects
+  masks <- lapply(node$children, .plan_mask, df = df, store = store,
+                  subject_key = subject_key, target_ds_name = target_ds_name)
+  if (length(masks) == 0) return(all_rows)
+  Reduce(if (identical(node$op, "OR")) `|` else `&`, masks)
 }
 
 #' A dataset read from the store and filtered by a where-clause.
@@ -689,8 +717,11 @@
   if (is.null(df) || is.null(where_clause)) {
     return(df)
   }
-  df[.where_keep_mask(df, target_ds_name, where_clause, store, subject_key), ,
-     drop = FALSE]
+  mask <- .where_keep_mask(df, target_ds_name, where_clause, store, subject_key)
+  ## NULL mask = the clause could not be planned. Returning the UNFILTERED
+  ## frame here would be the silent wrong answer this exists to prevent.
+  if (is.null(mask)) return(NULL)
+  df[mask, , drop = FALSE]
 }
 
 #' Execute ARS JSON and return an ARD object using 'cards'
@@ -862,6 +893,10 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     if (!is.null(pop_where)) {
       df_filtered <- .apply_where_clause(analysis_ds, pop_where, store, subject_key)
     }
+    ## Refused rather than computed: .where_keep_mask() has already recorded a
+    ## FAIL saying which clause and why. PR 2 turns this skip into reserved
+    ## `blocked` rows so the deliverable says so too.
+    if (is.null(df_filtered)) next
 
     df_population <- NULL
     adsl_df <- store$get("ADSL")
@@ -1135,13 +1170,18 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
           ## row by row.
           keep_t <- .where_keep_mask(df_filtered, analysis_ds, res$total_where,
                                      store, subject_key)
+          keep_p <- if (is.null(df_population)) NULL else {
+            .where_keep_mask(df_population, "ADSL", res$total_where,
+                             store, subject_key)
+          }
+          ## An unplannable Total scope must not fall back to the whole
+          ## population -- that is a plausible wrong overall column.
+          if (is.null(keep_t) || (!is.null(df_population) && is.null(keep_p))) {
+            stop("total_where could not be planned", call. = FALSE)
+          }
           df_t   <- df_filtered[keep_t, , drop = FALSE]
           df_pop <- if (is.null(df_population)) NULL else {
-            df_population[
-              .where_keep_mask(df_population, "ADSL", res$total_where,
-                               store, subject_key), ,
-              drop = FALSE
-            ]
+            df_population[keep_p, , drop = FALSE]
           }
           ## Keep every grouping after the column axis as a row key, but do not
           ## let those row variables split the denominator. This mirrors the
