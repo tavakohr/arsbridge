@@ -2,6 +2,24 @@
 
 ## arsbridge (development version)
 
+- **Crash-recovery files no longer accumulate forever.** An autosave is
+  cleared when the file is saved and when the reviewer chooses to start
+  fresh, so what survived was what nobody came back for – a session that
+  died on a study never reopened – and nothing ever pruned it. The cache
+  grew by one file per study for the life of the installation. The
+  editor now sweeps autosaves older than 30 days when it opens,
+  configurable through `options(arsbridge.autosave_max_age_days = )`.
+  Thirty days because a recovery file’s worth decays fast: work resumed
+  at all is resumed within days, and an offer to restore changes from
+  months ago is one a reviewer cannot judge, because they no longer
+  remember what those changes were. It also matters that this is bounded
+  at all – unlike the recent-projects list, which holds paths and
+  nothing else, an autosave holds the whole model and edit log, so a
+  stale one is study content sitting in a cache directory indefinitely.
+  Only the editor’s own `editor-*.rds` files are considered; the cache
+  is shared, and a sweep by age alone would eventually take something it
+  never wrote.
+
 - **The where-clause evaluator is a package function, not a closure.**
   `.eval_where_clause()`, `.eval_condition()` and `.clean_var_name()`
   were defined inside
