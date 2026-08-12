@@ -1,6 +1,6 @@
 ## where_to_filter_expr(): the WhereClause -> predicate-string emitter that the
 ## cards emitter uses. These tests pin its output to the SAME logical mask that
-## eval_condition()/eval_where_clause() in ars_to_ard.R produce, so emitted
+## .eval_condition()/.eval_where_clause() in utils_where_clause.R produce, so emitted
 ## filtering == executed filtering (Plan B deterministic-equivalence guarantee).
 
 .wtf_df <- data.frame(
@@ -68,5 +68,29 @@ test_that("emitted predicates always parse as valid R", {
                 "ADSL.SAFFL='Y' or ADSL.AGE GE 65")) {
     expr <- where_to_filter_expr(parse_where_clause(ann))
     expect_silent(parse(text = expr))
+  }
+})
+
+test_that("the emitter and the executor agree on every annotation here", {
+  ## Every expectation above pins ONE half -- the emitted string -- against a
+  ## mask typed out by hand. The equivalence guarantee is the other claim:
+  ## that the executor computes that same mask. Now that .eval_where_clause()
+  ## is a package function rather than a closure inside ars_to_ard(), it can
+  ## be asserted directly instead of trusted, so a change to either half that
+  ## is not mirrored in the other fails here.
+  annotations <- c(
+    "ADSL.SAFFL='Y'", "ADSL.SAFFL NE 'Y'",
+    "ADSL.RACE IN ('WHITE','ASIAN')", "ADSL.RACE NOT IN ('WHITE')",
+    "ADSL.AGE GE 65", "ADSL.AGE LT 65",
+    "ADAE.AETERM contains 'rash'",
+    "ADSL.DTHDT is null", "ADSL.DTHDT not missing",
+    "ADSL.SAFFL='Y' and ADSL.AGE GE 65",
+    "ADSL.SAFFL='Y' or ADSL.AGE GE 65"
+  )
+  for (ann in annotations) {
+    where <- parse_where_clause(ann)
+    emitted  <- eval(parse(text = where_to_filter_expr(where)), envir = .wtf_df)
+    executed <- .eval_where_clause(.wtf_df, where)
+    expect_equal(executed, emitted, info = ann)
   }
 })

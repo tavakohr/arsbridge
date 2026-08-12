@@ -515,6 +515,80 @@ test_that("a continuous summary is never completed with zeros", {
   expect_false("Placebo" %in% arms)
 })
 
+## A shell that declared its columns by CONDITION rather than by letting the
+## variable's own values drive them -- the ordinary annotated shape,
+## "Drug A ... ADSL.TRT01A='Drug A'" -- closes the same gap EARLIER: both the
+## emitted code (.group_mutate_expr) and the legacy path derive the grouping
+## as factor(levels = every declared label), so {cards} reports the emptied
+## column itself and .complete_zero_groups() finds nothing missing to add.
+##
+## Pinned because it is what makes the declared-column branch of that function
+## unreachable from here. If a future change stops carrying the full level set,
+## this test fails first and says so, rather than the column silently vanishing.
+.zero_spec_conditions <- function() {
+  spec <- .zero_spec()
+  arm <- function(label) list(
+    id = paste0("G_", label), label = label,
+    condition = list(dataset = "ADSL", variable = "TRT01A",
+                     comparator = "EQ", value = list(label)))
+  spec$analysisGroupings[[1]] <- list(
+    id = "GF_TRT", name = "TRT01A",
+    groupingVariable = list(dataset = "ADSL", variable = "TRT01A"),
+    groups = list(arm("Drug A"), arm("Placebo")))
+  spec
+}
+
+test_that("a condition-declared column the subset empties is reported anyway", {
+  skip_if_not_installed("cards")
+  ard <- suppressMessages(suppressWarnings(
+    ars_to_ard(.edge_write(.zero_spec_conditions()), .zero_adam())))
+
+  chr <- function(col) vapply(col, function(x) {
+    if (length(x) == 0 || is.null(x[[1]]) || is.function(x[[1]])) NA_character_
+    else as.character(x[[1]])[[1]]
+  }, character(1))
+
+  arms <- chr(ard$group1_level)
+  expect_setequal(unique(arms[!is.na(arms)]), c("Drug A", "Placebo"))
+
+  zero <- ard[!is.na(arms) & arms == "Placebo", , drop = FALSE]
+  stat <- stats::setNames(as.numeric(chr(zero$stat)),
+                          as.character(zero$stat_name))
+  expect_equal(unname(stat[["n"]]), 0)
+  ## The denominator comes from the column's own condition over the
+  ## population -- the three Placebo subjects, not the whole study.
+  expect_equal(unname(stat[["N"]]), 3)
+})
+
+test_that("completing a condition-declared group counts by its condition", {
+  ## Straight at .complete_zero_groups(), because nothing else reaches this
+  ## branch: the function is defined at namespace level but its evaluator was
+  ## a closure inside ars_to_ard(), so the call resolved to nothing and the
+  ## branch died with "could not find function" the moment it ran. Unreachable
+  ## today is not the same as correct -- the branch is the fallback for a
+  ## declared column the level set did NOT carry, and it has to work when it
+  ## is finally reached.
+  pop <- data.frame(USUBJID = sprintf("S%02d", 1:6),
+                    COHORTN = c(1, 1, 2, 2, 2, 3),
+                    stringsAsFactors = FALSE)
+  cohort <- function(label, code) list(
+    label = label,
+    condition = list(dataset = "ADSL", variable = "COHORTN",
+                     comparator = "EQ", value = list(code)))
+  defs <- list(COHORTN = list(cohort("Low", 1), cohort("High", 2)))
+  ard <- data.frame(group1_level = c("Low", "Low"),
+                    stat_name = c("n", "N"), stat = c(2, 2),
+                    stringsAsFactors = FALSE)
+
+  out <- .complete_zero_groups(ard, "COHORTN", pop, "USUBJID", defs)
+
+  high <- out[out$group1_level == "High", , drop = FALSE]
+  expect_equal(high$stat[high$stat_name == "n"], 0)
+  ## Three subjects satisfy COHORTN = 2; the cohort nobody declared (3) is
+  ## not a column and contributes to no denominator.
+  expect_equal(high$stat[high$stat_name == "N"], 3)
+})
+
 # ---- the denominator's column variable -------------------------------------
 
 ## Percentages are computed against ADSL under the analysis set's filter, and

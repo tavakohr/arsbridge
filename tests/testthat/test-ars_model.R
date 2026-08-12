@@ -752,7 +752,7 @@ test_that("a condition can be created on a child that had none", {
 })
 
 test_that("an empty value list is a condition, not a cleared one", {
-  ## eval_condition() reads an empty EQ as "is missing" -- a real clinical
+  ## .eval_condition() reads an empty EQ as "is missing" -- a real clinical
   ## condition the flat path cannot express, because it keeps the old values
   ## whenever the new list is empty.
   model <- .cg_model()

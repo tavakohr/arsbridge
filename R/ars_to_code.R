@@ -14,7 +14,7 @@
 ## ---- small string helpers -------------------------------------------------
 
 ## Strip a leading DATASET. qualifier from a variable reference (mirrors the
-## prefix-stripping half of clean_var_name() in ars_to_ard.R).
+## prefix-stripping half of .clean_var_name() in utils_where_clause.R).
 #' @noRd
 .clean_emit_name <- function(v) {
   if (is.null(v) || !length(v)) return(v)
@@ -121,7 +121,7 @@
 ## is overwritten with its display labels as an ordered factor, one
 ## case_when branch per header condition. Every predicate comes from
 ## where_to_filter_expr(), so the emitted code computes exactly what the
-## executor's eval_where_clause() computes -- equivalence by construction.
+## executor's .eval_where_clause() computes -- equivalence by construction.
 ## Rows matching no condition become NA and drop out of the grouped pass
 ## (cards omits NA by-levels); the executor logs how many.
 #' @noRd
