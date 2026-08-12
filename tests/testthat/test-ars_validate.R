@@ -489,3 +489,113 @@ test_that("direct execution APIs refuse a structurally blocked event", {
   )
   expect_false(file.exists(filled_path))
 })
+
+
+## --- where-clause variables ------------------------------------------------
+##
+## The spec overlay used to look only at the flat condition columns, so a
+## variable named inside a CHILD group's condition -- or inside any compound
+## expression -- was never checked. That is the easiest wrong variable to
+## write and the hardest to notice: the column still renders, just empty.
+
+test_that("a where clause yields every variable it names, at any depth", {
+  nested <- list(compoundExpression = list(
+    logicalOperator = "OR",
+    whereClauses = list(
+      list(condition = list(dataset = "ADSL", variable = "TRT01A")),
+      list(condition = list(dataset = "ADSL", variable = "TRT01AN")),
+      list(compoundExpression = list(
+        logicalOperator = "AND",
+        whereClauses = list(
+          list(condition = list(dataset = "ADAE", variable = "AESER"))))))))
+
+  refs <- .where_clause_refs(nested)
+  expect_equal(
+    vapply(refs, function(r) paste0(r$dataset, ".", r$variable), character(1)),
+    c("ADSL.TRT01A", "ADSL.TRT01AN", "ADAE.AESER")
+  )
+
+  ## A simple condition is one reference; a group carrying neither is none.
+  expect_length(
+    .where_clause_refs(list(condition = list(dataset = "ADSL",
+                                             variable = "SAFFL"))), 1L)
+  expect_length(.where_clause_refs(list(id = "GRP_X")), 0L)
+  expect_length(.where_clause_refs(NULL), 0L)
+})
+
+test_that("one variable used twice in a clause is one finding, not two", {
+  twice <- list(compoundExpression = list(
+    logicalOperator = "OR",
+    whereClauses = list(
+      list(condition = list(dataset = "ADSL", variable = "AGEGR1")),
+      list(condition = list(dataset = "ADSL", variable = "AGEGR1")))))
+  expect_length(.where_clause_refs(twice), 1L)
+})
+
+test_that("a child group's condition is checked against the ADaM spec", {
+  spec <- parse_adam_spec(arsbridge_example("adam_spec.xlsx"))
+  model <- .valid_fixture_model()
+
+  index <- match("GF_TRT01A", model$groupings$id)
+  ## TRT01AN is not in this study's ADSL at all -- the exact shape of a
+  ## column that would silently select nobody.
+  model$groupings$raw[[index]][["groups"]] <- list(
+    list(id = "GRP_ONE", label = "One", level = 1L, order = 1L,
+         compoundExpression = list(
+           logicalOperator = "OR",
+           whereClauses = list(
+             list(condition = list(dataset = "ADSL", variable = "TRT01A",
+                                   comparator = "EQ", value = list("x"))),
+             list(condition = list(dataset = "ADSL", variable = "TRT01AN",
+                                   comparator = "EQ", value = list("54"))))))
+  )
+
+  findings <- validate_ars_model(model, spec = spec)
+  hit <- findings[grepl("TRT01AN", findings$problem), , drop = FALSE]
+
+  expect_equal(nrow(hit), 1L)
+  expect_equal(hit$severity[1], "WARN")
+  expect_equal(hit$entity[1], "groupings")
+  ## The field names the child, so two bad children are two lines rather than
+  ## one collapsed one.
+  expect_true(grepl("GRP_ONE", hit$field[1], fixed = TRUE))
+})
+
+test_that("a compound analysis set has its clauses checked too", {
+  spec <- parse_adam_spec(arsbridge_example("adam_spec.xlsx"))
+  model <- .valid_fixture_model()
+
+  ## The flat columns hold nothing for a compound, so this row used to be
+  ## skipped outright. An entity carries ONE representation, so the simple
+  ## condition goes when the compound arrives.
+  model$analysis_sets$is_compound[1] <- TRUE
+  model$analysis_sets$raw[[1]][["condition"]] <- NULL
+  model$analysis_sets$raw[[1]][["compoundExpression"]] <- list(
+    logicalOperator = "AND",
+    whereClauses = list(
+      list(condition = list(dataset = "ADSL", variable = "SAFFL",
+                            comparator = "EQ", value = list("Y"))),
+      list(condition = list(dataset = "ADSL", variable = "NOSUCHVAR",
+                            comparator = "EQ", value = list("Y"))))
+  )
+
+  findings <- validate_ars_model(model, spec = spec)
+  expect_true(any(grepl("NOSUCHVAR", findings$problem)))
+})
+
+test_that("the check validates the variable, not the value", {
+  ## Worth pinning: AGEGR1 exists, so a wrong VALUE for it ("<65" where the
+  ## data holds "18-64") is NOT caught here. Only a missing variable is.
+  spec <- parse_adam_spec(arsbridge_example("adam_spec.xlsx"))
+  model <- .valid_fixture_model()
+
+  index <- match("GF_TRT01A", model$groupings$id)
+  model$groupings$raw[[index]][["groups"]] <- list(
+    list(id = "GRP_AGE", label = "Age", level = 1L, order = 1L,
+         condition = list(dataset = "ADSL", variable = "AGEGR1",
+                          comparator = "EQ", value = list("<65")))
+  )
+
+  findings <- validate_ars_model(model, spec = spec)
+  expect_false(any(grepl("AGEGR1", findings$problem)))
+})

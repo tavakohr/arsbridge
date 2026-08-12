@@ -691,7 +691,17 @@
   for (pool in c("analysis_sets", "data_subsets")) {
     df <- model[[pool]]
     for (i in seq_len(nrow(df))) {
-      if (isTRUE(df$is_compound[i])) next
+      if (isTRUE(df$is_compound[i])) {
+        ## The flat columns hold nothing for a compound, so the loop above
+        ## skipped it entirely and never looked at its clauses.
+        for (ref in .where_clause_refs(df$raw[[i]])) {
+          findings <- check_reference(
+            findings, pool, df$id[i], "condition_variable",
+            ref$dataset, ref$variable
+          )
+        }
+        next
+      }
       findings <- check_reference(
         findings, pool, df$id[i], "condition_variable",
         df$condition_dataset[i], df$condition_variable[i]
@@ -699,7 +709,55 @@
     }
   }
 
+  ## A grouping's CHILD groups define the result columns, and each carries its
+  ## own where clause -- the one place a wrong variable is both easiest to
+  ## write and hardest to notice, because the column still renders, just
+  ## empty. Nothing looked at them until now.
+  for (i in seq_len(nrow(model$groupings))) {
+    groups <- model$groupings$raw[[i]][["groups"]] %||% list()
+    for (group in groups) {
+      group_id <- .chr_field(group[["id"]])
+      for (ref in .where_clause_refs(group)) {
+        findings <- check_reference(
+          findings, "groupings", model$groupings$id[i],
+          paste0("group ", .blank_na(group_id), " condition"),
+          ref$dataset, ref$variable
+        )
+      }
+    }
+  }
+
   findings
+}
+
+## Every (dataset, variable) a where clause names, however deeply nested.
+##
+## A condition contributes one pair; a compoundExpression contributes its
+## clauses, recursively, so a wrong variable is found at any depth rather than
+## only at the top. Duplicates are dropped so one misspelling in a clause used
+## twice is one finding, not two.
+#' @noRd
+.where_clause_refs <- function(where) {
+  if (is.null(where) || !is.list(where)) return(list())
+
+  refs <- list()
+  if (!is.null(where[["condition"]])) {
+    condition <- where[["condition"]]
+    refs <- list(list(dataset  = .chr_field(condition[["dataset"]]),
+                      variable = .chr_field(condition[["variable"]])))
+  } else if (!is.null(where[["compoundExpression"]])) {
+    clauses <- where[["compoundExpression"]][["whereClauses"]] %||% list()
+    refs <- unlist(lapply(clauses, .where_clause_refs), recursive = FALSE)
+  }
+
+  refs <- Filter(function(ref) {
+    !is.na(ref$dataset) || !is.na(ref$variable)
+  }, refs %||% list())
+
+  keys <- vapply(refs, function(ref) {
+    paste0(.blank_na(ref$dataset), ".", .blank_na(ref$variable))
+  }, character(1))
+  refs[!duplicated(keys)]
 }
 
 ## --- gap detection ---------------------------------------------------------
