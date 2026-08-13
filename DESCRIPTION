@@ -1,6 +1,6 @@
 Package: arsbridge
 Title: Convert Annotated TLF Shells and ADaM Spec to CDISC ARS JSON
-Version: 0.1.0.9121
+Version: 0.1.0.9122
 Authors@R:
     person("Hamid", "Tavakoli",
            email = "htavakoli@gmail.com",
@@ -29,7 +29,6 @@ Depends:
     R (>= 4.1.0)
 Roxygen: list(markdown = TRUE)
 Imports:
-    callr (>= 3.7.0),
     cards (>= 0.2.0),
     cli (>= 3.6.0),
     dplyr (>= 1.1.0),
@@ -50,6 +49,7 @@ Imports:
 Suggests:
     askpass,
     bslib (>= 0.7.0),
+    callr (>= 3.7.0),
     cardx (>= 0.2.0),
     DT (>= 0.30),
     jsonvalidate,

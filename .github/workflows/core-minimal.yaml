@@ -1,0 +1,76 @@
+# The core install gate.
+#
+# Builds a library containing arsbridge's HARD dependencies and nothing else,
+# then proves the core contract still works in it: convert a shell to ARS,
+# validate it, execute it to an ARD, and write the filled workbook back.
+#
+# Two rules make this job mean something, and both are easy to break by
+# accident:
+#
+#   * dependencies is '"hard"' -- never `TRUE`, never `dependencies: all`.
+#     A generic resolution installs Suggests and the job silently passes while
+#     testing nothing.
+#   * no testthat. testthat hard-depends on callr, so installing it would
+#     reinstate the very package this job exists to prove is absent. The smoke
+#     script therefore uses base assertions only.
+#
+# This job is what makes the later dependency PRs verifiable: as the rendering
+# and LLM tiers move to Suggests, they drop out of the hard closure and the
+# smoke script starts requiring their absence with no edit here.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+name: core-minimal.yaml
+
+permissions: read-all
+
+jobs:
+  core-minimal:
+    runs-on: ubuntu-latest
+    name: core install (no Suggests)
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Deliberately no setup-pandoc: the core path must not need it.
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'release'
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          # "hard" = Depends + Imports + LinkingTo, recursively. Suggests are
+          # NOT resolved. Do not add `needs:` here -- each entry pulls in its
+          # own tooling packages and dilutes the environment under test.
+          dependencies: '"hard"'
+          extra-packages: ''
+          # The cache MUST stay off. Its key does not include the dependency
+          # spec, so this job restored the library the full-dependency jobs
+          # had saved -- arriving with every Suggests plus covr, rcmdcheck
+          # and pkgdown, and no way to tell. A gate whose entire point is a
+          # controlled library cannot accept a library it did not build.
+          cache: 'false'
+
+      - name: Install arsbridge from source
+        run: R CMD INSTALL --no-multiarch --with-keep.source .
+        shell: bash
+
+      - name: Show the library under test
+        run: |
+          Rscript -e 'ip <- rownames(installed.packages());
+                      cat(length(ip), "packages installed\n\n");
+                      cat(paste(sort(ip), collapse = "\n"), "\n")'
+        shell: bash
+
+      - name: Core smoke
+        run: Rscript .github/scripts/core-smoke.R
+        shell: bash
