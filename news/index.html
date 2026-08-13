@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9126</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9127</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -42,6 +42,12 @@
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="development version" id="arsbridge-development-version">arsbridge (development version)<a class="anchor" aria-label="anchor" href="#arsbridge-development-version"></a></h2>
 <ul><li>
+<p><strong>The generated analysis scripts no longer invite an edit that has no effect.</strong> Each emitted <code>.R</code> opened with <code>## &lt;id&gt; -- generated {cards} analysis script (edit freely).</code> That was not true: arsbridge computes an output’s ARD from the reporting event, by emitting and evaluating its own per-analysis blocks, and never reads these files back. Editing one changed nothing, and nothing said so.</p>
+<p>The header now states what the file is — generated from the ARS, not the artefact that computes the ARD, and self-contained so it can be run to reproduce the numbers.</p>
+<p>An output whose script is a stub says so in its own terms, because the two cases are not the same: a listing is genuinely produced directly from the ADaM data, whereas a figure’s content could be expressed as a structured summary and simply has no emitter yet. One shared line would have quietly asserted the second question was settled.</p>
+<p>This is documentation of current behaviour, not a change to it. Whether a hand-edited program should drive execution is a separate architectural question, and this change deliberately stops the file from answering it wrongly in the meantime.</p>
+</li>
+<li>
 <p><strong>A reviewed supplement ships with the training bundle.</strong> <code>arsbridge_example("supplement.json")</code> is what a chat assistant could return for the bundled Word shell inside a closed environment, corrected by hand. It makes the offline path runnable from the bundle alone – deterministic parse, reviewed supplement, enriched ARS, with no key, no network and no <code>ellmer</code>:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/spec_to_ars_example.html">spec_to_ars_example</a></span><span class="op">(</span>supplement <span class="op">=</span> <span class="fu"><a href="../reference/arsbridge_example.html">arsbridge_example</a></span><span class="op">(</span><span class="st">"supplement.json"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
