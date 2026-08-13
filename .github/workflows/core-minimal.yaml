@@ -53,6 +53,12 @@ jobs:
           # own tooling packages and dilutes the environment under test.
           dependencies: '"hard"'
           extra-packages: ''
+          # The cache MUST stay off. Its key does not include the dependency
+          # spec, so this job restored the library the full-dependency jobs
+          # had saved -- arriving with every Suggests plus covr, rcmdcheck
+          # and pkgdown, and no way to tell. A gate whose entire point is a
+          # controlled library cannot accept a library it did not build.
+          cache: 'false'
 
       - name: Install arsbridge from source
         run: R CMD INSTALL --no-multiarch --with-keep.source .
