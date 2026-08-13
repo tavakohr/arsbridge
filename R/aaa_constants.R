@@ -16,6 +16,14 @@
 ## otherwise returns `a`. Mirrors rlang::`%||%` semantics without the dep.
 `%||%` <- function(a, b) if (is.null(a) || length(a) == 0) b else a
 
+## Is an optional package installed? A one-line wrapper over
+## requireNamespace() so that a capability guard can be TESTED: a test can
+## rebind this in the namespace and watch the fallback run, which it cannot do
+## with requireNamespace() itself. Callers keep using
+## rlang::check_installed() when the right answer is to stop; this is for the
+## guards that degrade instead.
+.pkg_available <- function(pkg) requireNamespace(pkg, quietly = TRUE)
+
 ## Largest codelist that EXPANDS -- into one row per term, and into column
 ## groups. A categorical analysis on a decoded variable shows every codelist
 ## term, unobserved ones as n = 0, which is right for a 9-term

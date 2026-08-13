@@ -104,11 +104,12 @@ ars_workflow <- function(project_dir = NULL) {
 
 #' Start the build in a background process, or NULL when that is not possible.
 #'
-#' callr is an Imports since 0.1.0.9061, so its gate below is near-unreachable
-#' (a broken library only); the app still degrades to synchronous rather than
-#' refusing if it ever fires.
+#' callr is a Suggests since 0.1.0.9122, so the gate below is genuinely
+#' reachable: a core install has no callr, and this is the path it takes.
 #' Returning NULL rather than aborting is deliberate -- a frozen UI is worse
-#' than a responsive one, and much better than not being able to build.
+#' than a responsive one, and much better than not being able to build. The
+#' background process is a responsiveness optimisation, never a requirement:
+#' everything it does, `ars_workflow_run()` also does in this process.
 #'
 #' The worker is a FRESH R process, so it inherits no options and no
 #' environment. Everything the run needs is passed explicitly -- which is why
@@ -125,7 +126,7 @@ ars_workflow <- function(project_dir = NULL) {
       type = "message", duration = 4)
     return(NULL)
   }
-  if (!requireNamespace("callr", quietly = TRUE)) {
+  if (!.pkg_available("callr")) {
     shiny::showNotification(
       paste("callr is not installed, so the build runs in this process and",
             "the UI will pause until it finishes. install.packages(\"callr\")",
