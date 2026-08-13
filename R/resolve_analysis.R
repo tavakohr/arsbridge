@@ -307,7 +307,15 @@ resolve_analysis <- function(ana, spec, subject_key = "USUBJID",
     gf_var <- grouping_map[[gf_id]]
     if (!is.null(gf_var) && nzchar(gf_var)) {
       by <- c(by, gf_var)
-      by_datasets <- c(by_datasets, grouping_ds[[gf_id]] %||% NA_character_)
+      ## A conflicted grouping resolves to NA here, carrying `conflict` as an
+      ## attribute; as.character() drops it. Nothing downstream chooses a
+      ## dataset from a conflict -- ars_to_ard() never sees one, because
+      ## .assert_runnable_ars() refuses the event on the blocking FAIL that
+      ## validate_ars_model() raises. resolve_analysis() is directly callable,
+      ## so a caller that bypasses that gate gets NA, which is "no declared
+      ## dataset" and therefore population-first.
+      by_datasets <- c(by_datasets,
+                       as.character(grouping_ds[[gf_id]] %||% NA_character_))
     }
     ## Condition-defined levels ride along keyed by the variable name, so
     ## the executor/emitter can derive the display grouping in-memory.

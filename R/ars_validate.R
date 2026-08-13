@@ -247,6 +247,25 @@
 .check_grouping_shapes <- function(findings, model) {
   groupings <- model$groupings
 
+  ## A grouping can name its dataset twice -- the flat `groupingDataset`
+  ## arsbridge writes, and the nested `groupingVariable$dataset` a
+  ## spec-correct ARS carries. Both are read; if they DISAGREE neither wins,
+  ## because whichever were chosen decides whether the denominator is joined
+  ## from a domain, and that moves every percentage in the analysis.
+  ##
+  ## Structural, so it is checked without an ADaM spec: the two fields
+  ## contradict each other whatever the study data looks like.
+  for (i in seq_len(nrow(groupings))) {
+    resolved <- .grouping_dataset(groupings$raw[[i]])
+    if (!isTRUE(resolved$conflict)) next
+    findings <- .add_finding(
+      findings, "FAIL", "groupings", groupings$id[i], "groupingDataset",
+      paste0("groupingDataset says ", resolved$flat,
+             " but groupingVariable.dataset says ", resolved$nested, "."),
+      "Make the two agree -- they decide which frame the denominator comes from."
+    )
+  }
+
   is_fixed <- is.na(groupings$dataDriven) | !groupings$dataDriven
   invalid <- which(is_fixed & groupings$n_groups == 0L)
   for (i in invalid) {
@@ -686,6 +705,7 @@
       findings, "groupings", model$groupings$id[i], "groupingVariable",
       model$groupings$groupingDataset[i], model$groupings$groupingVariable[i]
     )
+
   }
 
   for (pool in c("analysis_sets", "data_subsets")) {

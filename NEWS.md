@@ -12,7 +12,9 @@
   `spec_to_ars()` to the ARD, N = 6 where it should have been 3. Both forms are
   now read by one resolver, and a grouping that names two DIFFERENT datasets is
   refused rather than resolved by precedence, because choosing either could
-  move a denominator. The rule the denominator follows is population-first: if
+  move a denominator: `validate_ars_model()` reports it as a blocking FAIL
+  naming both datasets, and execution refuses the event through the structural
+  gate rather than picking one. The rule the denominator follows is population-first: if
   the population frame already carries the grouping variable it is
   authoritative, whatever the metadata names, so a treatment variable copied
   onto an event domain can no longer decide the denominator and subjects with

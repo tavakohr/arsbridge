@@ -543,7 +543,6 @@
 ## grouping variable and the foreign dataset cannot resolve it either.
 .BLOCK_DENOM_AMBIGUOUS    <- "denominator_grouping_ambiguous"
 .BLOCK_DENOM_UNRESOLVED   <- "denominator_grouping_unresolved"
-.BLOCK_GROUPING_CONFLICT  <- "grouping_dataset_conflict"
 .BLOCK_GROUPING_DISAGREE  <- "grouping_value_disagreement"
 
 #' @noRd
@@ -582,9 +581,6 @@
       analysis_id, block$detail),
     denominator_grouping_unresolved = sprintf(
       "Analysis %s is blocked: cannot construct grouped denominator -- %s, so any per-group N would be partly invented",
-      analysis_id, block$detail),
-    grouping_dataset_conflict = sprintf(
-      "Analysis %s is blocked: grouping %s names two different datasets, and choosing either could move the denominator",
       analysis_id, block$detail),
     grouping_value_disagreement = sprintf(
       "Analysis %s is blocked: %s -- the numerator would be counted under one group and the denominator under another",
@@ -1087,7 +1083,7 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     block <- NULL
 
     df_filtered <- df_base
-    if (!is.null(pop_where)) {
+    if (is.null(block) && !is.null(pop_where)) {
       df_filtered <- .apply_where_clause(analysis_ds, pop_where, store, subject_key)
       if (.is_block(df_filtered)) block <- df_filtered
     }

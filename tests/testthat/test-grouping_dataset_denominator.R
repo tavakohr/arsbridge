@@ -282,3 +282,86 @@ test_that("no computed percentage exceeds its denominator", {
     }
   }
 })
+
+# ---- flat / nested conflict -------------------------------------------------
+#
+# Detecting the conflict is not enough: if the run continued it would have
+# silently chosen one representation, and which one decides whether the
+# denominator is joined from a domain. Both surfaces refuse it.
+
+.gd_conflict_spec <- function() {
+  spec <- .gd_spec("TRT01A", flat = "ADAE")
+  ## Same grouping, two datasets: flat says ADAE, nested says ADSL.
+  spec$analysisGroupings[[1]]$groupingVariable <-
+    list(dataset = "ADSL", variable = "TRT01A")
+  spec
+}
+
+test_that("validate_ars_model() raises a blocking FAIL on the conflict", {
+  td <- .gd_adam(same_name = TRUE)
+  path <- file.path(td, "conflict_v.json")
+  jsonlite::write_json(.gd_conflict_spec(), path, auto_unbox = TRUE,
+                       null = "null")
+
+  model <- ars_to_model(path)
+  findings <- validate_ars_model(model)
+  hit <- findings[findings$field == "groupingDataset", , drop = FALSE]
+
+  expect_equal(nrow(hit), 1L)
+  expect_equal(hit$severity[[1]], "FAIL")
+  expect_match(hit$problem[[1]], "groupingDataset says ADAE", fixed = TRUE)
+  expect_match(hit$problem[[1]], "groupingVariable.dataset says ADSL",
+               fixed = TRUE)
+  ## FAIL is what the execution gate refuses on.
+  expect_true(arsbridge:::.model_validation_gate(model)$blocked)
+})
+
+test_that("a conflicted grouping refuses the event on BOTH paths", {
+  ## Not "the default path picks flat and legacy picks nested" -- that would be
+  ## two engines answering a question the spec does not settle.
+  ##
+  ## The refusal is the STRUCTURAL gate, not a per-analysis blocked row: a
+  ## grouping that contradicts itself is a blocking validation FAIL, and
+  ## .assert_runnable_ars() refuses to execute an event with one. That is the
+  ## existing contract for structural findings and is strictly more
+  ## fail-closed than reserving cells -- nothing is computed at all.
+  td <- .gd_adam(same_name = TRUE)
+  for (lg in c(FALSE, TRUE)) {
+    path <- file.path(td, paste0("conflict_", lg, ".json"))
+    jsonlite::write_json(.gd_conflict_spec(), path, auto_unbox = TRUE,
+                         null = "null")
+    expect_error(
+      suppressMessages(suppressWarnings(ars_to_ard(path, td, legacy = lg))),
+      "structural validation failed", info = paste("legacy", lg))
+  }
+})
+
+test_that("the conflict names the grouping and both datasets", {
+  ## So the spec can be repaired without guessing which field to trust.
+  td <- .gd_adam(same_name = TRUE)
+  path <- file.path(td, "conflict_map.json")
+  jsonlite::write_json(.gd_conflict_spec(), path, auto_unbox = TRUE,
+                       null = "null")
+
+  gate <- arsbridge:::.model_validation_gate(ars_to_model(path))
+  hit <- gate$blocking_findings
+  hit <- hit[hit$field == "groupingDataset", , drop = FALSE]
+
+  expect_equal(nrow(hit), 1L)
+  expect_equal(hit$id[[1]], "GF_G")
+  expect_match(hit$problem[[1]], "ADAE", fixed = TRUE)
+  expect_match(hit$problem[[1]], "ADSL", fixed = TRUE)
+})
+
+test_that("agreeing metadata still resolves and computes normally", {
+  ## The other side of the conflict rule: agreement in either form, or in both
+  ## differing only by case, is not a conflict and must not block.
+  td <- .gd_adam(same_name = TRUE)
+  spec <- .gd_spec("TRT01A", flat = "adae")
+  spec$analysisGroupings[[1]]$groupingVariable <-
+    list(dataset = "ADAE", variable = "TRT01A")
+
+  ard <- .gd_run(spec, td, "agree_case.json")
+  expect_equal(.gd_status(ard, "blocked"), 0L)
+  expect_equal(.gd_stat(ard, "Drug A", "N"), 3)
+})
