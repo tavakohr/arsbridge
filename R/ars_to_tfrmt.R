@@ -1078,6 +1078,9 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
 #' }
 ars_to_tfrmt <- function(ars_path, ard, output_id,
                          col_var = NULL, label_var = NULL, group_vars = NULL) {
+  ## tfrmt only: this builds a table SPECIFICATION and renders nothing, so it
+  ## needs neither gt nor flextable.
+  rlang::check_installed("tfrmt", reason = "to build a tfrmt table")
   spec <- .read_json(ars_path)
   if (is.null(ard)) {
     cli::cli_abort(c(
@@ -1253,6 +1256,13 @@ ars_render_tlf <- function(ars_path, ard, output_id,
                            format = c("gt", "docx", "rtf"),
                            file = NULL, rtf_path = NULL, ...) {
   format  <- match.arg(format)
+  ## Named together so a user installs once rather than being sent back twice.
+  ## The table is SPECIFIED with tfrmt and BUILT as gt whatever the format;
+  ## Word and RTF additionally CONVERT it with flextable, so ask for all three
+  ## at once when that is where this call is going.
+  rlang::check_installed(
+    if (format == "gt") c("tfrmt", "gt") else c("tfrmt", "gt", "flextable"),
+    reason = paste("to render an ARS table as", format))
   tf      <- ars_to_tfrmt(ars_path, ard, output_id, ...)
 
   col_var     <- attr(tf, "arsbridge_col_var")

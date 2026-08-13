@@ -46,6 +46,11 @@ ars_render_figure <- function(ars_path, adam_dir, output_id,
                               responder_flag = NULL, time_event = NULL,
                               subject_key = "USUBJID") {
   type    <- match.arg(type)
+  ## ggplot2 only: a figure is built from the ADaM data directly and never
+  ## passes through the table stack, so tfrmt, gt and flextable are not
+  ## needed to render one. (survival is checked separately, where the KM
+  ## type asks for it.)
+  rlang::check_installed("ggplot2", reason = "to render an ARS figure")
   spec    <- jsonlite::fromJSON(ars_path, simplifyVector = FALSE)
   out_obj <- find_output(spec, output_id)
   title   <- extract_title(out_obj)

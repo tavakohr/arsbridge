@@ -170,6 +170,102 @@ need(!is.na(msg), "ars_workflow() refuses rather than proceeding")
 need(grepl("shiny", msg, fixed = TRUE),
      paste0("the refusal names the missing package: ", gsub("\n", " ", msg)))
 
+## ---------------------------------------------------------------------------
+step(7, "each rendering capability names the packages IT needs")
+## This is the only environment where the four rendering packages are really
+## absent, so it is the only place the guards can be proven rather than
+## simulated. The point is not merely that each call fails -- it is that each
+## names ONLY what its own execution path needs. A guard demanding all four
+## would pass a "does it fail?" test and still be wrong.
+##
+## Each capability is asked about an output of ITS OWN kind, using the
+## package's own classifier. Handing a figure id to the table renderer would
+## test which check happens to come first, not what the capability requires.
+RENDER_PKGS <- c("tfrmt", "gt", "flextable", "ggplot2")
+kind_of <- function(o) arsbridge:::.classify_output(o)
+ids_by_kind <- function(k) {
+  hit <- Filter(function(o) identical(kind_of(o), k), spec$outputs)
+  vapply(hit, function(o) as.character(o$id), character(1))
+}
+tab_ids <- ids_by_kind("table")
+lst_ids <- ids_by_kind("listing")
+fig_ids <- ids_by_kind("figure")
+need(length(tab_ids) > 0, sprintf("the fixture has a table output (%s)", tab_ids[1]))
+need(length(lst_ids) > 0, sprintf("the fixture has a listing output (%s)", lst_ids[1]))
+need(length(fig_ids) > 0, sprintf("the fixture has a figure output (%s)", fig_ids[1]))
+
+say <- function(expr) {
+  tryCatch({ force(expr); NA_character_ },
+           error = function(e) gsub("[\r\n]+", " ", conditionMessage(e)))
+}
+asked <- function(m) RENDER_PKGS[vapply(RENDER_PKGS, function(p)
+  grepl(paste0("\\b", p, "\\b"), m), logical(1))]
+
+check_needs <- function(label, m, want) {
+  need(!is.na(m), paste0(label, " refuses rather than proceeding"))
+  got <- asked(m)
+  need(setequal(got, want),
+       sprintf("%s asks for exactly {%s}%s", label, paste(want, collapse = ", "),
+               if (setequal(got, want)) ""
+               else sprintf(" -- got {%s}: %s", paste(got, collapse = ", "), m)))
+}
+
+## The three single-capability exports pin precision in both directions: each
+## names its own package and NONE of the other three.
+check_needs("ars_to_tfrmt()",
+            say(ars_to_tfrmt(ars_path, ard, tab_ids[1])), "tfrmt")
+check_needs("ars_render_listing()",
+            say(ars_render_listing(ars_path, adam_dir, lst_ids[1])), "gt")
+check_needs("ars_render_figure()",
+            say(ars_render_figure(ars_path, adam_dir, fig_ids[1])), "ggplot2")
+
+## A table render needs the specification AND the builder, named together so
+## the user installs once instead of being sent back twice.
+check_needs("ars_render_tlf()",
+            say(ars_render_tlf(ars_path, ard, tab_ids[1])), c("tfrmt", "gt"))
+
+## THE non-broadness claim, tested where it actually bites: a composite asked
+## for FIGURES ONLY must want ggplot2 and nothing else. It must not drag in the
+## table stack for a document that contains no tables. An eager "rendering
+## needs all four" guard fails here, which is the point of the check.
+check_needs("ars_render_all(figures only)",
+            say(ars_render_all(ars_path, ard, adam_dir,
+                               file.path(out_dir, "figs.docx"),
+                               output_ids = fig_ids)), "ggplot2")
+check_needs("ars_render_split(figures only)",
+            say(ars_render_split(ars_path, out_dir, adam_dir, ard,
+                                 output_ids = fig_ids)), "ggplot2")
+
+## Over the WHOLE event the requirement is inherited from the outputs they
+## meet, and which one they reach first depends on the fixture and on whether
+## that output has computed results. So the assertion here is bounded rather
+## than exact: a non-empty subset, never the whole tier, and never a raw
+## namespace error.
+for (nm in c("ars_render_all", "ars_render_combined", "ars_render_split")) {
+  m <- switch(nm,
+    ars_render_all      = say(ars_render_all(ars_path, ard, adam_dir,
+                                             file.path(out_dir, "all.docx"))),
+    ars_render_combined = say(ars_render_combined(ars_path,
+                                             file.path(out_dir, "comb.docx"),
+                                             adam_dir, ard)),
+    ars_render_split    = say(ars_render_split(ars_path, out_dir, adam_dir, ard)))
+  need(!is.na(m), paste0(nm, "() refuses rather than proceeding"))
+  got <- asked(m)
+  cat("    ", nm, "() asks for {", paste(got, collapse = ", "), "}\n", sep = "")
+  need(length(got) > 0, sprintf("%s() names at least one rendering package", nm))
+  need(length(got) < length(RENDER_PKGS),
+       sprintf("%s() does not demand the whole rendering tier", nm))
+  need(!grepl("there is no package called", m, fixed = TRUE),
+       sprintf("%s() fails as a capability message, not a namespace load error", nm))
+}
+
+## And the docx path names its three up front rather than sending the user
+## back for flextable after they have installed tfrmt and gt.
+check_needs("ars_render_tlf(format = 'docx')",
+            say(ars_render_tlf(ars_path, ard, tab_ids[1], format = "docx",
+                               file = file.path(out_dir, "one.docx"))),
+            c("tfrmt", "gt", "flextable"))
+
 ## The callr path is different by design: it degrades instead of refusing,
 ## so there is nothing here to catch -- .workflow_start_build() is reachable
 ## only from inside a shiny session. Its behaviour is pinned by
