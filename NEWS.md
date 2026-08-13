@@ -1,5 +1,17 @@
 # arsbridge (development version)
 
+* **`ars_to_tfrmt_list()` reports a missing tfrmt once, instead of skipping
+  every output.** It wrapped each output in the per-output handler that is
+  right for a table which could not be built and wrong for an absent package:
+  that is the same answer for every output, so a core install got one warning
+  per output and a list of `NULL`s -- "install tfrmt" arriving as a warning
+  storm over an empty result. It now raises the same condition
+  `ars_to_tfrmt()` does, once, through the handler added with the rendering
+  tier. Genuine per-output failures are untouched: one bad output still skips
+  with its reason and leaves a `NULL` in its place while the others render.
+  This closes the rendering tier -- every affected export is now covered by an
+  exact requirement assertion in the core-minimal job.
+
 * **Rendering is an optional capability, and each capability asks only for what
   it needs.** `tfrmt`, `gt`, `flextable` and `ggplot2` move from Imports to
   Suggests. A core install -- read a shell and an ADaM spec, produce and

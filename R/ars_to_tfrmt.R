@@ -1367,7 +1367,14 @@ ars_to_tfrmt_list <- function(ars_path, ard) {
     tryCatch(
       ars_to_tfrmt(ars_path, ard, oid),
       error = function(e) {
-        cli::cli_warn("Skipping output {.val {oid}}: {e$message}")
+        ## .render_output_error() re-raises a missing-package condition and
+        ## returns the message for everything else. A missing tfrmt is not
+        ## THIS output's problem -- it is the same answer for every one of
+        ## them -- so skipping each in turn would warn once per output and
+        ## hand back a list of NULLs, turning "install tfrmt" into a warning
+        ## storm over an empty result. Genuine per-output failures still skip.
+        msg <- .render_output_error(e)
+        cli::cli_warn("Skipping output {.val {oid}}: {msg}")
         NULL
       }
     )
