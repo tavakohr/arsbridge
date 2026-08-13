@@ -2,6 +2,46 @@
 
 ## arsbridge (development version)
 
+- **`ellmer` is optional, and the offline supplement is the documented
+  completion path.** ellmer moves from Imports to Suggests, taking
+  `httr2`, `curl`, `coro`, `later`, `promises`, `S7`, `otel` and
+  `fastmap` with it: 12 hard dependencies and a 50-package closure, down
+  from 18 and 106 when this dependency work began.
+
+  The reading hierarchy is unchanged in behaviour and now stated plainly
+  in the documentation. Deterministic parsing always runs and is a
+  supported mode on its own. On top of it at most one gap-filler
+  applies: an offline **supplement** – a reviewed JSON file, typically
+  produced by a chat assistant inside a closed environment, applied with
+  no key and no network – or, only when no supplement is supplied, an
+  optional **live LLM** pass. A supplement wins outright: supplying one
+  makes no live call whatever `use_llm` says, so it can never require
+  ellmer. The DESCRIPTION, the package documentation and the
+  reading-engine vignette no longer describe the live LLM as the primary
+  reader; it is a convenience for sites that permit it.
+
+  The guard sits on the single line where
+  [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
+  resolves the extraction mode to `"llm"` – opted in, with a provider
+  and a usable key – because that is the only mode that reaches ellmer
+  at all. `deterministic` enriches with `offline = TRUE` and
+  `supplement` enriches from courier answers, and both return before a
+  chat object is built. Placing it there rather than at the ellmer call
+  sites keeps every supported path reachable without the package:
+  `use_llm = FALSE` never asks for it even with a key configured;
+  `use_llm = TRUE` with no usable key falls back deterministically and
+  silently, exactly as before; and a preferred provider whose key is
+  missing keeps its existing warning and its fallback, because that
+  provider is unusable whether or not ellmer is installed. Only the last
+  case – opted in, usable configuration, ellmer absent – fails, and it
+  fails naming ellmer. That one has to fail: silently handing back
+  regex-extracted output to somebody who configured a key and asked for
+  the LLM would be a quieter answer than they asked for, not a safer
+  one.
+
+  `use_llm` semantics are unchanged. This release does not redefine what
+  opting in means; it only decides when the package is required.
+
 - **[`ars_to_tfrmt_list()`](https://tavakohr.github.io/arsbridge/reference/ars_to_tfrmt_list.md)
   reports a missing tfrmt once, instead of skipping every output.** It
   wrapped each output in the per-output handler that is right for a

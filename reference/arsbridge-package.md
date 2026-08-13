@@ -8,12 +8,18 @@ by
 
 ## Details
 
-Annotation reading is style-agnostic and uses two passes together to
-extract as many annotation variants as possible: a deterministic
-four-layer regex detector (font colour, character formatting, brackets,
-plain text) and an LLM primary reader that separates display label from
-variable reference in layouts no regex was written for. A row is read if
-either pass finds it; on conflict the LLM wins and a warning flags it.
+Annotation reading is style-agnostic, and runs in two stages. The
+deterministic four-layer regex detector (font colour, character
+formatting, brackets, plain text) ALWAYS runs and is a fully supported
+mode on its own. On top of it, at most one gap-filler applies, in this
+order of preference: an offline **supplement** – a reviewed JSON file,
+typically produced by a chat assistant inside a closed environment,
+applied with no API key and no network – or, when no supplement is
+supplied and a provider key is configured, an optional **live LLM** pass
+via the `ellmer` package. A supplement always wins: supplying one makes
+no live call whatever `use_llm` says. Where a gap-filler runs, a row is
+read if either it or the regex finds it, and the gap-filler wins a
+conflict with a warning flagging it.
 
 Core principle: the package extracts and converts – it does not invent.
 Every LLM-proposed variable passes a hard gate against the ADaM
@@ -31,9 +37,11 @@ spec only, regex plus heuristics, no LLM call even if a key is
 configured), **supplement** (a JSON file a chat assistant such as
 Copilot produces from the uploaded shell + spec, fed via
 `spec_to_ars(supplement =)` with no API call), or **llm** (opt in with
-`spec_to_ars(use_llm = TRUE)` and a configured key). A missing key never
-stops a run and never raises a key-related warning. Start the no-API
-supplement path with
+`spec_to_ars(use_llm = TRUE)`, a configured key, and the optional
+`ellmer` package installed). A missing key never stops a run and never
+raises a key-related warning; `ellmer` is asked for only once a run has
+resolved that it will actually call an LLM. Start the no-API supplement
+path with
 [`ars_copilot_instructions()`](https://tavakohr.github.io/arsbridge/reference/ars_copilot_instructions.md);
 see
 [`vignette("no-api-access")`](https://tavakohr.github.io/arsbridge/articles/no-api-access.md).

@@ -13,7 +13,7 @@ siera::readARS()."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9124</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9125</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -56,12 +56,17 @@ CDISC Analysis Results Standard (ARS) v1.0 ARM-TS JSON file consumable by
 
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>Annotation reading is style-agnostic and uses two passes together to
-extract as many annotation variants as possible: a deterministic
-four-layer regex detector (font colour, character formatting, brackets,
-plain text) and an LLM primary reader that separates display label from
-variable reference in layouts no regex was written for. A row is read if
-either pass finds it; on conflict the LLM wins and a warning flags it.</p>
+    <p>Annotation reading is style-agnostic, and runs in two stages. The
+deterministic four-layer regex detector (font colour, character formatting,
+brackets, plain text) ALWAYS runs and is a fully supported mode on its own.
+On top of it, at most one gap-filler applies, in this order of preference:
+an offline <strong>supplement</strong> – a reviewed JSON file, typically produced by a
+chat assistant inside a closed environment, applied with no API key and no
+network – or, when no supplement is supplied and a provider key is
+configured, an optional <strong>live LLM</strong> pass via the <code>ellmer</code> package. A
+supplement always wins: supplying one makes no live call whatever <code>use_llm</code>
+says. Where a gap-filler runs, a row is read if either it or the regex finds
+it, and the gap-filler wins a conflict with a warning flagging it.</p>
 <p>Core principle: the package extracts and converts – it does not invent.
 Every LLM-proposed variable passes a hard gate against the ADaM
 specification, so a variable absent from the spec is rejected and logged,
@@ -78,8 +83,10 @@ an annotated shell" vignette.</p>
 no LLM call even if a key is configured), <strong>supplement</strong> (a JSON file a chat
 assistant such as Copilot produces from the uploaded shell + spec, fed via
 <code>spec_to_ars(supplement =)</code> with no API call), or <strong>llm</strong> (opt in with
-<code>spec_to_ars(use_llm = TRUE)</code> and a configured key). A missing key never
-stops a run and never raises a key-related warning. Start the no-API
+<code>spec_to_ars(use_llm = TRUE)</code>, a configured key, and the optional <code>ellmer</code>
+package installed). A missing key never stops a run and never raises a
+key-related warning; <code>ellmer</code> is asked for only once a run has resolved
+that it will actually call an LLM. Start the no-API
 supplement path with <code><a href="ars_copilot_instructions.html">ars_copilot_instructions()</a></code>; see
 <code><a href="../articles/no-api-access.html">vignette("no-api-access")</a></code>.</p>
     </div>

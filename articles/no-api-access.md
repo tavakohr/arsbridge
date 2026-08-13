@@ -2,17 +2,23 @@
 
 ## Three tiers, one required
 
-`arsbridge` has an LLM in the loop for two jobs: reading variable
-annotations in shell layouts a regex was never designed for, and
-classifying each table (analysis type, grouping columns, method).
-Neither is required. The reading engine has three tiers and only the
-first is mandatory:
+Two jobs benefit from a language model: reading variable annotations in
+shell layouts a regex was never designed for, and classifying each table
+(analysis type, grouping columns, method). Neither requires live API
+access. The reading engine has three tiers:
 
-| Tier | You supply | Accuracy |
+| Tier | You supply | Role |
 |----|----|----|
-| **Deterministic** | shell + spec | Regex + keyword heuristics |
-| **Supplement** | \+ a JSON file from a chat assistant | Near-LLM, no API call |
-| **LLM** | \+ an API key | Full |
+| **Deterministic** | shell + spec | The baseline. Always runs; a supported mode on its own. |
+| **Supplement** | \+ a reviewed JSON file from a chat assistant | **The preferred completion path.** Offline: no API key, no network, no `ellmer`. |
+| **Live LLM** | \+ an API key and the optional `ellmer` package | An optional convenience for sites that permit it. |
+
+The supplement tier is not a workaround for blocked environments – it is
+the intended production path. A reviewed JSON file is auditable,
+reproducible and reviewable before it is applied, which a live API call
+is not, and it keeps the model’s contribution inside whatever
+environment your organisation already trusts. A supplement also takes
+precedence: supplying one makes no live call whatever `use_llm` says.
 
 A missing key and a missing supplement never stop the run. With neither,
 [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
@@ -34,11 +40,14 @@ diagnostics sheet.
 
 ## The supplement tier: use a chat assistant by hand
 
-Many regulated or enterprise environments block LLM APIs but allow an
+Most regulated and enterprise environments already provide an
 interactive chat assistant (GitHub Copilot, ChatGPT, an internal portal)
-where you can upload files. The supplement tier turns that into near-LLM
-accuracy with zero API calls: you ferry the work through the chat UI,
-and the package consumes the assistant’s reply as an auxiliary file.
+that can read uploaded files, whether or not they permit outbound API
+calls. The supplement tier is built around that: you ferry the work
+through the chat UI inside your own environment, review the reply, and
+the package consumes it as an auxiliary file. Nothing leaves the
+boundary your organisation already sanctions, and the answer is a file
+you can read, diff and keep.
 
 ### Step 1 — get the instruction file
 

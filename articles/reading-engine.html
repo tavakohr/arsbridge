@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9124</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9125</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -101,7 +101,7 @@ union.</strong></p>
         +-----------------+-----------------+
         |                                   |
         v                                   v
-1. DETERMINISTIC PASS               2. LLM PASS (primary)
+1. DETERMINISTIC PASS               2. LLM PASS (optional)
    parse_shell_docx()                  extract_shell_llm()
    four-layer regex detector            re-reads each raw cell,
    - colour                             separates label vs variable
@@ -168,7 +168,7 @@ always runs even with no API key.</p>
 <hr>
 </div>
 <div class="section level3">
-<h3 id="pass-2-the-llm-as-primary-reader-handles-the-variants">Pass 2: the LLM as primary reader (handles the variants)<a class="anchor" aria-label="anchor" href="#pass-2-the-llm-as-primary-reader-handles-the-variants"></a>
+<h3 id="pass-2-the-optional-llm-assisted-reader-handles-the-variants">Pass 2: the optional LLM-assisted reader (handles the variants)<a class="anchor" aria-label="anchor" href="#pass-2-the-optional-llm-assisted-reader-handles-the-variants"></a>
 </h3>
 <p><code>extract_shell_llm()</code> re-reads the <strong>raw</strong>
 text of each cell and asks the model to separate the human display label
@@ -200,8 +200,10 @@ while letting the LLM read freely.</p>
 <h2 id="how-the-two-passes-combine">How the two passes combine<a class="anchor" aria-label="anchor" href="#how-the-two-passes-combine"></a>
 </h2>
 <p>A row’s annotation is taken if <strong>either</strong> pass finds it.
-On a conflict, the LLM wins (it is the primary reader) and a warning
-flags the disagreement for a human to check.</p>
+When the LLM pass runs, it wins a conflict – it has read the raw cell in
+context – and a warning flags the disagreement for a human to check.
+When it does not run, the deterministic pass stands alone and the run is
+fully supported.</p>
 <table class="table">
 <colgroup>
 <col width="18%">
@@ -257,6 +259,19 @@ flags the disagreement for a human to check.</p>
 </tr>
 </tbody>
 </table>
+</div>
+<div class="section level2">
+<h2 id="which-gap-filler-runs">Which gap-filler runs<a class="anchor" aria-label="anchor" href="#which-gap-filler-runs"></a>
+</h2>
+<p>The deterministic pass always runs, and on top of it <strong>at most
+one</strong> gap-filler applies: a <strong>supplement</strong> if one is
+supplied, otherwise a <strong>live LLM</strong> pass if
+<code>use_llm = TRUE</code> with a configured key and the optional
+<code>ellmer</code> package installed, otherwise neither. A supplement
+wins outright — supplying one makes no live call regardless of
+<code>use_llm</code> or any configured key.</p>
+<p>See <code><a href="../articles/no-api-access.html">vignette("no-api-access")</a></code> for the tiers in full, and
+for how to produce a supplement with a chat assistant.</p>
 <p>Guards keep the regex result safe in failure modes: if the LLM
 returns an empty dataset or variable, omits a row, or no API key is set,
 the deterministic result stands.</p>

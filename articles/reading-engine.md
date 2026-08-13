@@ -30,7 +30,7 @@ arsbridge reads each shell **twice and takes the union.**
             +-----------------+-----------------+
             |                                   |
             v                                   v
-    1. DETERMINISTIC PASS               2. LLM PASS (primary)
+    1. DETERMINISTIC PASS               2. LLM PASS (optional)
        parse_shell_docx()                  extract_shell_llm()
        four-layer regex detector            re-reads each raw cell,
        - colour                             separates label vs variable
@@ -70,7 +70,7 @@ The four layers, in priority order:
 
 ------------------------------------------------------------------------
 
-### Pass 2: the LLM as primary reader (handles the variants)
+### Pass 2: the optional LLM-assisted reader (handles the variants)
 
 `extract_shell_llm()` re-reads the **raw** text of each cell and asks
 the model to separate the human display label from the machine variable
@@ -101,9 +101,11 @@ letting the LLM read freely.
 
 ## How the two passes combine
 
-A row’s annotation is taken if **either** pass finds it. On a conflict,
-the LLM wins (it is the primary reader) and a warning flags the
-disagreement for a human to check.
+A row’s annotation is taken if **either** pass finds it. When the LLM
+pass runs, it wins a conflict – it has read the raw cell in context –
+and a warning flags the disagreement for a human to check. When it does
+not run, the deterministic pass stands alone and the run is fully
+supported.
 
 | Situation | Regex | LLM | Result |
 |----|:--:|:--:|----|
@@ -113,6 +115,20 @@ disagreement for a human to check.
 | Variant layout regex cannot parse | ✗ | ✓ | **LLM adds the row** |
 | LLM proposes a non-spec variable | ✗ | rejected | Dropped + **blocker logged** |
 | Row genuinely has no variable | ✗ | silent | Empty |
+
+## Which gap-filler runs
+
+The deterministic pass always runs, and on top of it **at most one**
+gap-filler applies: a **supplement** if one is supplied, otherwise a
+**live LLM** pass if `use_llm = TRUE` with a configured key and the
+optional `ellmer` package installed, otherwise neither. A supplement
+wins outright — supplying one makes no live call regardless of `use_llm`
+or any configured key.
+
+See
+[`vignette("no-api-access")`](https://tavakohr.github.io/arsbridge/articles/no-api-access.md)
+for the tiers in full, and for how to produce a supplement with a chat
+assistant.
 
 Guards keep the regex result safe in failure modes: if the LLM returns
 an empty dataset or variable, omits a row, or no API key is set, the

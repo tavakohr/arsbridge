@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9124</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9125</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -71,11 +71,10 @@
 <div class="section level2">
 <h2 id="three-tiers-one-required">Three tiers, one required<a class="anchor" aria-label="anchor" href="#three-tiers-one-required"></a>
 </h2>
-<p><code>arsbridge</code> has an LLM in the loop for two jobs: reading
-variable annotations in shell layouts a regex was never designed for,
-and classifying each table (analysis type, grouping columns, method).
-Neither is required. The reading engine has three tiers and only the
-first is mandatory:</p>
+<p>Two jobs benefit from a language model: reading variable annotations
+in shell layouts a regex was never designed for, and classifying each
+table (analysis type, grouping columns, method). Neither requires live
+API access. The reading engine has three tiers:</p>
 <table class="table">
 <colgroup>
 <col width="33%">
@@ -85,26 +84,35 @@ first is mandatory:</p>
 <thead><tr class="header">
 <th>Tier</th>
 <th>You supply</th>
-<th>Accuracy</th>
+<th>Role</th>
 </tr></thead>
 <tbody>
 <tr class="odd">
 <td><strong>Deterministic</strong></td>
 <td>shell + spec</td>
-<td>Regex + keyword heuristics</td>
+<td>The baseline. Always runs; a supported mode on its own.</td>
 </tr>
 <tr class="even">
 <td><strong>Supplement</strong></td>
-<td>+ a JSON file from a chat assistant</td>
-<td>Near-LLM, no API call</td>
+<td>+ a reviewed JSON file from a chat assistant</td>
+<td>
+<strong>The preferred completion path.</strong> Offline: no API key,
+no network, no <code>ellmer</code>.</td>
 </tr>
 <tr class="odd">
-<td><strong>LLM</strong></td>
-<td>+ an API key</td>
-<td>Full</td>
+<td><strong>Live LLM</strong></td>
+<td>+ an API key and the optional <code>ellmer</code> package</td>
+<td>An optional convenience for sites that permit it.</td>
 </tr>
 </tbody>
 </table>
+<p>The supplement tier is not a workaround for blocked environments – it
+is the intended production path. A reviewed JSON file is auditable,
+reproducible and reviewable before it is applied, which a live API call
+is not, and it keeps the model’s contribution inside whatever
+environment your organisation already trusts. A supplement also takes
+precedence: supplying one makes no live call whatever
+<code>use_llm</code> says.</p>
 <p>A missing key and a missing supplement never stop the run. With
 neither, <code><a href="../reference/spec_to_ars.html">spec_to_ars()</a></code> completes on regex plus heuristics
 and records the fact:</p>
@@ -123,11 +131,14 @@ in the diagnostics sheet.</p>
 <div class="section level2">
 <h2 id="the-supplement-tier-use-a-chat-assistant-by-hand">The supplement tier: use a chat assistant by hand<a class="anchor" aria-label="anchor" href="#the-supplement-tier-use-a-chat-assistant-by-hand"></a>
 </h2>
-<p>Many regulated or enterprise environments block LLM APIs but allow an
+<p>Most regulated and enterprise environments already provide an
 interactive chat assistant (GitHub Copilot, ChatGPT, an internal portal)
-where you can upload files. The supplement tier turns that into near-LLM
-accuracy with zero API calls: you ferry the work through the chat UI,
-and the package consumes the assistant’s reply as an auxiliary file.</p>
+that can read uploaded files, whether or not they permit outbound API
+calls. The supplement tier is built around that: you ferry the work
+through the chat UI inside your own environment, review the reply, and
+the package consumes it as an auxiliary file. Nothing leaves the
+boundary your organisation already sanctions, and the answer is a file
+you can read, diff and keep.</p>
 <div class="section level3">
 <h3 id="step-1-get-the-instruction-file">Step 1 — get the instruction file<a class="anchor" aria-label="anchor" href="#step-1-get-the-instruction-file"></a>
 </h3>
