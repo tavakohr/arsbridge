@@ -43,3 +43,4 @@
 ^scratch_.*\.R$
 ^run_.*\.R$
 ^tmp_.*$
+^CLAUDE\.md$
