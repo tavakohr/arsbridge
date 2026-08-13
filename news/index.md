@@ -2,6 +2,49 @@
 
 ## arsbridge (development version)
 
+- **New ARD status `blocked`: an analysis whose filter could not run
+  reports nothing rather than a plausible wrong number.** This extends
+  the ARD contract. `result_status` now takes four values, and they are
+  not interchangeable: `computed` is a trustworthy engine result,
+  `manual_pending` is valid work a programmer must derive by hand,
+  `manual_filled` is a validated manual result, and `blocked` means
+  computation could not safely proceed because required data or filter
+  semantics could not be satisfied. Three things block: a referenced
+  dataset that is not in the ADaM directory, a referenced dataset with
+  no subject key to carry its filter back on, and a where-clause whose
+  row semantics are not determined. Each previously carried on against a
+  population nobody had asked for – a filter that did not run is a wrong
+  denominator, and a wrong denominator is invisible in a rendered table.
+  The middle case was worse than silent: it warned that the filter had
+  not been applied while the emitted code then failed on the missing
+  column and dropped the analysis, so the diagnostic promised a run that
+  continued and it did not. A blocked analysis now emits no computed
+  rows on either execution path, the emitter writes no code for it, and
+  one FAIL names the analysis and the cause. The reason is recoverable
+  without a new identifier – the blocked row carries `analysis_id` and
+  the FAIL carries the same id in `location`, so
+  [`ars_blockers()`](https://tavakohr.github.io/arsbridge/reference/ars_blockers.md)
+  maps a reserved cell to why it is reserved – with a `block_reason`
+  column alongside for direct inspection. Every consumer is explicit
+  rather than inheriting an `else`:
+  [`ars_manual_worklist()`](https://tavakohr.github.io/arsbridge/reference/ars_manual_worklist.md)
+  excludes blocked rows, because sending a programmer to derive a number
+  that cannot be derived until the spec is repaired would be worse than
+  saying nothing;
+  [`ars_validate_manual_fills()`](https://tavakohr.github.io/arsbridge/reference/ars_validate_manual_fills.md)
+  ignores them; `derived_dt` stays NA; the shell fill reports the cell
+  as blocked rather than as an ordinary absent value; the Word
+  placeholder names the blocked cells and their reason instead of
+  rendering empty columns; and a rendered table carries a note pointing
+  at
+  [`ars_blockers()`](https://tavakohr.github.io/arsbridge/reference/ars_blockers.md).
+  That note is table-level rather than a per-cell marker, and
+  deliberately so: a blocked analysis reserves one row with no statistic
+  name, because the filter never ran and nothing decided which
+  statistics it would have produced. A missing dataset is also now
+  remembered as missing, so it is reported once per run instead of once
+  per lookup.
+
 - **A condition spanning several datasets is filtered correctly, and
   same-record semantics are preserved.** A where-clause is now turned
   into a restriction PLAN that both halves consume – the executor

@@ -11,7 +11,7 @@ it directly using the {cards} package, dynamically loading the ADaM datasets
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9118</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9119</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -106,13 +106,40 @@ engine-equivalence test and as a transitional escape hatch).</p></dd>
 columns <code>analysis_id</code>, <code>method_id</code>, <code>output_id</code>, <code>method_intended</code>,
 and <code>method_actual</code> (differs from <code>method_intended</code> when the generic
 fallback summarizer was used), plus provenance columns (ADR 0002):
-<code>result_status</code> (<code>"computed"</code> for engine output), <code>value_source</code>
-(<code>"cards"</code>), <code>derivation_ref</code> (the emitted block, <code>arsbridge:emitted:&lt;id&gt;</code>),
-<code>derived_by</code> (<code>"arsbridge"</code>), and <code>derived_dt</code> (run timestamp, ISO-8601;
-pin with <code>options(arsbridge.derived_dt=)</code>). These let a later partial /
-manual fill be distinguished from engine output without breaking
-traceability.</p>
-    </div>
+<code>result_status</code>, <code>value_source</code> (<code>"cards"</code>), <code>derivation_ref</code> (the emitted
+block, <code>arsbridge:emitted:&lt;id&gt;</code>), <code>derived_by</code> (<code>"arsbridge"</code>), and
+<code>derived_dt</code> (run timestamp, ISO-8601; pin with
+<code>options(arsbridge.derived_dt=)</code>). These let a later partial / manual fill
+be distinguished from engine output without breaking traceability.</p>
+<p><code>result_status</code> takes one of four values, and they are not
+interchangeable:</p>
+<dl><dt><code>"computed"</code></dt>
+<dd><p>a trustworthy engine result.</p></dd>
+
+<dt><code>"manual_pending"</code></dt>
+<dd><p>a cell reserved because the method has no
+executor. Valid work that a programmer must derive by hand; listed by
+<code><a href="ars_manual_worklist.html">ars_manual_worklist()</a></code>.</p></dd>
+
+<dt><code>"manual_filled"</code></dt>
+<dd><p>a manual result that has been supplied and
+validated; checked by <code><a href="ars_validate_manual_fills.html">ars_validate_manual_fills()</a></code>.</p></dd>
+
+<dt><code>"blocked"</code></dt>
+<dd><p>computation could not safely proceed, because
+required data or filter semantics could not be satisfied – a
+referenced dataset that is not in <code>adam_dir</code>, one with no subject key
+to carry its filter back on, or a where-clause whose row semantics are
+not determined. A blocked analysis emits NO computed rows: a filter
+that did not run is a wrong denominator, and a wrong denominator is
+invisible in a rendered table. It is NOT manual work – nobody can
+derive it by hand until the spec or the ADaM cut is repaired – so it
+is excluded from <code><a href="ars_manual_worklist.html">ars_manual_worklist()</a></code>. The cause is in the
+accompanying FAIL diagnostic, whose <code>location</code> is the analysis id; see
+<code><a href="ars_blockers.html">ars_blockers()</a></code>. The row also carries <code>block_reason</code>.</p></dd>
+
+
+</dl></div>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
