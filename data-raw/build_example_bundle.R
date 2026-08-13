@@ -18,6 +18,13 @@
 ##   inputs/adam_spec_CDSC-ALZ-201.xlsx                       same spec again,
 ##                                                            for hands-on use
 ##
+## NOT generated, and never overwritten here:
+##   inst/extdata/example_cdsc_alz_201/supplement.json        reviewed by hand
+##
+## The supplement is a human artifact -- a chat assistant's reply, corrected by
+## a reviewer. Generating it would defeat what it exists to demonstrate, so this
+## script only checks that it is still there and reports its size in the README.
+##
 ## data-raw/ is .Rbuildignore'd: none of this ships; only its outputs do.
 
 for (pkg in c("pharmaverseadam", "haven", "openxlsx2")) {
@@ -541,6 +548,17 @@ wb$save(xlsx_path)
 ## ---------------------------------------------------------------------------
 
 size_kb <- function(path) sprintf("%d KB", round(file.size(path) / 1024))
+
+## The one bundled file this script does not write. It is checked rather than
+## regenerated: a missing supplement means someone deleted a reviewed artifact,
+## which the README must not quietly stop mentioning.
+supp_bundle <- file.path(bundle_dir, "supplement.json")
+if (!file.exists(supp_bundle)) {
+  stop("The reviewed supplement is missing: ", supp_bundle,
+       "\nIt is committed, not generated -- restore it from git rather than ",
+       "rebuilding it.", call. = FALSE)
+}
+
 readme <- c(
   "# CDSC-ALZ-201 -- the bundled training study",
   "",
@@ -564,11 +582,43 @@ readme <- c(
   paste0("| `ADaM.zip` | 5 XPT datasets (adsl, adae, adex, adcm, advs; ",
          "ADVS restricted to PARAMCD='PULSE', ADCM to first occurrences) | ",
          size_kb(zip_path), " |"),
+  paste0("| `supplement.json` | reviewed v4 supplement for the **Word** ",
+         "shell -- the offline enrichment example; hand-written, not ",
+         "generated | ", size_kb(supp_bundle), " |"),
   "",
   "Access from R with `arsbridge_example()`; run the whole study with",
   "`spec_to_ars_example()`. The Excel shell demos the full chain offline:",
   "build the ARS, execute it against the unzipped data, and write the",
-  "shell back filled."
+  "shell back filled.",
+  "",
+  "## The offline (closed-environment) workflow",
+  "",
+  "`supplement.json` is here so the no-API path is runnable from the bundle.",
+  "It is an **example artifact**: `spec_to_ars()` never discovers or applies",
+  "it on its own, and the study converts exactly as before unless you name it.",
+  "",
+  "```r",
+  "spec_to_ars_example(supplement = arsbridge_example(\"supplement.json\"))",
+  "```",
+  "",
+  "The workflow it stands in for, end to end:",
+  "",
+  "1. `write_supplement_draft()` -- a deterministic parse writes what it found,",
+  "   with its open questions under `provenance$reviewItems`.",
+  "2. Give the draft, the shell, the ADaM spec, and the files",
+  "   `ars_copilot_instructions()` writes to Copilot or another assistant your",
+  "   organisation approves, inside your own environment.",
+  "3. Review what comes back. It is plain JSON: read it, diff it, keep it under",
+  "   version control.",
+  "4. `spec_to_ars(supplement = \"supplement.json\")` -- no key, no network, no",
+  "   `ellmer`.",
+  "5. `ars_workflow()` -- review and correct the resulting ARS in the editor.",
+  "",
+  "Read this file next to `annotated_shell.docx`: it repairs a population the",
+  "shell states only as prose, states the three treatment columns the shell",
+  "prints instead of letting them come from the data, binds the row that heads",
+  "Table 14.3.2, and records the judgements a reviewer made but arsbridge does",
+  "not compute."
 )
 writeLines(readme, file.path(bundle_dir, "README.md"))
 
