@@ -88,7 +88,11 @@ ok(sprintf("%d packages installed, all hard-reachable", length(installed_extra))
 ## And the readable half: the optional capabilities are, by name, absent.
 ## This list shrinks by itself -- as tiers move to Suggests in later PRs they
 ## leave the hard closure and appear here with no edit to this script.
-optional_absent <- setdiff(suggested, closure)
+##
+## Recommended packages are excluded because they ship WITH R: `survival` is
+## a Suggests and is also always installed, so requiring its absence would be
+## asking for an environment that cannot exist.
+optional_absent <- setdiff(suggested, c(closure, base_pkgs))
 present <- optional_absent[vapply(optional_absent, function(p)
   p %in% rownames(inst), logical(1))]
 cat("  optional packages required to be absent:\n    ",
