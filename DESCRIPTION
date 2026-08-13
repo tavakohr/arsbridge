@@ -1,6 +1,6 @@
 Package: arsbridge
 Title: Convert Annotated TLF Shells and ADaM Spec to CDISC ARS JSON
-Version: 0.1.0.9124
+Version: 0.1.0.9125
 Authors@R:
     person("Hamid", "Tavakoli",
            email = "htavakoli@gmail.com",
@@ -15,14 +15,17 @@ Description: Reads a lead programmer's already-annotated TLF shell, as
     the deliverable is the reviewed shell itself. Annotation extraction
     is style-agnostic: detects ADaM variable references whether marked by
     font colour, character formatting, brackets, or plain-text appended
-    after the stub label. An LLM ('ellmer'; Anthropic, OpenAI, Gemini, or
-    an OpenAI-compatible provider such as GLM) acts as the primary reader of
-    variant shell layouts, separating display label from variable reference,
-    and also supplies light semantic enrichment per TLF section (analysis
-    type, method name, row roles). Every LLM-proposed variable is gated
-    against the ADaM specification, so an out-of-spec proposal is rejected
-    and flagged rather than shipped; with no API key the reader degrades to
-    deterministic parsing.
+    after the stub label. Deterministic parsing always runs and is a fully
+    supported mode on its own. Where a shell needs more than regex can read,
+    the preferred completion mechanism is an offline supplement: a reviewed
+    JSON file, typically produced by a chat assistant inside a closed
+    environment, supplied via 'supplement=' and applied with no API key and no
+    network access. A live LLM reader ('ellmer'; Anthropic, OpenAI, Gemini, or
+    an OpenAI-compatible provider such as GLM) is an optional convenience for
+    sites that permit it, used only when no supplement is supplied and a
+    provider key is configured. Every proposed variable, from either source,
+    is gated against the ADaM specification, so an out-of-spec proposal is
+    rejected and flagged rather than shipped.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Depends:
@@ -32,7 +35,6 @@ Imports:
     cards (>= 0.2.0),
     cli (>= 3.6.0),
     dplyr (>= 1.1.0),
-    ellmer (>= 0.1.0),
     glue (>= 1.7.0),
     haven (>= 2.5.0),
     jsonlite (>= 1.8.0),
@@ -48,6 +50,7 @@ Suggests:
     callr (>= 3.7.0),
     cardx (>= 0.2.0),
     DT (>= 0.30),
+    ellmer (>= 0.1.0),
     flextable (>= 0.9.0),
     ggplot2 (>= 3.4.0),
     gt (>= 0.10.0),

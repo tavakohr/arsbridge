@@ -1,4 +1,9 @@
-## LLM-primary extraction: spec gate, cross-check, degraded mode.
+## LLM-assisted extraction: spec gate, cross-check, degraded mode.
+##
+## ellmer is a Suggests, and extract_shell_llm() builds its request schema
+## from ellmer's type constructors even when the call itself is mocked, so
+## these cannot run in a core install.
+skip_if_not_installed("ellmer")
 
 .mk_section <- function() {
   list(

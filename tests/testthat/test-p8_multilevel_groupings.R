@@ -1,5 +1,10 @@
 ## P8: multi-level groupings -- by_variables array, ordered GroupingFactors,
 ## orderedGroupings 1..n, include_total execution.
+##
+## These drive enrich_with_llm() on its LIVE branch (a provider and key are
+## passed, rather than courier answers or offline = TRUE), which builds the
+## request schema from ellmer. ellmer is a Suggests.
+skip_if_not_installed("ellmer")
 
 .mk_lookup2 <- function(keys) setNames(lapply(keys, function(k) list()), keys)
 
