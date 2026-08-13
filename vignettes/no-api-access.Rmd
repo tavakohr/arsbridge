@@ -112,6 +112,24 @@ Upload **four files together** to your chat assistant:
 
 Save the assistant's reply — one JSON block — as `supplement.json`.
 
+Consider sending a **draft** as a fifth file. `write_supplement_draft()` runs the
+deterministic parse and writes what it found in the same v4 format, one entry
+per TLF, with everything it was unsure about listed under
+`provenance$reviewItems`:
+
+```{r}
+write_supplement_draft(
+  shell_path     = "shell.docx",
+  adam_spec_path = "adam_spec.xlsx",
+  output_path    = "supplement_draft.json"
+)
+```
+
+The assistant then corrects a structured starting point instead of authoring one
+from nothing, and the review items tell it where to look. It is a deterministic
+parse — no key, no network, no LLM of any kind — so it costs nothing to produce
+before the conversation starts.
+
 ### Step 3 — pre-flight (optional but recommended)
 
 ```{r}
@@ -137,6 +155,43 @@ res <- spec_to_ars(
 res$extraction_mode
 #> "supplement"
 ```
+
+The supplement has to be named. Nothing is auto-discovered: a `supplement.json`
+sitting next to your shell changes nothing until you pass it.
+
+### Step 5 — review the result
+
+The ARS is the deliverable, and it is meant to be read before it is used:
+
+```{r}
+ars_workflow()   # the Shiny editor: inspect and correct the converted event
+```
+
+## The whole workflow on the bundled study
+
+The training bundle ships a reviewed supplement, so the offline path is
+runnable end to end with no key, no network and nothing to author:
+
+```{r}
+res <- spec_to_ars_example(supplement = arsbridge_example("supplement.json"))
+res$extraction_mode
+#> "supplement"
+```
+
+It is what a chat assistant could return for the bundled Word shell, corrected
+by hand — including the parts a reviewer decides *not* to change, which are
+written down in `provenance$reviewItems` rather than left silent. Read it
+alongside the shell to see the shape a real reply takes; it is plain JSON:
+
+```{r}
+cat(readLines(arsbridge_example("supplement.json")), sep = "\n")
+```
+
+Run the same shell without `supplement =` and compare: the enrolled-subjects
+analysis set has no condition to filter on, the treatment axis is data-driven
+rather than the three columns the shell prints, and the row that heads Table
+14.3.2 has no analysis at all. Those are the gaps a Word shell leaves and a
+supplement closes.
 
 ## What the supplement can and cannot do
 

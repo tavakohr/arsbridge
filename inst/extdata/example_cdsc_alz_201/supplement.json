@@ -1,0 +1,368 @@
+{
+  "supplement_version": 4,
+  "generator": {
+    "workflow": "chat assistant, single-file instructions; reviewed by hand",
+    "instruction_version": "arsbridge_copilot_instructions.md"
+  },
+  "tlfs": {
+    "T-14-1-1": {
+      "title": "Subject Disposition",
+      "outputType": "TABLE",
+      "analysis_type": "SUBJECT_COUNT",
+      "is_supported": true,
+      "analysisSet": {
+        "label": "All Subjects Enrolled",
+        "condition": {
+          "dataset": "ADSL",
+          "variable": "STUDYID",
+          "comparator": "EQ",
+          "value": ["CDISCPILOT01"]
+        }
+      },
+      "groupings": [
+        {
+          "groupingDataset": "ADSL",
+          "groupingVariable": "TRT01A",
+          "dataDriven": false,
+          "label": "Treatment Group",
+          "groups": [
+            {
+              "label": "Placebo",
+              "order": 1,
+              "condition": {
+                "dataset": "ADSL",
+                "variable": "TRT01A",
+                "comparator": "EQ",
+                "value": ["Placebo"]
+              }
+            },
+            {
+              "label": "Xanomeline Low",
+              "order": 2,
+              "condition": {
+                "dataset": "ADSL",
+                "variable": "TRT01A",
+                "comparator": "EQ",
+                "value": ["Xanomeline Low Dose"]
+              }
+            },
+            {
+              "label": "Xanomeline High",
+              "order": 3,
+              "condition": {
+                "dataset": "ADSL",
+                "variable": "TRT01A",
+                "comparator": "EQ",
+                "value": ["Xanomeline High Dose"]
+              }
+            }
+          ]
+        }
+      ],
+      "anchors": {
+        "firstRowLabel": "Subjects enrolled",
+        "rowCount": 6
+      },
+      "provenance": {
+        "reviewItems": [
+          "The population line reads 'All Subjects Enrolled (ADSL; all enrolled subjects - no ITTFL/DCSREAS in this ADSL)', which is prose rather than a condition. This table counts screen failures as one of its rows, so the set is every subject in ADSL; the study id is the only variable that says so.",
+          "'(End-of-study status)' is a caption above the two EOSSTT rows, not an analysis; left unbound."
+        ]
+      }
+    },
+    "T-14-1-2": {
+      "title": "Demographics and Baseline Characteristics",
+      "outputType": "TABLE",
+      "analysis_type": "MIXED_SUMMARY",
+      "is_supported": true,
+      "groupings": [
+        {
+          "groupingDataset": "ADSL",
+          "groupingVariable": "TRT01A",
+          "dataDriven": false,
+          "label": "Treatment Group",
+          "groups": [
+            {
+              "label": "Placebo",
+              "order": 1,
+              "condition": {
+                "dataset": "ADSL",
+                "variable": "TRT01A",
+                "comparator": "EQ",
+                "value": ["Placebo"]
+              }
+            },
+            {
+              "label": "Xanomeline Low",
+              "order": 2,
+              "condition": {
+                "dataset": "ADSL",
+                "variable": "TRT01A",
+                "comparator": "EQ",
+                "value": ["Xanomeline Low Dose"]
+              }
+            },
+            {
+              "label": "Xanomeline High",
+              "order": 3,
+              "condition": {
+                "dataset": "ADSL",
+                "variable": "TRT01A",
+                "comparator": "EQ",
+                "value": ["Xanomeline High Dose"]
+              }
+            }
+          ]
+        }
+      ],
+      "anchors": {
+        "firstRowLabel": "Age (years) - Mean (SD)",
+        "rowCount": 7
+      },
+      "provenance": {
+        "reviewItems": [
+          "'Male' is left unbound on purpose: the ADSL.SEX analysis annotated on the 'Sex, n (%) - Female' row above already produces both sex levels, so binding this row would add a second analysis for a count that already exists.",
+          "ADSL.AGEU on the age row names the unit, not an analysis variable."
+        ]
+      }
+    },
+    "T-14-3-1": {
+      "title": "Overview of Treatment-Emergent Adverse Events",
+      "outputType": "TABLE",
+      "analysis_type": "SUBJECT_COUNT",
+      "is_supported": true,
+      "recordFilter": {
+        "condition": {
+          "dataset": "ADAE",
+          "variable": "TRTEMFL",
+          "comparator": "EQ",
+          "value": ["Y"]
+        }
+      },
+      "groupings": [
+        {
+          "groupingDataset": "ADSL",
+          "groupingVariable": "TRT01A",
+          "dataDriven": false,
+          "label": "Treatment Group",
+          "groups": [
+            {
+              "label": "Placebo",
+              "order": 1,
+              "condition": {
+                "dataset": "ADSL",
+                "variable": "TRT01A",
+                "comparator": "EQ",
+                "value": ["Placebo"]
+              }
+            },
+            {
+              "label": "Xanomeline Low",
+              "order": 2,
+              "condition": {
+                "dataset": "ADSL",
+                "variable": "TRT01A",
+                "comparator": "EQ",
+                "value": ["Xanomeline Low Dose"]
+              }
+            },
+            {
+              "label": "Xanomeline High",
+              "order": 3,
+              "condition": {
+                "dataset": "ADSL",
+                "variable": "TRT01A",
+                "comparator": "EQ",
+                "value": ["Xanomeline High Dose"]
+              }
+            }
+          ]
+        }
+      ],
+      "anchors": {
+        "firstRowLabel": "Any TEAE",
+        "rowCount": 7
+      },
+      "provenance": {
+        "reviewItems": [
+          "The severity block annotates only its middle row ('Moderate', ADAE.ASEV / ASEVN), so the shell's own reading gives one unfiltered ASEV analysis. Splitting it into one analysis per severity level would overrule an existing shell annotation, which needs supplement_trust = 'prefer_supplement'; left as the shell reads it here."
+        ]
+      }
+    },
+    "T-14-3-2": {
+      "title": "Treatment-Emergent Adverse Events by System Organ Class and Preferred Term",
+      "outputType": "TABLE",
+      "analysis_type": "CATEGORICAL_HIERARCHICAL",
+      "methodId": "MTH_AE_FREQUENCY_COUNT",
+      "is_supported": true,
+      "recordFilter": {
+        "condition": {
+          "dataset": "ADAE",
+          "variable": "TRTEMFL",
+          "comparator": "EQ",
+          "value": ["Y"]
+        }
+      },
+      "groupings": [
+        {
+          "groupingDataset": "ADSL",
+          "groupingVariable": "TRT01A",
+          "dataDriven": false,
+          "label": "Treatment Group",
+          "groups": [
+            {
+              "label": "Placebo",
+              "order": 1,
+              "condition": {
+                "dataset": "ADSL",
+                "variable": "TRT01A",
+                "comparator": "EQ",
+                "value": ["Placebo"]
+              }
+            },
+            {
+              "label": "Xanomeline Low",
+              "order": 2,
+              "condition": {
+                "dataset": "ADSL",
+                "variable": "TRT01A",
+                "comparator": "EQ",
+                "value": ["Xanomeline Low Dose"]
+              }
+            },
+            {
+              "label": "Xanomeline High",
+              "order": 3,
+              "condition": {
+                "dataset": "ADSL",
+                "variable": "TRT01A",
+                "comparator": "EQ",
+                "value": ["Xanomeline High Dose"]
+              }
+            }
+          ]
+        }
+      ],
+      "analyses": [
+        {
+          "rowLabel": "Subjects with any TEAE",
+          "variable": {"dataset": "ADAE", "variable": "USUBJID"},
+          "whereClause": {
+            "condition": {
+              "dataset": "ADAE",
+              "variable": "TRTEMFL",
+              "comparator": "EQ",
+              "value": ["Y"]
+            }
+          },
+          "order": 1,
+          "confidence": "HIGH"
+        }
+      ],
+      "sorting": [
+        {"dataset": "ADAE", "variable": "AESOC", "direction": "ASC", "order": 1},
+        {"dataset": "ADAE", "variable": "AEDECOD", "direction": "ASC", "order": 2}
+      ],
+      "anchors": {
+        "firstRowLabel": "Subjects with any TEAE",
+        "rowCount": 6
+      },
+      "provenance": {
+        "reviewItems": [
+          "The shell's first row carries no annotation; it is the overall subject count that heads an AE table, so it is bound to ADAE.USUBJID restricted to treatment-emergent records. No methodId is stated: the shell cell shows 'xx (xx.x)', and letting arsbridge read those two slots gives the subject count with a percentage.",
+          "The repeated '<System Organ Class>' / '<Preferred Term>' rows are the template the SOC and PT levels expand into, not separate analyses."
+        ]
+      }
+    },
+    "T-14-2-1": {
+      "title": "Study Drug Exposure",
+      "outputType": "TABLE",
+      "analysis_type": "CONTINUOUS",
+      "methodId": "MTH_SUMMARY_STATISTICS_CONTINUOUS",
+      "is_supported": true,
+      "groupings": [
+        {
+          "groupingDataset": "ADSL",
+          "groupingVariable": "TRT01A",
+          "dataDriven": false,
+          "label": "Treatment Group",
+          "groups": [
+            {
+              "label": "Placebo",
+              "order": 1,
+              "condition": {
+                "dataset": "ADSL",
+                "variable": "TRT01A",
+                "comparator": "EQ",
+                "value": ["Placebo"]
+              }
+            },
+            {
+              "label": "Xanomeline Low",
+              "order": 2,
+              "condition": {
+                "dataset": "ADSL",
+                "variable": "TRT01A",
+                "comparator": "EQ",
+                "value": ["Xanomeline Low Dose"]
+              }
+            },
+            {
+              "label": "Xanomeline High",
+              "order": 3,
+              "condition": {
+                "dataset": "ADSL",
+                "variable": "TRT01A",
+                "comparator": "EQ",
+                "value": ["Xanomeline High Dose"]
+              }
+            }
+          ]
+        }
+      ],
+      "anchors": {
+        "firstRowLabel": "Duration of exposure (days)",
+        "rowCount": 6
+      },
+      "provenance": {
+        "reviewItems": [
+          "'Total exposure (subject-days)' is a summed total, which none of the six ARS methods this format allows can express; left unbound rather than mapped to a mean.",
+          "'Average daily dose' is annotated ADEX.AVAL by ADEX.PARAMCD (ADEX.EXDOSE / EXDOSU); the parameter it selects is PARAMCD = 'AVDDSE'. Stating that filter would overrule the shell's own annotation, so it needs supplement_trust = 'prefer_supplement'."
+        ]
+      }
+    },
+    "L-16-2-7-1": {
+      "title": "Listing of Adverse Events",
+      "outputType": "LISTING",
+      "analysis_type": "LISTING",
+      "methodId": "MTH_LISTING",
+      "is_supported": true,
+      "sorting": [
+        {"dataset": "ADAE", "variable": "USUBJID", "direction": "ASC", "order": 1},
+        {"dataset": "ADAE", "variable": "ASTDT", "direction": "ASC", "order": 2}
+      ]
+    },
+    "L-16-2-4-1": {
+      "title": "Listing of Concomitant Medications",
+      "outputType": "LISTING",
+      "analysis_type": "LISTING",
+      "methodId": "MTH_LISTING",
+      "is_supported": true,
+      "sorting": [
+        {"dataset": "ADCM", "variable": "USUBJID", "direction": "ASC", "order": 1},
+        {"dataset": "ADCM", "variable": "CMDECOD", "direction": "ASC", "order": 2}
+      ]
+    },
+    "F-14-3-1": {
+      "title": "Mean (+/- SE) Pulse Rate Over Time by Treatment",
+      "outputType": "FIGURE",
+      "analysis_type": "FIGURE",
+      "is_supported": true,
+      "provenance": {
+        "reviewItems": [
+          "The figure plots mean pulse rate (ADVS.AVAL where ADVS.PARAMCD = 'PULSE' and ADVS.ANL01FL = 'Y') over ADVS.AVISIT by treatment. Recorded here so the intent is not lost."
+        ]
+      }
+    }
+  }
+}

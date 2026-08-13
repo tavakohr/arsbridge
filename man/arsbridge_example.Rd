@@ -46,6 +46,13 @@ restricted to the curated variables; ADVS keeps only
 ADCM only each subject's first occurrence of a medication, which is
 what its listing shows. Roughly 217 KB compressed. Unzip and pass the
 folder as \code{adam_dir} to \code{\link[=ars_to_ard]{ars_to_ard()}}.}
+\item{\code{supplement.json}}{A reviewed supplement (format v4) for the
+\strong{Word} shell: what a chat assistant could return for it inside a
+closed environment, corrected by hand. It makes the offline
+enrichment path runnable from the bundle, and it is an example
+artifact only -- \code{\link[=spec_to_ars]{spec_to_ars()}} never discovers or applies it on its
+own. Pass it explicitly with \verb{supplement =}. See
+\code{vignette("no-api-access")}.}
 }
 }
 \examples{
@@ -53,5 +60,6 @@ arsbridge_example()                       # list bundle contents
 arsbridge_example("annotated_shell.docx") # path to the Word shell
 arsbridge_example("annotated_shell.xlsx") # path to the Excel shell
 arsbridge_example("adam_spec.xlsx")       # path to the ADaM spec
+arsbridge_example("supplement.json")      # path to the reviewed supplement
 
 }

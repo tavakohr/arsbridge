@@ -101,7 +101,15 @@ enrich_with_llm <- function(section,
     ## Whole-response failure: count it (the caller emits ONE summary finding
     ## for all affected TLFs) rather than logging an identical row per section.
     if (!isTRUE(offline) && is.null(courier_answers)) .diag_llm_fail_bump()
-  } else {
+  } else if (is.null(courier_answers)) {
+    ## Only a live answer is judged against the LLM response schema. A
+    ## supplement arrives through `courier_answers` and carries no
+    ## `row_enrichments` at all -- per-row detail reaches the section as
+    ## bindings instead -- so measuring it against that schema reports every
+    ## offline run as a degraded LLM response, which is neither true nor
+    ## actionable. What the supplement did supply is already reported by the
+    ## supplement stage, and `ars_validate_supplement()` checks its own
+    ## required fields before the run starts.
     if (is.null(parsed$analysis_type) || !nzchar(parsed$analysis_type %||% "")) {
       diag_add(
         stage = "enrich_llm", severity = "WARN",

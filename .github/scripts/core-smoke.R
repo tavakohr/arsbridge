@@ -286,7 +286,7 @@ FAKE_KEY <- "sk-ant-not-a-real-key-000000000001"
 ## Run spec_to_ars under a chosen key/provider environment; return the
 ## extraction mode on success, or the error message on failure.
 convert_under <- function(label, use_llm, env = character(),
-                          supplement = NULL) {
+                          supplement = NULL, shell = "annotated_shell.xlsx") {
   vals <- stats::setNames(rep("", length(LLM_ENV)), LLM_ENV)
   vals[names(env)] <- env
   old <- Sys.getenv(LLM_ENV, unset = NA_character_, names = TRUE)
@@ -301,7 +301,7 @@ convert_under <- function(label, use_llm, env = character(),
   out <- file.path(out_dir, paste0("llm_", label, ".json"))
   res <- tryCatch({
     suppressMessages(suppressWarnings(spec_to_ars(
-      shell_path     = arsbridge_example("annotated_shell.xlsx"),
+      shell_path     = arsbridge_example(shell),
       adam_spec_path = arsbridge_example("adam_spec.xlsx"),
       output_path    = out, study_id = "CORE-SMOKE-LLM",
       supplement     = supplement,
@@ -336,49 +336,84 @@ deterministic_ok("use_llm = FALSE with a key configured",
 ## ---------------------------------------------------------------------------
 ## The production path: deterministic parse + an offline supplement, with no
 ## ellmer, no key and no network. This is the workflow the core install exists
-## to serve, so proving it matters more than proving regex alone runs. The
-## supplement carries one field the parser does not produce -- the bundled
-## shell asks for no Total column on Table 14.1.1 -- so the enrichment landing
-## is measurable rather than assumed.
-## SETUP, not a proof. write_supplement_draft() has no LLM path at all -- it
-## is a deterministic parse emitting a scaffold -- so "it ran without ellmer"
-## would assert nothing about this change. It is here only because no
-## supplement ships with the package yet; the proofs are the three assertions
-## below, about a supplement being read, applied, and preferred.
-draft <- file.path(out_dir, "draft.json")
-suppressMessages(suppressWarnings(write_supplement_draft(
-  shell_path     = arsbridge_example("annotated_shell.xlsx"),
-  adam_spec_path = arsbridge_example("adam_spec.xlsx"),
-  output_path    = draft)))
-stopifnot(file.exists(draft))
+## to serve, so proving it matters more than proving regex alone runs.
+##
+## The supplement is the reviewed one that ships in the bundle, read against
+## the bundled Word shell it was written for. Three separate enrichments are
+## checked, each of a different kind -- a typed analysis-set condition, a
+## fixed column axis, and a row the shell left unannotated becoming an
+## analysis -- and each is put to the deterministic reading of the SAME shell
+## first. Without those baselines the assertions would pass for a run that
+## ignored the supplement entirely.
+SUPP_SHELL <- "annotated_shell.docx"
+supp_path <- arsbridge_example("supplement.json")
+need(file.exists(supp_path), "the reviewed supplement ships in the bundle")
 
-supp_spec <- jsonlite::fromJSON(draft, simplifyVector = FALSE)
-supp_spec$tlfs[["T-14-1-1"]]$includeTotal <- TRUE
-supp_path <- file.path(out_dir, "supplement.json")
-jsonlite::write_json(supp_spec, supp_path, auto_unbox = TRUE, null = "null")
+ANALYSIS_SET <- paste0("AS_ALL_SUBJECTS_ENROLLED_ADSL_ALL_ENROLLED_",
+                       "SUBJECTS_NO_ITTFL_DCSREAS_IN_THIS_ADSL")
 
-marker_landed <- function(path) {
-  s <- jsonlite::fromJSON(path, simplifyVector = FALSE)
-  hit <- Filter(function(a) startsWith(as.character(a$id), "AN_T_14_1_1"),
-                s$analyses)
-  length(hit) > 0 &&
-    all(vapply(hit, function(a)
-      isTRUE(as.logical(unlist(a$includeTotal)[1])), logical(1)))
+by_id <- function(entries, id) {
+  if (!is.list(entries)) return(NULL)
+  hit <- Filter(function(x) identical(as.character(x$id), id), entries)
+  if (length(hit) == 0) NULL else hit[[1]]
 }
 
-## The baseline, which is what makes the assertion below mean anything: the
-## same shell read deterministically does NOT set that field.
-need(!marker_landed(ars_path),
-     "the deterministic ARS does not carry the supplement's marker")
+## A grouping is a FIXED axis only when it says so: dataDriven present and
+## explicitly FALSE. Treating a missing or unreadable value as "fixed" would
+## let a grouping that lost its flag pass as the enrichment landing.
+is_fixed_axis <- function(grouping) {
+  flag <- unlist(grouping$dataDriven)
+  length(flag) == 1L && identical(as.logical(flag[1]), FALSE)
+}
 
-supp_run <- convert_under("supp", FALSE, supplement = supp_path)
+## Each enrichment as a yes/no read of a written ARS, so the same three
+## questions can be put to the baseline and to the supplemented runs.
+enrichments <- function(path) {
+  s <- jsonlite::fromJSON(path, simplifyVector = FALSE)
+  set <- by_id(s$analysisSets, ANALYSIS_SET)
+  grp <- by_id(s$analysisGroupings, "GF_TRT01A")
+  out <- by_id(s$outputs, "T_14_3_2")
+  first <- if (is.null(out)) NULL else {
+    by_id(s$analyses, unlist(out$referencedAnalysisIds)[1])
+  }
+  list(
+    typed_population = !is.null(set) &&
+      identical(as.character(set$condition$variable), "STUDYID"),
+    fixed_columns = !is.null(grp) && is_fixed_axis(grp) &&
+      length(grp$groups) == 3L,
+    bound_row = !is.null(first) &&
+      identical(paste(unlist(first$analysisVariable), collapse = "."),
+                "ADAE.USUBJID")
+  )
+}
+
+## The baseline. Nothing may discover the bundled file on its own, and none of
+## the three enrichments may already be there.
+base_run <- convert_under("supp_base", FALSE, shell = SUPP_SHELL)
+deterministic_ok("the Word shell with no supplement", base_run)
+base_has <- enrichments(base_run$path)
+need(!base_has$typed_population,
+     "the deterministic ARS has no typed condition on the enrolled-subjects set")
+need(!base_has$fixed_columns,
+     "the deterministic ARS leaves the treatment axis data-driven")
+need(!base_has$bound_row,
+     "the deterministic ARS does not bind the unannotated TEAE row")
+
+supp_run <- convert_under("supp", FALSE, supplement = supp_path,
+                          shell = SUPP_SHELL)
 need(isTRUE(supp_run$ok),
      paste0("a supplement run converts without ellmer",
             if (isTRUE(supp_run$ok)) "" else paste0(" -- got: ", supp_run$msg)))
 need(identical(supp_run$mode, "supplement"),
      sprintf("a supplement run reports mode = %s", supp_run$mode))
-need(marker_landed(supp_run$path),
-     "the supplement's enrichment landed in the ARS (includeTotal on T_14_1_1)")
+
+supp_has <- enrichments(supp_run$path)
+need(supp_has$typed_population,
+     "the supplement states the enrolled-subjects population as a typed condition")
+need(supp_has$fixed_columns,
+     "the supplement fixes the treatment axis to its three printed columns")
+need(supp_has$bound_row,
+     "the supplement binds the TEAE row the shell left unannotated")
 
 ## Precedence, in the environment where it matters: a supplement is resolved
 ## before use_llm is consulted, so an opted-in run holding a usable key still
@@ -386,13 +421,14 @@ need(marker_landed(supp_run$path),
 supp_optin <- convert_under("supp_optin", TRUE,
                             c(ANTHROPIC_API_KEY = FAKE_KEY,
                               ARS_LLM_PROVIDER  = "anthropic"),
-                            supplement = supp_path)
+                            supplement = supp_path, shell = SUPP_SHELL)
 need(isTRUE(supp_optin$ok),
      paste0("a supplement run opted in WITH a key still needs no ellmer",
             if (isTRUE(supp_optin$ok)) "" else paste0(" -- got: ", supp_optin$msg)))
 need(identical(supp_optin$mode, "supplement"),
      "the supplement wins over the live LLM")
-need(marker_landed(supp_optin$path), "and its enrichment still landed")
+need(all(unlist(enrichments(supp_optin$path))),
+     "and all three of its enrichments still landed")
 
 ## And the one case that must fail, naming ellmer and nothing else.
 res <- convert_under("e", TRUE, c(ANTHROPIC_API_KEY = FAKE_KEY,
