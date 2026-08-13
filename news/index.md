@@ -2,6 +2,37 @@
 
 ## arsbridge (development version)
 
+- **`callr` is optional, and there is now a CI job that proves what
+  “optional” means.** The background build the workflow app starts is a
+  responsiveness optimisation, never a requirement – everything the
+  worker does,
+  [`ars_workflow_run()`](https://tavakohr.github.io/arsbridge/reference/ars_workflow_run.md)
+  also does in this process – and the fallback for a missing callr has
+  been written and guarded since `0.1.0.9061`. It was unreachable only
+  because callr was an Import. It is now a Suggests, so a core install
+  has no callr, no `processx` and no `ps`, and the app says why the
+  build will pause rather than failing or falling silent. No exported
+  function changed, and no public API depends on it.
+
+  The larger half of this change is the `core-minimal` CI job, which
+  installs arsbridge’s HARD dependencies and nothing else, then proves
+  the core contract in that library: convert an annotated shell and an
+  ADaM spec to ARS, validate it, execute it to an ARD with nothing
+  blocked, and write the filled workbook back. It asserts that nothing
+  is installed which is not a hard dependency – stated that way rather
+  than as “no Suggests installed”, because several Suggests (`withr`,
+  `knitr`, `rmarkdown`, `bslib`, `askpass`) are also legitimate hard
+  dependencies of Imports and would otherwise false-alarm – and, by
+  name, that every optional package is absent. Two details are what make
+  the job mean anything: dependency resolution is `"hard"` rather than
+  the usual `TRUE`, which would install Suggests and pass while testing
+  nothing; and the smoke script uses base assertions rather than
+  testthat, because testthat hard-depends on callr and installing it
+  would reinstate the very package whose absence is being proven. The
+  job is also what makes the remaining dependency work verifiable: as
+  further tiers move to Suggests they leave the hard closure and the
+  script begins requiring their absence with no edit to it.
+
 - **A grouping’s dataset is read from one place, and the denominator is
   the population.** A grouping can name its dataset twice – the flat
   `groupingDataset` that arsbridge itself writes, and the nested
