@@ -130,22 +130,14 @@ pass stands alone and the run is fully supported.
 
 ## Which gap-filler runs
 
-The deterministic pass always runs. On top of it **at most one** gap-filler
-applies, and the order of preference is:
+The deterministic pass always runs, and on top of it **at most one** gap-filler
+applies: a **supplement** if one is supplied, otherwise a **live LLM** pass if
+`use_llm = TRUE` with a configured key and the optional `ellmer` package
+installed, otherwise neither. A supplement wins outright — supplying one makes
+no live call regardless of `use_llm` or any configured key.
 
-1. **Supplement** — a reviewed JSON file produced outside this process,
-   typically by a chat assistant inside a closed environment, supplied via
-   `spec_to_ars(supplement = )`. No API key, no network, no `ellmer`. This is
-   the intended production path where live API access is not available.
-2. **Live LLM** — only when *no* supplement is supplied, `use_llm = TRUE`, a
-   provider key is configured, and the optional `ellmer` package is installed.
-3. **Neither** — the deterministic result stands, which is a fully supported
-   outcome and not a degraded one.
-
-A supplement wins outright: supplying one makes no live call regardless of
-`use_llm` or any configured key. `ellmer` is required only in case 2, at the
-moment the run resolves that it will actually call a model — so a core
-install without `ellmer` covers cases 1 and 3 completely.
+See `vignette("no-api-access")` for the tiers in full, and for how to produce a
+supplement with a chat assistant.
 
 Guards keep the regex result safe in failure modes: if the LLM returns an empty
 dataset or variable, omits a row, or no API key is set, the deterministic result

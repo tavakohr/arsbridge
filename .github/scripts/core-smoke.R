@@ -340,12 +340,17 @@ deterministic_ok("use_llm = FALSE with a key configured",
 ## supplement carries one field the parser does not produce -- the bundled
 ## shell asks for no Total column on Table 14.1.1 -- so the enrichment landing
 ## is measurable rather than assumed.
+## SETUP, not a proof. write_supplement_draft() has no LLM path at all -- it
+## is a deterministic parse emitting a scaffold -- so "it ran without ellmer"
+## would assert nothing about this change. It is here only because no
+## supplement ships with the package yet; the proofs are the three assertions
+## below, about a supplement being read, applied, and preferred.
 draft <- file.path(out_dir, "draft.json")
 suppressMessages(suppressWarnings(write_supplement_draft(
   shell_path     = arsbridge_example("annotated_shell.xlsx"),
   adam_spec_path = arsbridge_example("adam_spec.xlsx"),
   output_path    = draft)))
-need(file.exists(draft), "a supplement draft is written without ellmer")
+stopifnot(file.exists(draft))
 
 supp_spec <- jsonlite::fromJSON(draft, simplifyVector = FALSE)
 supp_spec$tlfs[["T-14-1-1"]]$includeTotal <- TRUE
