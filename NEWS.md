@@ -1,5 +1,23 @@
 # arsbridge (development version)
 
+* **The generated analysis scripts no longer invite an edit that has no
+  effect.** Each emitted `.R` opened with `## <id> -- generated {cards} analysis
+  script (edit freely).` That was not true: arsbridge computes an output's ARD
+  from the reporting event, by emitting and evaluating its own per-analysis
+  blocks, and never reads these files back. Editing one changed nothing, and
+  nothing said so.
+
+  The header now states what the file is — generated from the ARS, not the
+  artefact that computes the ARD, and self-contained so it can be run to
+  reproduce the numbers. An output with no summarisable analyses (a listing or
+  a figure, whose script is a stub) says that instead of promising numbers it
+  does not produce.
+
+  This is documentation of current behaviour, not a change to it. Whether a
+  hand-edited program should drive execution is a separate architectural
+  question, and this change deliberately stops the file from answering it
+  wrongly in the meantime.
+
 * **A reviewed supplement ships with the training bundle.**
   `arsbridge_example("supplement.json")` is what a chat assistant could return
   for the bundled Word shell inside a closed environment, corrected by hand.

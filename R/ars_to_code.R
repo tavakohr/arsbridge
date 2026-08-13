@@ -749,9 +749,30 @@
   }
 
   ard_obj <- paste0("ard_", make.names(output_id))
+  ## What this header must not do is invite an edit that has no effect.
+  ## arsbridge computes the ARD from the reporting event, by emitting and
+  ## evaluating its own per-analysis blocks -- it never reads this file back.
+  ## So this script is a reproducible RECORD of the calculation, and saying
+  ## "edit freely" promised a workflow the package does not have.
   header <- c(
-    sprintf("## %s -- generated {cards} analysis script (edit freely).", output_id),
-    "## Self-contained: this script computes the ARD for this output.",
+    sprintf("## %s -- generated from the reporting event by arsbridge.", output_id),
+    "##",
+    "## Editing this file changes nothing: arsbridge computes this output's ARD",
+    "## from the ARS itself, never from this script. Regenerate it by rebuilding",
+    "## the reporting event.",
+    "##",
+    ## An output with nothing to summarise gets a stub body, so the promise of
+    ## reproducible numbers would be false for it -- listings and figures say
+    ## what they are instead.
+    if (length(reslist) == 0) {
+      paste0("## This output has no summarisable analyses, so there is nothing ",
+             "here to run.")
+    } else {
+      sprintf(paste0("## Self-contained, so you can run it yourself to reproduce ",
+                     "the numbers:\n## it leaves the {cards} rows in `%s`. The ",
+                     "ARD arsbridge builds adds\n## the analysis, method and ",
+                     "status columns on top of those rows."), ard_obj)
+    },
     "",
     "library(cards)",
     "library(dplyr)",

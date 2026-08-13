@@ -68,11 +68,58 @@ test_that("emitted script parses and is free of internal symbols", {
                           adam_dir = td)
 
   expect_length(paths, 1)
-  txt <- paste(readLines(paths[[1]]), collapse = "\n")
+  lines <- readLines(paths[[1]])
+  txt <- paste(lines, collapse = "\n")
   expect_silent(parse(text = txt))
-  expect_false(grepl("arsbridge", txt))
-  expect_false(grepl("MTH_", txt))
-  expect_false(grepl("load_adam", txt))
+
+  ## The claim is about the CODE, not the commentary: an emitted script must run
+  ## without arsbridge on the search path and must not leak internal ids. The
+  ## header comment names the package deliberately -- it is what tells a reader
+  ## where the file came from and that editing it has no effect -- so the
+  ## comment lines are excluded rather than the assertion weakened.
+  code <- paste(grep("^\\s*##", lines, value = TRUE, invert = TRUE),
+                collapse = "\n")
+  expect_false(grepl("arsbridge", code))
+  expect_false(grepl("MTH_", code))
+  expect_false(grepl("load_adam", code))
+})
+
+test_that("the header does not invite an edit that has no effect", {
+  ## arsbridge computes the ARD from the ARS and never reads these files back,
+  ## so the header must not promise otherwise. It said "edit freely" until
+  ## 0.1.0.9127.
+  td <- withr::local_tempdir()
+  spec <- .ac_spec(list(list(
+    id = "AN_1", methodId = "MTH_COUNT_AND_PERCENTAGE",
+    label = "Age group", dataset = "ADSL", variable = "AGEGR1",
+    analysisVariable = list(dataset = "ADSL", variable = "AGEGR1"),
+    analysisSetId = "", dataSubsetId = "",
+    orderedGroupings = list(list(order = 1, groupingId = "GF_TRT",
+                                 resultsByGroup = TRUE)),
+    includeTotal = TRUE)))
+  paths <- write_tlf_code(.ac_write(spec, td), file.path(td, "code"),
+                          adam_dir = td)
+  txt <- paste(readLines(paths[[1]]), collapse = "\n")
+
+  expect_false(grepl("edit freely", txt, fixed = TRUE))
+  expect_match(txt, "Editing this file changes nothing")
+})
+
+test_that("an output with nothing to run does not promise numbers", {
+  ## A listing or figure gets a stub body, so the "run it yourself to reproduce
+  ## the numbers" line would be false for it.
+  td <- withr::local_tempdir()
+  spec <- .ac_spec(list(list(
+    id = "AN_1", methodId = "MTH_LISTING",
+    label = "Subject", dataset = "ADSL", variable = "USUBJID",
+    analysisVariable = list(dataset = "ADSL", variable = "USUBJID"),
+    analysisSetId = "", dataSubsetId = "")))
+  paths <- write_tlf_code(.ac_write(spec, td), file.path(td, "code"),
+                          adam_dir = td)
+  txt <- paste(readLines(paths[[1]]), collapse = "\n")
+
+  expect_match(txt, "no summarisable analyses")
+  expect_false(grepl("reproduce the numbers", txt, fixed = TRUE))
 })
 
 test_that("sourced categorical script yields a by-group + total ARD", {
