@@ -56,9 +56,12 @@ skip_if_not_installed("withr")
        subjects = adae$USUBJID)
 }
 
+## NULL when the clause blocks -- the mask functions now return a block signal
+## rather than a logical vector, and the analysis loop turns that into a FAIL
+## plus reserved `blocked` rows.
 .rp_kept <- function(where, envir = parent.frame()) {
   got <- .rp_mask(where, envir = envir)
-  if (is.null(got$mask)) return(NULL)
+  if (is.null(got$mask) || .is_block(got$mask)) return(NULL)
   got$subjects[got$mask]
 }
 
@@ -152,13 +155,14 @@ test_that("T5: an expression whose row coherence cannot be recovered fails close
   expect_equal(plan$reason, "ambiguous_row_coherence")
   expect_match(plan$detail, "ADCM", fixed = TRUE)
 
-  ## The executor computes no mask ...
-  diag_reset()
+  ## The executor computes no mask, and says which kind of block it is. The
+  ## FAIL itself is raised by the analysis loop, which knows the analysis id --
+  ## see test-blocked_status.R.
+  store <- .adam_store(.rp_adam())
+  signal <- .where_keep_mask(store$get("ADAE"), "ADAE", where, store, "USUBJID")
+  expect_true(.is_block(signal))
+  expect_equal(signal$reason, "ambiguous_row_coherence")
   expect_null(.rp_kept(where))
-  fails <- ars_diagnostics()
-  fails <- fails[fails$severity == "FAIL", , drop = FALSE]
-  expect_gt(nrow(fails), 0)
-  expect_match(fails$problem[[1]], "cannot be planned", fixed = TRUE)
 
   ## ... and the emitter writes no code that could produce one by some other
   ## reading.

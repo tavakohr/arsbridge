@@ -277,6 +277,12 @@
   if (any(index$status[hits] %in% "manual_pending")) {
     return(none("manual_pending"))
   }
+  ## A blocked cell is NOT manual work and NOT an absent result. Falling
+  ## through to "no_value" would render it identically to a cell nobody ever
+  ## asked for, losing the one thing worth saying about it.
+  if (any(index$status[hits] %in% "blocked")) {
+    return(none("blocked"))
+  }
   none("no_value")
 }
 
@@ -997,6 +1003,9 @@
   if (length(failed) > 0 && identical(failed[[1]], "missing_parent_key")) {
     return("missing_parent_key")
   }
+  ## Distinguished from "pending": pending means the number is coming, blocked
+  ## means it cannot be computed until the spec or the data is repaired.
+  if (any(failed %in% "blocked")) return("blocked")
   "pending"
 }
 

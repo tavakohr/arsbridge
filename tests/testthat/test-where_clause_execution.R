@@ -127,6 +127,23 @@ skip_if_not_installed("withr")
 }
 
 ## What goes into the analysisSet node for a simple clause.
+
+## Rows of one result_status, and a scalar column off them.
+.wc_status_rows <- function(ard, status) {
+  if (is.null(ard) || !"result_status" %in% names(ard)) {
+    return(data.frame())
+  }
+  st <- as.character(ard[["result_status"]])
+  ard[!is.na(st) & st == status, , drop = FALSE]
+}
+
+.wc_chr <- function(rows, column) {
+  if (!column %in% names(rows)) return(NA_character_)
+  value <- rows[[column]]
+  if (is.list(value)) value <- unlist(value, use.names = FALSE)
+  unique(as.character(value))
+}
+
 .wc_condition <- function(dataset, variable, value) {
   list(condition = .wc_cond(dataset, variable, value))
 }
@@ -206,32 +223,28 @@ test_that("a referenced dataset that is not there FAILs by name", {
   expect_true(is.null(ard) || is.data.frame(ard))
 })
 
-test_that("KNOWN DEFECT: a referenced dataset with no subject key", {
-  ## The executor half behaves: it sees that nothing can be carried back
-  ## without a key, declines to apply the filter, and says so -- a silently
-  ## unapplied population filter would be a wrong denominator.
+test_that("a referenced dataset with no subject key blocks the analysis", {
+  ## This WAS a KNOWN DEFECT. The executor detected the missing key, declined
+  ## to apply the filter and emitted a WARN saying the run continued -- while
+  ## the emitted code then did pull(USUBJID) on a frame without it and dropped
+  ## the analysis anyway. The WARN promised something that did not happen.
   ##
-  ## The emitted half has no such check. .apply_where_expr() writes
-  ## `USUBJID %in% (ADNOKEY |> filter(...) |> pull(USUBJID))` against a frame
-  ## with no USUBJID, dplyr::pull() selects no column, and the analysis dies.
-  ##
-  ## So the WARN promises the run continues unfiltered while the analysis is
-  ## actually dropped. CORRECT behaviour is what the WARN describes: continue
-  ## with the filter unapplied, giving Drug A N = 4. Recorded, not endorsed;
-  ## explicitly NOT in scope for the de-closuring refactor.
+  ## Now it is a block: nothing is computed, the FAIL names the analysis and
+  ## the dataset, and the reserved rows say so.
   td  <- .wc_adam()
-  ard <- .wc_run(.wc_spec(.wc_condition("ADNOKEY", "FLAG", "Y")), td)
+  ard <- .wc_run(.wc_spec(.wc_condition("ADNOKEY", "FLAG", "Y")), td,
+                 name = "nokey.json")
 
-  diagnostics <- ars_diagnostics()
-  hit <- diagnostics[grepl("ADNOKEY", diagnostics$problem), , drop = FALSE]
-  expect_gt(nrow(hit), 0)
-  expect_true(all(hit$severity == "WARN"))
-  expect_match(hit$action[[1]], "NOT applied")
+  blocked <- .wc_status_rows(ard, "blocked")
+  expect_equal(nrow(blocked), 1L)
+  expect_equal(.wc_chr(blocked, "block_reason"), "missing_subject_key")
+  expect_equal(nrow(.wc_status_rows(ard, "computed")), 0L)
 
-  ## The defect: nothing survives, despite the WARN saying the run goes on.
-  expect_true(any(diagnostics$severity == "FAIL" &
-                    grepl("cards calculation error", diagnostics$problem)))
-  expect_null(ard)
+  fails <- ars_blockers()
+  hit <- fails[grepl("ADNOKEY", fails$problem), , drop = FALSE]
+  expect_equal(nrow(hit), 1L)
+  expect_match(hit$problem[[1]], "no subject key", fixed = TRUE)
+  expect_equal(hit$location[[1]], "AN_AE")
 })
 
 # ---- KNOWN DEFECTS: reproduced, not endorsed --------------------------------
@@ -379,16 +392,19 @@ test_that("a NULL clause and an empty frame are handled without special cases", 
                logical(0))
 })
 
-test_that("a dataset the store cannot read leaves the mask unfiltered", {
-  ## Preserved behaviour, not endorsed: the clause is dropped rather than
-  ## failing closed. Recorded with the deferred defects.
+test_that("a dataset the store cannot read blocks rather than unfiltering", {
+  ## Preserved behaviour until now, and the wrong one: the clause was dropped
+  ## and the analysis carried on against a population nobody had asked for.
   diag_reset()
   store <- .wc_store()
   adae  <- store$get("ADAE")
-  mask  <- suppressWarnings(.where_keep_mask(
+  signal <- suppressWarnings(.where_keep_mask(
     adae, "ADAE", list(condition = .wc_cond("ADXX", "FLAG", "Y")),
     store, "USUBJID"))
-  expect_equal(mask, rep(TRUE, nrow(adae)))
+
+  expect_true(.is_block(signal))
+  expect_equal(signal$reason, "missing_dataset")
+  expect_equal(signal$detail, "ADXX")
 })
 
 test_that("the raw dataset reader sees cardinality the coerced one hides", {

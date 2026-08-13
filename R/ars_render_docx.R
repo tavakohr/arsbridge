@@ -122,9 +122,40 @@
 .reserved_cells_detail <- function(ard, oid) {
   wl <- ars_manual_worklist(ard)
   wl <- wl[!is.na(wl$output_id) & wl$output_id == oid, , drop = FALSE]
-  if (nrow(wl) == 0) return(NULL)
-  paste0("Reserved cell(s) needing manual derivation (see ars_manual_worklist()): ",
-         paste(sprintf("%s [%s]", wl$stat_name, wl$method_id), collapse = "; "))
+  manual <- if (nrow(wl) == 0) NULL else {
+    paste0("Reserved cell(s) needing manual derivation (see ars_manual_worklist()): ",
+           paste(sprintf("%s [%s]", wl$stat_name, wl$method_id), collapse = "; "))
+  }
+  ## Blocked cells need a different sentence: nobody can derive them by hand,
+  ## the spec or the data has to be repaired first. Silence here would leave an
+  ## unexplained empty page.
+  detail <- c(manual, .blocked_cells_detail(ard, oid))
+  if (length(detail) == 0) return(NULL)
+  paste(detail, collapse = " ")
+}
+
+## Why this output could not be computed, when any of its analyses is blocked.
+#' @noRd
+.blocked_cells_detail <- function(ard, oid) {
+  if (is.null(ard) ||
+      !all(c("output_id", "result_status") %in% names(ard))) return(NULL)
+  chr <- function(col) if (is.list(col)) vapply(col, function(x)
+    if (length(x)) as.character(x[[1]]) else NA_character_, character(1)) else
+      as.character(col)
+  o <- chr(ard[["output_id"]]); st <- chr(ard[["result_status"]])
+  hit <- !is.na(o) & o == oid & !is.na(st) & st == "blocked"
+  if (!any(hit)) return(NULL)
+
+  reasons <- if ("block_reason" %in% names(ard)) {
+    unique(chr(ard[["block_reason"]])[hit])
+  } else character(0)
+  reasons <- reasons[!is.na(reasons)]
+  paste0(
+    "Blocked cell(s): the analysis could not be computed safely",
+    if (length(reasons)) paste0(" (", paste(reasons, collapse = ", "), ")") else "",
+    ". These cannot be derived by hand -- see ars_blockers() for the analysis ",
+    "and the cause."
+  )
 }
 
 ## Convert a GT table (from ars_render_tlf / ars_render_listing) to a
@@ -333,6 +364,13 @@ ars_render_all <- function(ars_path, ard, adam_dir = NULL, file = NULL,
     ## render the partial table: computed cells are filled, reserved
     ## manual_pending cells render as the loud [‡ manual] marker (ADR 0002 ph4).
     unsup <- unsupported_map[[oid]]
+    ## An output whose analyses were blocked has no computable cell either, and
+    ## must not fall through to a table render that would show empty columns
+    ## with nothing to explain them.
+    if (is.null(unsup) && !is.null(.blocked_cells_detail(ard, oid)) &&
+        !.output_has_computed(ard, oid)) {
+      unsup <- "blocked: required data or filter semantics could not be satisfied"
+    }
     if (!is.null(unsup) && !.output_has_computed(ard, oid)) {
       doc <- .add_placeholder(doc, .tlf_heading(oid, kind),
                               extract_title(o) %||% .sc(o[["name"]]) %||% oid,
