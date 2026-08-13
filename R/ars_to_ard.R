@@ -582,24 +582,26 @@
 #' writing to the run's diagnostics, not something captured from a frame, so
 #' severity, wording and control flow are the same by construction.
 #'
-#' Two behaviours are preserved deliberately rather than corrected here,
-#' because this is a behaviour-preserving move and both predate it:
-#'
-#'   * a MISSING dataset is not cached. `dfs[[name]] <- NULL` removes the
-#'     element in R rather than storing a NULL, so the next lookup re-reads the
-#'     directory and re-reports. That is why a run against an absent dataset
-#'     emits the FAIL more than once.
-#'   * the caller is not forced to stop. `.where_keep_mask()` skips a
-#'     referenced dataset it cannot read and, if no dataset yielded subjects,
-#'     returns every row -- so the population filter is simply not applied.
-#'
-#' Both are recorded in notes/plans/POST_ROADMAP_risks_and_order.md.
+#' A dataset that is NOT there is remembered as such. `dfs[[name]] <- NULL`
+#' removes the element rather than storing one, so before this every lookup
+#' re-read the directory and re-reported -- one FAIL per analysis that named
+#' the same absent dataset, which is noisiest exactly when it matters most. The
+#' sentinel is keyed on the canonical identity resolution already uses (the
+#' upper-cased name), so ADSL / adsl / AdSl are one dataset and one diagnostic,
+#' while genuinely different datasets each get their own.
 #' @noRd
+## Stored in place of a frame for a dataset that could not be resolved, so the
+## absence is remembered. NULL cannot do this job: assigning it to a list
+## element deletes the element.
+.ADAM_ABSENT <- structure(list(), class = "arsbridge_absent_dataset")
+
 .adam_store <- function(adam_dir) {
   dfs <- list()
 
   get <- function(name) {
     if (is.null(name) || !nzchar(name)) return(NULL)
+    ## The canonical identity resolution itself uses: every spelling of one
+    ## dataset resolves to one cache slot, and so to one diagnostic.
     name_upper <- toupper(name)
     if (!name_upper %in% names(dfs)) {
       files <- list.files(adam_dir, full.names = TRUE)
@@ -613,11 +615,14 @@
         ## records a FAIL diagnostic naming the dataset and returns NULL (this
         ## analysis is then skipped) rather than throwing a cryptic base-R
         ## error. Native SAS formats are preferred over .csv when both exist.
-        dfs[[name_upper]] <<- .read_dataset(xpt_file[1], name_upper)
+        dfs[[name_upper]] <<- .read_dataset(xpt_file[1], name_upper) %||%
+          .ADAM_ABSENT
       } else if (length(sas_file) > 0) {
-        dfs[[name_upper]] <<- .read_dataset(sas_file[1], name_upper)
+        dfs[[name_upper]] <<- .read_dataset(sas_file[1], name_upper) %||%
+          .ADAM_ABSENT
       } else if (length(csv_file) > 0) {
-        dfs[[name_upper]] <<- .read_dataset(csv_file[1], name_upper)
+        dfs[[name_upper]] <<- .read_dataset(csv_file[1], name_upper) %||%
+          .ADAM_ABSENT
       } else {
         cli::cli_warn("Dataset {.val {name_upper}} not found in {.path {adam_dir}}.")
         diag_add(
@@ -626,10 +631,12 @@
           location = adam_dir,
           action = "All analyses against this dataset were skipped"
         )
-        dfs[[name_upper]] <<- NULL
+        dfs[[name_upper]] <<- .ADAM_ABSENT
       }
     }
-    dfs[[name_upper]]
+    resolved <- dfs[[name_upper]]
+    if (inherits(resolved, "arsbridge_absent_dataset")) return(NULL)
+    resolved
   }
 
   list(get = get)

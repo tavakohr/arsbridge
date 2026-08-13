@@ -320,3 +320,56 @@ test_that("a fully supported study produces zero blocked rows", {
   expect_gt(.bs_status(ard, "computed"), 0L)
   expect_equal(.bs_status(ard, "blocked"), 0L)
 })
+
+# ---- negative caching -------------------------------------------------------
+
+test_that("a missing dataset is reported once per run, not once per lookup", {
+  ## Before this, `dfs[[name]] <- NULL` removed the element instead of storing
+  ## one, so every lookup re-read the directory and re-reported. With blocking
+  ## in place that would mean one FAIL per analysis naming the same absent
+  ## dataset -- noisiest exactly when it matters most.
+  diag_reset()
+  store <- .adam_store(.bs_adam())
+
+  for (i in 1:4) expect_null(suppressWarnings(store$get("ADXX")))
+
+  hit <- ars_diagnostics()
+  hit <- hit[grepl("ADXX", hit$problem), , drop = FALSE]
+  expect_equal(nrow(hit), 1L)
+})
+
+test_that("caching keys on the canonical identity resolution uses", {
+  ## ADSL / adsl / AdSl are one dataset, so they are one diagnostic. Resolution
+  ## already upper-cases the name; the cache uses the same key rather than a
+  ## second notion of identity that could drift from it.
+  diag_reset()
+  store <- .adam_store(.bs_adam())
+
+  for (spelling in c("ADXX", "adxx", "AdXx")) {
+    expect_null(suppressWarnings(store$get(spelling)))
+  }
+  hit <- ars_diagnostics()
+  expect_equal(nrow(hit[grepl("ADXX", hit$problem), , drop = FALSE]), 1L)
+})
+
+test_that("genuinely different missing datasets are each reported", {
+  ## The failure mode on the other side: suppressing too much.
+  diag_reset()
+  store <- .adam_store(.bs_adam())
+
+  expect_null(suppressWarnings(store$get("ADXX")))
+  expect_null(suppressWarnings(store$get("ADYY")))
+  expect_null(suppressWarnings(store$get("ADXX")))
+
+  hit <- ars_diagnostics()
+  expect_equal(nrow(hit[grepl("ADXX", hit$problem), , drop = FALSE]), 1L)
+  expect_equal(nrow(hit[grepl("ADYY", hit$problem), , drop = FALSE]), 1L)
+})
+
+test_that("a dataset that IS there is still returned on every lookup", {
+  store <- .adam_store(.bs_adam())
+  first  <- store$get("ADSL")
+  second <- store$get("adsl")
+  expect_s3_class(first, "data.frame")
+  expect_equal(first, second)
+})
