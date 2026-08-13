@@ -246,3 +246,63 @@ test_that("planning an already-planned shape returns the same plan", {
   expect_equal(first$node$kind, again$node$kind)
   expect_equal(length(first$node$children), length(again$node$children))
 })
+
+# ---- target-dataset predicates split by a foreign branch --------------------
+
+test_that("two target predicates split by a foreign branch stay row-wise", {
+  ## (ADAE.AEDECOD='Headache' OR ADSL.SAFFL='Y') AND ADAE.AESER='Y'
+  ##
+  ## ADAE is the TARGET here, so its two predicates are evaluated against the
+  ## same row and there is no existential projection to be ambiguous about.
+  ## Only the ADSL branch projects to subject membership. This must NOT be
+  ## refused as ambiguous_row_coherence -- refusing it would reject an
+  ## expression whose meaning is completely determined.
+  td <- withr::local_tempdir()
+
+  ## S03 is the discriminator: not SAFFL, with the two target predicates
+  ## satisfied by DIFFERENT rows. Row-wise, S03 contributes nothing. Treated
+  ## existentially per subject -- "has a Headache row" and "has a serious row"
+  ## -- S03 would be kept, which is the reading being ruled out.
+  utils::write.csv(data.frame(
+    USUBJID = c("S01", "S02", "S03"),
+    SAFFL   = c("Y", "Y", "N"),
+    stringsAsFactors = FALSE
+  ), file.path(td, "adsl.csv"), row.names = FALSE)
+
+  adae <- data.frame(
+    USUBJID = c("S01", "S01", "S02", "S03", "S03"),
+    AEDECOD = c("Headache", "Rash", "Headache", "Headache", "Rash"),
+    AESER   = c("N",        "Y",    "Y",        "N",        "Y"),
+    stringsAsFactors = FALSE)
+  utils::write.csv(adae, file.path(td, "adae.csv"), row.names = FALSE)
+
+  where <- .rp_and(
+    .rp_or(.rp_cond("ADAE", "AEDECOD", "Headache"),
+           .rp_cond("ADSL", "SAFFL", "Y")),
+    .rp_cond("ADAE", "AESER", "Y"))
+
+  ## The planner accepts it: only ADSL is projected, and it appears once.
+  plan <- .where_restriction_plan(where, "ADAE", "USUBJID")
+  expect_true(plan$ok)
+  expect_equal(.plan_subject_datasets(plan$node), "ADSL")
+
+  store <- .adam_store(td)
+  frame <- store$get("ADAE")
+  mask  <- .where_keep_mask(frame, "ADAE", where, store, "USUBJID")
+
+  ## Row by row: (Headache OR safety) AND serious.
+  expected <- (adae$AEDECOD == "Headache" |
+                 adae$USUBJID %in% c("S01", "S02")) & adae$AESER == "Y"
+  expect_equal(mask, expected)
+
+  ## S01's kept row is the Rash one -- admitted by SAFFL, not by Headache --
+  ## and S03 contributes no row at all, which is the same-row assertion.
+  expect_equal(frame$AEDECOD[mask], c("Rash", "Headache"))
+  expect_false("S03" %in% frame$USUBJID[mask])
+
+  ## And the emitted predicate computes the same mask.
+  predicate <- .plan_pred_expr(plan$node, "ADAE", "USUBJID")
+  emitted <- eval(parse(text = predicate),
+                  envir = c(as.list(frame), list(ADSL = store$get("ADSL"))))
+  expect_equal(mask, emitted)
+})
