@@ -150,6 +150,9 @@
 #' @export
 ars_render_listing <- function(ars_path, adam_dir, output_id,
                                subject_key = "USUBJID", max_rows = 500) {
+  ## gt only: a listing is read straight from the ADaM data, so it needs
+  ## neither tfrmt (no table specification) nor flextable (returns gt).
+  rlang::check_installed("gt", reason = "to render an ARS listing")
   spec    <- jsonlite::fromJSON(ars_path, simplifyVector = FALSE)
   out_obj <- find_output(spec, output_id)
 

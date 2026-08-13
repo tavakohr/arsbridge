@@ -161,7 +161,26 @@
 ## Convert a GT table (from ars_render_tlf / ars_render_listing) to a
 ## regulatory-style flextable: title + id as header lines, footnotes in the
 ## footer, group-header rows bolded, body indented.
+#' A per-output error handler that lets a MISSING PACKAGE through.
+#'
+#' The composite renderers record a failed output and carry on, which is right
+#' for a table that could not be built and wrong for an absent optional
+#' package: that is the same answer for every output, so it lands in the
+#' manifest eight times and the run then aborts with "no output could be
+#' rendered", naming nothing. "Install gt" becomes "inspect the diagnostics".
+#' Re-raise those, record everything else.
+#' @noRd
+.render_output_error <- function(e) {
+  if (inherits(e, "rlib_error_package_not_found")) stop(e)
+  conditionMessage(e)
+}
+
 .gt_to_flextable <- function(gt_tbl, oid_name, title, footnotes) {
+  ## The flextable boundary. Guarding HERE rather than at the top of
+  ## ars_render_all() keeps the requirement honest: a reporting event of
+  ## figures only never reaches this function, and must not be asked to
+  ## install flextable to render its figures.
+  rlang::check_installed("flextable", reason = "to render a Word or RTF table")
   d <- as.data.frame(gt_tbl[["_data"]], stringsAsFactors = FALSE, check.names = FALSE)
   grp_col  <- intersect(c("..tfrmt_row_grp_lbl", ".tfrmt_row_grp_lbl"), names(d))
   grp_flag <- if (length(grp_col)) as.logical(d[[grp_col[1]]]) else rep(FALSE, nrow(d))
@@ -229,6 +248,7 @@
 
 ## Write a single flextable to a Word or RTF file (landscape).
 .write_flextable <- function(ft, file, format) {
+  rlang::check_installed("flextable", reason = "to write a Word or RTF table")
   if (format == "rtf") {
     flextable::save_as_rtf(ft, path = file)
   } else {
@@ -415,7 +435,7 @@ ars_render_all <- function(ars_path, ard, adam_dir = NULL, file = NULL,
         }
         "ok"
       }
-    }, error = function(e) conditionMessage(e))
+    }, error = .render_output_error)
 
     if (identical(res, "ok")) {
       rec$status <- "rendered"
@@ -522,7 +542,7 @@ ars_render_split <- function(ars_path, dir, adam_dir = NULL, ard = NULL,
         .write_flextable(ft, doc_file, format)
       }
       "ok"
-    }, error = function(e) conditionMessage(e))
+    }, error = .render_output_error)
 
     if (identical(res, "ok")) {
       status <- "rendered"
@@ -609,7 +629,7 @@ ars_render_combined <- function(ars_path, file, adam_dir = NULL, ard = NULL,
     res <- tryCatch({
       fts[[oid]] <- .output_to_flextable(ars_path, spec, ard, o, adam_dir, max_rows)
       "ok"
-    }, error = function(e) conditionMessage(e))
+    }, error = .render_output_error)
     rows[[length(rows) + 1L]] <- data.frame(
       output_id = oid, type = kind,
       status = if (identical(res, "ok")) "rendered" else "error",
