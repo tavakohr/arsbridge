@@ -497,6 +497,72 @@
   invisible(NULL)
 }
 
+## --- blocking -------------------------------------------------------------
+##
+## Three things stop a where-clause being applied at all: a referenced dataset
+## that cannot be read, one with no subject key to carry an answer back on, and
+## an expression whose row coherence is not determined. None may quietly widen
+## the population -- a filter that did not run is a wrong denominator, and a
+## wrong denominator is invisible in a rendered table.
+##
+## The mask functions return this signal instead of a logical vector. The
+## analysis loop turns it into a FAIL naming the analysis and reserved
+## `blocked` rows, so the reason stays recoverable through ars_blockers().
+
+.BLOCK_MISSING_DATASET     <- "missing_dataset"
+.BLOCK_MISSING_SUBJECT_KEY <- "missing_subject_key"
+.BLOCK_AMBIGUOUS_PLAN      <- "ambiguous_row_coherence"
+
+#' @noRd
+.block_signal <- function(reason, detail = NA_character_) {
+  structure(list(reason = reason, detail = detail), class = "arsbridge_block")
+}
+
+#' @noRd
+.is_block <- function(x) inherits(x, "arsbridge_block")
+
+## TRUE only for something that can actually index `df`. A NULL or wrong-length
+## mask is a bug, not a filter, and must never reach `df[mask, ]`.
+#' @noRd
+.is_usable_mask <- function(mask, df) {
+  is.logical(mask) && !is.null(df) && length(mask) == nrow(df)
+}
+
+## One sentence a reviewer can act on, per reason. The analysis id is in the
+## text AND in the diagnostic's `location`, which is the mapping from a blocked
+## row back to why it is blocked.
+#' @noRd
+.block_problem <- function(block, analysis_id) {
+  switch(
+    block$reason,
+    missing_dataset = sprintf(
+      "Analysis %s is blocked: dataset %s named by a where-clause is not in the ADaM directory",
+      analysis_id, block$detail),
+    missing_subject_key = sprintf(
+      "Analysis %s is blocked: dataset %s named by a where-clause has no subject key, so its filter cannot be carried back",
+      analysis_id, block$detail),
+    ambiguous_row_coherence = sprintf(
+      "Analysis %s is blocked: a where-clause naming %s cannot be planned without guessing whether its predicates hold on the same record",
+      analysis_id, block$detail),
+    sprintf("Analysis %s is blocked (%s): %s", analysis_id, block$reason,
+            block$detail)
+  )
+}
+
+#' Reserved rows for an analysis that could not safely be computed.
+#'
+#' Keyed like the manual_pending stubs so the same downstream machinery finds
+#' them, but a different status: `manual_pending` means a human must derive the
+#' number, and putting an unfixable analysis on that worklist would be wrong.
+#' The fix here is to the spec or the data.
+#' @noRd
+.blocked_ard_for_analysis <- function(variable, block) {
+  row <- .stub_ard_row(.ard_schema_proto(), variable, NA_character_,
+                       by_var = NA_character_, by_level = NA_character_)
+  if ("context" %in% names(row)) row$context <- "blocked"
+  cards::bind_ard(row)
+}
+
 ## --- reading ADaM, and applying a where-clause across datasets --------------
 ##
 ## These four lived inside ars_to_ard() as closures, which put them out of
@@ -653,17 +719,10 @@
 
   plan <- .where_restriction_plan(where_clause, target_ds_name, subject_key)
   if (!isTRUE(plan$ok)) {
-    ## An expression whose row semantics are not determined must not be
-    ## guessed at. NULL means "no mask could be built"; the caller refuses the
-    ## analysis rather than computing something defensible-looking.
-    .diag_gap(
-      stage = "execute_ard", severity = "FAIL", input = INPUT_ARS,
-      problem = sprintf("Where-clause on %s cannot be planned (%s): %s",
-                        target_ds_name %||% "?", plan$reason, plan$detail),
-      why = "Its predicates could be read as needing the same record or different ones, and the two readings give different populations.",
-      fix = "Rewrite the condition so each dataset's predicates sit in one AND group, or split the analysis.",
-      location = target_ds_name)
-    return(NULL)
+    ## Diagnosed by the caller, which knows the analysis. Returning the signal
+    ## keeps one FAIL per blocked analysis instead of one per frame the clause
+    ## is applied to.
+    return(.block_signal(plan$reason, plan$detail))
   }
 
   .plan_mask(plan$node, df, store, subject_key, target_ds_name)
@@ -682,29 +741,31 @@
 
   if (identical(node$kind, "subject")) {
     ref_df <- store$get(node$dataset)
-    if (is.null(ref_df)) return(all_rows)
+    ## Not readable: the clause cannot be applied, so nothing is computed.
+    ## Carrying on unfiltered would report a population nobody asked for.
+    if (is.null(ref_df)) {
+      return(.block_signal(.BLOCK_MISSING_DATASET, node$dataset))
+    }
 
     ## The whole subtree, row-wise on its own dataset: this is what keeps two
     ## predicates on one conmed record from becoming two separate records.
     keep <- .eval_where_clause(ref_df, node$where)
     ref_df_filtered <- ref_df[keep, , drop = FALSE]
 
-    if (!subject_key %in% names(ref_df_filtered)) {
-      diag_add(
-        stage = "execute_ard", severity = "WARN", input = INPUT_DATA,
-        problem = sprintf("Subject key %s not present in dataset %s referenced by a where-clause",
-                          subject_key, node$dataset),
-        location = target_ds_name,
-        action = "Cross-dataset filter from this dataset NOT applied"
-      )
-      return(all_rows)
+    ## No key on either side means the answer cannot be carried back.
+    if (!subject_key %in% names(ref_df_filtered) ||
+        !subject_key %in% names(df)) {
+      return(.block_signal(.BLOCK_MISSING_SUBJECT_KEY, node$dataset))
     }
-    if (!subject_key %in% names(df)) return(all_rows)
     return(df[[subject_key]] %in% unique(ref_df_filtered[[subject_key]]))
   }
 
   masks <- lapply(node$children, .plan_mask, df = df, store = store,
                   subject_key = subject_key, target_ds_name = target_ds_name)
+  ## A blocked branch blocks the whole clause, whatever the operator: an OR
+  ## whose other side is unknown is not TRUE, it is unknown.
+  blocked <- Filter(.is_block, masks)
+  if (length(blocked) > 0) return(blocked[[1]])
   if (length(masks) == 0) return(all_rows)
   Reduce(if (identical(node$op, "OR")) `|` else `&`, masks)
 }
@@ -718,9 +779,13 @@
     return(df)
   }
   mask <- .where_keep_mask(df, target_ds_name, where_clause, store, subject_key)
-  ## NULL mask = the clause could not be planned. Returning the UNFILTERED
-  ## frame here would be the silent wrong answer this exists to prevent.
-  if (is.null(mask)) return(NULL)
+  if (.is_block(mask)) return(mask)
+  ## Anything that is not a usable mask blocks rather than being indexed with:
+  ## df[NULL, ] is a silent zero-row frame, which reads downstream as "this
+  ## analysis genuinely had no data".
+  if (!.is_usable_mask(mask, df)) {
+    return(.block_signal("unusable_mask", target_ds_name %||% NA_character_))
+  }
   df[mask, , drop = FALSE]
 }
 
@@ -889,22 +954,29 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     subset_where <- res$subset_where
 
     # Apply filters
+    ## A block anywhere here stops the analysis: no computed rows, a FAIL
+    ## naming the analysis and the cause, and reserved `blocked` rows so the
+    ## deliverable shows a placeholder that can be explained rather than a
+    ## number nobody should trust.
+    block <- NULL
+
     df_filtered <- df_base
     if (!is.null(pop_where)) {
       df_filtered <- .apply_where_clause(analysis_ds, pop_where, store, subject_key)
+      if (.is_block(df_filtered)) block <- df_filtered
     }
-    ## Refused rather than computed: .where_keep_mask() has already recorded a
-    ## FAIL saying which clause and why. PR 2 turns this skip into reserved
-    ## `blocked` rows so the deliverable says so too.
-    if (is.null(df_filtered)) next
 
     df_population <- NULL
-    adsl_df <- store$get("ADSL")
-    if (!is.null(adsl_df)) {
-      df_population <- .apply_where_clause("ADSL", pop_where, store, subject_key)
-    }
-    if (is.null(df_population)) {
-      df_population <- df_filtered
+    if (is.null(block)) {
+      adsl_df <- store$get("ADSL")
+      if (!is.null(adsl_df)) {
+        df_population <- .apply_where_clause("ADSL", pop_where, store, subject_key)
+        if (.is_block(df_population)) {
+          block <- df_population
+          df_population <- NULL
+        }
+      }
+      if (is.null(df_population)) df_population <- df_filtered
     }
 
     ## The frame a missing column variable can be learned from: the domain
@@ -912,8 +984,49 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     ## .denominator_by_subject() -- a subset selects events, not subjects.
     df_domain <- df_filtered
 
-    if (!is.null(subset_where)) {
+    if (is.null(block) && !is.null(subset_where)) {
       df_filtered <- .apply_where_clause(analysis_ds, subset_where, store, subject_key)
+      if (.is_block(df_filtered)) block <- df_filtered
+    }
+
+    ## The overall column's scope is checked here rather than deep inside the
+    ## legacy branch, so a blocked Total reserves rows like any other block.
+    ## EVERY frame the Total clause will later be applied to is probed, because
+    ## each can block independently -- the numerator on the analysis dataset
+    ## and the denominator on ADSL.
+    if (is.null(block) && isTRUE(res$include_total) &&
+        !is.null(res$total_where)) {
+      for (probe_on in list(list(df = df_filtered,   ds = analysis_ds),
+                            list(df = df_population, ds = "ADSL"))) {
+        if (!is.data.frame(probe_on$df)) next
+        probe <- .where_keep_mask(probe_on$df, probe_on$ds, res$total_where,
+                                  store, subject_key)
+        if (.is_block(probe)) { block <- probe; break }
+      }
+    }
+
+    if (!is.null(block)) {
+      diag_add(
+        stage = "execute_ard", severity = "FAIL", input = INPUT_DATA,
+        problem = .block_problem(block, analysis_id),
+        location = analysis_id,
+        action = "Analysis blocked -- reserved cells, no computed results"
+      )
+      blocked_ard <- .blocked_ard_for_analysis(analysis_var, block)
+      blocked_ard[["analysis_id"]]     <- analysis_id
+      blocked_ard[["analysis_descr"]]  <- res$description
+      blocked_ard[["method_id"]]       <- method_id
+      blocked_ard[["output_id"]]       <- out_id %||% NA_character_
+      blocked_ard[["method_intended"]] <- method_id
+      blocked_ard[["method_actual"]]   <- method_id
+      blocked_ard[["result_status"]]   <- "blocked"
+      blocked_ard[["block_reason"]]    <- block$reason
+      blocked_ard[["value_source"]]    <- NA_character_
+      blocked_ard[["derivation_ref"]]  <- NA_character_
+      blocked_ard[["derived_by"]]      <- NA_character_
+      blocked_ard[["derived_dt"]]      <- NA_character_
+      ard_list[[length(ard_list) + 1L]] <- blocked_ard
+      next
     }
 
     analysis_var <- unname(.clean_var_name(analysis_var, names(df_filtered)))
@@ -1176,8 +1289,22 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
           }
           ## An unplannable Total scope must not fall back to the whole
           ## population -- that is a plausible wrong overall column.
-          if (is.null(keep_t) || (!is.null(df_population) && is.null(keep_p))) {
-            stop("total_where could not be planned", call. = FALSE)
+          ## Defensive. A blocked Total scope is caught by the preflight above
+          ## and reserved, so neither arm should be reachable -- but this
+          ## branch must never index with a signal, a NULL, or a mask of the
+          ## wrong length.
+          if (.is_block(keep_t)) stop(.block_problem(keep_t, analysis_id),
+                                      call. = FALSE)
+          if (.is_block(keep_p)) stop(.block_problem(keep_p, analysis_id),
+                                      call. = FALSE)
+          if (!.is_usable_mask(keep_t, df_filtered)) {
+            stop("total_where produced no usable mask on the analysis frame",
+                 call. = FALSE)
+          }
+          if (!is.null(df_population) &&
+              !.is_usable_mask(keep_p, df_population)) {
+            stop("total_where produced no usable mask on the population frame",
+                 call. = FALSE)
           }
           df_t   <- df_filtered[keep_t, , drop = FALSE]
           df_pop <- if (is.null(df_population)) NULL else {

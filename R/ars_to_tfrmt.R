@@ -1155,6 +1155,24 @@ ars_to_tfrmt <- function(ars_path, ard, output_id,
       "See ars_manual_worklist()."))
   }
 
+  ## Blocked is neither manual work nor an ordinary empty cell, so the table
+  ## says so rather than leaving a reader to wonder about the gap.
+  ##
+  ## Deliberately a table-level note and NOT a per-cell marker. A blocked
+  ## analysis reserves ONE row carrying stat_name = NA, because the filter
+  ## never ran and so nothing decided which statistics it would have produced
+  ## -- there is no blocked CELL to mark. manual_pending can be marked per cell
+  ## only because .UNEXECUTABLE_METHODS declares the exact statistics each of
+  ## those methods reserves. Cell-level blocking would mean declaring the
+  ## expected statistics of every method, which is a larger change than this.
+  if ("result_status" %in% names(ard_out) &&
+      any(.flat_chr(ard_out[["result_status"]]) == "blocked", na.rm = TRUE)) {
+    footnotes <- c(footnotes, paste0(
+      "Not computed for one or more analyses in this table: required data or ",
+      "filter semantics could not be satisfied. These cannot be derived by ",
+      "hand -- see ars_blockers() for the analysis and the cause."))
+  }
+
   ## Assemble the tfrmt call. group/column take quosure lists (vars()); label/
   ## param/value take single quosures -- build them programmatically.
   group_q  <- do.call(dplyr::vars, lapply(group_vars, as.name))
