@@ -2,6 +2,48 @@
 
 ## arsbridge (development version)
 
+- **Rendering is an optional capability, and each capability asks only
+  for what it needs.** `tfrmt`, `gt`, `flextable` and `ggplot2` move
+  from Imports to Suggests. A core install – read a shell and an ADaM
+  spec, produce and validate ARS, execute it to an ARD, write the filled
+  workbook back – now carries 13 hard dependencies instead of 17, and 59
+  packages instead of 103. The 44 that leave include the whole
+  knitr/rmarkdown/sass/htmltools chain, and with them go two external
+  system libraries: `V8` (libv8, via gt) and `gdtools` (cairo,
+  freetype2, fontconfig, via flextable).
+
+  The guards are deliberately NOT one “rendering requires four packages”
+  gate, because that would make someone who wants a figure install a
+  Word table writer. Each sits at the boundary where its capability is
+  actually requested:
+  [`ars_to_tfrmt()`](https://tavakohr.github.io/arsbridge/reference/ars_to_tfrmt.md)
+  asks for tfrmt alone, since it builds a specification and renders
+  nothing;
+  [`ars_render_listing()`](https://tavakohr.github.io/arsbridge/reference/ars_render_listing.md)
+  asks for gt alone, since a listing is read straight from the data;
+  [`ars_render_figure()`](https://tavakohr.github.io/arsbridge/reference/ars_render_figure.md)
+  asks for ggplot2 alone;
+  [`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md)
+  asks for tfrmt and gt together, named in one message so nobody is sent
+  back twice; and flextable is asked for by the two functions that
+  convert and write a Word/RTF table, so a reporting event of figures
+  only is never told to install it. The composite renderers inherit
+  their requirement from the outputs they actually meet.
+
+  One related fix: the composite renderers record a failed output and
+  carry on, which is right for a table that could not be built and wrong
+  for an absent package – that is the same answer for every output, so
+  it landed in the manifest once per output and the run then aborted
+  with “no output could be rendered”, naming nothing. A missing-package
+  condition is now re-raised instead of recorded, so “install gt” cannot
+  turn into “inspect the diagnostics”.
+
+  The `core-minimal` CI job proves all of this where the four packages
+  are genuinely absent, which is the only place it can be proven rather
+  than simulated: it asserts that each single-capability export names
+  its own package and none of the other three, and that no composite
+  demands flextable before it has a table to convert.
+
 - **`callr` is optional, and there is now a CI job that proves what
   “optional” means.** The background build the workflow app starts is a
   responsiveness optimisation, never a requirement – everything the
