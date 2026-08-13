@@ -109,10 +109,18 @@ test_that("spec_to_ars emits per-TLF {cards} deliverables (deterministic)", {
   expect_equal(normalizePath(res$code_dir),
                normalizePath(file.path(dirname(json_out), "code")))
   ## Every emitted deliverable is valid R and free of internal symbols.
+  ##
+  ## "Free of internal symbols" is a claim about the CODE: the script must run
+  ## without arsbridge attached and must not leak internal ids. The header
+  ## comment names arsbridge deliberately -- it is what tells a reader where the
+  ## file came from and that editing it has no effect -- so comment lines are
+  ## excluded rather than the assertion weakened.
   for (p in res$code_paths) {
-    txt <- paste(readLines(p), collapse = "\n")
-    expect_silent(parse(text = txt))
-    expect_false(grepl("arsbridge|MTH_|load_adam", txt))
+    lines <- readLines(p)
+    expect_silent(parse(text = paste(lines, collapse = "\n")))
+    code <- paste(grep("^\\s*#", lines, value = TRUE, invert = TRUE),
+                  collapse = "\n")
+    expect_false(grepl("arsbridge|MTH_|load_adam", code))
   }
 })
 
