@@ -25,6 +25,7 @@ spec_to_ars(
   heading_patterns = NULL,
   validate = TRUE,
   report_path = file.path(tempdir(), "spec_validation_report.xlsx"),
+  emit_code = FALSE,
   code_dir = NULL,
   adam_dir = ".",
   verbose = TRUE,
@@ -154,13 +155,19 @@ against the ADaM spec and write a validation report.}
 \item{report_path}{Path for the validation report \code{.xlsx}. Defaults to
 \code{spec_validation_report.xlsx} in \code{\link[=tempdir]{tempdir()}}.}
 
-\item{code_dir}{Directory for the emitted per-TLF pure-\code{{cards}} \code{.R}
-deliverables. When \code{NULL} (default) a \verb{code/} folder next to \code{output_path}
-is used. These scripts are both the human-readable deliverable and the
-engine \code{ars_to_ard()} sources to build the ARD.}
+\item{emit_code}{Also generate the per-TLF \code{.R} analysis programs.
+Default \code{FALSE}: authoring a reporting event and generating programs from
+it are two deliberate steps, and generating here would produce programs
+from the reporting event as it stands \emph{before} review. Generate them from
+the reviewed, saved ARS with \code{\link[=ars_to_code]{ars_to_code()}}. \code{TRUE} keeps the older
+one-call behaviour.}
+
+\item{code_dir}{Directory for the per-TLF pure-\code{{cards}} \code{.R}
+programs, used only when \code{emit_code = TRUE}. When \code{NULL} (default) a
+\verb{code/} folder next to \code{output_path} is used.}
 
 \item{adam_dir}{ADaM directory baked into each emitted script's header
-(the reader can edit it). Default \code{"."}.}
+when \code{emit_code = TRUE} (the reader can edit it). Default \code{"."}.}
 
 \item{verbose}{Print progress messages. Default \code{TRUE}.}
 
@@ -179,10 +186,11 @@ Invisibly returns a named list:
 \item{\code{report_path}}{Path to the validation report (if validate=TRUE).}
 \item{\code{adam_spec_path}}{The ADaM spec this run read, so the review
 stage can be opened with \code{edit_ars(result)} alone.}
-\item{\code{code_dir}}{Directory holding the emitted per-TLF \code{{cards}} \code{.R}
-deliverables.}
-\item{\code{code_paths}}{Named character vector of the emitted \code{.R} paths
-(names = output ids).}
+\item{\code{code_dir}}{Where per-TLF \code{{cards}} \code{.R} programs would be
+written. Reported whether or not any were: it is the directory
+\code{\link[=ars_to_code]{ars_to_code()}} fills.}
+\item{\code{code_paths}}{Named character vector of the \code{.R} paths written
+(names = output ids). Empty unless \code{emit_code = TRUE}.}
 \item{\code{n_tlfs}}{Number of TLF sections processed.}
 \item{\code{n_analyses}}{Number of ARS Analysis objects created.}
 \item{\code{n_warnings}}{Number of spec validation warnings.}

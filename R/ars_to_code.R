@@ -895,6 +895,24 @@
   get("ard_block", envir = env)
 }
 
+#' Refuse to replace a program file that is not what this ARS would write.
+#'
+#' The message says only what arsbridge can actually establish. A file that
+#' differs from the current generation was either edited by hand or generated
+#' from an earlier version of the ARS, and **nothing on disk distinguishes the
+#' two**: emitted scripts carry no provenance, so there is no baseline to
+#' compare against. Claiming "this program was customized" would be a guess,
+#' and the wrong guess would talk someone into discarding their own work.
+#' @noRd
+.abort_existing_program <- function(path, output_id) {
+  cli::cli_abort(c(
+    "{.path {path}} already exists and differs from what this ARS generates.",
+    "i" = "It was either edited by hand, or generated from an earlier version of the reporting event -- arsbridge cannot yet tell which.",
+    "i" = "Move or delete it, or pass {.code overwrite = TRUE} to replace it.",
+    " " = "Output: {.val {output_id}}"
+  ), class = "arsbridge_existing_program")
+}
+
 #' Write per-TLF {cards} deliverable scripts for an ARS spec
 #'
 #' Deterministically emits one self-contained, pharmaverse-style `{cards}` `.R`
@@ -908,11 +926,15 @@
 #' @param subject_key Subject identifier (default `"USUBJID"`).
 #' @param adam_dir Default ADaM directory baked into each script header.
 #' @param log Optional `function(msg)` progress callback.
+#' @param overwrite Replace a file that already exists and whose content
+#'   differs. `TRUE` (the default) preserves the behaviour `spec_to_ars()` has
+#'   always had. [ars_to_code()] passes `FALSE`, which is what makes generation
+#'   refuse to discard a file it did not write.
 #' @return A named character vector of written file paths (names = output ids).
 #' @noRd
 write_tlf_code <- function(spec_or_path, code_dir, output_ids = NULL,
                            subject_key = "USUBJID", adam_dir = ".",
-                           log = NULL) {
+                           log = NULL, overwrite = TRUE) {
   spec <- if (is.character(spec_or_path)) {
     jsonlite::fromJSON(spec_or_path, simplifyVector = FALSE)
   } else spec_or_path
@@ -940,28 +962,162 @@ write_tlf_code <- function(spec_or_path, code_dir, output_ids = NULL,
   }, logical(1))
   outs <- all_outputs[keep]
 
+  ## A requested id that matches nothing is a typo, not an empty result. Left
+  ## unchecked it produces a silent no-op, and the user goes looking for a
+  ## program that was never going to be written.
+  if (!is.null(output_ids)) {
+    known <- unlist(lapply(all_outputs, function(o) {
+      tolower(c(.as_scalar_char(o[["id"]]), .as_scalar_char(o[["name"]])))
+    }))
+    missing <- output_ids[!tolower(output_ids) %in% known]
+    if (length(missing) > 0) {
+      ids <- vapply(all_outputs, function(o) .as_scalar_char(o[["id"]]) %||% "",
+                    character(1))
+      cli::cli_abort(c(
+        "No output in this reporting event matches {.val {missing}}.",
+        "i" = "Available output{?s}: {.val {ids[nzchar(ids)]}}"
+      ), class = "arsbridge_unknown_output")
+    }
+  }
+
+  ## Generate every script BEFORE writing any of them. Two different failures
+  ## need two different answers, and doing this in one pass gets one of them
+  ## wrong:
+  ##
+  ##  * a REFUSAL to replace an existing file must touch nothing -- otherwise a
+  ##    conflict on the fifth output leaves four already overwritten;
+  ##  * a genuine emission FAILURE keeps its long-standing behaviour: whatever
+  ##    generated cleanly is still written, and reported, so the caller learns
+  ##    exactly which files this run produced.
+  ##
+  ## So generation is attempted for all, the refusal check runs against what
+  ## generated, and the failure (if any) is raised only after those are on disk.
   paths <- character(0)
-  tryCatch(
-    for (o in outs) {
-      oid <- .as_scalar_char(o[["id"]])
-      script <- .emit_tlf_script(
+  scripts <- list()
+  emit_error <- NULL
+  for (o in outs) {
+    oid <- .as_scalar_char(o[["id"]])
+    text <- tryCatch(
+      .emit_tlf_script(
         oid, spec, subject_key, adam_dir,
         grouping_map, analysis_to_output,
         grouping_groups, output_paths
-      )
-      fp <- file.path(code_dir, paste0(make.names(oid), ".R"))
-      writeLines(script, fp)
-      paths[[oid]] <- fp
-      if (!is.null(log)) log(sprintf("Emitted cards script: %s", fp))
-    },
-    error = function(e) {
-      rlang::abort(
-        conditionMessage(e),
-        class = "arsbridge_tlf_code_error",
-        code_paths = paths,
-        parent = e
-      )
+      ),
+      error = function(e) {
+        emit_error <<- e
+        NULL
+      }
+    )
+    if (is.null(text)) break
+    scripts[[length(scripts) + 1L]] <-
+      list(id = oid,
+           path = file.path(code_dir, paste0(make.names(oid), ".R")),
+           text = text)
+  }
+
+  ## Only an EXISTING file can be discarded, and only a DIFFERING one is
+  ## actually being replaced: rewriting identical bytes changes nothing, so
+  ## regeneration stays idempotent instead of failing on its own output. This
+  ## refusal is deliberate, so it is raised on its own rather than through the
+  ## emission handler, which would relabel it as an emission failure.
+  if (!isTRUE(overwrite)) {
+    for (s in scripts) {
+      if (file.exists(s$path) &&
+          !identical(readLines(s$path, warn = FALSE),
+                     strsplit(s$text, "\n")[[1]])) {
+        .abort_existing_program(s$path, s$id)
+      }
     }
+  }
+
+  tryCatch(
+    for (s in scripts) {
+      writeLines(s$text, s$path)
+      paths[[s$id]] <- s$path
+      if (!is.null(log)) log(sprintf("Emitted cards script: %s", s$path))
+    },
+    error = function(e) emit_error <<- e
   )
+
+  if (!is.null(emit_error)) {
+    rlang::abort(
+      conditionMessage(emit_error),
+      class = "arsbridge_tlf_code_error",
+      code_paths = paths,
+      parent = emit_error
+    )
+  }
   paths
+}
+
+#' Generate the R analysis program for one or more outputs
+#'
+#' Writes one self-contained `{cards}` `.R` program per output (TLF) from an
+#' **already-saved** ARS. This is the explicit generation step: authoring a
+#' reporting event and generating programs from it are two deliberate actions,
+#' so `spec_to_ars()` does not do this for you unless you ask it to with
+#' `emit_code = TRUE`.
+#'
+#' The reporting event is the semantic source of truth. Generation reads the
+#' saved ARS and nothing else -- never the original shell or ADaM
+#' specification -- so a program always reflects the reviewed, approved
+#' document rather than a re-reading of the inputs it came from.
+#'
+#' @section What this does not do:
+#' It generates; it never executes. Nothing here reads data, so no `adam_dir`
+#' is needed: the emitted program takes the ADaM location as its own input,
+#' which you set before running it.
+#'
+#' @section An existing program is never silently replaced:
+#' If the target file exists and is byte-identical to what would be written,
+#' nothing happens -- regenerating is safe to repeat. If it exists and
+#' *differs*, generation stops rather than discarding it.
+#'
+#' arsbridge deliberately does not claim to know *why* it differs. Emitted
+#' programs carry no provenance, so a file edited by hand and a file generated
+#' from an earlier version of the ARS look exactly alike. Pass
+#' `overwrite = TRUE` when you have decided the file on disk is expendable.
+#'
+#' @param ars_path Path to a saved ARS JSON file.
+#' @param output_ids Character vector of output ids (or names) to generate.
+#'   `NULL`, the default, generates every eligible output. An id matching no
+#'   output is an error, not an empty result.
+#' @param code_dir Directory to write the `.R` programs into, created if
+#'   needed.
+#' @param overwrite Replace an existing program whose content differs.
+#'   Default `FALSE`.
+#' @param subject_key Subject identifier used when resolving analyses.
+#'
+#' @return Invisibly, a named character vector of the paths written -- names
+#'   are output ids, in the order the reporting event lists them.
+#'
+#' @seealso [spec_to_ars()] to author the reporting event, [ars_to_ard()] to
+#'   compute results from it, and [edit_ars()] to review it first.
+#'
+#' @examples
+#' \dontrun{
+#' res <- spec_to_ars_example()          # emit_code = FALSE by default
+#' ars_to_code(res$ars_path, code_dir = "code")            # every output
+#' ars_to_code(res$ars_path, "T_14_1_2", code_dir = "code") # just one
+#' }
+#' @export
+ars_to_code <- function(ars_path, output_ids = NULL, code_dir,
+                        overwrite = FALSE, subject_key = "USUBJID") {
+  .require_file(ars_path, "ars_path", INPUT_ARS)
+  if (missing(code_dir) || !is.character(code_dir) || length(code_dir) != 1 ||
+      is.na(code_dir) || !nzchar(code_dir)) {
+    cli::cli_abort("{.arg code_dir} must be a single directory path.")
+  }
+  if (!is.null(output_ids)) {
+    output_ids <- as.character(output_ids)
+    if (length(output_ids) == 0 || anyNA(output_ids) ||
+        !all(nzchar(output_ids))) {
+      cli::cli_abort(
+        "{.arg output_ids} must be a non-empty character vector, or {.code NULL} for every output.")
+    }
+  }
+
+  paths <- write_tlf_code(ars_path, code_dir, output_ids = output_ids,
+                          subject_key = subject_key, overwrite = overwrite)
+  invisible(paths)
 }

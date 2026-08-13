@@ -273,6 +273,12 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
       study_id       = study_id,
       supplement     = supplement,
       report_path    = paths$validation_report,
+      ## Asked for explicitly, because spec_to_ars() no longer emits programs
+      ## by default. This runner is the existing one-shot build -- shell to
+      ## filled workbook in one call -- so its behaviour is unchanged here.
+      ## Separating generation into its own deliberate step belongs with the
+      ## downstream workspace, not with this default change.
+      emit_code      = TRUE,
       code_dir       = paths$code_dir,
       use_llm        = use_llm,
       api_key        = api_key,

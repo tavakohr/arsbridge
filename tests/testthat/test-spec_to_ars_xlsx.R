@@ -154,7 +154,8 @@ test_that("the deliberate authoring mistakes in the fixture are reported", {
 ## ---------------------------------------------------------------------------
 
 test_that("per-TLF code is emitted for an Excel shell like any other", {
-  built <- build_apx()
+  ## Emission is opt-in since 0.1.0.9128, and this test's subject is emission.
+  built <- build_apx(emit_code = TRUE)
   expect_true(length(built$res$code_paths %||% character()) > 0)
   expect_true(all(file.exists(built$res$code_paths)))
 })

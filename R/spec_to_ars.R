@@ -111,12 +111,17 @@
 #'   against the ADaM spec and write a validation report.
 #' @param report_path    Path for the validation report `.xlsx`. Defaults to
 #'   `spec_validation_report.xlsx` in [tempdir()].
-#' @param code_dir       Directory for the emitted per-TLF pure-`{cards}` `.R`
-#'   deliverables. When `NULL` (default) a `code/` folder next to `output_path`
-#'   is used. These scripts are both the human-readable deliverable and the
-#'   engine `ars_to_ard()` sources to build the ARD.
+#' @param emit_code      Also generate the per-TLF `.R` analysis programs.
+#'   Default `FALSE`: authoring a reporting event and generating programs from
+#'   it are two deliberate steps, and generating here would produce programs
+#'   from the reporting event as it stands *before* review. Generate them from
+#'   the reviewed, saved ARS with [ars_to_code()]. `TRUE` keeps the older
+#'   one-call behaviour.
+#' @param code_dir       Directory for the per-TLF pure-`{cards}` `.R`
+#'   programs, used only when `emit_code = TRUE`. When `NULL` (default) a
+#'   `code/` folder next to `output_path` is used.
 #' @param adam_dir       ADaM directory baked into each emitted script's header
-#'   (the reader can edit it). Default `"."`.
+#'   when `emit_code = TRUE` (the reader can edit it). Default `"."`.
 #' @param verbose        Print progress messages. Default `TRUE`.
 #' @param .on_artifact_written Internal callback invoked with a named artifact
 #'   receipt after a current-run artifact has been written successfully. Used by
@@ -132,10 +137,11 @@
 #'     \item{`report_path`}{Path to the validation report (if validate=TRUE).}
 #'     \item{`adam_spec_path`}{The ADaM spec this run read, so the review
 #'       stage can be opened with `edit_ars(result)` alone.}
-#'     \item{`code_dir`}{Directory holding the emitted per-TLF `{cards}` `.R`
-#'       deliverables.}
-#'     \item{`code_paths`}{Named character vector of the emitted `.R` paths
-#'       (names = output ids).}
+#'     \item{`code_dir`}{Where per-TLF `{cards}` `.R` programs would be
+#'       written. Reported whether or not any were: it is the directory
+#'       [ars_to_code()] fills.}
+#'     \item{`code_paths`}{Named character vector of the `.R` paths written
+#'       (names = output ids). Empty unless `emit_code = TRUE`.}
 #'     \item{`n_tlfs`}{Number of TLF sections processed.}
 #'     \item{`n_analyses`}{Number of ARS Analysis objects created.}
 #'     \item{`n_warnings`}{Number of spec validation warnings.}
@@ -259,6 +265,7 @@ spec_to_ars <- function(shell_path,
                         heading_patterns = NULL,
                         validate     = TRUE,
                         report_path  = file.path(tempdir(), "spec_validation_report.xlsx"),
+                        emit_code    = FALSE,
                         code_dir     = NULL,
                         adam_dir     = ".",
                         verbose      = TRUE,
@@ -636,7 +643,18 @@ spec_to_ars <- function(shell_path,
   ## the code ars_to_ard() sources to compute the ARD. Read back the written
   ## JSON so emission parses the spec exactly as the engine will.
   if (is.null(code_dir)) code_dir <- file.path(dirname(output_path), "code")
-  code_paths <- if (validation_gate$blocked) {
+  code_paths <- if (!isTRUE(emit_code)) {
+    ## Authoring a reporting event and generating programs from it are two
+    ## deliberate steps. Doing the second as a side effect of the first means
+    ## the programs on disk are always generated from the PRE-review ARS, and
+    ## nothing regenerates them once the reviewer edits it.
+    if (verbose) {
+      cli::cli_alert_info(
+        "No {.path .R} programs emitted; generate them with {.fn ars_to_code}."
+      )
+    }
+    character(0)
+  } else if (validation_gate$blocked) {
     if (verbose) {
       cli::cli_alert_danger(
         "Runnable code was not emitted: {validation_gate$summary}"
