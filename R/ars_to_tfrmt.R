@@ -1256,11 +1256,13 @@ ars_render_tlf <- function(ars_path, ard, output_id,
                            format = c("gt", "docx", "rtf"),
                            file = NULL, rtf_path = NULL, ...) {
   format  <- match.arg(format)
-  ## Both, and named together so a user installs once rather than being sent
-  ## back twice: the table is SPECIFIED with tfrmt and BUILT as gt, whatever
-  ## the format. flextable is not checked here -- only the non-gt formats
-  ## reach it, and .gt_to_flextable() asks for it there.
-  rlang::check_installed(c("tfrmt", "gt"), reason = "to render an ARS table")
+  ## Named together so a user installs once rather than being sent back twice.
+  ## The table is SPECIFIED with tfrmt and BUILT as gt whatever the format;
+  ## Word and RTF additionally CONVERT it with flextable, so ask for all three
+  ## at once when that is where this call is going.
+  rlang::check_installed(
+    if (format == "gt") c("tfrmt", "gt") else c("tfrmt", "gt", "flextable"),
+    reason = paste("to render an ARS table as", format))
   tf      <- ars_to_tfrmt(ars_path, ard, output_id, ...)
 
   col_var     <- attr(tf, "arsbridge_col_var")

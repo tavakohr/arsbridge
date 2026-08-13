@@ -224,13 +224,23 @@ check_needs("ars_render_figure()",
 check_needs("ars_render_tlf()",
             say(ars_render_tlf(ars_path, ard, tab_ids[1])), c("tfrmt", "gt"))
 
-## The composites inherit their requirement from the output they meet FIRST,
-## which depends on the fixture's contents and on whether that output has
-## computed results at all. So what is asserted here is the prohibition rather
-## than an exact set: whatever they ask for must not include flextable --
-## reaching flextable means converting a table they have not got to yet -- and
-## must not be the whole tier. An eager "rendering needs all four" guard fails
-## this, which is the point.
+## THE non-broadness claim, tested where it actually bites: a composite asked
+## for FIGURES ONLY must want ggplot2 and nothing else. It must not drag in the
+## table stack for a document that contains no tables. An eager "rendering
+## needs all four" guard fails here, which is the point of the check.
+check_needs("ars_render_all(figures only)",
+            say(ars_render_all(ars_path, ard, adam_dir,
+                               file.path(out_dir, "figs.docx"),
+                               output_ids = fig_ids)), "ggplot2")
+check_needs("ars_render_split(figures only)",
+            say(ars_render_split(ars_path, out_dir, adam_dir, ard,
+                                 output_ids = fig_ids)), "ggplot2")
+
+## Over the WHOLE event the requirement is inherited from the outputs they
+## meet, and which one they reach first depends on the fixture and on whether
+## that output has computed results. So the assertion here is bounded rather
+## than exact: a non-empty subset, never the whole tier, and never a raw
+## namespace error.
 for (nm in c("ars_render_all", "ars_render_combined", "ars_render_split")) {
   m <- switch(nm,
     ars_render_all      = say(ars_render_all(ars_path, ard, adam_dir,
@@ -243,13 +253,18 @@ for (nm in c("ars_render_all", "ars_render_combined", "ars_render_split")) {
   got <- asked(m)
   cat("    ", nm, "() asks for {", paste(got, collapse = ", "), "}\n", sep = "")
   need(length(got) > 0, sprintf("%s() names at least one rendering package", nm))
-  need(!("flextable" %in% got),
-       sprintf("%s() does not demand flextable before it has a table to convert", nm))
   need(length(got) < length(RENDER_PKGS),
        sprintf("%s() does not demand the whole rendering tier", nm))
   need(!grepl("there is no package called", m, fixed = TRUE),
        sprintf("%s() fails as a capability message, not a namespace load error", nm))
 }
+
+## And the docx path names its three up front rather than sending the user
+## back for flextable after they have installed tfrmt and gt.
+check_needs("ars_render_tlf(format = 'docx')",
+            say(ars_render_tlf(ars_path, ard, tab_ids[1], format = "docx",
+                               file = file.path(out_dir, "one.docx"))),
+            c("tfrmt", "gt", "flextable"))
 
 ## The callr path is different by design: it degrades instead of refusing,
 ## so there is nothing here to catch -- .workflow_start_build() is reachable
