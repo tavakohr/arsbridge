@@ -357,6 +357,15 @@ spec_to_ars <- function(shell_path,
       provider <- NULL
       api_key  <- NULL
     } else {
+      ## The one point at which arsbridge has resolved that it WILL call an
+      ## LLM: opted in, with a provider and a usable key. ellmer is asked for
+      ## here and nowhere else, so every supported deterministic path above
+      ## stays reachable without it -- including `use_llm = TRUE` with no
+      ## usable key, and a preferred provider whose key is missing (already
+      ## warned about by get_active_llm(), and not usable whether or not
+      ## ellmer is installed).
+      rlang::check_installed(
+        "ellmer", reason = "to read the shell with an LLM (use_llm = TRUE)")
       extraction_mode <- "llm"
     }
   }

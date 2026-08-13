@@ -44,7 +44,7 @@ arsbridge reads each shell **twice and takes the union.**
         +-----------------+-----------------+
         |                                   |
         v                                   v
-1. DETERMINISTIC PASS               2. LLM PASS (primary)
+1. DETERMINISTIC PASS               2. LLM PASS (optional)
    parse_shell_docx()                  extract_shell_llm()
    four-layer regex detector            re-reads each raw cell,
    - colour                             separates label vs variable
@@ -85,7 +85,7 @@ The four layers, in priority order:
 
 ---
 
-### Pass 2: the LLM as primary reader (handles the variants)
+### Pass 2: the optional LLM-assisted reader (handles the variants)
 
 `extract_shell_llm()` re-reads the **raw** text of each cell and asks the
 model to separate the human display label from the machine variable reference,
@@ -114,9 +114,10 @@ it extracts and converts rather than invents, while letting the LLM read freely.
 
 ## How the two passes combine
 
-A row's annotation is taken if **either** pass finds it. On a conflict, the LLM
-wins (it is the primary reader) and a warning flags the disagreement for a human
-to check.
+A row's annotation is taken if **either** pass finds it. When the LLM pass runs,
+it wins a conflict -- it has read the raw cell in context -- and a warning flags
+the disagreement for a human to check. When it does not run, the deterministic
+pass stands alone and the run is fully supported.
 
 | Situation | Regex | LLM | Result |
 |---|:---:|:---:|---|
@@ -126,6 +127,25 @@ to check.
 | Variant layout regex cannot parse | ✗ | ✓ | **LLM adds the row** |
 | LLM proposes a non-spec variable | ✗ | rejected | Dropped + **blocker logged** |
 | Row genuinely has no variable | ✗ | silent | Empty |
+
+## Which gap-filler runs
+
+The deterministic pass always runs. On top of it **at most one** gap-filler
+applies, and the order of preference is:
+
+1. **Supplement** — a reviewed JSON file produced outside this process,
+   typically by a chat assistant inside a closed environment, supplied via
+   `spec_to_ars(supplement = )`. No API key, no network, no `ellmer`. This is
+   the intended production path where live API access is not available.
+2. **Live LLM** — only when *no* supplement is supplied, `use_llm = TRUE`, a
+   provider key is configured, and the optional `ellmer` package is installed.
+3. **Neither** — the deterministic result stands, which is a fully supported
+   outcome and not a degraded one.
+
+A supplement wins outright: supplying one makes no live call regardless of
+`use_llm` or any configured key. `ellmer` is required only in case 2, at the
+moment the run resolves that it will actually call a model — so a core
+install without `ellmer` covers cases 1 and 3 completely.
 
 Guards keep the regex result safe in failure modes: if the LLM returns an empty
 dataset or variable, omits a row, or no API key is set, the deterministic result

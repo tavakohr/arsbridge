@@ -12,12 +12,17 @@ CDISC Analysis Results Standard (ARS) v1.0 ARM-TS JSON file consumable by
 \code{\link[siera:readARS]{siera::readARS()}}.
 }
 \details{
-Annotation reading is style-agnostic and uses two passes together to
-extract as many annotation variants as possible: a deterministic
-four-layer regex detector (font colour, character formatting, brackets,
-plain text) and an LLM primary reader that separates display label from
-variable reference in layouts no regex was written for. A row is read if
-either pass finds it; on conflict the LLM wins and a warning flags it.
+Annotation reading is style-agnostic, and runs in two stages. The
+deterministic four-layer regex detector (font colour, character formatting,
+brackets, plain text) ALWAYS runs and is a fully supported mode on its own.
+On top of it, at most one gap-filler applies, in this order of preference:
+an offline \strong{supplement} -- a reviewed JSON file, typically produced by a
+chat assistant inside a closed environment, applied with no API key and no
+network -- or, when no supplement is supplied and a provider key is
+configured, an optional \strong{live LLM} pass via the \code{ellmer} package. A
+supplement always wins: supplying one makes no live call whatever \code{use_llm}
+says. Where a gap-filler runs, a row is read if either it or the regex finds
+it, and the gap-filler wins a conflict with a warning flagging it.
 
 Core principle: the package extracts and converts -- it does not invent.
 Every LLM-proposed variable passes a hard gate against the ADaM
@@ -33,8 +38,10 @@ The LLM is opt-in. \code{spec_to_ars()} runs in one of three tiers:
 no LLM call even if a key is configured), \strong{supplement} (a JSON file a chat
 assistant such as Copilot produces from the uploaded shell + spec, fed via
 \code{spec_to_ars(supplement =)} with no API call), or \strong{llm} (opt in with
-\code{spec_to_ars(use_llm = TRUE)} and a configured key). A missing key never
-stops a run and never raises a key-related warning. Start the no-API
+\code{spec_to_ars(use_llm = TRUE)}, a configured key, and the optional \code{ellmer}
+package installed). A missing key never stops a run and never raises a
+key-related warning; \code{ellmer} is asked for only once a run has resolved
+that it will actually call an LLM. Start the no-API
 supplement path with \code{\link[=ars_copilot_instructions]{ars_copilot_instructions()}}; see
 \code{vignette("no-api-access")}.
 }

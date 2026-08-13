@@ -13,6 +13,9 @@
 ##   4. the core ARS -> ARD path executes, with nothing blocked
 ##   5. the filled shell -- the headline deliverable -- is written
 ##   6. requesting an absent optional capability fails clearly
+##   7. each rendering export asks only for the packages ITS path needs
+##   8. regex + an offline supplement -- the production path -- works with
+##      no ellmer, and ellmer is required only when a run would call an LLM
 ##
 ## Exit status is what CI reads: any stop() fails the job.
 ## ---------------------------------------------------------------------------
@@ -269,6 +272,133 @@ check_needs("ars_render_tlf(format = 'docx')",
             say(ars_render_tlf(ars_path, ard, tab_ids[1], format = "docx",
                                file = file.path(out_dir, "one.docx"))),
             c("tfrmt", "gt", "flextable"))
+
+## ---------------------------------------------------------------------------
+step(8, "ellmer is required only when a run would actually call an LLM")
+## Deterministic parsing is a first-class mode, so almost every configuration
+## must still convert here with no ellmer at all. The one that must NOT is an
+## opted-in run with a usable key: silently handing that user regex output of
+## lower quality than they asked for is the failure this guards.
+LLM_ENV <- c("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY",
+             "GLM_API_KEY", "ARS_LLM_PROVIDER")
+FAKE_KEY <- "sk-ant-not-a-real-key-000000000001"
+
+## Run spec_to_ars under a chosen key/provider environment; return the
+## extraction mode on success, or the error message on failure.
+convert_under <- function(label, use_llm, env = character(),
+                          supplement = NULL) {
+  vals <- stats::setNames(rep("", length(LLM_ENV)), LLM_ENV)
+  vals[names(env)] <- env
+  old <- Sys.getenv(LLM_ENV, unset = NA_character_, names = TRUE)
+  do.call(Sys.setenv, as.list(vals))
+  on.exit({
+    unset <- names(old)[is.na(old)]
+    if (length(unset)) Sys.unsetenv(unset)
+    keep <- old[!is.na(old)]
+    if (length(keep)) do.call(Sys.setenv, as.list(keep))
+  }, add = TRUE)
+
+  out <- file.path(out_dir, paste0("llm_", label, ".json"))
+  res <- tryCatch({
+    suppressMessages(suppressWarnings(spec_to_ars(
+      shell_path     = arsbridge_example("annotated_shell.xlsx"),
+      adam_spec_path = arsbridge_example("adam_spec.xlsx"),
+      output_path    = out, study_id = "CORE-SMOKE-LLM",
+      supplement     = supplement,
+      use_llm        = use_llm)))
+    mode <- jsonlite::fromJSON(out, simplifyVector = FALSE)[["_meta"]][["extraction_mode"]]
+    list(ok = TRUE, mode = as.character(mode), path = out)
+  }, error = function(e) {
+    list(ok = FALSE, msg = gsub("[\r\n]+", " ", conditionMessage(e)))
+  })
+  res
+}
+
+deterministic_ok <- function(label, res) {
+  need(isTRUE(res$ok),
+       sprintf("%s converts without ellmer%s", label,
+               if (isTRUE(res$ok)) "" else paste0(" -- got: ", res$msg)))
+  need(identical(res$mode, "deterministic"),
+       sprintf("%s runs deterministically (mode = %s)", label,
+               if (is.null(res$mode)) "<none>" else res$mode))
+}
+
+deterministic_ok("default (no key, no opt-in)", convert_under("a", FALSE))
+deterministic_ok("use_llm = TRUE, no key",      convert_under("b", TRUE))
+deterministic_ok("preferred provider, no key",
+                 convert_under("c", TRUE, c(ARS_LLM_PROVIDER = "anthropic")))
+## The override: a real key present, but the run was never going to call out.
+deterministic_ok("use_llm = FALSE with a key configured",
+                 convert_under("d", FALSE,
+                               c(ANTHROPIC_API_KEY = FAKE_KEY,
+                                 ARS_LLM_PROVIDER  = "anthropic")))
+
+## ---------------------------------------------------------------------------
+## The production path: deterministic parse + an offline supplement, with no
+## ellmer, no key and no network. This is the workflow the core install exists
+## to serve, so proving it matters more than proving regex alone runs. The
+## supplement carries one field the parser does not produce -- the bundled
+## shell asks for no Total column on Table 14.1.1 -- so the enrichment landing
+## is measurable rather than assumed.
+draft <- file.path(out_dir, "draft.json")
+suppressMessages(suppressWarnings(write_supplement_draft(
+  shell_path     = arsbridge_example("annotated_shell.xlsx"),
+  adam_spec_path = arsbridge_example("adam_spec.xlsx"),
+  output_path    = draft)))
+need(file.exists(draft), "a supplement draft is written without ellmer")
+
+supp_spec <- jsonlite::fromJSON(draft, simplifyVector = FALSE)
+supp_spec$tlfs[["T-14-1-1"]]$includeTotal <- TRUE
+supp_path <- file.path(out_dir, "supplement.json")
+jsonlite::write_json(supp_spec, supp_path, auto_unbox = TRUE, null = "null")
+
+marker_landed <- function(path) {
+  s <- jsonlite::fromJSON(path, simplifyVector = FALSE)
+  hit <- Filter(function(a) startsWith(as.character(a$id), "AN_T_14_1_1"),
+                s$analyses)
+  length(hit) > 0 &&
+    all(vapply(hit, function(a)
+      isTRUE(as.logical(unlist(a$includeTotal)[1])), logical(1)))
+}
+
+## The baseline, which is what makes the assertion below mean anything: the
+## same shell read deterministically does NOT set that field.
+need(!marker_landed(ars_path),
+     "the deterministic ARS does not carry the supplement's marker")
+
+supp_run <- convert_under("supp", FALSE, supplement = supp_path)
+need(isTRUE(supp_run$ok),
+     paste0("a supplement run converts without ellmer",
+            if (isTRUE(supp_run$ok)) "" else paste0(" -- got: ", supp_run$msg)))
+need(identical(supp_run$mode, "supplement"),
+     sprintf("a supplement run reports mode = %s", supp_run$mode))
+need(marker_landed(supp_run$path),
+     "the supplement's enrichment landed in the ARS (includeTotal on T_14_1_1)")
+
+## Precedence, in the environment where it matters: a supplement is resolved
+## before use_llm is consulted, so an opted-in run holding a usable key still
+## takes the supplement -- and therefore still needs no ellmer.
+supp_optin <- convert_under("supp_optin", TRUE,
+                            c(ANTHROPIC_API_KEY = FAKE_KEY,
+                              ARS_LLM_PROVIDER  = "anthropic"),
+                            supplement = supp_path)
+need(isTRUE(supp_optin$ok),
+     paste0("a supplement run opted in WITH a key still needs no ellmer",
+            if (isTRUE(supp_optin$ok)) "" else paste0(" -- got: ", supp_optin$msg)))
+need(identical(supp_optin$mode, "supplement"),
+     "the supplement wins over the live LLM")
+need(marker_landed(supp_optin$path), "and its enrichment still landed")
+
+## And the one case that must fail, naming ellmer and nothing else.
+res <- convert_under("e", TRUE, c(ANTHROPIC_API_KEY = FAKE_KEY,
+                                  ARS_LLM_PROVIDER  = "anthropic"))
+need(!isTRUE(res$ok),
+     sprintf("an opted-in run with a usable key refuses (mode was %s)",
+             if (is.null(res$mode)) "<none>" else res$mode))
+need(grepl("\\bellmer\\b", res$msg),
+     paste0("the refusal names ellmer: ", res$msg))
+need(!grepl("there is no package called", res$msg, fixed = TRUE),
+     "it fails as a capability message, not a namespace load error")
 
 ## The callr path is different by design: it degrades instead of refusing,
 ## so there is nothing here to catch -- .workflow_start_build() is reachable
