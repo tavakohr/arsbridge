@@ -214,6 +214,10 @@ check_needs <- function(label, m, want) {
 ## names its own package and NONE of the other three.
 check_needs("ars_to_tfrmt()",
             say(ars_to_tfrmt(ars_path, ard, tab_ids[1])), "tfrmt")
+## The list form must raise the SAME condition once, not skip every output
+## with a warning and hand back a list of NULLs.
+check_needs("ars_to_tfrmt_list()",
+            say(ars_to_tfrmt_list(ars_path, ard)), "tfrmt")
 check_needs("ars_render_listing()",
             say(ars_render_listing(ars_path, adam_dir, lst_ids[1])), "gt")
 check_needs("ars_render_figure()",
