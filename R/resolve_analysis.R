@@ -29,11 +29,56 @@
   for (gf in spec[["analysisGroupings"]]) {
     gf_id <- .as_scalar_char(gf[["id"]])
     if (is.null(gf_id)) next
-    gv <- gf[["groupingVariable"]]
-    ds <- if (is.list(gv)) .as_scalar_char(gv[["dataset"]]) else NULL
-    if (!is.null(ds) && nzchar(ds)) out[[gf_id]] <- toupper(ds)
+    resolved <- .grouping_dataset(gf)
+    ## A conflict is recorded, not resolved: the caller decides what to do
+    ## about a spec that says two different things.
+    if (isTRUE(resolved$conflict)) {
+      out[[gf_id]] <- structure(NA_character_, conflict = TRUE,
+                                flat = resolved$flat, nested = resolved$nested)
+    } else if (!is.na(resolved$dataset)) {
+      out[[gf_id]] <- resolved$dataset
+    }
   }
   out
+}
+
+#' The dataset a grouping's variable lives on -- one answer, one place.
+#'
+#' A grouping can say this twice. The converter and the editor write the FLAT
+#' `groupingDataset` (siera reads flat strings); a spec-correct ARS from
+#' elsewhere carries the nested `groupingVariable$dataset`. Until now the
+#' execution/emission side read ONLY the nested form, so everything arsbridge
+#' itself produced resolved to "no dataset" and the denominator join it drives
+#' never fired -- an AE table's columns annotated ADAE.TRTA reported every
+#' percentage out of the whole study on the emitted path while the executor
+#' got it right.
+#'
+#' Both forms are now read here, and nowhere else.
+#'
+#' @return `list(dataset =, flat =, nested =, conflict =)`. `dataset` is
+#'   `NA_character_` when neither form says anything, or when the two disagree
+#'   -- disagreement is a `conflict`, never a precedence contest. Choosing
+#'   either silently could move a denominator, which is the failure this whole
+#'   area exists to prevent.
+#' @noRd
+.grouping_dataset <- function(gf) {
+  flat <- .as_scalar_char(gf[["groupingDataset"]])
+  gv <- gf[["groupingVariable"]]
+  nested <- if (is.list(gv)) .as_scalar_char(gv[["dataset"]]) else NULL
+
+  norm <- function(x) if (is.null(x) || !nzchar(x)) NA_character_ else toupper(x)
+  flat <- norm(flat)
+  nested <- norm(nested)
+
+  if (is.na(flat) && is.na(nested)) {
+    return(list(dataset = NA_character_, flat = flat, nested = nested,
+                conflict = FALSE))
+  }
+  if (is.na(flat) || is.na(nested) || identical(flat, nested)) {
+    return(list(dataset = if (is.na(flat)) nested else flat,
+                flat = flat, nested = nested, conflict = FALSE))
+  }
+  list(dataset = NA_character_, flat = flat, nested = nested, conflict = TRUE)
 }
 
 ## groupingId -> grouping variable name, built once from the ARS spec.
@@ -262,7 +307,15 @@ resolve_analysis <- function(ana, spec, subject_key = "USUBJID",
     gf_var <- grouping_map[[gf_id]]
     if (!is.null(gf_var) && nzchar(gf_var)) {
       by <- c(by, gf_var)
-      by_datasets <- c(by_datasets, grouping_ds[[gf_id]] %||% NA_character_)
+      ## A conflicted grouping resolves to NA here, carrying `conflict` as an
+      ## attribute; as.character() drops it. Nothing downstream chooses a
+      ## dataset from a conflict -- ars_to_ard() never sees one, because
+      ## .assert_runnable_ars() refuses the event on the blocking FAIL that
+      ## validate_ars_model() raises. resolve_analysis() is directly callable,
+      ## so a caller that bypasses that gate gets NA, which is "no declared
+      ## dataset" and therefore population-first.
+      by_datasets <- c(by_datasets,
+                       as.character(grouping_ds[[gf_id]] %||% NA_character_))
     }
     ## Condition-defined levels ride along keyed by the variable name, so
     ## the executor/emitter can derive the display grouping in-memory.

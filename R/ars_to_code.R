@@ -315,20 +315,56 @@
   var <- .clean_emit_name(by[[1]])
   if (is.null(var) || !nzchar(var %||% "")) return("")
   sk <- res$subject_key
-  ## The guard is the refusal, written out: join only when the variable is one
-  ## per subject and every population subject is covered. Otherwise the
-  ## denominator stays the whole population -- a partial join would make each
-  ## column N mean "subjects with a record in this domain", which is neither
-  ## the population nor the study. ars_to_ard() reports which case applied.
-  sprintf(paste0(
+  ## Written out so the script refuses exactly where ars_to_ard() does, for
+  ## the same three reasons:
+  ##
+  ##   * POPULATION-FIRST -- if the population frame already carries the
+  ##     variable it is authoritative, whatever the metadata names. Joining
+  ##     anyway collides the two into VAR.x / VAR.y, the grouping column
+  ##     disappears and every N silently becomes the whole study.
+  ##   * when both frames carry it and they DISAGREE for a subject, the
+  ##     numerator would be counted under one group and the denominator under
+  ##     another (n > N). Refused, not reconciled.
+  ##   * when only the domain carries it, a subject with two values or a
+  ##     population subject the domain does not know leaves group membership
+  ##     unresolvable, so any per-group N would be partly invented.
+  ##
+  ## Built by token substitution rather than positional sprintf: at this size
+  ## a miscounted %s is a silently malformed script.
+  template <- paste0(
     " |>\n    (\\(.pop) {\n",
-    "      .lvl <- dplyr::distinct(%s, %s, %s)\n",
-    "      if (nrow(.lvl) == dplyr::n_distinct(.lvl$%s) &&\n",
-    "          all(.pop$%s %%in%% .lvl$%s)) {\n",
-    "        dplyr::left_join(.pop, .lvl, by = %s)\n",
-    "      } else .pop\n",
-    "    })()"),
-    res$dataset, sk, .bt(var), sk, sk, sk, encodeString(sk, quote = "\""))
+    "      if (<VARQ> %in% names(.pop)) {\n",
+    "        if (<VARQ> %in% names(<DS>)) {\n",
+    "          .cmp <- merge(unique(.pop[, c(<SKQ>, <VARQ>)]),\n",
+    "                        unique(<DS>[, c(<SKQ>, <VARQ>)]),\n",
+    "                        by = <SKQ>, suffixes = c(\".pop\", \".dom\"))\n",
+    "          .p <- as.character(.cmp[[paste0(<VARQ>, \".pop\")]])\n",
+    "          .d <- as.character(.cmp[[paste0(<VARQ>, \".dom\")]])\n",
+    "          if (any(!is.na(.p) & !is.na(.d) & .p != .d)) {\n",
+    "            stop(\"cannot construct grouped denominator: <VAR> differs between the population frame and <DS>\")\n",
+    "          }\n",
+    "        }\n",
+    "        return(.pop)\n",
+    "      }\n",
+    "      .lvl <- dplyr::distinct(<DS>, <SK>, <VARBT>)\n",
+    "      if (nrow(.lvl) != dplyr::n_distinct(.lvl$<SK>)) {\n",
+    "        stop(\"cannot construct grouped denominator: a subject carries more than one <VAR> in <DS>\")\n",
+    "      }\n",
+    "      if (!all(.pop$<SK> %in% .lvl$<SK>)) {\n",
+    "        stop(\"cannot construct grouped denominator: population subjects have no resolvable <VAR> value in <DS>\")\n",
+    "      }\n",
+    "      dplyr::left_join(.pop, .lvl, by = <SKQ>)\n",
+    "    })()")
+
+  for (pair in list(c("<VARQ>", encodeString(var, quote = "\"")),
+                    c("<VARBT>", .bt(var)),
+                    c("<VAR>", var),
+                    c("<SKQ>", encodeString(sk, quote = "\"")),
+                    c("<SK>", sk),
+                    c("<DS>", res$dataset))) {
+    template <- gsub(pair[[1]], pair[[2]], template, fixed = TRUE)
+  }
+  template
 }
 
 ## ---- per-method block emission --------------------------------------------

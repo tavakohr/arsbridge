@@ -693,38 +693,54 @@ test_that("an ADSL column variable is left exactly as it was", {
   diag_reset()
 })
 
-test_that("an incomplete domain refuses the join and says what the percentages are out of", {
-  ## Four of the ten population subjects have no ADEX record, so their column
-  ## is unknowable. Joining anyway would make each N mean "subjects with a
-  ## record", which is neither the population nor the study -- so the join is
-  ## refused whole and the numbers are left as they were.
+test_that("an incomplete domain blocks rather than reporting a whole-study N", {
+  ## FORMER BEHAVIOUR, recorded so the change is legible: four of the ten
+  ## population subjects have no ADEX record, so their column is unknowable.
+  ## The join was refused whole, N stayed at 10 -- the entire population --
+  ## and a WARN said the percentages were "out of the whole population".
+  ##
+  ## That is a wrong denominator with a note attached. Once the population
+  ## frame cannot supply the grouping variable, the domain is the ONLY source
+  ## of group membership, so a subject the domain does not know cannot be
+  ## placed in any group's denominator and every per-group N would be partly
+  ## invented. It is now refused outright.
   skip_if_not_installed("cards")
   diag_reset()
   ard <- suppressMessages(suppressWarnings(
     ars_to_ard(.edge_write(.denom_spec()), .denom_adam(covered = FALSE))))
 
-  stats <- .denom_stats(ard)
-  expect_equal(unname(stats$A[["N"]]), 10)   # unchanged: the whole population
+  ## No computed rows at all -- not a 10 that reads like an answer.
+  status <- as.character(ard[["result_status"]])
+  expect_equal(sum(status == "computed"), 0L)
+  expect_gt(sum(status == "blocked"), 0L)
+  expect_equal(unique(as.character(ard[["block_reason"]])[status == "blocked"]),
+               "denominator_grouping_unresolved")
 
-  d <- ars_diagnostics()
-  hit <- d$severity == "WARN" & grepl("have no ADEX record", d$problem)
-  expect_true(any(hit))
-  expect_match(d$problem[hit][[1]], "out of the whole population")
-  expect_match(d$action[hit][[1]], "ADSL variable")
+  ## And the diagnostic names the variable, the source dataset and the count.
+  blockers <- ars_blockers()
+  expect_gt(nrow(blockers), 0)
+  expect_match(blockers$problem[[1]], "no resolvable TRTA value in ADEX",
+               fixed = TRUE)
+  expect_match(blockers$problem[[1]], "4 population subject", fixed = TRUE)
   diag_reset()
 })
 
-test_that("a subject under two arms refuses the join rather than picking one", {
+test_that("a subject under two arms blocks rather than reporting a whole-study N", {
+  ## FORMER BEHAVIOUR: the join was refused, N stayed at 10, and a WARN said a
+  ## subject carried more than one TRTA. Same objection as above -- there is
+  ## no fact of the matter about which group that subject belongs to, so any
+  ## per-group denominator would be invented.
   skip_if_not_installed("cards")
   diag_reset()
   ard <- suppressMessages(suppressWarnings(
     ars_to_ard(.edge_write(.denom_spec()),
                .denom_adam(one_per_subject = FALSE))))
-  expect_equal(unname(.denom_stats(ard)$A[["N"]]), 10)
 
-  d <- ars_diagnostics()
-  expect_true(any(d$severity == "WARN" &
-                    grepl("more than one TRTA", d$problem)))
+  status <- as.character(ard[["result_status"]])
+  expect_equal(sum(status == "computed"), 0L)
+  expect_equal(unique(as.character(ard[["block_reason"]])[status == "blocked"]),
+               "denominator_grouping_ambiguous")
+  expect_match(ars_blockers()$problem[[1]], "more than one TRTA", fixed = TRUE)
   diag_reset()
 })
 
