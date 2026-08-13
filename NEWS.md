@@ -9,9 +9,13 @@
 
   The header now states what the file is — generated from the ARS, not the
   artefact that computes the ARD, and self-contained so it can be run to
-  reproduce the numbers. An output with no summarisable analyses (a listing or
-  a figure, whose script is a stub) says that instead of promising numbers it
-  does not produce.
+  reproduce the numbers.
+
+  An output whose script is a stub says so in its own terms, because the two
+  cases are not the same: a listing is genuinely produced directly from the
+  ADaM data, whereas a figure's content could be expressed as a structured
+  summary and simply has no emitter yet. One shared line would have quietly
+  asserted the second question was settled.
 
   This is documentation of current behaviour, not a change to it. Whether a
   hand-edited program should drive execution is a separate architectural

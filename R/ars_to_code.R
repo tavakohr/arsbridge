@@ -717,6 +717,22 @@
   ds[nzchar(ds)]
 }
 
+#' An output's declared type ("TABLE" / "LISTING" / "FIGURE"), uppercased.
+#'
+#' Returns `"TABLE"` when the output or its type is missing: the header wording
+#' this feeds must not describe an output as a listing or a figure on the
+#' strength of an absent field.
+#' @noRd
+.output_type_of <- function(spec, output_id) {
+  for (o in spec[["outputs"]] %||% list()) {
+    if (identical(.as_scalar_char(o[["id"]]), output_id)) {
+      type <- toupper(trimws(.as_scalar_char(o[["outputType"]]) %||% ""))
+      return(if (nzchar(type)) type else "TABLE")
+    }
+  }
+  "TABLE"
+}
+
 #' Emit one self-contained {cards} script for a single output (TLF).
 #'
 #' @param output_id The ARS output id to emit.
@@ -761,12 +777,25 @@
     "## from the ARS itself, never from this script. Regenerate it by rebuilding",
     "## the reporting event.",
     "##",
-    ## An output with nothing to summarise gets a stub body, so the promise of
-    ## reproducible numbers would be false for it -- listings and figures say
-    ## what they are instead.
+    ## An output with no analysis blocks gets a stub body, so the promise of
+    ## reproducible numbers would be false for it. What to say instead depends
+    ## on the output type, and must describe TODAY's architecture without
+    ## claiming anything about what these outputs could become: a listing is
+    ## genuinely rendered from the data, whereas a figure's content could be
+    ## expressed as a structured summary -- it simply has no emitter yet. One
+    ## shared "no summarisable analyses" line would quietly assert the second
+    ## case is settled.
     if (length(reslist) == 0) {
-      paste0("## This output has no summarisable analyses, so there is nothing ",
-             "here to run.")
+      switch(
+        .output_type_of(spec, output_id),
+        LISTING = paste0("## This listing is produced directly from the ADaM ",
+                         "data; no executable\n## analysis program is generated ",
+                         "for it."),
+        FIGURE  = paste0("## An executable analysis program is not generated ",
+                         "for figures yet;\n## this file is a placeholder."),
+        paste0("## No analysis blocks were generated for this output, so there ",
+               "is\n## nothing here to run.")
+      )
     } else {
       sprintf(paste0("## Self-contained, so you can run it yourself to reproduce ",
                      "the numbers:\n## it leaves the {cards} rows in `%s`. The ",
@@ -783,7 +812,10 @@
   )
 
   if (length(reslist) == 0) {
-    body <- c("", paste0("# No summarisable analyses for this output."),
+    ## Says what the file contains, not what the output could support -- the
+    ## header just took care to avoid that claim, and this sits two lines below
+    ## it.
+    body <- c("", paste0("# No analysis blocks are generated for this output."),
               paste0(ard_obj, " <- NULL"))
     return(paste(c(header, body), collapse = "\n"))
   }

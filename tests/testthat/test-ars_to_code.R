@@ -105,21 +105,48 @@ test_that("the header does not invite an edit that has no effect", {
   expect_match(txt, "Editing this file changes nothing")
 })
 
-test_that("an output with nothing to run does not promise numbers", {
-  ## A listing or figure gets a stub body, so the "run it yourself to reproduce
-  ## the numbers" line would be false for it.
-  td <- withr::local_tempdir()
+## A stub script for one output type. `.ac_spec()` builds a TABLE output, so the
+## type is overridden here.
+.ac_stub_txt <- function(output_type, td) {
   spec <- .ac_spec(list(list(
     id = "AN_1", methodId = "MTH_LISTING",
     label = "Subject", dataset = "ADSL", variable = "USUBJID",
     analysisVariable = list(dataset = "ADSL", variable = "USUBJID"),
     analysisSetId = "", dataSubsetId = "")))
+  spec$outputs[[1]]$outputType <- output_type
   paths <- write_tlf_code(.ac_write(spec, td), file.path(td, "code"),
                           adam_dir = td)
-  txt <- paste(readLines(paths[[1]]), collapse = "\n")
+  paste(readLines(paths[[1]]), collapse = "\n")
+}
 
-  expect_match(txt, "no summarisable analyses")
-  expect_false(grepl("reproduce the numbers", txt, fixed = TRUE))
+test_that("a stub script does not promise numbers it cannot produce", {
+  ## An output with no analysis blocks gets a stub body, so the "run it yourself
+  ## to reproduce the numbers" line would be false for it.
+  for (type in c("LISTING", "FIGURE")) {
+    txt <- .ac_stub_txt(type, withr::local_tempdir())
+    expect_false(grepl("reproduce the numbers", txt, fixed = TRUE))
+    expect_match(txt, "Editing this file changes nothing")
+  }
+})
+
+test_that("a stub says what its own output type actually is", {
+  ## The two cases are NOT the same and must not share wording. A listing is
+  ## genuinely rendered from the data; a figure's content could be expressed as
+  ## a structured summary and simply has no emitter yet. A shared "no
+  ## summarisable analyses" line would assert the second question is settled.
+  listing <- .ac_stub_txt("LISTING", withr::local_tempdir())
+  figure  <- .ac_stub_txt("FIGURE", withr::local_tempdir())
+
+  expect_match(listing, "produced directly from the ADaM data")
+  expect_match(figure, "not generated for figures yet")
+
+  ## Neither claims the output has nothing summarisable to say.
+  expect_false(grepl("no summarisable analyses", listing, ignore.case = TRUE))
+  expect_false(grepl("no summarisable analyses", figure, ignore.case = TRUE))
+
+  ## And the two do not share a description.
+  expect_false(grepl("produced directly from the ADaM data", figure))
+  expect_false(grepl("not generated for figures yet", listing))
 })
 
 test_that("sourced categorical script yields a by-group + total ARD", {
