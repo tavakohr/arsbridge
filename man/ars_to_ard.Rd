@@ -41,12 +41,34 @@ A tidy ARD data frame of class \code{"card"}, with traceability
 columns \code{analysis_id}, \code{method_id}, \code{output_id}, \code{method_intended},
 and \code{method_actual} (differs from \code{method_intended} when the generic
 fallback summarizer was used), plus provenance columns (ADR 0002):
-\code{result_status} (\code{"computed"} for engine output), \code{value_source}
-(\code{"cards"}), \code{derivation_ref} (the emitted block, \verb{arsbridge:emitted:<id>}),
-\code{derived_by} (\code{"arsbridge"}), and \code{derived_dt} (run timestamp, ISO-8601;
-pin with \code{options(arsbridge.derived_dt=)}). These let a later partial /
-manual fill be distinguished from engine output without breaking
-traceability.
+\code{result_status}, \code{value_source} (\code{"cards"}), \code{derivation_ref} (the emitted
+block, \verb{arsbridge:emitted:<id>}), \code{derived_by} (\code{"arsbridge"}), and
+\code{derived_dt} (run timestamp, ISO-8601; pin with
+\code{options(arsbridge.derived_dt=)}). These let a later partial / manual fill
+be distinguished from engine output without breaking traceability.
+
+\code{result_status} takes one of four values, and they are not
+interchangeable:
+
+\describe{
+\item{\code{"computed"}}{a trustworthy engine result.}
+\item{\code{"manual_pending"}}{a cell reserved because the method has no
+executor. Valid work that a programmer must derive by hand; listed by
+\code{\link[=ars_manual_worklist]{ars_manual_worklist()}}.}
+\item{\code{"manual_filled"}}{a manual result that has been supplied and
+validated; checked by \code{\link[=ars_validate_manual_fills]{ars_validate_manual_fills()}}.}
+\item{\code{"blocked"}}{computation could not safely proceed, because
+required data or filter semantics could not be satisfied -- a
+referenced dataset that is not in \code{adam_dir}, one with no subject key
+to carry its filter back on, or a where-clause whose row semantics are
+not determined. A blocked analysis emits NO computed rows: a filter
+that did not run is a wrong denominator, and a wrong denominator is
+invisible in a rendered table. It is NOT manual work -- nobody can
+derive it by hand until the spec or the ADaM cut is repaired -- so it
+is excluded from \code{\link[=ars_manual_worklist]{ars_manual_worklist()}}. The cause is in the
+accompanying FAIL diagnostic, whose \code{location} is the analysis id; see
+\code{\link[=ars_blockers]{ars_blockers()}}. The row also carries \code{block_reason}.}
+}
 }
 \description{
 Reads a CDISC ARS JSON specification and executes the analyses defined within

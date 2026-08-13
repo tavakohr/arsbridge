@@ -823,12 +823,34 @@
 #'   columns `analysis_id`, `method_id`, `output_id`, `method_intended`,
 #'   and `method_actual` (differs from `method_intended` when the generic
 #'   fallback summarizer was used), plus provenance columns (ADR 0002):
-#'   `result_status` (`"computed"` for engine output), `value_source`
-#'   (`"cards"`), `derivation_ref` (the emitted block, `arsbridge:emitted:<id>`),
-#'   `derived_by` (`"arsbridge"`), and `derived_dt` (run timestamp, ISO-8601;
-#'   pin with `options(arsbridge.derived_dt=)`). These let a later partial /
-#'   manual fill be distinguished from engine output without breaking
-#'   traceability.
+#'   `result_status`, `value_source` (`"cards"`), `derivation_ref` (the emitted
+#'   block, `arsbridge:emitted:<id>`), `derived_by` (`"arsbridge"`), and
+#'   `derived_dt` (run timestamp, ISO-8601; pin with
+#'   `options(arsbridge.derived_dt=)`). These let a later partial / manual fill
+#'   be distinguished from engine output without breaking traceability.
+#'
+#'   `result_status` takes one of four values, and they are not
+#'   interchangeable:
+#'
+#'   \describe{
+#'     \item{`"computed"`}{a trustworthy engine result.}
+#'     \item{`"manual_pending"`}{a cell reserved because the method has no
+#'       executor. Valid work that a programmer must derive by hand; listed by
+#'       [ars_manual_worklist()].}
+#'     \item{`"manual_filled"`}{a manual result that has been supplied and
+#'       validated; checked by [ars_validate_manual_fills()].}
+#'     \item{`"blocked"`}{computation could not safely proceed, because
+#'       required data or filter semantics could not be satisfied -- a
+#'       referenced dataset that is not in `adam_dir`, one with no subject key
+#'       to carry its filter back on, or a where-clause whose row semantics are
+#'       not determined. A blocked analysis emits NO computed rows: a filter
+#'       that did not run is a wrong denominator, and a wrong denominator is
+#'       invisible in a rendered table. It is NOT manual work -- nobody can
+#'       derive it by hand until the spec or the ADaM cut is repaired -- so it
+#'       is excluded from [ars_manual_worklist()]. The cause is in the
+#'       accompanying FAIL diagnostic, whose `location` is the analysis id; see
+#'       [ars_blockers()]. The row also carries `block_reason`.}
+#'   }
 #' @importFrom tidyselect all_of
 #' @export
 #' @examples
