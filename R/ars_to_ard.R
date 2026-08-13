@@ -353,14 +353,49 @@
 .denominator_by_subject <- function(df_population, df_domain, by_arg,
                                     subject_key, analysis_id = NA_character_,
                                     analysis_ds = NA_character_) {
-  none <- list(data = df_population, joined = character())
+  none <- list(data = df_population, joined = character(), block = NULL)
+  blocked <- function(reason, detail) {
+    list(data = df_population, joined = character(),
+         block = .block_signal(reason, detail))
+  }
   if (is.null(df_population) || is.null(df_domain)) return(none)
   if (length(by_arg %||% character()) == 0) return(none)
+
+  ## POPULATION-FIRST. When the denominator frame already carries the grouping
+  ## variable it is authoritative, whatever the grouping metadata names as its
+  ## dataset. A treatment variable copied onto an event domain must not decide
+  ## the denominator: subjects with no event would drop out of it, and the
+  ## denominator is the POPULATION, not the subjects some domain happens to
+  ## know about.
+  ## by_arg[[1]] is the COLUMN axis and is one variable name; a row grouping
+  ## is appended after it and must not key the denominator.
   missing_vars <- setdiff(by_arg[[1]], names(df_population))
-  if (length(missing_vars) == 0) return(none)
+  if (length(missing_vars) == 0) {
+    ## Both frames carry the variable. The NUMERATOR is grouped by the
+    ## analysis frame's copy and the DENOMINATOR by the population's, so if
+    ## the two disagree for a subject that subject is counted under one group
+    ## and measured against another -- which is how an analysis comes to
+    ## report n = 3 against N = 2. There is no safe reading of that.
+    ##
+    ## Subjects the domain does not know are fine: the population answers for
+    ## them and they stay in their own column's denominator.
+    disagree <- .grouping_value_disagreement(df_population, df_domain,
+                                             by_arg[[1]], subject_key)
+    if (!is.null(disagree)) return(blocked(.BLOCK_GROUPING_DISAGREE, disagree))
+    return(none)
+  }
+
+  ## Past here the population does NOT have it, so the foreign dataset is the
+  ## only source of group membership -- and every requirement below follows
+  ## from that, because a subject whose group cannot be resolved cannot be
+  ## counted in any group's denominator.
   if (!subject_key %in% names(df_population) ||
       !subject_key %in% names(df_domain)) {
-    return(none)
+    return(blocked(
+      .BLOCK_MISSING_SUBJECT_KEY,
+      sprintf("%s is needed to carry %s from %s and is not on both frames",
+              subject_key, paste(missing_vars, collapse = ", "),
+              analysis_ds %||% "the analysis dataset")))
   }
 
   joined <- character()
@@ -371,37 +406,29 @@
                             c(subject_key, var), drop = FALSE])
     per_subject <- table(map[[subject_key]])
     if (any(per_subject > 1)) {
-      .diag_gap(
-        stage = "execute_ard", severity = "WARN", input = INPUT_DATA,
-        problem = sprintf(
-          "%d subject(s) carry more than one %s in %s, so it cannot key the denominator.",
-          sum(per_subject > 1), var, analysis_ds %||% "the analysis dataset"),
-        why = paste("Percentages would be out of the whole population instead",
-                    "of each column's own."),
-        fix = paste0("Resolve the duplicate ", var, " values, or point the ",
-                     "shell's column axis at an ADSL variable."),
-        location = analysis_id %||% "")
-      next
+      ## Two different values for one subject: there is no fact of the matter
+      ## about which group they belong to, and assigning either would invent
+      ## one. This used to warn and leave N as the whole population.
+      return(blocked(
+        .BLOCK_DENOM_AMBIGUOUS,
+        sprintf("%d subject(s) carry more than one %s in %s",
+                sum(per_subject > 1), var,
+                analysis_ds %||% "the analysis dataset")))
     }
 
     with_var <- merge(df_population, map, by = subject_key, all.x = TRUE,
                       sort = FALSE)
     unmapped <- sum(is.na(with_var[[var]]))
     if (unmapped > 0) {
-      .diag_gap(
-        stage = "execute_ard", severity = "WARN", input = INPUT_DATA,
-        problem = sprintf(
-          "%d of %d population subjects have no %s record, so their %s is unknown.",
-          unmapped, nrow(df_population), analysis_ds %||% "domain", var),
-        why = paste0("Every percentage in this analysis is therefore out of ",
-                     "the whole population, not out of its own column -- ",
-                     "keying the denominator on ", var, " would count only ",
-                     "the subjects ", analysis_ds %||% "the dataset",
-                     " knows, which is narrower still."),
-        fix = paste0("Point the shell's column axis at an ADSL variable ",
-                     "(the arm every subject has), rather than ", var, "."),
-        location = analysis_id %||% "")
-      next
+      ## The population frame cannot supply this variable and the domain does
+      ## not know these subjects, so their group membership is unknown and any
+      ## per-group N would be partly invented. NOT the same as a subject
+      ## missing from the domain when the POPULATION has the variable -- there
+      ## the population answers and the subject stays in its own denominator.
+      return(blocked(
+        .BLOCK_DENOM_UNRESOLVED,
+        sprintf("%d population subject(s) have no resolvable %s value in %s",
+                unmapped, var, analysis_ds %||% "the analysis dataset")))
     } else {
       diag_add(
         stage = "execute_ard", severity = "INFO",
@@ -413,7 +440,7 @@
     df_population <- with_var
     joined <- c(joined, var)
   }
-  list(data = df_population, joined = joined)
+  list(data = df_population, joined = joined, block = NULL)
 }
 
 ## Build one keyed, value-less stub ARD row from a prototype row.
@@ -512,6 +539,12 @@
 .BLOCK_MISSING_DATASET     <- "missing_dataset"
 .BLOCK_MISSING_SUBJECT_KEY <- "missing_subject_key"
 .BLOCK_AMBIGUOUS_PLAN      <- "ambiguous_row_coherence"
+## Denominator construction, when the population frame cannot supply the
+## grouping variable and the foreign dataset cannot resolve it either.
+.BLOCK_DENOM_AMBIGUOUS    <- "denominator_grouping_ambiguous"
+.BLOCK_DENOM_UNRESOLVED   <- "denominator_grouping_unresolved"
+.BLOCK_GROUPING_CONFLICT  <- "grouping_dataset_conflict"
+.BLOCK_GROUPING_DISAGREE  <- "grouping_value_disagreement"
 
 #' @noRd
 .block_signal <- function(reason, detail = NA_character_) {
@@ -544,9 +577,73 @@
     ambiguous_row_coherence = sprintf(
       "Analysis %s is blocked: a where-clause naming %s cannot be planned without guessing whether its predicates hold on the same record",
       analysis_id, block$detail),
+    denominator_grouping_ambiguous = sprintf(
+      "Analysis %s is blocked: cannot construct grouped denominator -- %s, so their group membership has no single answer",
+      analysis_id, block$detail),
+    denominator_grouping_unresolved = sprintf(
+      "Analysis %s is blocked: cannot construct grouped denominator -- %s, so any per-group N would be partly invented",
+      analysis_id, block$detail),
+    grouping_dataset_conflict = sprintf(
+      "Analysis %s is blocked: grouping %s names two different datasets, and choosing either could move the denominator",
+      analysis_id, block$detail),
+    grouping_value_disagreement = sprintf(
+      "Analysis %s is blocked: %s -- the numerator would be counted under one group and the denominator under another",
+      analysis_id, block$detail),
     sprintf("Analysis %s is blocked (%s): %s", analysis_id, block$reason,
             block$detail)
   )
+}
+
+## Subjects whose grouping value differs between the population frame and the
+## analysis domain. NULL when they agree, or when they cannot be compared.
+#' @noRd
+.grouping_value_disagreement <- function(df_population, df_domain, var,
+                                         subject_key) {
+  if (!all(c(var, subject_key) %in% names(df_population))) return(NULL)
+  if (!all(c(var, subject_key) %in% names(df_domain))) return(NULL)
+
+  pop <- unique(df_population[, c(subject_key, var), drop = FALSE])
+  dom <- unique(df_domain[!is.na(df_domain[[var]]),
+                          c(subject_key, var), drop = FALSE])
+  both <- merge(pop, dom, by = subject_key, suffixes = c(".pop", ".dom"))
+  if (nrow(both) == 0) return(NULL)
+
+  pop_val <- as.character(both[[paste0(var, ".pop")]])
+  dom_val <- as.character(both[[paste0(var, ".dom")]])
+  differs <- !is.na(pop_val) & !is.na(dom_val) & pop_val != dom_val
+  if (!any(differs)) return(NULL)
+
+  sprintf("%d subject(s) have a different %s in the population frame than in the analysis dataset",
+          length(unique(both[[subject_key]][differs])), var)
+}
+
+#' The stamped `blocked` rows for one refused analysis.
+#'
+#' Package level rather than a closure so both refusal points -- the
+#' where-clause plan and the denominator -- reserve identically.
+#' @noRd
+.reserve_blocked_ard <- function(block, analysis_id, res, method_id, out_id,
+                                 analysis_var) {
+  diag_add(
+    stage = "execute_ard", severity = "FAIL", input = INPUT_DATA,
+    problem = .block_problem(block, analysis_id),
+    location = analysis_id,
+    action = "Analysis blocked -- reserved cells, no computed results"
+  )
+  out <- .blocked_ard_for_analysis(analysis_var, block)
+  out[["analysis_id"]]     <- analysis_id
+  out[["analysis_descr"]]  <- res$description
+  out[["method_id"]]       <- method_id
+  out[["output_id"]]       <- out_id %||% NA_character_
+  out[["method_intended"]] <- method_id
+  out[["method_actual"]]   <- method_id
+  out[["result_status"]]   <- "blocked"
+  out[["block_reason"]]    <- block$reason
+  out[["value_source"]]    <- NA_character_
+  out[["derivation_ref"]]  <- NA_character_
+  out[["derived_by"]]      <- NA_character_
+  out[["derived_dt"]]      <- NA_character_
+  out
 }
 
 #' Reserved rows for an analysis that could not safely be computed.
@@ -1035,26 +1132,8 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     }
 
     if (!is.null(block)) {
-      diag_add(
-        stage = "execute_ard", severity = "FAIL", input = INPUT_DATA,
-        problem = .block_problem(block, analysis_id),
-        location = analysis_id,
-        action = "Analysis blocked -- reserved cells, no computed results"
-      )
-      blocked_ard <- .blocked_ard_for_analysis(analysis_var, block)
-      blocked_ard[["analysis_id"]]     <- analysis_id
-      blocked_ard[["analysis_descr"]]  <- res$description
-      blocked_ard[["method_id"]]       <- method_id
-      blocked_ard[["output_id"]]       <- out_id %||% NA_character_
-      blocked_ard[["method_intended"]] <- method_id
-      blocked_ard[["method_actual"]]   <- method_id
-      blocked_ard[["result_status"]]   <- "blocked"
-      blocked_ard[["block_reason"]]    <- block$reason
-      blocked_ard[["value_source"]]    <- NA_character_
-      blocked_ard[["derivation_ref"]]  <- NA_character_
-      blocked_ard[["derived_by"]]      <- NA_character_
-      blocked_ard[["derived_dt"]]      <- NA_character_
-      ard_list[[length(ard_list) + 1L]] <- blocked_ard
+      ard_list[[length(ard_list) + 1L]] <- .reserve_blocked_ard(
+        block, analysis_id, res, method_id, out_id, analysis_var)
       next
     }
 
@@ -1094,6 +1173,12 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     ## study, silently. Carry it over by subject before anything divides by it.
     denom_fix <- .denominator_by_subject(
       df_population, df_domain, by_arg, subject_key, analysis_id, analysis_ds)
+    ## A denominator that cannot be constructed is refused, not approximated.
+    if (!is.null(denom_fix$block)) {
+      ard_list[[length(ard_list) + 1L]] <- .reserve_blocked_ard(
+        denom_fix$block, analysis_id, res, method_id, out_id, analysis_var)
+      next
+    }
     df_population <- denom_fix$data
     ## The emitted block must do the same join, or emitted stops equalling
     ## executed -- .denom_join_expr() writes down what was decided here.
