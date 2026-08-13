@@ -2,6 +2,42 @@
 
 ## arsbridge (development version)
 
+- **A grouping’s dataset is read from one place, and the denominator is
+  the population.** A grouping can name its dataset twice – the flat
+  `groupingDataset` that arsbridge itself writes, and the nested
+  `groupingVariable$dataset` a spec-correct ARS from elsewhere carries.
+  The execution side read only the nested form, so everything the
+  converter produced resolved to “no dataset” and the denominator repair
+  it drives never fired. An AE table whose columns were annotated
+  `ADAE.TRTA` therefore reported every percentage out of the whole study
+  on the emitted path while the executor got it right – proven from an
+  annotated shell through
+  [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
+  to the ARD, N = 6 where it should have been 3. Both forms are now read
+  by one resolver, and a grouping that names two DIFFERENT datasets is
+  refused rather than resolved by precedence, because choosing either
+  could move a denominator:
+  [`validate_ars_model()`](https://tavakohr.github.io/arsbridge/reference/validate_ars_model.md)
+  reports it as a blocking FAIL naming both datasets, and execution
+  refuses the event through the structural gate rather than picking one.
+  The rule the denominator follows is population-first: if the
+  population frame already carries the grouping variable it is
+  authoritative, whatever the metadata names, so a treatment variable
+  copied onto an event domain can no longer decide the denominator and
+  subjects with no event stay in it. Emitted code makes the same
+  decision at runtime on the same frame, so the two engines cannot part
+  company. Three situations now fail closed instead of reporting a
+  whole-study N with a warning attached: a subject carrying two
+  different grouping values in the foreign dataset, a population subject
+  the foreign dataset does not know, and a same-named variable whose
+  value disagrees between the population frame and the analysis domain –
+  the last of which could previously report n = 3 against N = 2. Once
+  the population cannot supply the variable, the foreign dataset is the
+  only source of group membership, so an unresolvable subject makes
+  every per-group N partly invented. A subject simply missing from the
+  domain is NOT an error when the population has the variable: the
+  population answers for them.
+
 - **New ARD status `blocked`: an analysis whose filter could not run
   reports nothing rather than a plausible wrong number.** This extends
   the ARD contract. `result_status` now takes four values, and they are
