@@ -19,7 +19,7 @@ data-raw/build_example_bundle.R in the package source."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9125</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9126</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -111,6 +111,15 @@ ADCM only each subject's first occurrence of a medication, which is
 what its listing shows. Roughly 217 KB compressed. Unzip and pass the
 folder as <code>adam_dir</code> to <code><a href="ars_to_ard.html">ars_to_ard()</a></code>.</p></dd>
 
+<dt><code>supplement.json</code></dt>
+<dd><p>A reviewed supplement (format v4) for the
+<strong>Word</strong> shell: what a chat assistant could return for it inside a
+closed environment, corrected by hand. It makes the offline
+enrichment path runnable from the bundle, and it is an example
+artifact only – <code><a href="spec_to_ars.html">spec_to_ars()</a></code> never discovers or applies it on its
+own. Pass it explicitly with <code>supplement =</code>. See
+<code><a href="../articles/no-api-access.html">vignette("no-api-access")</a></code>.</p></dd>
+
 
 </dl></div>
 
@@ -118,13 +127,15 @@ folder as <code>adam_dir</code> to <code><a href="ars_to_ard.html">ars_to_ard()<
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="fu">arsbridge_example</span><span class="op">(</span><span class="op">)</span>                       <span class="co"># list bundle contents</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] "ADaM.zip"             "README.md"            "adam_spec.xlsx"      </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [4] "annotated_shell.docx" "annotated_shell.xlsx"</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [4] "annotated_shell.docx" "annotated_shell.xlsx" "supplement.json"     </span>
 <span class="r-in"><span><span class="fu">arsbridge_example</span><span class="op">(</span><span class="st">"annotated_shell.docx"</span><span class="op">)</span> <span class="co"># path to the Word shell</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] "/home/runner/work/_temp/Library/arsbridge/extdata/example_cdsc_alz_201/annotated_shell.docx"</span>
 <span class="r-in"><span><span class="fu">arsbridge_example</span><span class="op">(</span><span class="st">"annotated_shell.xlsx"</span><span class="op">)</span> <span class="co"># path to the Excel shell</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] "/home/runner/work/_temp/Library/arsbridge/extdata/example_cdsc_alz_201/annotated_shell.xlsx"</span>
 <span class="r-in"><span><span class="fu">arsbridge_example</span><span class="op">(</span><span class="st">"adam_spec.xlsx"</span><span class="op">)</span>       <span class="co"># path to the ADaM spec</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] "/home/runner/work/_temp/Library/arsbridge/extdata/example_cdsc_alz_201/adam_spec.xlsx"</span>
+<span class="r-in"><span><span class="fu">arsbridge_example</span><span class="op">(</span><span class="st">"supplement.json"</span><span class="op">)</span>      <span class="co"># path to the reviewed supplement</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "/home/runner/work/_temp/Library/arsbridge/extdata/example_cdsc_alz_201/supplement.json"</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>

@@ -62,16 +62,29 @@ Files currently in the bundle:
   217 KB compressed. Unzip and pass the folder as `adam_dir` to
   [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md).
 
+- `supplement.json`:
+
+  A reviewed supplement (format v4) for the **Word** shell: what a chat
+  assistant could return for it inside a closed environment, corrected
+  by hand. It makes the offline enrichment path runnable from the
+  bundle, and it is an example artifact only –
+  [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
+  never discovers or applies it on its own. Pass it explicitly with
+  `supplement =`. See
+  [`vignette("no-api-access")`](https://tavakohr.github.io/arsbridge/articles/no-api-access.md).
+
 ## Examples
 
 ``` r
 arsbridge_example()                       # list bundle contents
 #> [1] "ADaM.zip"             "README.md"            "adam_spec.xlsx"      
-#> [4] "annotated_shell.docx" "annotated_shell.xlsx"
+#> [4] "annotated_shell.docx" "annotated_shell.xlsx" "supplement.json"     
 arsbridge_example("annotated_shell.docx") # path to the Word shell
 #> [1] "/home/runner/work/_temp/Library/arsbridge/extdata/example_cdsc_alz_201/annotated_shell.docx"
 arsbridge_example("annotated_shell.xlsx") # path to the Excel shell
 #> [1] "/home/runner/work/_temp/Library/arsbridge/extdata/example_cdsc_alz_201/annotated_shell.xlsx"
 arsbridge_example("adam_spec.xlsx")       # path to the ADaM spec
 #> [1] "/home/runner/work/_temp/Library/arsbridge/extdata/example_cdsc_alz_201/adam_spec.xlsx"
+arsbridge_example("supplement.json")      # path to the reviewed supplement
+#> [1] "/home/runner/work/_temp/Library/arsbridge/extdata/example_cdsc_alz_201/supplement.json"
 ```

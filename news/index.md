@@ -2,6 +2,55 @@
 
 ## arsbridge (development version)
 
+- **A reviewed supplement ships with the training bundle.**
+  `arsbridge_example("supplement.json")` is what a chat assistant could
+  return for the bundled Word shell inside a closed environment,
+  corrected by hand. It makes the offline path runnable from the bundle
+  alone – deterministic parse, reviewed supplement, enriched ARS, with
+  no key, no network and no `ellmer`:
+
+  ``` r
+
+  spec_to_ars_example(supplement = arsbridge_example("supplement.json"))
+  ```
+
+  Shipping it changes nothing by default. It is an example artifact:
+  [`spec_to_ars()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars.md)
+  does not discover or apply a supplement sitting next to the shell, and
+  the bundled study converts exactly as before unless the file is named.
+  Both halves are asserted – the deterministic run is checked for the
+  absence of each enrichment before the supplemented run is checked for
+  its presence, so neither assertion can pass vacuously.
+
+  What it repairs on that shell, all of it real rather than
+  illustrative: the disposition table’s population, which the shell
+  states only as prose, becomes a typed condition instead of an analysis
+  set with nothing to filter on; the treatment axis becomes the three
+  columns the shell actually prints, each with its own condition, rather
+  than a data-driven axis that would take its levels from the data
+  (including a screen-failure arm the tables do not show); and the row
+  heading Table 14.3.2, which the shell leaves unannotated, becomes a
+  subject-count analysis with its own data subset. Judgements a reviewer
+  made but arsbridge does not compute – record filters, sort keys, and
+  the reasons for leaving certain rows alone – travel in
+  `provenance$reviewItems` and on the output’s `_meta`, so nothing the
+  reviewer decided is silently lost.
+
+  The core-minimal CI job now asserts those three enrichments against
+  the bundled file rather than a marker set by hand in the job itself.
+
+- **A supplement run no longer reports itself as a degraded LLM
+  response.** Supplement answers reach the enricher through the same
+  path a live model answer does, but the v4 format has no
+  `row_enrichments` channel – per-row detail arrives as bindings
+  instead. Judging it against the LLM response schema therefore emitted
+  one “LLM response missing ‘row_enrichments’” warning per TLF on every
+  offline run, which was neither true nor actionable. Those two checks
+  now apply to live answers only; what a supplement did supply is
+  reported by the supplement stage, and
+  [`ars_validate_supplement()`](https://tavakohr.github.io/arsbridge/reference/ars_validate_supplement.md)
+  checks its required fields before the run starts.
+
 - **`ellmer` is optional, and the offline supplement is the documented
   completion path.** ellmer moves from Imports to Suggests, taking
   `httr2`, `curl`, `coro`, `later`, `promises`, `S7`, `otel` and
