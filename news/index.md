@@ -2,6 +2,32 @@
 
 ## arsbridge (development version)
 
+- **A condition spanning several datasets is filtered correctly, and
+  same-record semantics are preserved.** A where-clause is now turned
+  into a restriction PLAN that both halves consume – the executor
+  interprets it, the emitter renders it as dplyr – so executed filtering
+  and emitted filtering cannot drift apart. The rule the plan encodes: a
+  maximal subexpression naming ONE dataset is evaluated ROW-WISE on that
+  dataset, and only then, if that dataset is foreign, are qualifying
+  rows projected to subject ids and combined with the rest. That is what
+  keeps `ADCM.CMDECOD='ASPIRIN' AND ADCM.CONTRTFL='Y'` from admitting a
+  subject whose two predicates are satisfied by two DIFFERENT conmed
+  records. Three things were wrong before and are now right: a valid
+  compound clause naming two foreign datasets emptied the population
+  silently in the executor and emitted code referencing a column its
+  frame did not have; `OR` across datasets behaved as `AND`, because the
+  old path intersected subject sets whatever the operator said; and
+  same-dataset predicates separated by an intervening foreign sibling –
+  `(ADCM.A AND ADSL.S) AND ADCM.B` – are now regrouped, by associativity
+  and commutativity, so they are judged against one record again.
+  Regrouping never crosses an `OR`: that would require distribution,
+  which changes the answer. An expression whose row coherence cannot be
+  recovered that way, such as `(ADCM.A OR ADSL.S) AND ADCM.B`, is
+  reported as unsupported and refused by BOTH halves rather than guessed
+  at – the executor computes nothing and the emitter writes no script.
+  Every valid single-dataset spec is numerically unchanged, percentages
+  included, and the three ARS goldens are unchanged.
+
 - **A where-clause names its datasets in one place, and says so when a
   spec names two.** Reading ADaM by name, and applying a where-clause
   across datasets, lived inside
