@@ -236,49 +236,44 @@ test_that("KNOWN DEFECT: a referenced dataset with no subject key", {
 
 # ---- KNOWN DEFECTS: reproduced, not endorsed --------------------------------
 
-test_that("KNOWN DEFECT: a valid compound clause across two foreign datasets", {
-  ## `ADSL.SAFFL='Y' AND ADCM.CONTRTFL='Y'` against an ADAE analysis is VALID
-  ## input -- the shape utils_where_clause.R documents. Both execution paths
-  ## are wrong about it, differently:
+test_that("a valid compound clause across two foreign datasets is correct", {
+  ## This WAS a KNOWN DEFECT. `ADSL.SAFFL='Y' AND ADCM.CONTRTFL='Y'` against
+  ## an ADAE analysis is valid -- the shape utils_where_clause.R documents --
+  ## and both halves were wrong about it: the executor evaluated the WHOLE
+  ## compound against each referenced dataset in turn, so CONTRTFL read FALSE
+  ## for every ADSL row, the subject intersection emptied and the population
+  ## became nobody; the emitter filtered only refs[1] by a predicate naming a
+  ## column that dataset does not have.
   ##
-  ##   executor: evaluates the WHOLE compound against each referenced dataset
-  ##             in turn, so CONTRTFL reads FALSE for every ADSL row, the
-  ##             subject intersection empties, and the population becomes
-  ##             nobody -- silently.
-  ##   emitter : filters only refs[1] by a predicate naming a column that
-  ##             dataset does not have (.apply_where_expr, ars_to_code.R:82).
-  ##
-  ## This test records that the answer is WRONG, not that it is desired. It
-  ## asserts the gap against the correct answer, computed here, so it fails
-  ## the day the defect is fixed and has to be rewritten as an equality.
-  ## Tracked in notes/plans/POST_ROADMAP_risks_and_order.md; explicitly NOT in
-  ## scope for the de-closuring refactor.
+  ## The restriction plan evaluates each maximal single-dataset subtree on its
+  ## own dataset and combines the resulting target-length masks, so AND across
+  ## two foreign datasets is now the intersection of their subjects.
   td <- .wc_adam()
   compound <- list(compoundExpression = list(
     logicalOperator = "AND",
     whereClauses = list(
       list(condition = .wc_cond("ADSL", "SAFFL", "Y")),
       list(condition = .wc_cond("ADCM", "CONTRTFL", "Y")))))
-  ard <- .wc_run(.wc_spec(compound), td)
+  ard <- .wc_run(.wc_spec(compound), td, name = "compound.json")
 
   adsl <- utils::read.csv(file.path(td, "adsl.csv"), stringsAsFactors = FALSE)
   adcm <- utils::read.csv(file.path(td, "adcm.csv"), stringsAsFactors = FALSE)
   adae <- utils::read.csv(file.path(td, "adae.csv"), stringsAsFactors = FALSE)
 
-  ## What the clause actually asks for: safety subjects who also have a
-  ## flagged conmed record. Non-empty, and that is the point.
+  ## Computed independently: safety subjects who also have a flagged conmed.
   correct_pop <- intersect(adsl$USUBJID[adsl$SAFFL == "Y"],
                            adcm$USUBJID[adcm$CONTRTFL == "Y"])
   expect_gt(length(correct_pop), 0)
 
-  correct_n <- length(unique(adae$USUBJID[adae$AEDECOD == "Headache" &
-                                            adae$TRT01A == "Drug A" &
-                                            adae$USUBJID %in% correct_pop]))
-  expect_gt(correct_n, 0)
-
-  ## The defect: what comes back is not that.
-  got_n <- .wc_stat(ard, "Drug A", "Headache", "n")
-  expect_false(isTRUE(all.equal(got_n, correct_n)))
+  for (arm in c("Drug A", "Placebo")) {
+    in_arm <- intersect(correct_pop, adsl$USUBJID[adsl$TRT01A == arm])
+    correct_n <- length(unique(adae$USUBJID[adae$AEDECOD == "Headache" &
+                                              adae$USUBJID %in% in_arm]))
+    expect_equal(.wc_stat(ard, arm, "Headache", "n"), correct_n,
+                 info = paste(arm, "n"))
+    expect_equal(.wc_stat(ard, arm, "Headache", "N"), length(in_arm),
+                 info = paste(arm, "N"))
+  }
 })
 
 test_that("a dataset field carrying two values is read once, and reported", {
