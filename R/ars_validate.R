@@ -35,6 +35,7 @@
 ## data, no execution.
 
 .SEMANTIC_SOURCE_REF <- "SEMANTIC_SOURCE_NOT_DECLARED"
+.UNRESOLVED_ROLE_REF <- "UNRESOLVED_VARIABLE_ROLE"
 
 #' An analysis's annotation as plain text, with "absent" spelled one way.
 #'
@@ -187,6 +188,55 @@
              "an undeclared source can look correct -- it may even match, when ",
              "the two variables happen to agree in this data cut."),
       ref = .SEMANTIC_SOURCE_REF
+    )
+  }
+  findings
+}
+
+#' An analysis whose variable role could not be attributed may not execute.
+#'
+#' **Why this is a FAIL and not a WARN.** Of everything an enrichment carries,
+#' dataset, variable and subset are all restated by the row's own annotation, so
+#' when a pairing cannot be decided those are rebuilt from the annotation and
+#' nothing is lost. `variableRole` is the exception: no annotation restates it,
+#' and the ARS default is `ANALYSIS`. Dropping an unattributable non-default
+#' role therefore does not leave a gap -- it silently asserts a role the row
+#' never claimed, and the event runs and produces numbers under it.
+#'
+#' The distinction the package keeps: nothing specified, a legitimate default
+#' may apply; specified and understood, use it; specified but unresolvable,
+#' refuse. This is the third case, so it blocks. It is deliberately *not*
+#' `manual_pending`, which means "the semantics are known and a human must
+#' supply the value" -- here the semantics are precisely what is unknown.
+#'
+#' Structural, like every check here: it reads the event alone, no data.
+#' @noRd
+.check_unresolved_variable_role <- function(findings, model) {
+  analyses <- model$analyses
+  if (is.null(analyses) || nrow(analyses) == 0) return(findings)
+  raw <- attr(analyses, "raw") %||% analyses$raw
+  if (is.null(raw)) return(findings)
+
+  for (i in seq_len(nrow(analyses))) {
+    node <- raw[[i]]
+    if (!is.list(node)) next
+    roles <- as.character(unlist(node[["unresolvedVariableRole"]] %||% list()))
+    roles <- roles[!is.na(roles) & nzchar(roles)]
+    if (length(roles) == 0) next
+
+    findings <- .add_finding(
+      findings, "FAIL", "analyses", analyses$id[[i]], "variableRole",
+      sprintf(
+        paste0("Analysis %s carries an unresolved variable role (%s). A role ",
+               "was proposed for this row but could not be attributed to it, ",
+               "and the annotation cannot restate it, so the analysis would ",
+               "otherwise execute as the default ANALYSIS role it never ",
+               "claimed."),
+        analyses$id[[i]], paste(roles, collapse = ", ")),
+      paste0("Settle which variable role this row has -- give the row an ",
+             "unambiguous label or state the role explicitly -- and rebuild. ",
+             "arsbridge will not choose one on your behalf."),
+      ref = .UNRESOLVED_ROLE_REF
     )
   }
   findings
@@ -1426,6 +1476,7 @@ validate_ars_model <- function(model, spec = NULL, report = NULL) {
   findings <- .check_result_paths(findings, model)
   findings <- .check_nested_layout(findings, model)
   findings <- .check_semantic_source(findings, model)
+  findings <- .check_unresolved_variable_role(findings, model)
 
   if (!is.null(spec)) {
     findings <- .check_against_spec(findings, model, spec)

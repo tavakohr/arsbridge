@@ -213,18 +213,49 @@ semantic source, not just the result.
 
 ### Fixing a bug found in a real study
 
-A real study exposes a defect; it does not define it. Every fix states six
-things, in the PR description and in the defect register:
+A real study exposes a defect; it does not define it. **The study fixtures in
+this repository are regression and acceptance evidence only.** They may appear
+in regression tests and in the defect register; they may never become
+production assumptions. A fix is not general merely because every real study in
+the repository passes.
 
-1. **Fixture** — the study, output and row that exposed it.
-2. **Defect class** — the general structural failure, named without study
-   vocabulary.
-3. **Invariant / fix** — expressed without study-specific names.
-4. **Generic regression** — a synthetic test built from arbitrary *valid*
-   identifiers.
-5. **Metamorphic / rename test** — rename every identifier consistently; the
-   verdict must not move. Include wherever practical.
-6. **Real-study regression** — evidence the defect mattered in practice.
+Every fix clears these seven steps, in order, in the PR description and in the
+defect register:
+
+1. **General defect class** — the structural failure, described with no fixture
+   names. For example: "when multiple candidate enrichments share display
+   identity, the builder may associate a row with semantic metadata belonging
+   to another row."
+2. **General invariant** — the intended behaviour, with no study identifiers.
+   For example: "matching is on structural and semantic compatibility; display
+   labels may assist a match but never override contradictory qualified
+   semantic identity; ambiguity resolves to *unresolved*, never to first-match."
+3. **Generic committed test** — a synthetic test built from invented but
+   *valid* identifiers unrelated to any fixture, covering the axes that can
+   break the rule: duplicate labels, differing semantic sources,
+   unique-but-contradictory candidates, several compatible candidates, missing
+   semantic evidence, a non-default role, and the orderings of both sides
+   reversed independently.
+4. **Rename / metamorphic test** — rename every dataset and variable
+   consistently into a second, disjoint invented vocabulary; the outcome must
+   be structurally identical. This is what demonstrates the algorithm keys on
+   relationships rather than on familiar names. Include wherever practical.
+5. **Mutation proof** — deliberately reintroduce the bad behaviour and show
+   that the *generic* tests turn red. A generic test that survives the defect
+   it was written for is not evidence. Prove the restore afterwards: the source
+   parses, no mutation marker remains, and the suite is green again.
+6. **Real-study regression** — only now bring in the fixtures: one for
+   acceptance, and a second, different study as a correctness stress test.
+   Assert the corrected behaviour explicitly. "No findings" is a weaker claim
+   than it looks — it is also true of an event that lost the rows entirely, or
+   that stopped being checkable — so pin the corrected values themselves and
+   assert a non-zero checked count alongside them.
+7. **Production audit** — before the PR, search the executable production diff
+   for study-specific dataset names, variable names, row labels, table or
+   output IDs and analysis IDs. None may participate in the algorithm.
+   Standards-level ADaM grammar and metadata knowledge is allowed; the
+   *presence* of an optional study variable is always derived from the supplied
+   spec, never assumed.
 
 Concretely: fix "a row declared one qualified semantic source but ARS
 construction introduced another, for any identifiers" — not "make `STRAT2`
@@ -232,6 +263,51 @@ work". Fix "display-label equality must never override stronger row-specific
 semantic identity" — not "handle two rows sharing one label". Fix "tokenization
 must ignore operator-like text inside quoted literals, whatever the literal
 contains" — not "make one particular level parse".
+
+### Every real-study bug leaves a study-independent regression
+
+Whenever practical, a defect found in a real study produces at least one
+synthetic regression that does not mention it. Generalise the *shape*, not the
+instance: a duplicate-label collision becomes "two arbitrary rows with the same
+display label but different semantic identities"; one variable resolved as
+another becomes "a declared source A accidentally resolved as source B"; a
+boolean keyword inside a quoted value becomes "a boolean keyword occurring
+inside any quoted literal"; a comparison operator inside a quoted value becomes
+"operators inside literals are distinct from operators in expressions". A new
+study exposing a new pattern gets the same treatment.
+
+### A regression must be anchored on an input, not on generated output
+
+A test whose expectation is derived from the same machinery it is judging will
+pass no matter what that machinery does. This has happened here: a structural
+test compared a generated child identifier against the generated identifier of
+its generated parent, so when the builder wrongly promoted a child row, that
+wrong row simply became the expected parent and the test stayed green through
+the defect.
+
+Anchor on something the code under test did not produce — the shell row
+position, the row's own annotation text, the spec. Generated identifiers are
+especially treacherous as anchors because they *renumber*: removing one
+spurious analysis shifts every identifier after it, so a test pinned to them
+reports a failure that is really a renumbering, or passes because the anchor
+moved with the bug.
+
+### Specified, unspecified, and unresolvable are three different states
+
+Keep them distinct; collapsing any two turns a structural problem into a silent
+substitution:
+
+- **Nothing specified** — a documented default may legitimately apply.
+- **Specified and understood** — use what was specified.
+- **Specified but unsupported or unresolvable** — FAIL or block. Never fall
+  back to the default, because the default is itself a semantics the input
+  never claimed.
+- **Known semantics, value must come from a human** — reserve it as
+  `manual_pending`.
+
+`manual_pending` is specifically *not* the catch-all for structural
+uncertainty. It means the semantics are known and only the value is missing.
+Where what is unknown is the semantics itself, the event must refuse.
 
 ### Synthetic tests must prove they exercised something
 
