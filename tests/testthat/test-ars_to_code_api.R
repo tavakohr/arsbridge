@@ -63,6 +63,40 @@ test_that("ars_to_code() generates every output from a saved ARS", {
                vapply(spec$outputs, function(o) as.character(o$id), character(1)))
 })
 
+test_that("no argument can make a program disagree with the event's subject key", {
+  ## The subject identifier is the deduplication key, the cross-dataset join
+  ## key and the grouped-denominator merge key, so a caller-supplied value
+  ## decides what gets counted. It is therefore not exposed.
+  expect_false("subject_key" %in% names(formals(ars_to_code)))
+})
+
+test_that("the emitted deduplication key is the one the event's methods name", {
+  ## NOT a claim that generation READS the key -- it does not; both halves use
+  ## USUBJID unconditionally. This pins that they agree, so a change to either
+  ## half alone fails here rather than silently emitting a program that counts
+  ## on a different key than the method it implements. The expected value is
+  ## read out of the event rather than typed in, or the test would keep passing
+  ## against a builder that had moved on.
+  td <- withr::local_tempdir()
+  res <- .a2c_build(td)
+  spec <- jsonlite::fromJSON(res$ars_path, simplifyVector = FALSE)
+
+  templates <- unlist(lapply(spec$methods, function(m) m$codeTemplate$code))
+  keys <- unique(unlist(regmatches(
+    templates,
+    gregexpr("(?<=dplyr::distinct\\()[A-Z][A-Z0-9]*", templates, perl = TRUE))))
+  skip_if(length(keys) != 1L, "fixture has no single subject-level method key")
+
+  paths   <- ars_to_code(res$ars_path, code_dir = file.path(td, "gen"))
+  emitted <- unlist(lapply(paths, readLines, warn = FALSE))
+  distinct_args <- unlist(regmatches(
+    emitted,
+    gregexpr("(?<=dplyr::distinct\\()[A-Za-z][A-Za-z0-9_]*", emitted, perl = TRUE)))
+  skip_if(length(distinct_args) == 0L, "fixture emits no distinct() call")
+
+  expect_equal(unique(distinct_args), keys)
+})
+
 test_that("output_ids selects exactly the requested outputs", {
   td <- withr::local_tempdir()
   res <- .a2c_build(td)

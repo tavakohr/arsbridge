@@ -35,6 +35,15 @@
   An unknown `output_ids` value is an error naming the available outputs, not
   a silent empty result.
 
+  **There is no `subject_key` argument.** The subject identifier is not
+  plumbing -- it is the deduplication key, the cross-dataset join key and the
+  grouped-denominator merge key, so a caller-supplied value decides what gets
+  counted. The reporting event already settles it: every method's
+  `codeTemplate` names `USUBJID`, as does the generated analysis-set
+  condition. Exposing an override would let a program contradict the method it
+  implements. Should arsbridge support another key, the event will have to
+  declare it.
+
 * **The generated analysis scripts no longer invite an edit that has no
   effect.** Each emitted `.R` opened with `## <id> -- generated {cards} analysis
   script (edit freely).` That was not true: arsbridge computes an output's ARD

@@ -4,13 +4,7 @@
 \alias{ars_to_code}
 \title{Generate the R analysis program for one or more outputs}
 \usage{
-ars_to_code(
-  ars_path,
-  output_ids = NULL,
-  code_dir,
-  overwrite = FALSE,
-  subject_key = "USUBJID"
-)
+ars_to_code(ars_path, output_ids = NULL, code_dir, overwrite = FALSE)
 }
 \arguments{
 \item{ars_path}{Path to a saved ARS JSON file.}
@@ -24,8 +18,6 @@ needed.}
 
 \item{overwrite}{Replace an existing program whose content differs.
 Default \code{FALSE}.}
-
-\item{subject_key}{Subject identifier used when resolving analyses.}
 }
 \value{
 Invisibly, a named character vector of the paths written -- names
@@ -49,6 +41,18 @@ document rather than a re-reading of the inputs it came from.
 It generates; it never executes. Nothing here reads data, so no \code{adam_dir}
 is needed: the emitted program takes the ADaM location as its own input,
 which you set before running it.
+}
+
+\section{The subject key comes from the event, not the call}{
+
+There is no \code{subject_key} argument. The subject identifier is not plumbing
+-- it is the deduplication key, the cross-dataset join key and the
+grouped-denominator merge key -- so a caller-supplied value decides what
+gets counted. The reporting event already settles it: every method's
+\code{codeTemplate} names \code{USUBJID}, as does the generated analysis-set
+condition. An override here could emit a program that contradicts the
+method it implements. Should arsbridge support another key, the event will
+have to declare it.
 }
 
 \section{An existing program is never silently replaced}{
