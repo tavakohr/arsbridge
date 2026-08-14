@@ -1,5 +1,31 @@
 # arsbridge (development version)
 
+* **The generated program's calculations are now pinned against the reference
+  engine.** arsbridge computes an output's ARD by emitting `{cards}` blocks and
+  evaluating them in memory; it never reads back the `.R` file `ars_to_code()`
+  writes. Those two assemblies of one generator had nothing holding them
+  together. A regression test now executes the written file and compares it
+  against `ars_to_ard()` on the complete row identity, so a change to either
+  half that moves a number fails the suite.
+
+  What is locked is a **subset relation, not equality** -- measuring it is what
+  showed why. On the bundled CDSC-ALZ-201 event, across all five table outputs:
+  every row the program produces matches a reference row, every shared row is
+  identical on `stat`, `stat_label`, `fmt_fun`, `warning` and `error`, and the
+  program produces **zero** rows the reference does not have. But the reference
+  produces 18 rows the program does not, on T_14_1_1: when a subset filter
+  empties an arm, `.complete_zero_groups()` states that arm as an explicit
+  zero. Those are real computed results, not metadata. They are characterised
+  exactly -- 18 rows, all `computed`, only `n`/`N`/`p`, with `n = 0`, `p = 0`
+  and `N > 0` -- and pinned by count as well as by rule, so a change to the
+  completion layer has to be understood rather than absorbed.
+
+  The invariant holds **under the canonical subject key**.
+  `ars_to_ard(subject_key = )` remains an independently configurable
+  reference-engine option and is outside it: given a different key it neither
+  errors nor no-ops, it computes different things and still labels most of the
+  result `computed`.
+
 * **Generating analysis programs is now its own step: `ars_to_code()`.**
   Authoring a reporting event and generating R programs from it are two
   deliberate actions, so `spec_to_ars()` no longer writes programs by default
