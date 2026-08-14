@@ -1,5 +1,71 @@
 # arsbridge (development version)
 
+* **An analysis may only compute from data its own annotation named.**
+  `validate_ars_model()` gains a structural check: every qualified
+  `DATASET.VARIABLE` the built analysis resolves -- its analysis variable, and
+  every variable of its data subset, recursively through compound expressions
+  -- must appear among the references that analysis's **own annotation**
+  declares. A source that appears in the analysis and nowhere in its annotation
+  came from somewhere else, and that is a `FAIL`.
+
+  This detects a failure with no visible symptom. A display label is not an
+  identity: the same stub text is often a legitimate level of more than one
+  variable, and when two rows share a label, the second has been observed to
+  inherit the first's variable and filter. The number that comes out is
+  well-formed, plausible, and computed from the wrong column. Where the two
+  columns happen to agree in a data cut, **the output is numerically correct
+  and the analysis is still wrong**, so no amount of checking the numbers
+  would find it.
+
+  The rule is **containment, not equality**, and one-way. An annotation of the
+  form `<dataset>.<summarised> WHERE <dataset>.<restricted>='...'` analyses one
+  variable while restricting on another, which is ordinary and correct; an
+  annotation may also name more than the analysis uses. Only the reverse --
+  using what was never named -- is a finding. Grouping variables are excluded:
+  they come from the column header, not the row.
+
+  It is a **one-way provenance invariant, not a proof of semantic equivalence**
+  between an annotation and the ARS built from it. It detects a source that
+  construction introduced and the row never declared; it does not by itself
+  detect every role swap among several references an annotation legitimately
+  names. If a row declares two variables and a later defect exchanges which one
+  is summarised and which one restricts, containment still holds, because both
+  were declared. That case needs a check of its own.
+
+  Reference extraction is deliberately **independent of the where-clause
+  parser**. It asks only which identifiers appear in the text, never what the
+  condition means, so an annotation the condition grammar cannot yet read still
+  declares its sources correctly. Both known parser weaknesses come from
+  operator-like text inside a quoted literal -- a literal containing the clause
+  joiner, or one containing a comparison character -- and neither can affect an
+  extractor that never looks for operators. Reusing the parser would make the
+  check blind in exactly the cases it exists to police.
+
+  The check is defined on the *relationship* between two sets of qualified
+  references, not on any study's vocabulary: the package contains no dataset or
+  variable name from any particular study. The test suite proves this with
+  cases built from invented identifiers, including a renaming that must leave
+  every verdict unchanged.
+
+  Coverage is measured in three states that are deliberately kept apart, since
+  merging any two would let an unexamined event read as a clean one:
+  **checkable** (the annotation declares qualified references, so containment
+  is evaluated), **not checkable** (an annotation is present but yields no
+  qualified reference -- the row made a claim this check could not settle), and
+  **no source claim** (no annotation at all). These counts are asserted by the
+  test suite, so a run can be shown to have been non-vacuous; they are not yet
+  part of `validate_ars_model()`'s return value, which would change its result
+  shape.
+
+  The guarantee is therefore conditional, and is worth stating as such: *where
+  an analysis carries source annotation from which qualified references can be
+  established, arsbridge verifies that the resolved analysis introduces no
+  undeclared semantic source.* Because `annotation` is an arsbridge extension,
+  an ARS produced by another tool legitimately carries none; every other ARS
+  check still runs against it, but this particular provenance invariant is
+  unavailable. Such a file has **not passed** the semantic-source check -- it
+  has not been assessed by it.
+
 * **The generated program's calculations are now pinned against the reference
   engine.** arsbridge computes an output's ARD by emitting `{cards}` blocks and
   evaluating them in memory; it never reads back the `.R` file `ars_to_code()`

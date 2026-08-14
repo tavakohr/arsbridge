@@ -486,10 +486,13 @@ test_that("an added line executes into an ARD", {
   path <- file.path(dir, "reporting_event.json")
 
   model <- .valid_fixture_model()
+  ## The annotation has to name the variable the line computes: a line that
+  ## declares one source and resolves another is refused before execution.
   updated <- .add_a_line(
     model,
     label = "Sex, n (%) added by hand",
     variable = "SEX",
+    annotation = "ADSL.SEX",
     analysis_set_id = model$analyses$analysisSetId[
       model$analyses$output_id == "T_14_1_2"
     ][1]
