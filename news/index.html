@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9129</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9130</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -42,6 +42,11 @@
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="development version" id="arsbridge-development-version">arsbridge (development version)<a class="anchor" aria-label="anchor" href="#arsbridge-development-version"></a></h2>
 <ul><li>
+<p><strong>The generated program’s calculations are now pinned against the reference engine.</strong> arsbridge computes an output’s ARD by emitting <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> blocks and evaluating them in memory; it never reads back the <code>.R</code> file <code><a href="../reference/ars_to_code.html">ars_to_code()</a></code> writes. Those two assemblies of one generator had nothing holding them together. A regression test now executes the written file and compares it against <code><a href="../reference/ars_to_ard.html">ars_to_ard()</a></code> on the complete row identity, so a change to either half that moves a number fails the suite.</p>
+<p>What is locked is a <strong>subset relation, not equality</strong> – measuring it is what showed why. On the bundled CDSC-ALZ-201 event, across all five table outputs: every row the program produces matches a reference row, every shared row is identical on <code>stat</code>, <code>stat_label</code>, <code>fmt_fun</code>, <code>warning</code> and <code>error</code>, and the program produces <strong>zero</strong> rows the reference does not have. But the reference produces 18 rows the program does not, on T_14_1_1: when a subset filter empties an arm, <code>.complete_zero_groups()</code> states that arm as an explicit zero. Those are real computed results, not metadata. They are characterised exactly – 18 rows, all <code>computed</code>, only <code>n</code>/<code>N</code>/<code>p</code>, with <code>n = 0</code>, <code>p = 0</code> and <code>N &gt; 0</code> – and pinned by count as well as by rule, so a change to the completion layer has to be understood rather than absorbed.</p>
+<p>The invariant holds <strong>under the canonical subject key</strong>. <code>ars_to_ard(subject_key = )</code> remains an independently configurable reference-engine option and is outside it: given a different key it neither errors nor no-ops, it computes different things and still labels most of the result <code>computed</code>.</p>
+</li>
+<li>
 <p><strong>Generating analysis programs is now its own step: <code><a href="../reference/ars_to_code.html">ars_to_code()</a></code>.</strong> Authoring a reporting event and generating R programs from it are two deliberate actions, so <code><a href="../reference/spec_to_ars.html">spec_to_ars()</a></code> no longer writes programs by default (<code>emit_code = FALSE</code>). <code>emit_code = TRUE</code> keeps the older one-call behaviour.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/spec_to_ars.html">spec_to_ars</a></span><span class="op">(</span><span class="va">...</span><span class="op">)</span>                                  <span class="co"># the ARS, nothing else</span></span>

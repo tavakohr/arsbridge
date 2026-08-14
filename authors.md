@@ -11,13 +11,13 @@ Source:
 [`DESCRIPTION`](https://github.com/tavakohr/arsbridge/blob/main/DESCRIPTION)
 
 Tavakoli H (2026). *arsbridge: Convert Annotated TLF Shells and ADaM
-Spec to CDISC ARS JSON*. R package version 0.1.0.9129,
+Spec to CDISC ARS JSON*. R package version 0.1.0.9130,
 <https://github.com/tavakohr/arsbridge>.
 
     @Manual{,
       title = {arsbridge: Convert Annotated TLF Shells and ADaM Spec to CDISC ARS JSON},
       author = {Hamid Tavakoli},
       year = {2026},
-      note = {R package version 0.1.0.9129},
+      note = {R package version 0.1.0.9130},
       url = {https://github.com/tavakohr/arsbridge},
     }
