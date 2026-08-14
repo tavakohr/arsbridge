@@ -57,6 +57,7 @@ reference:
   - ars_workflow_run
   - spec_to_ars
   - spec_to_ars_example
+  - ars_to_code
   - ars_to_ard
   - ars_to_tfrmt
   - ars_to_tfrmt_list

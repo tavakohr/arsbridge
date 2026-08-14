@@ -1,5 +1,49 @@
 # arsbridge (development version)
 
+* **Generating analysis programs is now its own step: `ars_to_code()`.**
+  Authoring a reporting event and generating R programs from it are two
+  deliberate actions, so `spec_to_ars()` no longer writes programs by default
+  (`emit_code = FALSE`). `emit_code = TRUE` keeps the older one-call
+  behaviour.
+
+  ```r
+  res <- spec_to_ars(...)                                  # the ARS, nothing else
+  ars_to_code(res$ars_path, code_dir = "code")             # every output
+  ars_to_code(res$ars_path, "T_14_1_2", code_dir = "code") # one of them
+  ```
+
+  This matters because generation used to happen *before* review: the programs
+  on disk were always emitted from the reporting event as it stood before
+  anyone opened the editor, and nothing regenerated them afterwards.
+
+  `ars_to_code()` reads the saved ARS and nothing else -- never the original
+  shell or ADaM specification -- so a program reflects the reviewed document
+  rather than a re-reading of the inputs. It needs no `adam_dir`: generation
+  defines the analysis, and the emitted program takes the data location as its
+  own input. It generates, and never executes.
+
+  **An existing program is not silently replaced.** Regenerating identical
+  content is a no-op, so repeating the call is safe; a file that *differs*
+  stops generation, and every other output is left alone (all scripts are
+  built before any is written). arsbridge deliberately does not claim to know
+  *why* it differs: emitted programs carry no provenance, so a file edited by
+  hand and one generated from an earlier ARS are indistinguishable, and the
+  message says exactly that. Pass `overwrite = TRUE` when the file on disk is
+  expendable. Real customization detection needs a stored baseline, which does
+  not exist yet.
+
+  An unknown `output_ids` value is an error naming the available outputs, not
+  a silent empty result.
+
+  **There is no `subject_key` argument.** The subject identifier is not
+  plumbing -- it is the deduplication key, the cross-dataset join key and the
+  grouped-denominator merge key, so a caller-supplied value decides what gets
+  counted. The reporting event already settles it: every method's
+  `codeTemplate` names `USUBJID`, as does the generated analysis-set
+  condition. Exposing an override would let a program contradict the method it
+  implements. Should arsbridge support another key, the event will have to
+  declare it.
+
 * **The generated analysis scripts no longer invite an edit that has no
   effect.** Each emitted `.R` opened with `## <id> -- generated {cards} analysis
   script (edit freely).` That was not true: arsbridge computes an output's ARD

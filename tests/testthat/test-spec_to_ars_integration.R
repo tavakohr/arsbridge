@@ -99,6 +99,8 @@ test_that("spec_to_ars emits per-TLF {cards} deliverables (deterministic)", {
       adam_spec_path = test_path("fixtures/adam_spec_minimal.xlsx"),
       output_path    = json_out,
       report_path    = file.path(td, "rep.xlsx"),
+      ## This test's subject IS emission, which is opt-in since 0.1.0.9128.
+      emit_code      = TRUE,
       verbose        = FALSE
     )
   )
@@ -187,6 +189,7 @@ test_that("partially emitted scripts retain exact current-run provenance", {
         output_path = json_out,
         report_path = report_out,
         code_dir = code_dir,
+        emit_code = TRUE,
         verbose = FALSE,
         .on_artifact_written = function(receipt) {
           receipts[[length(receipts) + 1L]] <<- receipt
@@ -235,6 +238,9 @@ test_that("a blocked reporting event keeps repair artifacts but emits no code", 
       output_path    = json_out,
       report_path    = report_out,
       code_dir       = code_dir,
+      ## Emission is asked for, so "the blocked gate emitted nothing" stays a
+      ## real assertion rather than passing because nothing would emit anyway.
+      emit_code      = TRUE,
       validate       = FALSE,
       verbose        = FALSE
     ))
