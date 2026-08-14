@@ -455,15 +455,30 @@
   grepl("^(?:\\.{2,}|\u2026|etc\\.?)$", label, perl = TRUE)
 }
 
-.detect_nested_token_blocks <- function(rows, er_by_label) {
+#' @param enriched_rows the section's enrichments, unkeyed -- which one belongs
+#'   to a row is decided per row by `.enrichment_for_row()`, never by name.
+#' @noRd
+.detect_nested_token_blocks <- function(rows, enriched_rows) {
   n <- length(rows)
   roles <- rep(NA_character_, n)
   if (n < 2) return(roles)
 
   ## The dataset/variable a row's own annotation names, or NULL.
+  ##
+  ## Was a lookup keyed on the row's label, which hands back whichever
+  ## enrichment came first when two rows share their visible text -- the same
+  ## first-match defect the pairing sites had, landing here on the one value
+  ## this whole classification turns on. Every test below compares variables,
+  ## so reading one row's variable as another's can take a two-variable
+  ## parent/child block for a one-variable level block, or the reverse.
+  ##
+  ## .enrichment_for_row() lets the label assist the match but never outrank
+  ## the row's own declared source, and yields nothing rather than a guess --
+  ## in which case the annotation fallback just below reads the row directly,
+  ## which for this purpose is the authoritative answer anyway.
   row_ref <- function(row) {
     if (!isTRUE(row$has_annot)) return(NULL)
-    er <- er_by_label[[row$label %||% ""]] %||% list()
+    er <- .enrichment_for_row(row, enriched_rows) %||% list()
     ds  <- er$primary_dataset  %||% ""
     var <- er$primary_variable %||% ""
     if (!nzchar(var)) {
@@ -985,10 +1000,6 @@ build_ars_json <- function(sections,
     rows_iter <- if (build_layout) sec$stub_rows %||% list() else
       Filter(function(r) isTRUE(r$has_annot), sec$stub_rows)
     enriched_rows  <- sec$enriched_rows %||% list()
-    er_by_label    <- setNames(
-      enriched_rows,
-      vapply(enriched_rows, function(e) e$label %||% "", character(1))
-    )
 
     shell_layout <- list()
     analysis_ids <- character()
@@ -1001,7 +1012,7 @@ build_ars_json <- function(sections,
     ## front over the whole row list, because the pattern is a property of
     ## the row SEQUENCE, not of any single row.
     nested_roles <- if (build_layout) {
-      .detect_nested_token_blocks(rows_iter, er_by_label)
+      .detect_nested_token_blocks(rows_iter, enriched_rows)
     } else {
       rep(NA_character_, length(rows_iter))
     }
@@ -1192,7 +1203,54 @@ build_ars_json <- function(sections,
       }
 
       idx <- length(analysis_ids) + 1L
-      er  <- er_by_label[[row$label]] %||% list()
+      ## Was: a lookup keyed on row$label, returning whichever enrichment came
+      ## first under a shared label. Two rows may legitimately carry the same
+      ## visible text, and the second then inherited the first's variable and
+      ## filter. .enrichment_for_row() lets the label assist the match but never
+      ## outrank the row's own declared source, and yields nothing rather than a
+      ## guess -- the block below then builds the row from its own annotation.
+      er  <- .enrichment_for_row(row, enriched_rows)
+      if (is.null(er)) {
+        ## Two outcomes hide behind one unresolved pairing, and they are not
+        ## equally serious.
+        ##
+        ## Dataset, variable and subset are all restated by the row's own
+        ## annotation, so for those the fallback below is the correct answer
+        ## rather than a degraded one: nothing is lost and a WARN says so.
+        ##
+        ## A non-default variable_role is different in kind. It reaches the ARS
+        ## as variableRole, no annotation can restate it, and dropping it
+        ## silently rewrites the row as an ordinary ANALYSIS -- a semantics this
+        ## row never claimed. arsbridge does not know which role was meant, so
+        ## it must not pick one. The role is recorded on the analysis and
+        ## validation then refuses to execute the event.
+        shared <- Filter(function(e) identical(e$label %||% "",
+                                               row$label %||% ""),
+                         enriched_rows)
+        unresolved_role <- .enrichment_unrecoverable(shared)
+        if (length(shared) > 0) {
+          diag_add(
+            stage = "build_ars",
+            severity = if (length(unresolved_role)) "FAIL" else "WARN",
+            problem = sprintf(
+              "Could not decide which enrichment belongs to row '%s'",
+              row$label %||% "?"),
+            location = row$annotation %||% "",
+            tlf_number = sec$tlf_number,
+            action = if (length(unresolved_role)) sprintf(
+              paste("A proposed variable role (%s) cannot be rebuilt from the",
+                    "annotation, and which role is correct is exactly what",
+                    "could not be decided. The analysis is marked unresolved",
+                    "and the event will not execute until the role is settled"),
+              paste(unresolved_role, collapse = ", ")
+            ) else paste("Built from the row's own annotation, which is",
+                         "authoritative for its dataset, variable and filter"))
+        }
+        er <- list()
+        if (length(unresolved_role)) {
+          er$unresolved_variable_role <- unresolved_role
+        }
+      }
       ## Deterministic safety net: when the LLM enrichment omitted this row,
       ## derive dataset/variable and the subset filter straight from the
       ## bound annotation so the authored row still computes.
@@ -2335,7 +2393,7 @@ build_ars_json <- function(sections,
     list(referencedOperationRelationshipId = "SELF_DEN", analysisId = self_id)
   )
 
-  list(
+  node <- list(
     id            = self_id,
     name          = paste0("Analysis ", index, " for ", section$tlf_number),
     label         = row$label %||% "",
@@ -2376,6 +2434,17 @@ build_ars_json <- function(sections,
     totalWhere                   = section$total_condition,
     totalLabel                   = section$total_label
   )
+
+  ## Extension field: a variable role that was proposed for this row but could
+  ## not be attributed to it, and that no annotation can restate. Carried so the
+  ## decision is visible in the file itself rather than only in a build-time
+  ## message; .check_unresolved_variable_role() turns it into a blocking FAIL.
+  ## Written as a list so a single role still reads as an array.
+  unresolved_role <- enrichment$unresolved_variable_role %||% character(0)
+  if (length(unresolved_role) > 0) {
+    node$unresolvedVariableRole <- as.list(as.character(unresolved_role))
+  }
+  node
 }
 
 .build_output <- function(section, analysis_ids, ship_annotations = FALSE,

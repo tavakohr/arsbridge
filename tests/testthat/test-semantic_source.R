@@ -345,64 +345,93 @@ test_that("CDSC-ALZ-201 declares every source it uses", {
   expect_equal(nrow(.ssrc_hits(model)), 0L)
 })
 
-test_that("APX-DRM-301 exposes exactly the five known undeclared sources", {
-  ## Study 2, deterministic. The identities are pinned, not the count: if one
-  ## of these were repaired while an unrelated analysis started failing, a
-  ## count assertion would stay green and this will not.
+## The five rows this study exposed, and the source each one's OWN annotation
+## declares. Keyed by sheet row, because that is an input: it survives a repair
+## that renumbers analyses, and it cannot be produced by the code under test.
+## (The generated ids did in fact renumber here -- removing one spurious
+## analysis shifted every id after it -- so pinning ids would have re-created
+## the very circularity these regressions exist to avoid.)
+.SSRC_DRM_T1412_ROWS <- c(
+  "35"  = "ADSL.ETHNICN",   # level of Ethnicity; had taken Race's variable
+  "36"  = "ADSL.ETHNICN",   # the second victim in the same block
+  "121" = "ADSL.STRAT2",    # randomisation stratum; had taken an age grouping
+  "122" = "ADSL.STRAT2",
+  "123" = "ADSL.STRAT2"
+)
+## The gated table has no layout to key on, so its row is anchored on the
+## annotation text the shell wrote, which is equally an input.
+.SSRC_DRM_T1421_ANNOTATION <- "ADEFF.PCHG75FL='Y'"
+.SSRC_DRM_T1421_SOURCE     <- "ADEFF.PCHG75FL"
+
+#' Assert every formerly-affected row now resolves the source it declared.
+#' Shared by the deterministic and supplement-assisted runs so the two cannot
+#' drift apart.
+.ssrc_expect_drm_repaired <- function(art, label) {
+  by_row <- ssrc_resolved_by_sheet_row(art$json, "14_1_2")
+  ## Non-vacuous: the rows must actually be present to be judged.
+  expect_true(all(names(.SSRC_DRM_T1412_ROWS) %in% names(by_row)),
+              info = paste(label, "-- every affected sheet row is in the layout"))
+  for (srow in names(.SSRC_DRM_T1412_ROWS)) {
+    expect_equal(by_row[[srow]], .SSRC_DRM_T1412_ROWS[[srow]],
+                 info = sprintf("%s -- sheet row %s", label, srow))
+  }
+
+  resolved <- ssrc_resolved_for_annotation(art$json, .SSRC_DRM_T1421_ANNOTATION)
+  expect_length(resolved, 1L)
+  expect_equal(unname(resolved), .SSRC_DRM_T1421_SOURCE, info = label)
+}
+
+test_that("APX-DRM-301 resolves the source every shell row declared", {
+  ## Study 2, deterministic. This study exposed five rows whose ARS analysis
+  ## computed from a variable the row's own annotation never named. The
+  ## regression asserts the CORRECTED source of each one by name -- "no
+  ## findings" alone would also be true of an event that had lost the rows
+  ## altogether, or that stopped being checkable.
   skip_on_cran()
   skip_if_not_installed("openxlsx2")
   drm <- .ssrc_drm_inputs()
   skip_if(is.null(drm), "APX-DRM-301 study material is not available")
 
-  model <- .ssrc_study_model(shell = drm$shell, spec = drm$spec, tag = "DRMdet")
-  hits <- .ssrc_hits(model)
+  art <- ssrc_study_artifacts(shell = drm$shell, spec = drm$spec, tag = "DRMdet")
 
-  expect_setequal(hits$id, c("AN_T_14_1_2_006", "AN_T_14_1_2_024",
-                             "AN_T_14_1_2_025", "AN_T_14_1_2_026",
-                             "AN_T_14_2_1_006"))
-  expect_true(all(hits$severity == "FAIL"))
+  ## 1. Each formerly-affected row now carries its declared source.
+  .ssrc_expect_drm_repaired(art, "deterministic")
 
-  ## The offending pair on each, so a different wrong variable is a failure.
-  expected <- c(
-    AN_T_14_1_2_006 = "ADSL.RACEN",     # A-11        (annotation: ADSL.ETHNICN)
-    AN_T_14_1_2_024 = "ADSL.AGEGR1",    # A-15        (annotation: ADSL.STRAT2)
-    AN_T_14_1_2_025 = "ADSL.AGEGR1",    # A-15
-    AN_T_14_1_2_026 = "ADSL.AGEGR1",    # A-15
-    AN_T_14_2_1_006 = "ADEFF.ANL01FL"   # primary endpoint (ann: ADEFF.PCHG75FL)
-  )
-  for (id in names(expected)) {
-    expect_match(hits$problem[hits$id == id], expected[[id]], fixed = TRUE,
-                 info = id)
-  }
-  declared <- c(
-    AN_T_14_1_2_006 = "ADSL.ETHNICN", AN_T_14_1_2_024 = "ADSL.STRAT2",
-    AN_T_14_1_2_025 = "ADSL.STRAT2",  AN_T_14_1_2_026 = "ADSL.STRAT2",
-    AN_T_14_2_1_006 = "ADEFF.PCHG75FL")
-  for (id in names(declared)) {
-    expect_match(hits$problem[hits$id == id], declared[[id]], fixed = TRUE,
-                 info = id)
-  }
+  ## 2. And the detector, over the whole event, is clean -- with a non-zero
+  ##    checkable count, so zero means "checked and clean".
+  scope <- .semantic_source_scope(art$model)
+  expect_gt(scope$checkable, 0L)
+  expect_equal(scope$not_checkable, 0L)
+  expect_equal(nrow(.ssrc_hits(art$model)), 0L)
 })
 
-test_that("the reviewed supplement does not repair the undeclared sources", {
-  ## The supplement carries a typed whereClause for each of these rows, and
-  ## binds it by display label -- so it lands on the same wrong rows. Same five.
+test_that("the reviewed supplement keeps the sources the shell rows declared", {
+  ## The supplement carries a typed whereClause for each of these rows and
+  ## binds it by display label. It used to land on the same wrong rows; the
+  ## repair has to hold on this path too, not only on the deterministic one.
   skip_on_cran()
   skip_if_not_installed("openxlsx2")
   drm <- .ssrc_drm_inputs()
   skip_if(is.null(drm), "APX-DRM-301 study material is not available")
   skip_if(!file.exists(drm$supplement), "supplement.json is not available")
 
-  model <- .ssrc_study_model(shell = drm$shell, spec = drm$spec, tag = "DRMsup",
-                             supplement = drm$supplement)
-  expect_setequal(.ssrc_hits(model)$id,
-                  c("AN_T_14_1_2_006", "AN_T_14_1_2_024", "AN_T_14_1_2_025",
-                    "AN_T_14_1_2_026", "AN_T_14_2_1_006"))
+  art <- ssrc_study_artifacts(shell = drm$shell, spec = drm$spec,
+                              tag = "DRMsup", supplement = drm$supplement)
+
+  .ssrc_expect_drm_repaired(art, "supplement")
+
+  scope <- .semantic_source_scope(art$model)
+  expect_gt(scope$checkable, 0L)
+  expect_equal(scope$not_checkable, 0L)
+  expect_equal(nrow(.ssrc_hits(art$model)), 0L)
 })
 
-test_that("A-15 is invisible to numbers and visible to the detector", {
-  ## The whole reason this detector exists. STRAT2 and AGEGR1 agree exactly in
-  ## this data cut, so the printed table is correct and the analysis is not.
+test_that("A-15 stays invisible to numbers and is fixed in the ARS", {
+  ## The whole reason this detector exists, and the regression that must
+  ## outlive the repair. Two variables agree exactly in this data cut, so the
+  ## printed table was correct while the analysis was wrong. The numeric
+  ## coincidence is still there -- that is the point -- so nothing about the
+  ## values can tell you the ARS is now right. Only the source can.
   skip_on_cran()
   skip_if_not_installed("openxlsx2")
   skip_if_not_installed("haven")
@@ -414,14 +443,17 @@ test_that("A-15 is invisible to numbers and visible to the detector", {
   by_strat <- sum(!is.na(adsl$STRAT2) & as.character(adsl$STRAT2) == lvl)
   by_age   <- sum(!is.na(adsl$AGEGR1) & as.character(adsl$AGEGR1) == lvl)
 
-  ## The premise: a numeric oracle cannot tell these apart here.
+  ## The premise, unchanged by the repair: a numeric oracle cannot tell the
+  ## intended variable from the substituted one here.
   expect_equal(by_strat, by_age)
   expect_gt(by_strat, 0L)
 
-  ## The detector can.
-  model <- .ssrc_study_model(shell = drm$shell, spec = drm$spec, tag = "DRMa15")
-  hits <- .ssrc_hits(model)
-  expect_true("AN_T_14_1_2_025" %in% hits$id)
-  expect_match(hits$problem[hits$id == "AN_T_14_1_2_025"], "ADSL.AGEGR1",
-               fixed = TRUE)
+  ## The ARS now binds the variable the row declared, not the one that happens
+  ## to agree with it. Sheet row 122 is the "Adult (18-65)" stratum row.
+  art <- ssrc_study_artifacts(shell = drm$shell, spec = drm$spec, tag = "DRMa15")
+  by_row <- ssrc_resolved_by_sheet_row(art$json, "14_1_2")
+  expect_equal(by_row[["122"]], "ADSL.STRAT2")
+
+  ## And the detector that first made this visible is satisfied.
+  expect_equal(nrow(.ssrc_hits(art$model)), 0L)
 })

@@ -707,19 +707,142 @@ enrich_with_llm <- function(section,
   grepl(paste0("^\\s*\\[?\\s*", ref_re, "\\s*==?"), ann)
 }
 
+## ---- pairing a shell row with its enrichment -------------------------------
+##
+## One question, asked from both ends: given this shell row, which enrichment
+## belongs to it? Everything below answers only that.
+##
+## A display label is not an identity. Two rows of one table may legitimately
+## carry the same visible text while describing different data, so a lookup
+## keyed on the label alone returns whichever row came first -- and the second
+## row silently inherits the first's variable and filter. The result is
+## well-formed and wrong, and where the two variables happen to agree in a data
+## cut it is not even wrong-looking.
+##
+## So the label may *assist* a match; it may never outrank the row's own
+## identity. The precedence is: a label unique among the candidates decides; a
+## shared label is decided by the qualified semantic source the row's own
+## annotation declares; anything still undecided is NO match. Returning NULL is
+## deliberate -- callers then work from the row's own annotation, which is the
+## correct answer rather than a degraded one. First-match-wins is never right
+## here: it is precisely the behaviour that produced the defect.
+
+#' The qualified `DATASET.VARIABLE` an enrichment resolved for itself, if any.
+#' @noRd
+.enrichment_source_pair <- function(er) {
+  .source_pair(er$primary_dataset, er$primary_variable)
+}
+
+#' How an enrichment's resolved source stands against what an annotation
+#' declares. Three answers, and the third is not the second:
+#'
+#' * `"compatible"`   -- both sides name a qualified source, and they agree.
+#' * `"contradictory"`-- both sides name one, and they disagree.
+#' * `"unknown"`      -- one side names none, so there is nothing to compare.
+#'
+#' Comparison is on qualified pairs; a bare variable name would let one
+#' dataset's variable stand in for another's.
+#' @noRd
+.enrichment_compatibility <- function(er, annotation) {
+  pair <- .enrichment_source_pair(er)
+  declared <- .annotation_source_refs(annotation)
+  if (length(pair) != 1L || !length(declared)) return("unknown")
+  if (.source_is_declared(pair, declared)) "compatible" else "contradictory"
+}
+
+#' Choose among candidates that already share a label.
+#'
+#' **Unique is not the same as compatible.** A single candidate still loses if
+#' the row's own annotation contradicts it -- a label may assist identity, it
+#' may never overrule semantic evidence that is actually present. Absence of
+#' evidence is different: with nothing to compare, a lone candidate is the only
+#' reading there is, and the existing workflow depends on it (an unannotated
+#' row, or an enrichment that resolved no source, still has to pair).
+#'
+#' So: exactly one compatible candidate wins; several compatible candidates are
+#' undecidable; and when none carries usable evidence, a lone candidate stands.
+#' Anything else is `NULL`, never the first of several.
+#' @noRd
+.pick_by_compatibility <- function(cand, verdicts) {
+  compatible <- cand[verdicts == "compatible"]
+  if (length(compatible) == 1L) return(compatible[[1]])
+  if (length(compatible) > 1L) return(NULL)      # several fit; none is "the" one
+  ## No candidate agrees. Those that actively disagree are out; a single
+  ## candidate that simply said nothing may still stand.
+  silent <- cand[verdicts == "unknown"]
+  if (length(silent) == 1L) return(silent[[1]])
+  NULL
+}
+
+#' Which shell row does this enrichment belong to? `NULL` when undecidable.
+#' @noRd
+.row_for_enrichment <- function(er, annotated_rows) {
+  label <- er$label %||% ""
+  cand <- Filter(function(r) identical(r$label %||% "", label), annotated_rows)
+  if (length(cand) == 0L) return(NULL)
+  verdicts <- vapply(
+    cand, function(r) .enrichment_compatibility(er, r$annotation), character(1))
+  .pick_by_compatibility(cand, verdicts)
+}
+
+#' Which enrichment belongs to this shell row? The same pairing read from the
+#' other end, with the same precedence. `NULL` when undecidable.
+#' @noRd
+.enrichment_for_row <- function(row, enriched_rows) {
+  label <- row$label %||% ""
+  cand <- Filter(function(e) identical(e$label %||% "", label), enriched_rows)
+  if (length(cand) == 0L) return(NULL)
+  verdicts <- vapply(
+    cand, function(e) .enrichment_compatibility(e, row$annotation), character(1))
+  .pick_by_compatibility(cand, verdicts)
+}
+
+#' Semantics an enrichment carries that a row's annotation cannot supply.
+#'
+#' Used to keep an unresolved pairing from becoming a silent downgrade. Of the
+#' five fields an enrichment may carry, four are recoverable from the row
+#' itself -- label, dataset, variable and subset all restate what the
+#' annotation already says. `variable_role` does not: it reaches the ARS as
+#' `variableRole`, and a discarded non-default role would quietly become
+#' `ANALYSIS`. That is the only field worth warning about.
+#' @noRd
+.enrichment_unrecoverable <- function(cand) {
+  roles <- vapply(cand, function(e) {
+    role <- toupper(trimws(as.character(e$variable_role %||% "")))
+    if (is.na(role)) "" else role
+  }, character(1))
+  unique(roles[nzchar(roles) & roles != "ANALYSIS"])
+}
+
 #' Backfill a DataSubset onto every enriched row that lacks one, derived from
 #' the row's original annotation WHERE clause. Idempotent: rows that already
 #' carry a non-empty `data_subset` are left untouched (LLM output wins).
+#'
+#' The annotation comes from the row this enrichment actually belongs to. When
+#' that row cannot be identified the backfill is skipped and said so, because
+#' the alternative -- taking whichever row shares the label -- is how a filter
+#' from one row ends up on another.
 #' @noRd
 .backfill_data_subsets <- function(enriched_rows, annotated_rows) {
-  ann_by_label <- stats::setNames(
-    lapply(annotated_rows, function(r) r$annotation %||% ""),
-    vapply(annotated_rows, function(r) r$label %||% "", character(1)))
   lapply(enriched_rows, function(er) {
     ds <- er$data_subset
     if (!is.null(ds) && length(ds) > 0) return(er)        # keep existing
-    ann <- ann_by_label[[er$label %||% ""]]
-    if (is.null(ann) || !nzchar(ann)) return(er)
+    src <- .row_for_enrichment(er, annotated_rows)
+    if (is.null(src)) {
+      diag_add(
+        stage = "enrich_llm", severity = "WARN",
+        problem = sprintf(
+          "Could not identify which shell row the enrichment '%s' belongs to",
+          er$label %||% "?"),
+        location = er$label %||% "",
+        action = paste("Several rows share this label and their declared",
+                       "sources do not single one out, so no DataSubset was",
+                       "backfilled -- the row is built from its own",
+                       "annotation instead"))
+      return(er)
+    }
+    ann <- .annotation_text(src$annotation)
+    if (!nzchar(ann)) return(er)
     if (.is_level_illustration(er$label, ann)) return(er)
     fs <- flat_data_subset(ann)
     if (is.null(fs)) return(er)
