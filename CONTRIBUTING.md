@@ -166,6 +166,85 @@ consumes. Anything that produces a conformant section object is a valid shell
 reader, which is how a second input format plugs in without forking the
 grammar.
 
+## Writing code that works on a study you have never seen
+
+arsbridge is built to run against studies nobody here has looked at: different
+dataset and variable names, table structures, row labels, conditions, methods
+and annotation styles. The studies bundled or referenced in the test suite are
+*evidence that the code works*, never the definition of what working means.
+Everything in this section follows from that.
+
+### Study-agnostic within the ADaM contract
+
+The package's supported scope is CDISC ADaM, and that scope is deliberate:
+every input is ADaM — the spec, the datasets, and the shell annotations, which
+are gated against that spec — and the shell parser is built throughout on the
+identifier grammar in [`R/aaa_constants.R`](R/aaa_constants.R).
+
+So production code **may** understand standards-level structure, grammar and
+vocabulary. It **must not** encode study-specific dataset names, variable
+names, row labels, output IDs or analysis IDs. Those belong in regression tests
+and nowhere else. Never write `if (variable == "STRAT2")`,
+`if (label == "Not Reported")`, or `if (study == ...)`. Write the relationship
+instead: *whatever the identifiers are, preserve the semantics the annotation
+expressed.*
+
+"Agnostic within the model" is the precise claim. An invented but valid
+`ADQX.MEASURE` is in scope; an arbitrary `MYDATA.COL` is outside the supported
+grammar and is a separate architectural question, not a bug to patch around.
+
+### Recognising a variable is not the same as assuming it exists
+
+A name can be standards-recognised while its presence in any given study is not
+guaranteed — `AGEGR1` is sponsor-defined and optional, and even `SAFFL` and
+`TRT01P` are conventional rather than mandatory. Recognising standard
+vocabulary is fine; assuming a variable is present is not. Establish presence
+and applicability from the current study's spec and metadata rather than from a
+global list, because assumed presence is exactly what breaks on an unseen
+study.
+
+### Semantic correctness is not numeric correctness
+
+An analysis can produce the right number from the wrong column. Where two
+variables happen to agree in a data cut, the output is numerically correct and
+the analysis is still wrong, and no amount of checking values will find it. So
+a test that only compares numbers has not established correctness — assert the
+semantic source, not just the result.
+
+### Fixing a bug found in a real study
+
+A real study exposes a defect; it does not define it. Every fix states six
+things, in the PR description and in the defect register:
+
+1. **Fixture** — the study, output and row that exposed it.
+2. **Defect class** — the general structural failure, named without study
+   vocabulary.
+3. **Invariant / fix** — expressed without study-specific names.
+4. **Generic regression** — a synthetic test built from arbitrary *valid*
+   identifiers.
+5. **Metamorphic / rename test** — rename every identifier consistently; the
+   verdict must not move. Include wherever practical.
+6. **Real-study regression** — evidence the defect mattered in practice.
+
+Concretely: fix "a row declared one qualified semantic source but ARS
+construction introduced another, for any identifiers" — not "make `STRAT2`
+work". Fix "display-label equality must never override stronger row-specific
+semantic identity" — not "handle two rows sharing one label". Fix "tokenization
+must ignore operator-like text inside quoted literals, whatever the literal
+contains" — not "make one particular level parse".
+
+### Synthetic tests must prove they exercised something
+
+A test built from identifiers the grammar cannot read declares nothing, checks
+nothing, and passes. That failure mode is silent and it has already happened
+here: plausible-looking names outside the dataset grammar turned every case
+vacuous, including the ones that were supposed to fail.
+
+So a synthetic test must assert that it actually exercised the intended path —
+for a validation rule, assert the count of items the rule found checkable
+alongside the verdict itself. A later change to the grammar or the code path
+should turn such a test **red**, not quietly green.
+
 ## Architecture decisions
 
 Design-level decisions live as numbered Architecture Decision Records in

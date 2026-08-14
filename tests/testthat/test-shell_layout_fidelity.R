@@ -517,6 +517,17 @@ test_that("ars_to_ard keeps every analysis when several tabulate the same groupi
   p <- parse_cdsc()
   secs <- enrich_offline(p$secs)
   sec <- secs[[1]]
+  ## Each row below counts subjects, so each annotation that names a source has
+  ## to name that one too -- an analysis may only resolve a source its own
+  ## annotation declared. The unannotated header row is left alone: it declares
+  ## nothing and becomes no analysis. The collision under test is unaffected --
+  ## every analysis still tabulates one variable against one grouping, which is
+  ## what made their {cards} identities equal.
+  sec$stub_rows <- lapply(sec$stub_rows, function(r) {
+    ann <- trimws(as.character(r$annotation %||% ""))
+    if (nzchar(ann)) r$annotation <- paste0(ann, "; unique USUBJID in ADSL")
+    r
+  })
   sec$enriched_rows <- lapply(sec$stub_rows, function(r) list(
     label = r$label, primary_dataset = "ADSL", primary_variable = "USUBJID",
     data_subset = NULL, variable_role = "ANALYSIS"))

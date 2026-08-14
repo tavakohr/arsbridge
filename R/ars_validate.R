@@ -18,6 +18,228 @@
   c(names(.ARD_EXECUTORS), "MTH_LISTING")
 }
 
+## ---- semantic source ------------------------------------------------------
+##
+## An analysis may only compute from data its own annotation named. Everything
+## below serves that one sentence.
+##
+## Why it exists: a display label is not an identity. The same stub text is a
+## legitimate level of more than one variable, so when two rows share a label
+## the second has been observed to inherit the first's variable and filter. The
+## resulting number is well-formed, plausible, and computed from the wrong
+## column. Where the two variables happen to agree in a given data cut, nothing
+## about the output looks wrong at all.
+##
+## The check compares what the built analysis USES against what its own
+## annotation NAMED, and that is a property of the reporting event alone -- no
+## data, no execution.
+
+.SEMANTIC_SOURCE_REF <- "SEMANTIC_SOURCE_NOT_DECLARED"
+
+#' An analysis's annotation as plain text, with "absent" spelled one way.
+#'
+#' `annotation` is an arsbridge extension: an ARS written by another tool
+#' carries no such field, and pooling leaves those analyses with `NA`. That is
+#' the ordinary case for a foreign file, not an edge case.
+#'
+#' `NA` has to be normalised explicitly rather than left to `nzchar()`, which
+#' reports `TRUE` for it -- an unguarded `NA` would read as an annotation that
+#' happens to declare nothing, and would then be tallied against the unprovable
+#' count as though the row had made a claim this check could not settle.
+#' @noRd
+.annotation_text <- function(annotation) {
+  txt <- as.character(annotation %||% "")
+  if (length(txt) == 0 || is.na(txt[[1]])) return("")
+  trimws(txt[[1]])
+}
+
+#' Qualified `DATASET.VARIABLE` identifiers an annotation explicitly names.
+#'
+#' Deliberately **independent of the where-clause parser**. The question here
+#' is only "which identifiers appear in this text", never what the condition
+#' means -- so an annotation the condition grammar cannot yet read still
+#' declares its sources correctly. Two known parser weaknesses both come from
+#' operator-like text inside a quoted literal: a literal containing the clause
+#' joiner splits the clause in the wrong place, and one containing a comparison
+#' character defeats operator-shaped matching. Neither can affect this
+#' function, because it never looks for operators at all.
+#'
+#' Reusing the condition parser here would make the detector blind in exactly
+#' the cases it exists to police.
+#' @noRd
+.annotation_source_refs <- function(annotation) {
+  annotation <- .annotation_text(annotation)
+  if (!nzchar(annotation)) return(character(0))
+  refs <- toupper(extract_annotation_vars(annotation))
+  refs <- refs[grepl(".", refs, fixed = TRUE)]
+  unique(refs[nzchar(refs)])
+}
+
+#' One `DATASET.VARIABLE` token, or nothing when there is no variable.
+#'
+#' A pair whose dataset the event never recorded is returned bare, so a missing
+#' dataset degrades the comparison to the variable alone rather than inventing
+#' a mismatch out of an absent field.
+#' @noRd
+.source_pair <- function(dataset, variable) {
+  variable <- toupper(trimws(as.character(variable %||% "")))
+  if (!nzchar(variable) || is.na(variable)) return(character(0))
+  dataset <- toupper(trimws(as.character(dataset %||% "")))
+  if (!nzchar(dataset) || is.na(dataset)) return(variable)
+  paste0(dataset, ".", variable)
+}
+
+#' Every qualified pair a WhereClause references, following compound
+#' expressions to their leaves. A clause that restricts on three variables
+#' declares three sources, and all of them have to have been named.
+#' @noRd
+.where_source_pairs <- function(node) {
+  if (is.null(node) || !is.list(node)) return(character(0))
+  out <- character(0)
+  condition <- node[["condition"]]
+  if (!is.null(condition)) {
+    out <- c(out, .source_pair(condition[["dataset"]], condition[["variable"]]))
+  }
+  if (!is.null(node[["variable"]])) {
+    out <- c(out, .source_pair(node[["dataset"]], node[["variable"]]))
+  }
+  compound <- node[["compoundExpression"]]
+  children <- compound[["whereClauses"]] %||% node[["whereClauses"]] %||%
+    (if (is.list(compound)) compound else NULL)
+  if (is.list(children)) {
+    for (child in children) out <- c(out, .where_source_pairs(child))
+  }
+  unique(out[nzchar(out)])
+}
+
+#' Does a resolved pair appear among the annotation's declared references?
+#'
+#' A bare pair (no dataset on the resolved side) matches on the variable alone.
+#' @noRd
+.source_is_declared <- function(pair, declared) {
+  if (grepl(".", pair, fixed = TRUE)) return(pair %in% declared)
+  pair %in% sub("^[^.]*\\.", "", declared)
+}
+
+#' An analysis may only compute from data its own annotation named.
+#'
+#' **Containment, one way.** Everything the analysis resolves -- its analysis
+#' variable and every variable of its data subset -- must be among the
+#' references its annotation declares. The reverse is deliberately NOT checked:
+#' an annotation may legitimately name more than the analysis uses (a unit
+#' qualifier, a label hint). The dangerous direction is the other one, and only
+#' that one is a finding.
+#'
+#' **Not equality.** An annotation of the form `<dataset>.<summarised> WHERE
+#' <dataset>.<restricted>='...'` summarises one variable while restricting on
+#' another, which is ordinary and correct; requiring the analysis variable to
+#' equal the annotation's would condemn every analysis of that shape.
+#'
+#' Grouping variables are excluded throughout: they come from the column
+#' header, not the row's annotation, so the row never names them.
+#'
+#' Scope: an analysis whose annotation yields no qualified reference is not
+#' checkable -- nothing about its source is provable from the document -- and
+#' is counted rather than judged.
+#' @noRd
+.check_semantic_source <- function(findings, model) {
+  analyses <- model$analyses
+  if (is.null(analyses) || nrow(analyses) == 0) return(findings)
+
+  subsets <- model$data_subsets
+  subset_raw <- if (!is.null(subsets)) attr(subsets, "raw") %||% subsets$raw else NULL
+  pairs_for_subset <- function(subset_id) {
+    if (is.na(subset_id) || !nzchar(subset_id) || is.null(subsets) ||
+        nrow(subsets) == 0) {
+      return(character(0))
+    }
+    hit <- match(subset_id, subsets$id)
+    if (is.na(hit)) return(character(0))
+    node <- if (!is.null(subset_raw)) subset_raw[[hit]] else NULL
+    .where_source_pairs(node)
+  }
+
+  for (i in seq_len(nrow(analyses))) {
+    annotation <- analyses$annotation[[i]]
+    declared <- .annotation_source_refs(annotation)
+    if (length(declared) == 0) next          # not checkable -- see .semantic_source_scope()
+
+    used <- unique(c(
+      .source_pair(analyses$dataset[[i]], analyses$variable[[i]]),
+      pairs_for_subset(analyses$dataSubsetId[[i]])
+    ))
+    used <- used[nzchar(used)]
+    undeclared <- used[!vapply(used, .source_is_declared, logical(1),
+                               declared = declared)]
+    if (length(undeclared) == 0) next
+
+    findings <- .add_finding(
+      findings, "FAIL", "analyses", analyses$id[[i]], "variable",
+      sprintf(
+        paste0("Analysis %s resolves %s, but its annotation declares only %s. ",
+               "The resolved analysis uses a semantic source not named by its ",
+               "own annotation (%s)."),
+        analyses$id[[i]], paste(undeclared, collapse = ", "),
+        paste(declared, collapse = ", "),
+        trimws(as.character(annotation))
+      ),
+      paste0("Rebuild this row from its own annotation. A number computed from ",
+             "an undeclared source can look correct -- it may even match, when ",
+             "the two variables happen to agree in this data cut."),
+      ref = .SEMANTIC_SOURCE_REF
+    )
+  }
+  findings
+}
+
+#' How much of the event the semantic-source check could speak to.
+#'
+#' **Not currently part of `validate_ars_model()`'s return value.** This exists
+#' so the suite can prove a run was non-vacuous -- that the rule actually
+#' reached the analyses a test claims it judged -- and so coverage can be
+#' measured per study. Surfacing it to callers would change the validator's
+#' result shape and is deliberately left to its own change.
+#'
+#' Coverage is a measurement per study, never an assumption: "no violations"
+#' must never be read as "every analysis was examined". Three states, and they
+#' must stay distinct -- collapsing any two would let an unexamined event read
+#' as a clean one:
+#'
+#' * `checkable` -- the annotation declares qualified references, so
+#'   containment can be evaluated. Only these can produce a finding.
+#' * `not_checkable` -- an annotation is present, but no qualified reference
+#'   can be extracted from it. The row made a source claim this check could not
+#'   settle; the invariant is unavailable, not satisfied.
+#' * `no_claim` -- no annotation at all. `annotation` is an arsbridge
+#'   extension, so an ARS produced by another tool legitimately carries none.
+#'   Such an event has not *passed* this check; it has not been assessed by it,
+#'   and every other ARS check still applies.
+#'
+#' The guarantee is therefore conditional, and worth stating in those terms:
+#' where an analysis carries annotation from which qualified references can be
+#' established, arsbridge verifies that the resolved analysis introduces no
+#' undeclared semantic source.
+#' @noRd
+.semantic_source_scope <- function(model) {
+  analyses <- model$analyses
+  if (is.null(analyses) || nrow(analyses) == 0) {
+    return(list(checkable = 0L, not_checkable = 0L, no_claim = 0L))
+  }
+  annotated <- vapply(
+    seq_len(nrow(analyses)),
+    function(i) nzchar(.annotation_text(analyses$annotation[[i]])),
+    logical(1)
+  )
+  has_refs <- vapply(
+    seq_len(nrow(analyses)),
+    function(i) length(.annotation_source_refs(analyses$annotation[[i]])) > 0,
+    logical(1)
+  )
+  list(checkable     = sum(annotated & has_refs),
+       not_checkable = sum(annotated & !has_refs),
+       no_claim      = sum(!annotated))
+}
+
 #' @noRd
 .new_findings <- function() {
   data.frame(
@@ -1203,6 +1425,7 @@ validate_ars_model <- function(model, spec = NULL, report = NULL) {
   findings <- .check_separator_safety(findings, model)
   findings <- .check_result_paths(findings, model)
   findings <- .check_nested_layout(findings, model)
+  findings <- .check_semantic_source(findings, model)
 
   if (!is.null(spec)) {
     findings <- .check_against_spec(findings, model, spec)
