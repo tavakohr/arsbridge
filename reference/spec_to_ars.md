@@ -29,6 +29,7 @@ spec_to_ars(
   heading_patterns = NULL,
   validate = TRUE,
   report_path = file.path(tempdir(), "spec_validation_report.xlsx"),
+  emit_code = FALSE,
   code_dir = NULL,
   adam_dir = ".",
   verbose = TRUE,
@@ -204,18 +205,26 @@ spec_to_ars(
   `spec_validation_report.xlsx` in
   [`tempdir()`](https://rdrr.io/r/base/tempfile.html).
 
+- emit_code:
+
+  Also generate the per-TLF `.R` analysis programs. Default `FALSE`:
+  authoring a reporting event and generating programs from it are two
+  deliberate steps, and generating here would produce programs from the
+  reporting event as it stands *before* review. Generate them from the
+  reviewed, saved ARS with
+  [`ars_to_code()`](https://tavakohr.github.io/arsbridge/reference/ars_to_code.md).
+  `TRUE` keeps the older one-call behaviour.
+
 - code_dir:
 
-  Directory for the emitted per-TLF pure-`{cards}` `.R` deliverables.
-  When `NULL` (default) a `code/` folder next to `output_path` is used.
-  These scripts are both the human-readable deliverable and the engine
-  [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)
-  sources to build the ARD.
+  Directory for the per-TLF pure-`{cards}` `.R` programs, used only when
+  `emit_code = TRUE`. When `NULL` (default) a `code/` folder next to
+  `output_path` is used.
 
 - adam_dir:
 
-  ADaM directory baked into each emitted script's header (the reader can
-  edit it). Default `"."`.
+  ADaM directory baked into each emitted script's header when
+  `emit_code = TRUE` (the reader can edit it). Default `"."`.
 
 - verbose:
 
@@ -252,11 +261,15 @@ Invisibly returns a named list:
 
 - `code_dir`:
 
-  Directory holding the emitted per-TLF `{cards}` `.R` deliverables.
+  Where per-TLF `{cards}` `.R` programs would be written. Reported
+  whether or not any were: it is the directory
+  [`ars_to_code()`](https://tavakohr.github.io/arsbridge/reference/ars_to_code.md)
+  fills.
 
 - `code_paths`:
 
-  Named character vector of the emitted `.R` paths (names = output ids).
+  Named character vector of the `.R` paths written (names = output ids).
+  Empty unless `emit_code = TRUE`.
 
 - `n_tlfs`:
 

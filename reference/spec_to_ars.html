@@ -13,7 +13,7 @@ siera::readARS()."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9127</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9129</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -76,6 +76,7 @@ Results Standard (ARS) v1.0 ARM-TS JSON file consumable by
 <span>  heading_patterns <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  validate <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  report_path <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"spec_validation_report.xlsx"</span><span class="op">)</span>,</span>
+<span>  emit_code <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  code_dir <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  adam_dir <span class="op">=</span> <span class="st">"."</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">TRUE</span>,</span>
@@ -244,16 +245,24 @@ against the ADaM spec and write a validation report.</p></dd>
 <code>spec_validation_report.xlsx</code> in <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code>.</p></dd>
 
 
+<dt id="arg-emit-code">emit_code<a class="anchor" aria-label="anchor" href="#arg-emit-code"></a></dt>
+<dd><p>Also generate the per-TLF <code>.R</code> analysis programs.
+Default <code>FALSE</code>: authoring a reporting event and generating programs from
+it are two deliberate steps, and generating here would produce programs
+from the reporting event as it stands <em>before</em> review. Generate them from
+the reviewed, saved ARS with <code><a href="ars_to_code.html">ars_to_code()</a></code>. <code>TRUE</code> keeps the older
+one-call behaviour.</p></dd>
+
+
 <dt id="arg-code-dir">code_dir<a class="anchor" aria-label="anchor" href="#arg-code-dir"></a></dt>
-<dd><p>Directory for the emitted per-TLF pure-<code>{cards}</code> <code>.R</code>
-deliverables. When <code>NULL</code> (default) a <code>code/</code> folder next to <code>output_path</code>
-is used. These scripts are both the human-readable deliverable and the
-engine <code><a href="ars_to_ard.html">ars_to_ard()</a></code> sources to build the ARD.</p></dd>
+<dd><p>Directory for the per-TLF pure-<code>{cards}</code> <code>.R</code>
+programs, used only when <code>emit_code = TRUE</code>. When <code>NULL</code> (default) a
+<code>code/</code> folder next to <code>output_path</code> is used.</p></dd>
 
 
 <dt id="arg-adam-dir">adam_dir<a class="anchor" aria-label="anchor" href="#arg-adam-dir"></a></dt>
 <dd><p>ADaM directory baked into each emitted script's header
-(the reader can edit it). Default <code>"."</code>.</p></dd>
+when <code>emit_code = TRUE</code> (the reader can edit it). Default <code>"."</code>.</p></dd>
 
 
 <dt id="arg-verbose">verbose<a class="anchor" aria-label="anchor" href="#arg-verbose"></a></dt>
@@ -285,12 +294,13 @@ Callback errors are ignored.</p></dd>
 stage can be opened with <code>edit_ars(result)</code> alone.</p></dd>
 
 <dt><code>code_dir</code></dt>
-<dd><p>Directory holding the emitted per-TLF <code>{cards}</code> <code>.R</code>
-deliverables.</p></dd>
+<dd><p>Where per-TLF <code>{cards}</code> <code>.R</code> programs would be
+written. Reported whether or not any were: it is the directory
+<code><a href="ars_to_code.html">ars_to_code()</a></code> fills.</p></dd>
 
 <dt><code>code_paths</code></dt>
-<dd><p>Named character vector of the emitted <code>.R</code> paths
-(names = output ids).</p></dd>
+<dd><p>Named character vector of the <code>.R</code> paths written
+(names = output ids). Empty unless <code>emit_code = TRUE</code>.</p></dd>
 
 <dt><code>n_tlfs</code></dt>
 <dd><p>Number of TLF sections processed.</p></dd>

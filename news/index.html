@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9127</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9129</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -42,6 +42,18 @@
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="development version" id="arsbridge-development-version">arsbridge (development version)<a class="anchor" aria-label="anchor" href="#arsbridge-development-version"></a></h2>
 <ul><li>
+<p><strong>Generating analysis programs is now its own step: <code><a href="../reference/ars_to_code.html">ars_to_code()</a></code>.</strong> Authoring a reporting event and generating R programs from it are two deliberate actions, so <code><a href="../reference/spec_to_ars.html">spec_to_ars()</a></code> no longer writes programs by default (<code>emit_code = FALSE</code>). <code>emit_code = TRUE</code> keeps the older one-call behaviour.</p>
+<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/spec_to_ars.html">spec_to_ars</a></span><span class="op">(</span><span class="va">...</span><span class="op">)</span>                                  <span class="co"># the ARS, nothing else</span></span>
+<span><span class="fu"><a href="../reference/ars_to_code.html">ars_to_code</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">ars_path</span>, code_dir <span class="op">=</span> <span class="st">"code"</span><span class="op">)</span>             <span class="co"># every output</span></span>
+<span><span class="fu"><a href="../reference/ars_to_code.html">ars_to_code</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">ars_path</span>, <span class="st">"T_14_1_2"</span>, code_dir <span class="op">=</span> <span class="st">"code"</span><span class="op">)</span> <span class="co"># one of them</span></span></code></pre></div>
+<p>This matters because generation used to happen <em>before</em> review: the programs on disk were always emitted from the reporting event as it stood before anyone opened the editor, and nothing regenerated them afterwards.</p>
+<p><code><a href="../reference/ars_to_code.html">ars_to_code()</a></code> reads the saved ARS and nothing else – never the original shell or ADaM specification – so a program reflects the reviewed document rather than a re-reading of the inputs. It needs no <code>adam_dir</code>: generation defines the analysis, and the emitted program takes the data location as its own input. It generates, and never executes.</p>
+<p><strong>An existing program is not silently replaced.</strong> Regenerating identical content is a no-op, so repeating the call is safe; a file that <em>differs</em> stops generation, and every other output is left alone (all scripts are built before any is written). arsbridge deliberately does not claim to know <em>why</em> it differs: emitted programs carry no provenance, so a file edited by hand and one generated from an earlier ARS are indistinguishable, and the message says exactly that. Pass <code>overwrite = TRUE</code> when the file on disk is expendable. Real customization detection needs a stored baseline, which does not exist yet.</p>
+<p>An unknown <code>output_ids</code> value is an error naming the available outputs, not a silent empty result.</p>
+<p><strong>There is no <code>subject_key</code> argument.</strong> The subject identifier is not plumbing – it is the deduplication key, the cross-dataset join key and the grouped-denominator merge key, so a caller-supplied value decides what gets counted. The reporting event already settles it: every method’s <code>codeTemplate</code> names <code>USUBJID</code>, as does the generated analysis-set condition. Exposing an override would let a program contradict the method it implements. Should arsbridge support another key, the event will have to declare it.</p>
+</li>
+<li>
 <p><strong>The generated analysis scripts no longer invite an edit that has no effect.</strong> Each emitted <code>.R</code> opened with <code>## &lt;id&gt; -- generated {cards} analysis script (edit freely).</code> That was not true: arsbridge computes an output’s ARD from the reporting event, by emitting and evaluating its own per-analysis blocks, and never reads these files back. Editing one changed nothing, and nothing said so.</p>
 <p>The header now states what the file is — generated from the ARS, not the artefact that computes the ARD, and self-contained so it can be run to reproduce the numbers.</p>
 <p>An output whose script is a stub says so in its own terms, because the two cases are not the same: a listing is genuinely produced directly from the ADaM data, whereas a figure’s content could be expressed as a structured summary and simply has no emitter yet. One shared line would have quietly asserted the second question was settled.</p>
@@ -49,7 +61,7 @@
 </li>
 <li>
 <p><strong>A reviewed supplement ships with the training bundle.</strong> <code>arsbridge_example("supplement.json")</code> is what a chat assistant could return for the bundled Word shell inside a closed environment, corrected by hand. It makes the offline path runnable from the bundle alone – deterministic parse, reviewed supplement, enriched ARS, with no key, no network and no <code>ellmer</code>:</p>
-<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/spec_to_ars_example.html">spec_to_ars_example</a></span><span class="op">(</span>supplement <span class="op">=</span> <span class="fu"><a href="../reference/arsbridge_example.html">arsbridge_example</a></span><span class="op">(</span><span class="st">"supplement.json"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <p>Shipping it changes nothing by default. It is an example artifact: <code><a href="../reference/spec_to_ars.html">spec_to_ars()</a></code> does not discover or apply a supplement sitting next to the shell, and the bundled study converts exactly as before unless the file is named. Both halves are asserted – the deterministic run is checked for the absence of each enrichment before the supplemented run is checked for its presence, so neither assertion can pass vacuously.</p>
 <p>What it repairs on that shell, all of it real rather than illustrative: the disposition table’s population, which the shell states only as prose, becomes a typed condition instead of an analysis set with nothing to filter on; the treatment axis becomes the three columns the shell actually prints, each with its own condition, rather than a data-driven axis that would take its levels from the data (including a screen-failure arm the tables do not show); and the row heading Table 14.3.2, which the shell leaves unannotated, becomes a subject-count analysis with its own data subset. Judgements a reviewer made but arsbridge does not compute – record filters, sort keys, and the reasons for leaving certain rows alone – travel in <code>provenance$reviewItems</code> and on the output’s <code>_meta</code>, so nothing the reviewer decided is silently lost.</p>
@@ -203,7 +215,7 @@
 </li>
 <li>
 <p><strong>A column axis on a domain variable no longer computes every percentage out of the whole study.</strong> Percentages divide by a population frame – ADSL under the analysis set’s filter – and {cards} splits that frame by the analysis’ own <code>by</code> variable. When the frame does not carry that variable, cards says nothing and uses the whole frame for every column:</p>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">ard_categorical</span><span class="op">(</span><span class="va">cm</span>, variables <span class="op">=</span> <span class="st">"CMCLAS"</span>, by <span class="op">=</span> <span class="st">"TRTA"</span>, denominator <span class="op">=</span> <span class="va">adsl</span><span class="op">)</span></span>
 <span><span class="co">#  A: n=2 N=10 p=0.2    &lt;- N is the whole study, in both columns</span></span>
 <span><span class="co">#  B: n=1 N=10 p=0.1</span></span></code></pre></div>

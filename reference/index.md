@@ -13,6 +13,8 @@ clinical table out.
   : Convert annotated TLF shell and ADaM spec to CDISC ARS JSON
 - [`spec_to_ars_example()`](https://tavakohr.github.io/arsbridge/reference/spec_to_ars_example.md)
   : Run spec_to_ars() against the bundled example inputs
+- [`ars_to_code()`](https://tavakohr.github.io/arsbridge/reference/ars_to_code.md)
+  : Generate the R analysis program for one or more outputs
 - [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)
   : Execute ARS JSON and return an ARD object using 'cards'
 - [`ars_to_tfrmt()`](https://tavakohr.github.io/arsbridge/reference/ars_to_tfrmt.md)
