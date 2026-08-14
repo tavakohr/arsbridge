@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9130</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9131</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -112,6 +112,46 @@
 <li>
 <strong>The two readers must stay in lockstep.</strong> <code>test-parity_docx_xlsx.R</code> is the net; run <code>tools/parity_check_shell.R</code> against a real pair as well if you have one. When parity fails, the answer is almost never to relax the test — it is either a bug in the reader you changed, or a difference that belongs in the class-2 whitelist <em>with a written reason</em>.</li>
 </ul><p>The two halves meet at two seams, documented at the top of the core file: the <strong>per-run metadata list</strong> (<code>text</code>, <code>raw_text</code>, <code>color_hex</code>, <code>highlight</code>, <code>bold</code>, <code>italic</code>, <code>underline</code>, <code>strike</code>) and the <strong>header-grid record</strong> (<code>row</code>, <code>col_start</code>, <code>col_end</code>, <code>text</code>, <code>annotation</code>, <code>vmerge_continue</code>), which feeds the format-agnostic <a href="R/column_tree.R"><code>R/column_tree.R</code></a>. Their product is the <strong>section object</strong> — the contract every downstream stage consumes. Anything that produces a conformant section object is a valid shell reader, which is how a second input format plugs in without forking the grammar.</p>
+</div>
+<div class="section level2">
+<h2 id="writing-code-that-works-on-a-study-you-have-never-seen">Writing code that works on a study you have never seen<a class="anchor" aria-label="anchor" href="#writing-code-that-works-on-a-study-you-have-never-seen"></a></h2>
+<p>arsbridge is built to run against studies nobody here has looked at: different dataset and variable names, table structures, row labels, conditions, methods and annotation styles. The studies bundled or referenced in the test suite are <em>evidence that the code works</em>, never the definition of what working means. Everything in this section follows from that.</p>
+<div class="section level3">
+<h3 id="study-agnostic-within-the-adam-contract">Study-agnostic within the ADaM contract<a class="anchor" aria-label="anchor" href="#study-agnostic-within-the-adam-contract"></a></h3>
+<p>The package’s supported scope is CDISC ADaM, and that scope is deliberate: every input is ADaM — the spec, the datasets, and the shell annotations, which are gated against that spec — and the shell parser is built throughout on the identifier grammar in <a href="R/aaa_constants.R"><code>R/aaa_constants.R</code></a>.</p>
+<p>So production code <strong>may</strong> understand standards-level structure, grammar and vocabulary. It <strong>must not</strong> encode study-specific dataset names, variable names, row labels, output IDs or analysis IDs. Those belong in regression tests and nowhere else. Never write <code>if (variable == "STRAT2")</code>, <code>if (label == "Not Reported")</code>, or <code>if (study == ...)</code>. Write the relationship instead: <em>whatever the identifiers are, preserve the semantics the annotation expressed.</em></p>
+<p>“Agnostic within the model” is the precise claim. An invented but valid <code>ADQX.MEASURE</code> is in scope; an arbitrary <code>MYDATA.COL</code> is outside the supported grammar and is a separate architectural question, not a bug to patch around.</p>
+</div>
+<div class="section level3">
+<h3 id="recognising-a-variable-is-not-the-same-as-assuming-it-exists">Recognising a variable is not the same as assuming it exists<a class="anchor" aria-label="anchor" href="#recognising-a-variable-is-not-the-same-as-assuming-it-exists"></a></h3>
+<p>A name can be standards-recognised while its presence in any given study is not guaranteed — <code>AGEGR1</code> is sponsor-defined and optional, and even <code>SAFFL</code> and <code>TRT01P</code> are conventional rather than mandatory. Recognising standard vocabulary is fine; assuming a variable is present is not. Establish presence and applicability from the current study’s spec and metadata rather than from a global list, because assumed presence is exactly what breaks on an unseen study.</p>
+</div>
+<div class="section level3">
+<h3 id="semantic-correctness-is-not-numeric-correctness">Semantic correctness is not numeric correctness<a class="anchor" aria-label="anchor" href="#semantic-correctness-is-not-numeric-correctness"></a></h3>
+<p>An analysis can produce the right number from the wrong column. Where two variables happen to agree in a data cut, the output is numerically correct and the analysis is still wrong, and no amount of checking values will find it. So a test that only compares numbers has not established correctness — assert the semantic source, not just the result.</p>
+</div>
+<div class="section level3">
+<h3 id="fixing-a-bug-found-in-a-real-study">Fixing a bug found in a real study<a class="anchor" aria-label="anchor" href="#fixing-a-bug-found-in-a-real-study"></a></h3>
+<p>A real study exposes a defect; it does not define it. Every fix states six things, in the PR description and in the defect register:</p>
+<ol style="list-style-type: decimal"><li>
+<strong>Fixture</strong> — the study, output and row that exposed it.</li>
+<li>
+<strong>Defect class</strong> — the general structural failure, named without study vocabulary.</li>
+<li>
+<strong>Invariant / fix</strong> — expressed without study-specific names.</li>
+<li>
+<strong>Generic regression</strong> — a synthetic test built from arbitrary <em>valid</em> identifiers.</li>
+<li>
+<strong>Metamorphic / rename test</strong> — rename every identifier consistently; the verdict must not move. Include wherever practical.</li>
+<li>
+<strong>Real-study regression</strong> — evidence the defect mattered in practice.</li>
+</ol><p>Concretely: fix “a row declared one qualified semantic source but ARS construction introduced another, for any identifiers” — not “make <code>STRAT2</code> work”. Fix “display-label equality must never override stronger row-specific semantic identity” — not “handle two rows sharing one label”. Fix “tokenization must ignore operator-like text inside quoted literals, whatever the literal contains” — not “make one particular level parse”.</p>
+</div>
+<div class="section level3">
+<h3 id="synthetic-tests-must-prove-they-exercised-something">Synthetic tests must prove they exercised something<a class="anchor" aria-label="anchor" href="#synthetic-tests-must-prove-they-exercised-something"></a></h3>
+<p>A test built from identifiers the grammar cannot read declares nothing, checks nothing, and passes. That failure mode is silent and it has already happened here: plausible-looking names outside the dataset grammar turned every case vacuous, including the ones that were supposed to fail.</p>
+<p>So a synthetic test must assert that it actually exercised the intended path — for a validation rule, assert the count of items the rule found checkable alongside the verdict itself. A later change to the grammar or the code path should turn such a test <strong>red</strong>, not quietly green.</p>
+</div>
 </div>
 <div class="section level2">
 <h2 id="architecture-decisions">Architecture decisions<a class="anchor" aria-label="anchor" href="#architecture-decisions"></a></h2>
