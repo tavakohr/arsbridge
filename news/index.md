@@ -2,6 +2,44 @@
 
 ## arsbridge (development version)
 
+- **A row keeps its own enrichment: a display label may assist a match,
+  never outrank identity.** Two rows of one table may legitimately carry
+  the same visible text while describing different data – a level label
+  belongs to more than one variable. Both places that paired a shell row
+  with an enrichment looked the pairing up by label alone, so whichever
+  candidate came first won and the second row silently inherited the
+  first’s variable and filter. The result was well formed and wrong, and
+  where the two variables happened to agree in a data cut it did not
+  even look wrong.
+
+  Pairing is now decided by qualified `DATASET.VARIABLE` identity: a
+  candidate compatible with the row’s own declared source wins; a
+  candidate that contradicts it is refused *even when its label is
+  unique*; several compatible candidates, or several carrying no
+  evidence at all, resolve to nothing rather than to the first. An
+  unresolved pairing is not a downgrade – dataset, variable and subset
+  are rebuilt from the row’s own annotation, which is authoritative for
+  them.
+
+  The nested-block classifier read its rows the same way and is now on
+  the same resolver. It decides parent/child by comparing the variables
+  of consecutive token rows, so a label-keyed lookup gave two
+  same-labelled rows one shared variable, collapsed the run to a single
+  distinct variable, and could take a genuine parent/child hierarchy for
+  a flat one-variable block.
+
+- **An unresolved non-default `variableRole` now blocks the event
+  instead of becoming `ANALYSIS`.** Of everything an enrichment carries,
+  `variableRole` is the one field no annotation can restate, so
+  discarding an unattributable non-default role did not leave a gap – it
+  asserted the ARS default, a semantics the row never claimed, and the
+  event then ran and produced numbers under it.
+  [`validate_ars_model()`](https://tavakohr.github.io/arsbridge/reference/validate_ars_model.md)
+  gains `UNRESOLVED_VARIABLE_ROLE`, a `FAIL` that closes the validation
+  gate. This is deliberately not `manual_pending`, which means “the
+  semantics are known and a human must supply the value”; here the
+  semantics are precisely what could not be determined.
+
 - **An analysis may only compute from data its own annotation named.**
   [`validate_ars_model()`](https://tavakohr.github.io/arsbridge/reference/validate_ars_model.md)
   gains a structural check: every qualified `DATASET.VARIABLE` the built
