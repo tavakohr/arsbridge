@@ -171,6 +171,15 @@
     stat_name      = stat_name,
     value          = value,
     status         = status,
+    ## Why a blocked row was blocked, carried from the ARD so the workbook can
+    ## say it. Without this the fill knows only that the cell has no number,
+    ## and reports a deliberate reservation in the same words as a cell nobody
+    ## ever asked for.
+    block_reason   = if ("block_reason" %in% names(ard)) {
+      .ard_chr(ard[["block_reason"]])
+    } else {
+      rep(NA_character_, nrow(ard))
+    },
     stringsAsFactors = FALSE
   )
 }
@@ -211,7 +220,9 @@
 .ard_value <- function(index, analysis_id, group_level, variable_level,
                        stat_name, nest_level = NA_character_,
                        total_column = FALSE) {
-  none <- function(status) list(value = NA_real_, status = status)
+  none <- function(status, reason = NA_character_) {
+    list(value = NA_real_, status = status, reason = reason)
+  }
   if (is.null(index) || is.na(stat_name %||% NA_character_)) {
     return(none("no_row"))
   }
@@ -256,7 +267,25 @@
       any(rows_without_parent)) {
     return(none("missing_parent_key"))
   }
-  if (length(hits) == 0) return(none("no_row"))
+  if (length(hits) == 0) {
+    ## A structurally reserved analysis computes NOTHING, so it carries no
+    ## statistic for any key to match on -- and every cell of it would
+    ## otherwise fall through to "no result in the ARD", the words for a cell
+    ## nobody asked about. The reservation is a fact about the ANALYSIS, so it
+    ## is looked up by analysis alone once the keyed lookup has missed.
+    ##
+    ## Deliberately last: a computed row that matches the key always wins, so
+    ## an analysis carrying both a reservation and a real result (part of it
+    ## derived later) still fills the part that exists.
+    reserved <- which(index$analysis_id %in% analysis_id &
+                        index$status %in% "blocked")
+    if (length(reserved) > 0) {
+      why <- index$block_reason[reserved]
+      why <- why[!is.na(why) & nzchar(why)]
+      return(none("blocked", if (length(why) > 0) why[[1]] else NA_character_))
+    }
+    return(none("no_row"))
+  }
 
   ## More than one level answering to one cell means the row is a TEMPLATE for
   ## a repeated block -- "<System Organ Class>" stands for however many system
@@ -272,7 +301,8 @@
   usable <- index$status[hits] %in% "computed" & !is.na(index$value[hits])
   computed <- hits[usable]
   if (length(computed) > 0) {
-    return(list(value = index$value[[computed[[1]]]], status = "computed"))
+    return(list(value = index$value[[computed[[1]]]], status = "computed",
+                reason = NA_character_))
   }
   if (any(index$status[hits] %in% "manual_pending")) {
     return(none("manual_pending"))
@@ -280,8 +310,16 @@
   ## A blocked cell is NOT manual work and NOT an absent result. Falling
   ## through to "no_value" would render it identically to a cell nobody ever
   ## asked for, losing the one thing worth saying about it.
-  if (any(index$status[hits] %in% "blocked")) {
-    return(none("blocked"))
+  ##
+  ## The ARD's own reason travels with it, so a cell reserved because the
+  ## reporting event does not resolve says which finding reserved it rather
+  ## than only that it is empty.
+  blocked <- hits[index$status[hits] %in% "blocked"]
+  if (length(blocked) > 0) {
+    reasons <- index$block_reason[blocked]
+    reasons <- reasons[!is.na(reasons) & nzchar(reasons)]
+    return(none("blocked",
+                if (length(reasons) > 0) reasons[[1]] else NA_character_))
   }
   none("no_value")
 }
@@ -919,14 +957,18 @@
 
 #' Resolve every slot of one mapped cell against the ARD.
 #'
-#' @return list(values, statuses) -- one entry per slot, values as formatted
-#'   text and NA where the slot did not resolve.
+#' @return list(values, statuses, reasons) -- one entry per slot, values as
+#'   formatted text and NA where the slot did not resolve. `reasons` carries
+#'   the ARD's own explanation for a slot it deliberately reserved, which is
+#'   the only thing distinguishing that cell from one nobody asked about.
 #' @noRd
 .resolve_cell <- function(cell, index, decode = character(),
                           nest_level = NA_character_) {
   slots <- cell$slots %||% list()
   values <- rep(NA_character_, length(slots))
   statuses <- rep(NA_character_, length(slots))
+  ## Same length as values/statuses, filled in the same loop below.
+  reasons <- rep(NA_character_, length(slots))
 
   level <- cell$variable_level %||% NA_character_
   if (!is.na(level) && level %in% names(decode)) level <- decode[[level]]
@@ -951,6 +993,7 @@
       nest_level     = nest_level,
       total_column   = total_column)
     statuses[[i]] <- hit$status
+    reasons[[i]] <- hit$reason %||% NA_character_
     if (identical(hit$status, "computed")) {
       values[[i]] <- .format_value(hit$value, slot$decimals)
     }
@@ -958,6 +1001,7 @@
   list(
     values = values,
     statuses = statuses,
+    reasons = reasons,
     variable_level = level,
     parent_level = nest_level,
     ard_lookup_key = .ard_lookup_key(
@@ -970,6 +1014,54 @@
   )
 }
 
+#' The ARD's reason for the FIRST slot that came back blocked.
+#'
+#' Strictly that slot's own reason. Skipping ahead to a later slot's text when
+#' the first has none would attribute one slot's cause to another -- and
+#' `.pending_reason()` reports on the first failure precisely because that is
+#' the one the reader is looking at.
+#'
+#' Tolerant of a caller with no reasons to give: an older payload, or a path
+#' that resolved cells before the ARD carried the column.
+#' @noRd
+.first_reason <- function(statuses, reasons = NULL) {
+  if (is.null(reasons) || length(reasons) != length(statuses)) {
+    return(NA_character_)
+  }
+  hit <- which(statuses %in% "blocked")
+  if (length(hit) == 0) return(NA_character_)
+  found <- reasons[[hit[[1L]]]]
+  if (is.null(found) || length(found) != 1L || is.na(found) ||
+      !nzchar(found)) {
+    return(NA_character_)
+  }
+  found
+}
+
+#' A blocked cell's reason, in the words a shell reviewer needs.
+#'
+#' Two kinds arrive here and they are not the same news. A STRUCTURAL block --
+#' written as `structural:<CODE>` by `.structural_block()` -- means the
+#' reporting event itself does not resolve, and the code is what joins this
+#' cell to its row in the validation report. Anything else is a run-time block:
+#' the event was sound and the DATA could not answer, and that text is already
+#' written for a reader.
+#' @noRd
+.reserved_cell_reason <- function(reason) {
+  if (is.null(reason) || length(reason) != 1L || is.na(reason) ||
+      !nzchar(reason)) {
+    return("reserved: the reporting event does not resolve for this cell")
+  }
+  if (grepl("^structural:", reason)) {
+    code <- sub("^structural:", "", reason)
+    return(paste0(
+      "reserved: the reporting event does not resolve for this cell (",
+      code, ")"
+    ))
+  }
+  paste0("reserved: ", reason)
+}
+
 #' Why a cell could not be filled, in the words its reader needs.
 #'
 #' Reported for the FIRST slot that failed, not the worst one. A cell showing
@@ -978,9 +1070,19 @@
 #' the percentage was surplus would describe the cell as a typing quibble when
 #' the actual result is absent.
 #' @noRd
-.pending_reason <- function(statuses, parent_level = NA_character_) {
+.pending_reason <- function(statuses, parent_level = NA_character_,
+                            reasons = NULL) {
   failed <- statuses[!statuses %in% "computed"]
   if (length(failed) == 0) return(NA_character_)
+
+  ## A blocked cell used to fall through to the default and report "no result
+  ## in the ARD for this cell" -- the words for a cell nobody asked about, said
+  ## of one arsbridge deliberately withheld. The ARD's own reason is carried
+  ## here so the workbook and the validation report name the same cause.
+  if (identical(failed[[1]], "blocked")) {
+    return(.reserved_cell_reason(.first_reason(statuses, reasons)))
+  }
+
   switch(
     failed[[1]],
     manual_pending = "reserved for manual derivation",
@@ -1143,7 +1245,8 @@
       record$status <- .pending_status(resolved$statuses)
       record$reason <- .pending_reason(
         resolved$statuses,
-        resolved$parent_level
+        resolved$parent_level,
+        resolved$reasons
       )
       records[[length(records) + 1L]] <- record
       next
@@ -1170,7 +1273,8 @@
         record$status <- "partial"
         record$reason <- .pending_reason(
           resolved$statuses,
-          resolved$parent_level
+          resolved$parent_level,
+          resolved$reasons
         )
       }
     } else {
@@ -1560,7 +1664,8 @@
         rec$status <- .pending_status(resolved$statuses)
         rec$reason <- .pending_reason(
           resolved$statuses,
-          resolved$parent_level
+          resolved$parent_level,
+          resolved$reasons
         )
         records[[length(records) + 1L]] <- rec
         next
@@ -1582,7 +1687,8 @@
           rec$status <- "partial"
           rec$reason <- .pending_reason(
             resolved$statuses,
-            resolved$parent_level
+            resolved$parent_level,
+            resolved$reasons
           )
         }
       } else {
@@ -1770,7 +1876,8 @@
         rec$status <- .pending_status(resolved$statuses)
         rec$reason <- .pending_reason(
           resolved$statuses,
-          resolved$parent_level
+          resolved$parent_level,
+          resolved$reasons
         )
         records[[length(records) + 1L]] <- rec
         next
@@ -1792,7 +1899,8 @@
           rec$status <- "partial"
           rec$reason <- .pending_reason(
             resolved$statuses,
-            resolved$parent_level
+            resolved$parent_level,
+            resolved$reasons
           )
         }
       } else {
@@ -2494,8 +2602,6 @@ ars_fill_shell <- function(shell_path, ars, ard, output_path, adam_dir = NULL,
   } else {
     ars
   }
-  .assert_runnable_ars(spec)
-
   outputs <- spec$outputs %||% list()
   analysis_by_id <- list()
   for (analysis in spec$analyses %||% list()) {

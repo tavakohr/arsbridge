@@ -103,7 +103,11 @@ test_that("a report written before this release still reads correctly", {
 
   gate <- .validation_gate(archived)
   expect_equal(nrow(gate$gaps), 1L)
-  expect_true(gate$blocked)
+  expect_equal(gate$gap_refs, "FIXED_GROUPING_EMPTY")
+  ## Collected as a gap, not refused. Nothing is refused any more, whichever
+  ## word the payload happens to use for the severity.
+  expect_false(gate$blocked)
+  expect_equal(gate$verdict, "COMPLETED WITH GAPS")
 
   ## It sorts ahead of everything, rather than falling to the bottom as an
   ## unranked severity would.

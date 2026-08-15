@@ -373,20 +373,40 @@ test_that("an unresolved non-default role reaches the ARS analysis", {
   }
 })
 
-test_that("an unresolved role blocks execution instead of defaulting to ANALYSIS", {
+test_that("an unresolved role reserves the analysis instead of defaulting to ANALYSIS", {
   ## The claim that matters. It is not enough that a message was emitted: the
   ## resulting analysis must be unable to run as an ordinary ANALYSIS.
+  ##
+  ## What "unable to run" means changed with the reservation work, and the
+  ## change is the point. It used to mean the whole reporting event was
+  ## refused, which withheld every sound analysis beside this one too. It now
+  ## means THIS analysis is reserved: no data read, no calculation emitted, its
+  ## cells carrying a reason -- while everything else computes.
+  ##
+  ## This fixture's event has no outputs, so it cannot execute anything and an
+  ## execution assertion here would be vacuous. What it CAN show is that the
+  ## finding is raised and that the map withholds the named analysis. That the
+  ## withholding is honoured by the ARD, the generated program and the workbook
+  ## is asserted end to end, for this code among others, in
+  ## `test-reserved_end_to_end.R`.
   for (n in .REI_VOCABS) {
     ann <- sprintf("%s.%s", n$ds1, n$var1)
 
     ## Baseline: the same analysis WITHOUT the marker is quiet and runnable.
     plain <- ssrc_analysis(id = "AN_1", dataset = n$ds1, variable = n$var1,
                            annotation = ann)
-    plain_gate <- .model_validation_gate(ssrc_model(list(plain)))
-    expect_false(plain_gate$blocked)
-    expect_false(.UNRESOLVED_ROLE_REF %in% plain_gate$blocking_refs)
+    plain_model <- ssrc_model(list(plain))
+    plain_gate <- .model_validation_gate(plain_model)
+    expect_false(.UNRESOLVED_ROLE_REF %in% plain_gate$gap_refs)
+    expect_equal(plain_gate$verdict, "DONE")
+    ## Nothing withheld, so the analysis is free to compute.
+    expect_length(
+      .reservations_from_findings(
+        plain_model, validate_ars_model(plain_model))$by_analysis,
+      0L
+    )
 
-    ## With the marker: a FAIL, the gate closes, and execution is refused.
+    ## With the marker: a GAP, and the analysis it names is withheld.
     marked <- plain
     marked$variableRole <- "ANALYSIS"
     marked$unresolvedVariableRole <- list("GROUPING")
@@ -400,11 +420,12 @@ test_that("an unresolved role blocks execution instead of defaulting to ANALYSIS
     expect_match(hit$problem, "GROUPING", fixed = TRUE)
 
     gate <- .model_validation_gate(model)
-    expect_true(gate$blocked)
-    expect_true(.UNRESOLVED_ROLE_REF %in% gate$blocking_refs)
-    ## Not merely reported -- refused. This is what "cannot silently become
-    ## executable ANALYSIS" means in practice.
-    expect_error(.assert_runnable_ars(model), "structural validation")
+    expect_true(.UNRESOLVED_ROLE_REF %in% gate$gap_refs)
+    expect_equal(gate$verdict, "COMPLETED WITH GAPS")
+
+    reserved <- .reservations_from_findings(model, gate$findings)$by_analysis
+    expect_true("AN_1" %in% names(reserved))
+    expect_equal(reserved[["AN_1"]]$ref, .UNRESOLVED_ROLE_REF)
   }
 })
 

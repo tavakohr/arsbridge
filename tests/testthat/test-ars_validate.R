@@ -144,12 +144,23 @@ test_that("direct code emission blocks an empty grouping with omitted dataDriven
   ars$analysisGroupings[[grouping_index]]$dataDriven <- NULL
   code_dir <- file.path(withr::local_tempdir(), "code")
 
-  expect_error(
-    write_tlf_code(ars, code_dir),
-    "FIXED_GROUPING_EMPTY",
-    fixed = TRUE
-  )
-  expect_false(dir.exists(code_dir))
+  ## Emission is no longer refused: the scripts are written, and the analyses
+  ## that resolve through the empty grouping carry a reservation instead of a
+  ## calculation. Refusing the whole emission would have withheld the programs
+  ## for every sound output on this event too.
+  suppressMessages(suppressWarnings(write_tlf_code(ars, code_dir)))
+  expect_true(dir.exists(code_dir))
+
+  model <- ars_to_model(ars)
+  reserved <- names(.reservations_from_findings(
+    model, validate_ars_model(model))$by_analysis)
+  expect_gt(length(reserved), 0L)
+
+  scripts <- list.files(code_dir, pattern = "\\.R$", full.names = TRUE)
+  expect_gt(length(scripts), 0L)
+  text <- paste(unlist(lapply(scripts, readLines, warn = FALSE)),
+                collapse = "\n")
+  expect_match(text, "FIXED_GROUPING_EMPTY")
 })
 
 test_that("valid statistic lines may bind part of a method's operations", {
@@ -516,16 +527,24 @@ test_that("the validation gate collects only GAP findings", {
     "This fixed grouping has no groups.", "Add groups or make it data-driven.",
     ref = "FIXED_GROUPING_EMPTY"
   )
-  blocked_gate <- .validation_gate(blocking)
+  gap_gate <- .validation_gate(blocking)
 
-  expect_true(blocked_gate$blocked)
-  expect_equal(blocked_gate$status, "needs-fixes")
-  expect_equal(blocked_gate$blocking_findings$id, "GF_EMPTY")
-  expect_equal(blocked_gate$blocking_refs, "FIXED_GROUPING_EMPTY")
-  expect_match(blocked_gate$summary, "Add groups or make it data-driven", fixed = TRUE)
+  ## The run is not refused any more -- `blocked` is FALSE even with a gap
+  ## present -- but the gap is collected, named, and carries its fix.
+  expect_false(gap_gate$blocked)
+  expect_equal(gap_gate$status, "completed-with-gaps")
+  expect_equal(gap_gate$verdict, "COMPLETED WITH GAPS")
+  expect_equal(gap_gate$gaps$id, "GF_EMPTY")
+  expect_equal(gap_gate$gap_refs, "FIXED_GROUPING_EMPTY")
+  ## The old field names still answer, because archived payloads read them.
+  expect_identical(gap_gate$blocking_findings, gap_gate$gaps)
+  expect_match(gap_gate$summary, "Add groups or make it data-driven", fixed = TRUE)
 })
 
-test_that("direct execution APIs refuse a structurally blocked event", {
+test_that("direct execution APIs reserve rather than refuse a gapped event", {
+  ## The three direct entry points used to abort on any structural finding, so
+  ## a single empty grouping cost this whole study its code, its ARD and its
+  ## workbook. They now run and withhold only the analyses the finding reaches.
   ars_path <- test_path(
     "fixtures", "ars_apx_drm_301_deterministic.json"
   )
@@ -533,28 +552,46 @@ test_that("direct execution APIs refuse a structurally blocked event", {
   code_dir <- file.path(withr::local_tempdir(), "code")
   filled_path <- tempfile(fileext = ".xlsx")
 
-  expect_error(
-    write_tlf_code(ars_path, code_dir),
-    "FIXED_GROUPING_EMPTY",
-    fixed = TRUE
-  )
-  expect_false(dir.exists(code_dir))
+  model <- ars_to_model(ars_path)
+  findings <- validate_ars_model(model)
+  expect_true("FIXED_GROUPING_EMPTY" %in% findings$ref)
+  reserved <- names(
+    .reservations_from_findings(model, findings)$by_analysis)
+  expect_gt(length(reserved), 0L)
 
-  expect_error(
-    ars_to_ard(ars_path, adam_dir),
-    "FIXED_GROUPING_EMPTY",
-    fixed = TRUE
-  )
+  ## Code: written, with a reservation in place of the calculation.
+  suppressMessages(suppressWarnings(write_tlf_code(ars_path, code_dir)))
+  expect_true(dir.exists(code_dir))
 
+  ## ARD: produced, with the reserved analyses computing nothing.
+  ard <- as.data.frame(suppressMessages(suppressWarnings(
+    ars_to_ard(ars_path, adam_dir))))
+  expect_gt(nrow(ard), 0L)
+  rows <- ard[ard$analysis_id %in% reserved, , drop = FALSE]
+  expect_gt(nrow(rows), 0L)
+  expect_false(any(rows$result_status %in% "computed"))
+  ## Every analysis on this fixture resolves through the empty grouping, so all
+  ## of them are reserved and there is no "still computes" half to assert here.
+  ## That half is asserted in `test-reserved_end_to_end.R`, on an event built
+  ## to carry a sound analysis beside the damaged one -- the right place for
+  ## it, since this test is about the entry points not aborting.
+  expect_setequal(unique(ard$analysis_id), reserved)
+
+  ## Workbook: the fill is still exercised, and the point is WHICH refusal
+  ## survives. It no longer refuses on the structural finding; this fixture's
+  ## ARS was built from a .docx and carries no cell map, so the fill stops on
+  ## that unrelated precondition instead. Asserting the message keeps the
+  ## entry point covered -- a return of the structural refusal would fail here
+  ## rather than pass as "an error was raised".
   expect_error(
-    ars_fill_shell(
+    suppressMessages(suppressWarnings(ars_fill_shell(
       shell_path = test_path("fixtures", "shells_apx_drm_301.xlsx"),
       ars = ars_path,
-      ard = data.frame(),
-      output_path = filled_path
-    ),
-    "FIXED_GROUPING_EMPTY",
-    fixed = TRUE
+      ard = ard,
+      output_path = filled_path,
+      adam_dir = adam_dir
+    ))),
+    "no cell map"
   )
   expect_false(file.exists(filled_path))
 })

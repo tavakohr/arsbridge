@@ -117,16 +117,22 @@ review_ars <- edit_ars
   validation_gate <- .model_validation_gate(
     result$model, spec = spec, report = report
   )
-  if (validation_gate$blocked) {
-    cli::cli_alert_danger(
-      "Not saved: {validation_gate$summary}"
+  ## The refusal that stood here -- "Not saved: N blocking findings" -- is
+  ## gone, and this is the place where removing it matters most. The editor is
+  ## how an author REPAIRS an event with gaps in it; refusing to save until the
+  ## gaps are gone meant the one tool for fixing them would not persist the
+  ## work, so a partial repair was lost and the author had to finish in one
+  ## sitting or not at all.
+  ##
+  ## Saving an event with gaps is safe for the same reason running one is: the
+  ## gaps travel with it, every downstream path reserves the analyses they
+  ## name, and the caller is told how many remain rather than being left to
+  ## assume the save was clean.
+  n_gaps <- nrow(validation_gate$gaps %||% .new_findings())
+  if (n_gaps > 0) {
+    cli::cli_alert_warning(
+      "Saved with {n_gaps} gap{?s}: {validation_gate$summary}"
     )
-    return(invisible(list(
-      saved = FALSE,
-      path = output_path,
-      validation_gate = validation_gate,
-      diagnostics = validation_gate$findings
-    )))
   }
 
   ars <- model_to_ars(result$model)

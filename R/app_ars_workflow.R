@@ -306,17 +306,36 @@ ars_workflow <- function(project_dir = NULL) {
 #' the validation gate was being added. This compatibility belongs at the UI
 #' boundary; the build and fill paths keep one current model contract.
 #' @noRd
-.workflow_payload_needs_fixes <- function(payload) {
+.workflow_payload_has_gaps <- function(payload) {
   gate <- payload$validation_gate
   isTRUE(payload$needs_fixes) ||
     isTRUE(gate$blocked) ||
-    identical(gate$status %||% "", "needs-fixes")
+    length(gate$gap_refs %||% character(0)) > 0 ||
+    identical(gate$status %||% "", "completed-with-gaps") ||
+    .workflow_payload_was_refused(payload)
+}
+
+#' TRUE only for a payload written by a release where a gap refused the run.
+#'
+#' `.validation_gate()` sets `blocked = FALSE` and
+#' `status = "completed-with-gaps"` for a gap-only event now, so neither marker
+#' can be produced by a current run -- which is what makes them a reliable
+#' signal that a payload is archived.
+#'
+#' The distinction drives the wording. A refused run really did skip its
+#' runnable outputs, and saying so is correct for that payload. A current run
+#' with gaps produced everything it could, and telling its author that outputs
+#' were skipped would simply be false.
+#' @noRd
+.workflow_payload_was_refused <- function(payload) {
+  gate <- payload$validation_gate
+  isTRUE(gate$blocked) || identical(gate$status %||% "", "needs-fixes")
 }
 
 #' The blocked validation gate, including its model findings.
 #' @noRd
 .workflow_validation_gate_ui <- function(payload) {
-  if (!.workflow_payload_needs_fixes(payload)) return(NULL)
+  if (!.workflow_payload_has_gaps(payload)) return(NULL)
 
   gate <- payload$validation_gate %||% list()
   findings <- gate$gaps %||% gate$blocking_findings
@@ -368,17 +387,33 @@ ars_workflow <- function(project_dir = NULL) {
     })
   }
 
+  refused <- .workflow_payload_was_refused(payload)
+
   shiny::div(
-    class = "alert alert-danger small mt-2 mb-2",
-    shiny::strong("NEEDS FIXES -- runnable outputs blocked."),
+    class = if (refused) {
+      "alert alert-danger small mt-2 mb-2"
+    } else {
+      "alert alert-warning small mt-2 mb-2"
+    },
+    shiny::strong(if (refused) {
+      "NEEDS FIXES -- runnable outputs blocked."
+    } else {
+      sprintf("COMPLETED WITH GAPS -- %d result%s reserved.",
+              length(refs), if (length(refs) == 1L) "" else "s")
+    }),
     shiny::p(
       class = "mb-1",
-      "ARS JSON and validation report were retained for review; runnable code, ARD, filled workbook, and fill debrief were skipped."
+      if (refused) {
+        "ARS JSON and validation report were retained for review; runnable code, ARD, filled workbook, and fill debrief were skipped."
+      } else {
+        "Every other result was produced. The findings below name the analyses reserved instead of computed -- repair them and re-run to fill those cells."
+      }
     ),
     if (!is.null(gate$summary) && nzchar(gate$summary)) {
       shiny::p(class = "mb-1", gate$summary)
     },
-    shiny::strong("Blocking model findings:"),
+    shiny::strong(if (refused) "Blocking model findings:"
+                  else "Reserved because of:"),
     if (length(finding_items) > 0L) {
       shiny::tags$ul(class = "mb-0", finding_items)
     } else {
@@ -427,11 +462,19 @@ ars_workflow <- function(project_dir = NULL) {
       text = paste("Build failed at", payload$failed_stage %||% "an early stage."),
       type = "warning"))
   }
-  if (.workflow_payload_needs_fixes(payload)) {
+  if (.workflow_payload_was_refused(payload)) {
     return(list(
       text = paste(
         "Build needs fixes -- the ARS JSON and validation report were retained;",
         "runnable outputs were skipped."
+      ),
+      type = "warning"))
+  }
+  if (.workflow_payload_has_gaps(payload)) {
+    return(list(
+      text = paste(
+        "Completed with gaps -- every output was produced except the results",
+        "the validation report names, which were reserved rather than guessed."
       ),
       type = "warning"))
   }
@@ -550,14 +593,37 @@ ars_workflow <- function(project_dir = NULL) {
 #' The one-line verdict on a run.
 #' @noRd
 .workflow_summary_ui <- function(payload) {
-  needs_fixes <- .workflow_payload_needs_fixes(payload)
-  status <- if (needs_fixes) "needs fixes" else payload$status %||% "success"
-  tone <- if (needs_fixes) {
+  ## A run that ERRORED is still an error, and stays red. Gaps describe a run
+  ## that finished; they must never repaint a failed one as merely incomplete,
+  ## which would be the worst kind of reassuring.
+  errored <- !is.null(payload$error) ||
+    identical(payload$status %||% "", "error")
+  refused <- !errored && .workflow_payload_was_refused(payload)
+  has_gaps <- !errored && !refused && .workflow_payload_has_gaps(payload)
+
+  ## "COMPLETED WITH GAPS", not "NEEDS FIXES": the run finished and produced
+  ## every result it could, and what is missing is named. Amber rather than red
+  ## because nothing was refused. An archived payload that WAS refused keeps
+  ## the old wording, because for that run it was true.
+  status <- if (refused) {
+    "needs fixes"
+  } else if (has_gaps) {
+    "completed with gaps"
+  } else {
+    payload$status %||% "success"
+  }
+  tone <- if (refused) {
     "alert-danger"
+  } else if (has_gaps) {
+    "alert-warning"
   } else {
     switch(status, success = "alert-success", partial = "alert-warning",
            "alert-danger")
   }
+  ## FAIL diagnostics, which is what this has always counted: run-time stage
+  ## failures as well as structural findings. Deliberately NOT relabelled as
+  ## reserved results -- the two are different populations, and the fix report
+  ## is where the reserved cells get enumerated.
   fails <- sum((payload$diagnostics$severity %||% character()) %in% "FAIL")
   seconds <- payload$timings$total %||% NA_real_
   shiny::div(

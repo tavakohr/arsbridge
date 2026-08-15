@@ -702,7 +702,7 @@ test_that("a grouping left fixed and childless says so, and offers the flip", {
   })
 })
 
-test_that("a fixed childless grouping cannot be saved", {
+test_that("a fixed childless grouping saves, and reserves what it feeds", {
   skip_if_not_installed("shiny")
   skip_if_not_installed("bslib")
   skip_if_not_installed("DT")
@@ -713,8 +713,11 @@ test_that("a fixed childless grouping cannot be saved", {
                                 "dataDriven", FALSE))
     .model_validation_gate(state$model(), state$spec, state$report)
   })
-  expect_true(gate$blocked)
-  expect_true("FIXED_GROUPING_EMPTY" %in% gate$blocking_refs)
+  ## The editor is how an author repairs this, so the save is allowed; what is
+  ## withheld is the analyses that resolve through the empty grouping.
+  expect_false(gate$blocked)
+  expect_true("FIXED_GROUPING_EMPTY" %in% gate$gap_refs)
+  expect_equal(gate$verdict, "COMPLETED WITH GAPS")
 })
 
 

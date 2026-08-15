@@ -103,7 +103,7 @@ test_that("the emitted deliverable script computes the same declared paths", {
   expect_length(unique(ard$result_group_id[!is.na(ard$result_group_id)]), 6L)
 })
 
-test_that("an unresolvable path declaration blocks execution instead of degrading", {
+test_that("an unresolvable path declaration reserves instead of degrading", {
   td <- withr::local_tempdir()
   .asym_adam(td)
   res <- .asym_build(td)
@@ -118,10 +118,25 @@ test_that("an unresolvable path declaration blocks execution instead of degradin
   broken_path <- file.path(td, "re_broken.json")
   jsonlite::write_json(event, broken_path, auto_unbox = TRUE, null = "null")
 
-  expect_error(
-    suppressMessages(suppressWarnings(ars_to_ard(broken_path, td))),
-    "GROUPING_VARIABLE_NOT_LINKED"
-  )
+  ## The run is no longer refused. The analyses whose declared paths name a
+  ## grouping that does not exist are reserved -- no number for them, and the
+  ## reason names the finding. Scoped to exactly those analyses: asserting over
+  ## the whole ARD would pass for the wrong reason the moment this fixture grew
+  ## an output the damage does not reach.
+  model <- ars_to_model(broken_path)
+  findings <- validate_ars_model(model)
+  expect_true("GROUPING_VARIABLE_NOT_LINKED" %in% findings$ref)
+  reserved <- names(
+    .reservations_from_findings(model, findings)$by_analysis)
+  expect_gt(length(reserved), 0L)
+
+  ard <- as.data.frame(suppressMessages(suppressWarnings(
+    ars_to_ard(broken_path, td))))
+  rows <- ard[ard$analysis_id %in% reserved, , drop = FALSE]
+  expect_gt(nrow(rows), 0L)
+  expect_false(any(rows$result_status %in% "computed"))
+  expect_true(any(grepl("GROUPING_VARIABLE_NOT_LINKED",
+                        rows$block_reason %||% character(0))))
 })
 
 test_that("the path-mode ARD renders with one ordered column per path", {

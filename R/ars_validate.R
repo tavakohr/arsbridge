@@ -1780,8 +1780,12 @@ validate_ars_model <- function(model, spec = NULL, report = NULL) {
   ]
   actions <- unique(actions)
 
-  blocked <- nrow(gaps) > 0L
-  summary <- if (blocked) {
+  has_gaps <- nrow(gaps) > 0L
+  ## Counts FINDINGS, and says so. How many RESULTS each one withholds is a
+  ## question about the model -- one finding can reach many analyses, or none
+  ## when nothing references the entity it names -- and this function has only
+  ## the findings.
+  summary <- if (has_gaps) {
     action_text <- if (length(actions) > 0L) {
       paste(actions, collapse = " ")
     } else {
@@ -1790,15 +1794,31 @@ validate_ars_model <- function(model, spec = NULL, report = NULL) {
     paste0(
       nrow(gaps), " gap finding",
       if (nrow(gaps) == 1L) "" else "s",
-      ". To fix: ", action_text
+      "; the results each one names are withheld. To fix: ", action_text
     )
   } else {
     "No gap findings. WARN and INFO findings remain available for review."
   }
 
   list(
-    blocked = blocked,
-    status = if (blocked) "needs-fixes" else "ready",
+    ## FALSE, always. A gap used to refuse the whole reporting event, so ten
+    ## sound outputs were withheld for one unresolvable row.
+    ##
+    ## What replaced it is not "nothing". Every path that turns an event into a
+    ## deliverable now reads the same reservation map and withholds the same
+    ## analyses: `ars_to_ard()` reserves before it reads any data,
+    ## `.emit_tlf_script()` emits a reservation instead of a calculation, and
+    ## the fill carries the ARD's own reason into the workbook. That the three
+    ## agree is asserted end to end, on a deliberately damaged event, in
+    ## `test-reserved_end_to_end.R`; that no finding code escapes the map is
+    ## asserted in `test-reservation_coverage.R`. Both run on every suite.
+    ##
+    ## Kept rather than deleted because archived payloads carry this field and
+    ## readers branch on it; a reader finding it FALSE draws the right
+    ## conclusion, which is that this run was not refused.
+    blocked = FALSE,
+    status = if (has_gaps) "completed-with-gaps" else "ready",
+    verdict = if (has_gaps) "COMPLETED WITH GAPS" else "DONE",
     findings = findings,
     gaps = gaps,
     gap_refs = refs,
@@ -1813,27 +1833,20 @@ validate_ars_model <- function(model, spec = NULL, report = NULL) {
   .validation_gate(validate_ars_model(model, spec = spec, report = report))
 }
 
-## Refuse to turn a structurally invalid event into a runnable artifact. This is
-## deliberately called at each direct execution boundary, not only by the
-## higher-level workflow, because these helpers are also callable on their own.
-#' @noRd
-.assert_runnable_ars <- function(ars) {
-  model <- if (inherits(ars, "ars_model")) ars else ars_to_model(ars)
-  gate <- .model_validation_gate(model)
-  if (!gate$blocked) return(invisible(gate))
-
-  refs <- if (length(gate$blocking_refs) > 0L) {
-    paste(gate$blocking_refs, collapse = ", ")
-  } else {
-    "unreferenced structural finding"
-  }
-  cli::cli_abort(c(
-    "This reporting event cannot be executed because structural validation failed.",
-    "x" = gate$summary,
-    "i" = paste("Blocking references:", refs),
-    "i" = "Repair the reporting event and validate it again before execution."
-  ))
-}
+## `.assert_runnable_ars()` used to stand here. It was called at each execution
+## boundary -- ars_to_ard(), write_tlf_code(), ars_fill_shell() -- and refused
+## the whole reporting event when any finding was FAIL, which is why one
+## unresolvable row cost ten sound outputs. All three call sites are gone, and
+## so is the helper; nothing in the package calls it.
+##
+## What replaced it is not a weaker version of the same thing: it is the same
+## guarantee applied to a cell instead of a run. Each of those three paths now
+## reads the same reservation map and withholds the same analyses --
+## `ars_to_ard()` before it reads any data, `.emit_tlf_script()` instead of
+## emitting a calculation, and the fill by carrying the ARD's own reason into
+## the workbook. That the three agree is asserted end to end on deliberately
+## damaged events in `test-reserved_end_to_end.R`, and that no finding code
+## escapes the map is asserted in `test-reservation_coverage.R`.
 
 ## Translate model findings into the workflow diagnostics contract without
 ## throwing away entity, id and field context.

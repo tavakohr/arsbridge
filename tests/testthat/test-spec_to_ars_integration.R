@@ -212,20 +212,20 @@ test_that("partially emitted scripts retain exact current-run provenance", {
 })
 
 
-test_that("a blocked reporting event keeps repair artifacts but emits no code", {
+test_that("a gapped reporting event keeps its artifacts and emits programs", {
   skip_if_not_installed("openxlsx2")
   td <- withr::local_tempdir()
   json_out <- file.path(td, "repairable.json")
   report_out <- file.path(td, "validation.xlsx")
   code_dir <- file.path(td, "code")
 
-  blocked <- .add_finding(
+  gapped <- .add_finding(
     .new_findings(), "GAP", "groupings", "GF_EMPTY", "groups",
     "This fixed grouping has no groups.", "Add groups or make it data-driven.",
     ref = "FIXED_GROUPING_EMPTY"
   )
   testthat::local_mocked_bindings(
-    validate_ars_model = function(model, spec = NULL, report = NULL) blocked,
+    validate_ars_model = function(model, spec = NULL, report = NULL) gapped,
     .package = "arsbridge"
   )
 
@@ -238,21 +238,30 @@ test_that("a blocked reporting event keeps repair artifacts but emits no code", 
       output_path    = json_out,
       report_path    = report_out,
       code_dir       = code_dir,
-      ## Emission is asked for, so "the blocked gate emitted nothing" stays a
-      ## real assertion rather than passing because nothing would emit anyway.
+      ## Emission is asked for, so the assertions below are about what the
+      ## emitter DID, rather than passing because nothing would emit anyway.
       emit_code      = TRUE,
       validate       = FALSE,
       verbose        = FALSE
     ))
   )
 
-  expect_true(res$validation_gate$blocked)
-  expect_equal(res$validation_gate$blocking_refs, "FIXED_GROUPING_EMPTY")
-  expect_equal(res$ars_validation, blocked)
+  ## The gap is reported and nothing is refused: the repair artifacts are kept
+  ## as before, and the programs are written too. Withholding them would have
+  ## withheld every sound output's program along with the one that cannot
+  ## resolve.
+  expect_false(res$validation_gate$blocked)
+  expect_equal(res$validation_gate$gap_refs, "FIXED_GROUPING_EMPTY")
+  expect_equal(res$validation_gate$verdict, "COMPLETED WITH GAPS")
+  expect_equal(res$ars_validation, gapped)
   expect_true(file.exists(json_out))
   expect_true(file.exists(report_out))
-  expect_length(res$code_paths, 0L)
-  expect_false(dir.exists(code_dir))
+
+  ## Programs really were emitted -- files on disk, not merely a directory.
+  ## A directory check alone would pass on an emitter that wrote nothing.
+  expect_gt(length(res$code_paths), 0L)
+  expect_true(all(file.exists(res$code_paths)))
+  expect_gt(length(list.files(code_dir, pattern = "\\.R$")), 0L)
   expect_true("ARS validation" %in%
                 unname(openxlsx2::wb_get_sheet_names(openxlsx2::wb_load(report_out))))
 })

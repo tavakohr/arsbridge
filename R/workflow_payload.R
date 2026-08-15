@@ -303,11 +303,26 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
       !is.na(code_paths) & file.exists(code_paths)
     ]
   }
-  needs_fixes <- isTRUE(validation_gate$blocked)
+  ## "Has gaps", not "needs fixes before anything may run". `.validation_gate()`
+  ## sets blocked = FALSE and status = "completed-with-gaps" for a gap-only
+  ## event, so the gaps have to be read from `gap_refs` -- reading `blocked`
+  ## here would now report every run as clean.
+  ## `blocked` is FALSE for every gate this release produces, so in practice
+  ## this reads `gap_refs`. It is kept in the disjunction so a payload built by
+  ## a release that DID refuse still reports itself as needing fixes rather
+  ## than as a clean run.
+  has_gaps <- isTRUE(validation_gate$blocked) ||
+    length(validation_gate$gap_refs %||% character(0)) > 0
+  needs_fixes <- has_gaps
 
   ## 2. The results. Skipped, and said so, when there is no data to run
   ##    against -- which is a normal way to use the build, not an error.
-  if (is.null(failure) && !needs_fixes) {
+  ##
+  ##    Gaps no longer skip this stage; they reserve their own analyses inside
+  ##    it. The `blocked` guard is kept rather than dropped: it is FALSE for
+  ##    every gap, so it no longer withholds the stage, but if anything ever
+  ##    sets it the stage stays skipped rather than running unprotected.
+  if (is.null(failure) && !isTRUE(validation_gate$blocked)) {
     if (is.null(adam_dir) || !nzchar(adam_dir) || !dir.exists(adam_dir)) {
       diagnostics <- rbind(diagnostics, data.frame(
         stage = "execute_ard", severity = "INFO", input = INPUT_DATA,

@@ -100,7 +100,7 @@ test_that("writing to a new path makes no backup", {
   expect_equal(length(list.files(dir, pattern = "\\.bak-")), 0)
 })
 
-test_that("a blocked explicit save leaves the file and autosave untouched", {
+test_that("a save with gaps writes the file and keeps the recovery copy", {
   dir <- withr::local_tempdir()
   path <- .edit_fixture_copy(dir)
   before <- readBin(path, what = "raw", n = file.info(path)$size)
@@ -120,19 +120,28 @@ test_that("a blocked explicit save leaves the file and autosave untouched", {
     source_path = path
   )
 
-  blocked <- suppressMessages(.edit_ars_finish(result, path))
+  saved <- suppressMessages(.edit_ars_finish(result, path))
 
-  expect_false(blocked$saved)
-  expect_true(blocked$validation_gate$blocked)
-  expect_identical(
+  ## The editor is the tool for REPAIRING an event with gaps, so refusing to
+  ## save until the gaps were gone meant a partial repair could not be kept.
+  ## The save now succeeds, and the gap travels with the file.
+  expect_identical(saved, path)
+  gate <- .model_validation_gate(ars_to_model(path))
+  expect_false(gate$blocked)
+  expect_true("METHOD_NOT_ASSIGNED" %in% gate$gap_refs)
+
+  ## The file really was rewritten -- not "reported as saved" while unchanged.
+  expect_false(identical(
     readBin(path, what = "raw", n = file.info(path)$size),
     before
-  )
-  expect_identical(
-    readBin(autosave_path, what = "raw", n = file.info(autosave_path)$size),
-    autosave_before
-  )
-  expect_length(list.files(dir, pattern = "\\.bak-|\\.tmp$|\\.edits\\.json$"), 0L)
+  ))
+
+  ## And the crash-recovery copy is cleared, because the work is on disk now.
+  ## Leaving it would offer stale changes back on the next open.
+  expect_null(.read_autosave(path))
+
+  ## No scratch left behind by the atomic write.
+  expect_length(list.files(dir, pattern = "\\.tmp$"), 0L)
 })
 
 test_that("the temporary file used for the atomic write is not left behind", {

@@ -104,23 +104,36 @@ test_that("every explicit save confirmation revalidates the current model", {
     .package = "shiny"
   )
 
+  ## What "revalidates" means changed with the reservation work. It used to
+  ## mean the save was refused on the strength of the CURRENT model rather than
+  ## the stale clean snapshot. Saves are no longer refused -- the editor is how
+  ## an author repairs an event, and refusing to persist a partial repair was
+  ## the worst place for a refusal to sit -- so the observable proof is that
+  ## the confirmation replaced the stale findings with the current model's.
+  ## Trusting the snapshot would leave the panel clean.
   shiny::testServer(arsbridge:::mod_save_server, args = list(state = state), {
     suppressMessages(session$setInputs(confirm_save_stay = 1))
-    expect_identical(
+
+    ## Revalidated: the gap the stale snapshot did not have is now reported.
+    refreshed <- state$findings()
+    expect_true("METHOD_NOT_ASSIGNED" %in% refreshed$ref)
+    expect_true(any(refreshed$severity %in% "GAP"))
+
+    ## And the save really happened, rather than being silently skipped.
+    expect_false(identical(
       readBin(source_path, what = "raw", n = file.info(source_path)$size),
       before
-    )
-    expect_identical(nrow(state$edit_log()), 1L)
+    ))
 
-    copy_path <- file.path(td, "blocked_copy.json")
+    copy_path <- file.path(td, "gapped_copy.json")
     suppressMessages(session$setInputs(save_as_path = copy_path,
                                        confirm_save_as = 1))
-    expect_false(file.exists(copy_path))
+    expect_true(file.exists(copy_path))
 
+    ## Save-and-close now closes, because the save succeeded. It used to be
+    ## held open by the refusal.
     suppressMessages(session$setInputs(confirm_save = 1))
-    expect_false(stop_called)
-    expect_false(session$.__enclos_env__$private$was_closed)
-    expect_false(is.null(.read_autosave(source_path)))
+    expect_true(stop_called)
   })
 })
 

@@ -146,7 +146,15 @@ test_that("a run without data builds the ARS and says why it stopped there", {
   expect_equal(p$status, "success")
 })
 
-test_that("a blocked build needs fixes and reports only this run's artifacts", {
+test_that("an archived refused build still reports only this run's artifacts", {
+  ## The gate below is hand-built in the shape a release that REFUSED gap
+  ## events produced: blocked = TRUE, status "needs-fixes". No current run can
+  ## produce it -- `.validation_gate()` sets blocked = FALSE for every gap --
+  ## so this is the archived-payload path, and it must keep behaving as it did:
+  ## the stages stay skipped and stale artifacts on disk are not claimed as
+  ## this run's.
+  ##
+  ## The current shape is covered by the test that follows.
   output_dir <- withr::local_tempdir()
   paths <- list(
     code_dir = file.path(output_dir, "code"),
@@ -212,6 +220,72 @@ test_that("a blocked build needs fixes and reports only this run's artifacts", {
   )]))))
   expect_true(any(p$diagnostics$stage == "validate_ars" &
                     p$diagnostics$severity == "FAIL"))
+})
+
+test_that("a gapped build runs its stages instead of skipping them", {
+  ## The current gate shape: nothing refused, gaps named. This is the half of
+  ## the change that matters -- the results stage used to be skipped whenever
+  ## the gate said so, which is how one unresolvable row cost the ARD and the
+  ## workbook for every sound output on the event.
+  output_dir <- withr::local_tempdir()
+
+  findings <- .add_finding(
+    .new_findings(), "GAP", "groupings", "GF_EMPTY", "groups",
+    "This fixed grouping has no groups.", "Add groups or make it data-driven.",
+    ref = "FIXED_GROUPING_EMPTY"
+  )
+  gate <- .validation_gate(findings)
+  ## Guard the premise: if this ever came back blocked, the assertions below
+  ## would be testing the archived path again without saying so.
+  expect_false(gate$blocked)
+  expect_equal(gate$status, "completed-with-gaps")
+
+  ard_ran <- FALSE
+  fill_ran <- FALSE
+  testthat::local_mocked_bindings(
+    spec_to_ars = function(shell_path, adam_spec_path, output_path, report_path,
+                           code_dir, ...) {
+      writeLines("{}", output_path)
+      writeLines("validation", report_path)
+      dir.create(code_dir, recursive = TRUE, showWarnings = FALSE)
+      script <- file.path(code_dir, "T_01.R")
+      writeLines("# emitted", script)
+      list(
+        ars_path = output_path,
+        report_path = report_path,
+        code_dir = code_dir,
+        code_paths = script,
+        validation_gate = gate,
+        ars_validation = findings
+      )
+    },
+    ars_to_ard = function(...) {
+      ard_ran <<- TRUE
+      stop("stop here: reaching this proves the stage was not skipped")
+    },
+    .package = "arsbridge"
+  )
+
+  p <- ars_workflow_run(
+    shell_path = SHELL_X,
+    adam_spec_path = SPEC_X,
+    adam_dir = ADAM_X,
+    output_dir = output_dir
+  )
+
+  ## The point of the test: the results stage was entered.
+  expect_true(ard_ran)
+  expect_false(fill_ran)
+
+  ## And the gaps are reported rather than silently swallowed.
+  expect_true(p$needs_fixes)
+  expect_false(p$validation_gate$blocked)
+  expect_equal(p$validation_gate$verdict, "COMPLETED WITH GAPS")
+
+  ## The build's own artifacts are still reported, which is what "produce
+  ## everything you can" means in practice.
+  expect_true(file.exists(p$artifacts$ars_json))
+  expect_true(file.exists(p$artifacts$validation_report))
 })
 
 test_that("a successful rebuild reports only scripts written by this run", {
