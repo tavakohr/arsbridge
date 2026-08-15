@@ -341,6 +341,9 @@ ars_workflow <- function(project_dir = NULL) {
     context <- unlist(findings[i, c("entity", "id", "field"), drop = FALSE],
                       use.names = FALSE)
     context <- context[!is.na(context) & nzchar(context)]
+    ## Every validator finding now carries a registered code
+    ## (.VALIDATION_REFS), but an archived payload from before that change --
+    ## or a findings frame from another tool -- may not.
     ref <- findings$ref[i]
     if (is.na(ref) || !nzchar(ref)) ref <- "UNREFERENCED_FINDING"
 

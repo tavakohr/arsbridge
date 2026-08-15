@@ -97,12 +97,12 @@ mod_validation_server <- function(id, state, parent_session = NULL) {
       if (nrow(row) == 0) return()
 
       if (.is_gap_finding(row) && identical(state$mode, "edit")) {
-        parts <- .split_variable_ref(row$ref)
+        parts <- .split_variable_ref(row$detail)
         state$add_request(.add_request(
           output_id  = row$id,
           dataset    = parts$dataset,
           variable   = parts$variable,
-          annotation = row$ref
+          annotation = row$detail
         ))
         return()
       }
@@ -173,10 +173,13 @@ mod_validation_server <- function(id, state, parent_session = NULL) {
 ## A gap is the one finding that names something that should exist but does
 ## not, so it is the one the app can act on directly.
 #' @noRd
+## A gap finding says the shell annotated a line no analysis covers, and it
+## carries the variable the shell named -- enough to offer "add that analysis,
+## pre-filled". Keyed on the code rather than on the entity/field pair it used
+## to be inferred from, so a future finding on the same entity cannot be
+## mistaken for one.
 .is_gap_finding <- function(row) {
-  identical(row$entity, "outputs") &&
-    identical(row$field, "analyses") &&
-    !is.na(row$ref)
+  identical(row$ref, "SHELL_LINE_NOT_ANALYSED") && !is.na(row$detail)
 }
 
 

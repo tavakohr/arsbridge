@@ -417,11 +417,13 @@ test_that("a gap finding carries the variable it is about", {
   gap <- findings[findings$field == "analyses", ]
 
   expect_gt(nrow(gap), 0)
-  expect_equal(gap$ref[1], "ADSL.SEX")
+  ## `ref` says what KIND of finding this is; `detail` carries its payload.
+  expect_equal(gap$ref[1], "SHELL_LINE_NOT_ANALYSED")
+  expect_equal(gap$detail[1], "ADSL.SEX")
   expect_true(.is_gap_finding(gap[1, , drop = FALSE]))
 
   ## Which is what lets the wizard open pre-filled.
-  parts <- .split_variable_ref(gap$ref[1])
+  parts <- .split_variable_ref(gap$detail[1])
   expect_equal(parts$dataset, "ADSL")
   expect_equal(parts$variable, "SEX")
 })

@@ -37,6 +37,70 @@
 .SEMANTIC_SOURCE_REF <- "SEMANTIC_SOURCE_NOT_DECLARED"
 .UNRESOLVED_ROLE_REF <- "UNRESOLVED_VARIABLE_ROLE"
 
+## Every code `validate_ars_model()` may emit, in one place.
+##
+## A finding's `ref` is what the rest of the package joins on: which scope a
+## defect invalidates, which cells the engine must reserve, which fix to offer
+## the author. Matching any of that on the finding's `problem` text would tie
+## behaviour to display wording -- the same mistake `.check_semantic_source()`
+## exists to police -- so `ref` is a closed vocabulary and `.add_finding()`
+## refuses a code that is not listed here.
+##
+## The practical effect: a new check cannot ship without registering its code,
+## and nothing downstream can silently ignore a code it has no handling for.
+.VALIDATION_REFS <- c(
+  ## Identity and references -- the event does not resolve against itself.
+  "ENTITY_ID_MISSING",
+  "ENTITY_ID_DUPLICATED",
+  "METHOD_REF_UNRESOLVED",
+  "ANALYSIS_SET_REF_UNRESOLVED",
+  "DATA_SUBSET_REF_UNRESOLVED",
+  "GROUPING_REF_UNRESOLVED",
+  "ANALYSIS_REF_UNRESOLVED",
+  "ANALYSIS_NOT_DISPLAYED",
+  "OUTPUT_HAS_NO_ANALYSES",
+  "CONTENTS_ANALYSIS_STALE",
+  "CONTENTS_OUTPUT_STALE",
+
+  ## Semantics -- the analysis computes something other than what it declared.
+  .SEMANTIC_SOURCE_REF,
+  .UNRESOLVED_ROLE_REF,
+
+  ## Groupings and the column axis.
+  "GROUPING_DATASET_CONFLICT",
+  "FIXED_GROUPING_EMPTY",
+  "GROUPING_VARIABLE_NOT_LINKED",
+  "GROUPING_ORDER_AMBIGUOUS",
+  "FLAT_AXIS_COLUMN_COUNT_MISMATCH",
+  "FLAT_AXIS_COLUMN_LABEL_MISMATCH",
+
+  ## Methods -- what the row shows against what the method computes.
+  "METHOD_NOT_ASSIGNED",
+  "METHOD_PLACEHOLDER_SLOT_MISMATCH",
+  "METHOD_STRATA_MISSING",
+  "METHOD_NOT_EXECUTABLE",
+  "METHOD_FALLBACK_SUMMARIZER",
+  "METHOD_CONDITIONAL",
+
+  ## Nested displays and declared result paths.
+  "NESTED_CHILD_UNLINKED",
+  "NESTED_GROUPING_MISSING",
+  "HEADER_TREE_MISSING",
+  "DISPLAY_COLUMN_COUNT_MISMATCH",
+  "UNMAPPED_LEAF_COLUMN",
+  "INVALID_CARTESIAN_PRODUCT",
+  "SUBTOTAL_SCOPE_UNDEFINED",
+  "SUBTOTAL_EXCLUDES_UNDISPLAYED_CATEGORIES",
+  "DUPLICATE_RESULT_PATH",
+
+  ## The shell and the ADaM spec.
+  "SHELL_LINE_NOT_ANALYSED",
+  "POPULATION_NOT_PARSED",
+  "DATASET_NOT_IN_SPEC",
+  "VARIABLE_NOT_IN_SPEC",
+  "SEPARATOR_IN_CONDITION_VALUE"
+)
+
 #' An analysis's annotation as plain text, with "absent" spelled one way.
 #'
 #' `annotation` is an arsbridge extension: an ARS written by another tool
@@ -300,16 +364,32 @@
     problem  = character(0),
     action   = character(0),
     ref      = character(0),
+    detail   = character(0),
     stringsAsFactors = FALSE
   )
 }
 
-## `ref` carries whatever the finding is about in machine-readable form -- a
-## DATASET.VARIABLE for a gap, for instance -- so the editor can act on a
-## finding rather than only describe it.
+## `ref` names WHAT KIND of defect this is, from the closed vocabulary in
+## `.VALIDATION_REFS`. `detail` carries the finding's own machine-readable
+## payload where it has one -- a DATASET.VARIABLE for a shell line no analysis
+## covers, say -- so the editor can act on a finding rather than only describe
+## it.
+##
+## The two were one field until the reservation work needed to join on the
+## code: a column that is sometimes a code and sometimes a variable name cannot
+## be a reliable key, and the gap findings that carried a payload were silently
+## outside every code-matching branch in the package.
 #' @noRd
 .add_finding <- function(findings, severity, entity, id, field, problem,
-                         action, ref = NA_character_) {
+                         action, ref, detail = NA_character_) {
+  if (!ref %in% .VALIDATION_REFS) {
+    cli::cli_abort(c(
+      "Finding code {.val {ref}} is not registered.",
+      "i" = paste("Add it to {.code .VALIDATION_REFS} so the rest of the",
+                  "package can act on it.")
+    ))
+  }
+
   rbind(findings, data.frame(
     severity = severity,
     entity   = entity,
@@ -318,6 +398,7 @@
     problem  = problem,
     action   = action,
     ref      = ref,
+    detail   = detail,
     stringsAsFactors = FALSE
   ))
 }
@@ -387,7 +468,8 @@
       findings <- .add_finding(
         findings, "FAIL", pool, paste0("row ", i), "id",
         paste0("This ", labels[[pool]], " has no id."),
-        "Give it a unique id -- every reference in the event resolves by id."
+        "Give it a unique id -- every reference in the event resolves by id.",
+        ref = "ENTITY_ID_MISSING"
       )
     }
 
@@ -396,7 +478,8 @@
       findings <- .add_finding(
         findings, "FAIL", pool, dup, "id",
         paste0("Id ", dup, " is used by more than one ", labels[[pool]], "."),
-        "Make each id unique -- references to it are ambiguous."
+        "Make each id unique -- references to it are ambiguous.",
+        ref = "ENTITY_ID_DUPLICATED"
       )
     }
   }
@@ -411,11 +494,11 @@
   ## Shared entities referenced by each analysis.
   reference_checks <- list(
     list(column = "methodId",      pool = "methods",
-         what = "method"),
+         what = "method",       ref = "METHOD_REF_UNRESOLVED"),
     list(column = "analysisSetId", pool = "analysis_sets",
-         what = "analysis set"),
+         what = "analysis set", ref = "ANALYSIS_SET_REF_UNRESOLVED"),
     list(column = "dataSubsetId",  pool = "data_subsets",
-         what = "data subset")
+         what = "data subset",  ref = "DATA_SUBSET_REF_UNRESOLVED")
   )
 
   for (check in reference_checks) {
@@ -433,7 +516,8 @@
         paste0("References ", check$what, " ", value,
                ", which is not in the reporting event."),
         paste0("Point it at an existing ", check$what,
-               ", or add ", value, " to the ", check$what, " pool.")
+               ", or add ", value, " to the ", check$what, " pool."),
+        ref = check$ref
       )
     }
   }
@@ -447,7 +531,8 @@
         findings, "FAIL", "analyses", analyses$id[i], "grouping_ids",
         paste0("References grouping ", grouping_id,
                ", which is not in the reporting event."),
-        "Point it at an existing grouping, or add that grouping."
+        "Point it at an existing grouping, or add that grouping.",
+        ref = "GROUPING_REF_UNRESOLVED"
       )
     }
   }
@@ -464,7 +549,8 @@
         "referenced_analysis_ids",
         paste0("References analysis ", analysis_id,
                ", which is not in the reporting event."),
-        "Remove the reference, or add the analysis it points at."
+        "Remove the reference, or add the analysis it points at.",
+        ref = "ANALYSIS_REF_UNRESOLVED"
       )
     }
   }
@@ -473,7 +559,8 @@
     findings <- .add_finding(
       findings, "WARN", "analyses", analysis_id, "output_id",
       "No output references this analysis, so nothing will display it.",
-      "Add it to an output's analysis list, or delete it."
+      "Add it to an output's analysis list, or delete it.",
+      ref = "ANALYSIS_NOT_DISPLAYED"
     )
   }
 
@@ -488,7 +575,8 @@
       findings, "WARN", "outputs", model$outputs$id[i],
       "referenced_analysis_ids",
       "This output has no analyses, so it would render empty.",
-      "Add the analyses it should display, or drop the output."
+      "Add the analyses it should display, or drop the output.",
+      ref = "OUTPUT_HAS_NO_ANALYSES"
     )
   }
 
@@ -500,7 +588,8 @@
       findings, "WARN", "contents", analysis_id, "mainListOfContents",
       paste0("The table of contents lists analysis ", analysis_id,
              ", which is not in the reporting event."),
-      "Saving after any structural change rebuilds the contents lists."
+      "Saving after any structural change rebuilds the contents lists.",
+      ref = "CONTENTS_ANALYSIS_STALE"
     )
   }
   for (output_id in setdiff(contents$outputs, model$outputs$id)) {
@@ -508,7 +597,8 @@
       findings, "WARN", "contents", output_id, "listOfContents",
       paste0("The table of contents lists output ", output_id,
              ", which is not in the reporting event."),
-      "Saving after any structural change rebuilds the contents lists."
+      "Saving after any structural change rebuilds the contents lists.",
+      ref = "CONTENTS_OUTPUT_STALE"
     )
   }
 
@@ -534,7 +624,8 @@
       findings, "FAIL", "groupings", groupings$id[i], "groupingDataset",
       paste0("groupingDataset says ", resolved$flat,
              " but groupingVariable.dataset says ", resolved$nested, "."),
-      "Make the two agree -- they decide which frame the denominator comes from."
+      "Make the two agree -- they decide which frame the denominator comes from.",
+      ref = "GROUPING_DATASET_CONFLICT"
     )
   }
 
@@ -859,34 +950,39 @@
       findings <- .add_finding(
         findings, "FAIL", "analyses", analyses$id[i], "methodId",
         "No method is assigned, so this analysis cannot be executed.",
-        "Assign a method -- the engine computes results from it."
+        "Assign a method -- the engine computes results from it.",
+        ref = "METHOD_NOT_ASSIGNED"
       )
     } else if (identical(class, "blocked")) {
       findings <- .add_finding(
         findings, "WARN", "analyses", analyses$id[i], "strata",
         "A CMH test needs a stratification variable, and none is set.",
-        "Set the stratification variable, or the engine reserves an empty cell."
+        "Set the stratification variable, or the engine reserves an empty cell.",
+        ref = "METHOD_STRATA_MISSING"
       )
     } else if (identical(class, "unsupported")) {
       findings <- .add_finding(
         findings, "WARN", "analyses", analyses$id[i], "methodId",
         paste0("Method ", method_id,
                " has no executor, so the engine reserves an empty cell."),
-        "Plan to compute this result manually, or choose an executable method."
+        "Plan to compute this result manually, or choose an executable method.",
+        ref = "METHOD_NOT_EXECUTABLE"
       )
     } else if (identical(class, "fallback")) {
       findings <- .add_finding(
         findings, "WARN", "analyses", analyses$id[i], "methodId",
         paste0("Method ", method_id,
                " has no executor; the generic summarizer runs instead."),
-        "Check the result is what the shell asks for, or change the method."
+        "Check the result is what the shell asks for, or change the method.",
+        ref = "METHOD_FALLBACK_SUMMARIZER"
       )
     } else if (identical(class, "conditional")) {
       findings <- .add_finding(
         findings, "INFO", "analyses", analyses$id[i], "methodId",
         paste0("Method ", method_id,
                " executes only when its prerequisites are met."),
-        "No action needed if the required package and operands are present."
+        "No action needed if the required package and operands are present.",
+        ref = "METHOD_CONDITIONAL"
       )
     }
   }
@@ -906,7 +1002,8 @@
       findings, "WARN", "analysis_sets", sets$id[i], "annotationText",
       paste0("The population \"", sets$annotationText[i],
              "\" was not parsed into a condition, so it filters nothing."),
-      "Express it as a condition, or confirm the analysis is unfiltered."
+      "Express it as a condition, or confirm the analysis is unfiltered.",
+      ref = "POPULATION_NOT_PARSED"
     )
   }
   findings
@@ -928,7 +1025,8 @@
         findings, "INFO", pool, df$id[i], "condition_value",
         paste0("A condition value contains a semicolon, which the editor ",
                "uses to separate values."),
-        "Edit this condition through the raw-JSON escape hatch instead."
+        "Edit this condition through the raw-JSON escape hatch instead.",
+        ref = "SEPARATOR_IN_CONDITION_VALUE"
       )
     }
   }
@@ -950,7 +1048,8 @@
       return(.add_finding(
         findings, "FAIL", entity, id, field,
         paste0("Dataset ", dataset, " is not in the ADaM spec."),
-        "Correct the dataset, or add it to the spec."
+        "Correct the dataset, or add it to the spec.",
+        ref = "DATASET_NOT_IN_SPEC", detail = dataset
       ))
     }
     if (is.na(variable) || !nzchar(variable)) return(findings)
@@ -961,7 +1060,8 @@
     .add_finding(
       findings, "WARN", entity, id, field,
       paste0("Variable ", key, " is not in the ADaM spec."),
-      "Correct the variable, or confirm it is derived downstream."
+      "Correct the variable, or confirm it is derived downstream.",
+      ref = "VARIABLE_NOT_IN_SPEC", detail = key
     )
   }
 
@@ -1099,7 +1199,7 @@
       paste0("The shell annotates \"", described, "\" (", variable_ref,
              ") but no analysis in this output uses that variable."),
       "Add the missing analysis, or confirm the line is not an analysis.",
-      ref = variable_ref
+      ref = "SHELL_LINE_NOT_ANALYSED", detail = variable_ref
     )
   }
 

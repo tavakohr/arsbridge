@@ -25,10 +25,45 @@ test_that("the generated fixture has no blocking findings", {
   expect_s3_class(findings, "data.frame")
   expect_equal(
     names(findings),
-    c("severity", "entity", "id", "field", "problem", "action", "ref")
+    c("severity", "entity", "id", "field", "problem", "action", "ref",
+      "detail")
   )
   expect_equal(sum(findings$severity == "FAIL"), 0)
   expect_true(all(findings$severity %in% c("FAIL", "WARN", "INFO")))
+})
+
+
+## The rest of the package joins on `ref` -- which scope a defect invalidates,
+## which cells to reserve, which fix to offer. That only holds if `ref` is a
+## closed vocabulary, so these two tests are the contract: nothing escapes the
+## registry, and nothing in the registry is a display string in disguise.
+
+test_that("every finding carries a code from the registry", {
+  models <- list(.ars_validate_model(), .ars_validate_legacy_model())
+
+  checked <- 0L
+  for (model in models) {
+    findings <- validate_ars_model(model)
+    checked <- checked + nrow(findings)
+    expect_true(all(findings$ref %in% .VALIDATION_REFS))
+    expect_false(any(is.na(findings$ref)))
+  }
+
+  ## Non-vacuity: a run that produced no findings would pass the loop above
+  ## while asserting nothing.
+  expect_gt(checked, 5L)
+})
+
+test_that("an unregistered code is refused rather than recorded", {
+  expect_error(
+    .add_finding(.new_findings(), "FAIL", "analyses", "AN_X", "methodId",
+                 "problem", "action", ref = "NOT_A_REGISTERED_CODE"),
+    "not registered"
+  )
+})
+
+test_that("the registry has no duplicates", {
+  expect_equal(anyDuplicated(.VALIDATION_REFS), 0L)
 })
 
 test_that("a legacy fixed grouping with no groups is a blocker", {
@@ -429,10 +464,10 @@ test_that("the validation gate blocks only FAIL findings", {
   findings <- rbind(
     .add_finding(.new_findings(), "WARN", "analyses", "AN_WARN",
                  "methodId", "Review this method.", "Choose a native method.",
-                 ref = "WARN_REF"),
+                 ref = "METHOD_FALLBACK_SUMMARIZER"),
     .add_finding(.new_findings(), "INFO", "outputs", "OUT_INFO",
                  "columns", "This is informational.", "No action needed.",
-                 ref = "INFO_REF")
+                 ref = "METHOD_CONDITIONAL")
   )
 
   review_gate <- .validation_gate(findings)
