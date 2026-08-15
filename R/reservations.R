@@ -100,21 +100,31 @@
 #' match. `cell` findings reserve nothing here either -- the fill refuses that
 #' one cell, and the analysis's other cells are sound.
 #'
-#' @return list(by_analysis = named list). Each entry is
-#'   list(ref, scope, reason), keyed by analysis id.
+#' @return list(by_analysis, by_finding).
+#'
+#'   `by_analysis` is what the engine reads: one entry per reserved analysis,
+#'   `list(ref, scope, reason)`, keyed by analysis id.
+#'
+#'   `by_finding` is the provenance, keyed by the finding's row number as a
+#'   string: the analyses THAT finding reached, before the first-finding-wins
+#'   dedup below. It exists because `by_analysis` cannot answer "did finding N
+#'   reserve anything?" -- two findings reaching the same analysis leave only
+#'   one entry, so a non-empty map is no evidence that every finding in it was
+#'   enforced. `.model_validation_gate()` needs exactly that per-finding answer
+#'   before it can say the run is safe to continue.
 #' @noRd
 .reservations_from_findings <- function(model, findings) {
-  empty <- list(by_analysis = list())
+  empty <- list(by_analysis = list(), by_finding = list())
   if (is.null(findings) || nrow(findings) == 0) return(empty)
   if (is.null(model$analyses) || nrow(model$analyses) == 0) return(empty)
 
   ## Only these scopes withhold a result. The rest are reported and no more.
-  reserving <- c("analysis", "grouping", "output", "event")
   scope <- findings$scope %||% rep(NA_character_, nrow(findings))
-  rows <- which(!is.na(scope) & scope %in% reserving)
+  rows <- which(!is.na(scope) & scope %in% .RESERVING_SCOPES)
   if (length(rows) == 0) return(empty)
 
   by_analysis <- list()
+  by_finding <- list()   # provenance, keyed by finding row number
   for (i in rows) {
     ## analysis / grouping / output findings name an entity, and the
     ## reservation covers whatever computes through it.
@@ -135,6 +145,11 @@
       affected <- .all_analysis_ids(model)
     }
 
+    ## Recorded BEFORE the dedup below, so it says what this finding reached
+    ## rather than what it happened to claim first. `by_finding` is initialised
+    ## alongside `by_analysis` above.
+    by_finding[[as.character(i)]] <- affected
+
     for (analysis_id in affected) {
       ## First finding wins. A second reason for an already-reserved analysis
       ## changes nothing about the outcome, and one cause per reserved cell
@@ -148,7 +163,7 @@
     }
   }
 
-  list(by_analysis = by_analysis)
+  list(by_analysis = by_analysis, by_finding = by_finding)
 }
 
 #' The block signal for a structural defect.

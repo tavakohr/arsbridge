@@ -121,6 +121,13 @@
 .FINDING_SCOPES <- c("advisory", "cell", "analysis", "grouping", "output",
                      "event")
 
+## The scopes that withhold a result. `advisory` findings are reported and no
+## more; a `cell` finding is refused by the fill, one cell at a time. Named here
+## rather than inside `.reservations_from_findings()` because the gate has to
+## ask the same question the map answers -- "should this finding have reserved
+## something?" -- and two copies of that list would eventually disagree.
+.RESERVING_SCOPES <- c("analysis", "grouping", "output", "event")
+
 ## The severities a FINDING may carry.
 ##
 ##   GAP   a specific result will not be produced, and the run has reserved it
