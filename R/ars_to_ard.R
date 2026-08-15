@@ -467,7 +467,12 @@
 ## reported by group. Returns a `card`, or NULL if nothing to reserve.
 #' @noRd
 .stub_ard_for_method <- function(res, method_id, df, by, var) {
-  desc  <- .UNEXECUTABLE_METHODS[[method_id]]
+  ## A method arsbridge knows it cannot execute has a descriptor saying which
+  ## statistics to reserve. A method the EVENT declares it cannot compute may
+  ## be one arsbridge has never seen, so there is no descriptor to read: it
+  ## reserves one cell, under the name both sides of the fill agree on.
+  desc  <- .UNEXECUTABLE_METHODS[[method_id]] %||%
+    list(stats = .MANUAL_STAT_NAME, by_group = FALSE)
   proto <- .ard_schema_proto()
   by1   <- if (!is.null(by) && length(by) && by[1] %in% names(df))
     by[1] else NA_character_
@@ -999,6 +1004,9 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
   n_selected    <- 0L   # how many analyses passed the user's id selection
   n_walked      <- 0L   # progress ticks count every analysis, skips included
   ard_list <- list()
+  ## Methods this reporting event declares produce no computable result.
+  declared_unsupported <- .reserved_method_ids(spec)
+
   for (ana in spec[["analyses"]]) {
     ## Finished count, then the label of the analysis now running -- see the
     ## same pattern in ars_fill_shell(). An analysis reads its ADaM datasets,
@@ -1269,7 +1277,14 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     ## all-missing data check -- it needs no tabulable values.
     exec_desc <- .EXEC_DESCRIPTORS[[method_id]]
     is_exec   <- !is.null(exec_desc) && isTRUE(exec_desc$available(res))
-    is_stub   <- (method_id %in% names(.UNEXECUTABLE_METHODS)) && !is_exec
+    ## Two ways a method is known not to compute: arsbridge's own registry of
+    ## unexecutable methods, and the event's own `supported = FALSE`
+    ## declaration. The second matters because the registry is a fixed list of
+    ## arsbridge's ids -- without it a reporting event written elsewhere, which
+    ## has said in its own file that a method computes nothing, falls through
+    ## to the generic summarizer below and gets a number nobody asked for.
+    is_stub   <- (method_id %in% names(.UNEXECUTABLE_METHODS) ||
+                    method_id %in% declared_unsupported) && !is_exec
     if (!is_stub && !is_exec && is.null(.ARD_EXECUTORS[[method_id]])) {
       is_num <- is.numeric(df_filtered[[analysis_var]])
       method_actual <- if (is_num) "FALLBACK_CONTINUOUS" else "FALLBACK_CATEGORICAL"
