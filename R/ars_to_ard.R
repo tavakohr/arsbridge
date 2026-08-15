@@ -126,7 +126,8 @@
   ## Generic declarative method the spec generator assigns to a
   ## capability-gated section (ADR 0002 phase 3) when the specific statistic is
   ## not yet classified. Reserves one manual_pending cell per analysis row.
-  MTH_UNSUPPORTED_ANALYSIS     = list(stats = "result", by_group = FALSE),
+  MTH_UNSUPPORTED_ANALYSIS     = list(stats = .MANUAL_STAT_NAME,
+                                      by_group = FALSE),
   ## Specific declarative methods (ADR 0001 descriptor seeds) -- assigned once
   ## the shell reader classifies the exact statistic.
   MTH_CMH_TEST                 = list(stats = "p.value", by_group = FALSE),
