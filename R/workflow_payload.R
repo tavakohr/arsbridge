@@ -215,6 +215,11 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
     filled_workbook   = file.path(output_dir, "filled_shells.xlsx"),
     fill_debrief      = file.path(output_dir, "fill_debrief.xlsx")
   )
+  ## Not in `paths` above: the fix report's name carries the phase that wrote
+  ## it, and the phase is not known until the build stage resolves it. The
+  ## build reports the path it used, and the rewrite after the fill reuses that
+  ## same path rather than recomputing the name.
+  fix_report_path <- NA_character_
 
   diagnostics <- .EMPTY_DIAGNOSTICS()
   timings <- list()
@@ -230,7 +235,8 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
     code_paths = character(0),
     ard_rds = NA_character_,
     filled_workbook = NA_character_,
-    fill_debrief = NA_character_
+    fill_debrief = NA_character_,
+    fix_report = NA_character_
   )
 
   record <- function(stage) {
@@ -297,6 +303,10 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
     }
     if (file.exists(build$value$report_path %||% "")) {
       current_artifacts$validation_report <- build$value$report_path
+    }
+    if (file.exists(build$value$fix_report_path %||% "")) {
+      fix_report_path <- build$value$fix_report_path
+      current_artifacts$fix_report <- fix_report_path
     }
     code_paths <- build$value$code_paths %||% character(0)
     current_artifacts$code_paths <- code_paths[
@@ -418,6 +428,58 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
     }
   }
 
+  ## The build already wrote a fix report from the ARS alone. Rewritten here,
+  ## to the SAME path, now that the fill has turned analysis-level reservations
+  ## into addressable cells -- so "Reserved cells" names sheets and cells the
+  ## author can open rather than analysis ids they never typed.
+  ##
+  ## Every run fact comes from the build's own result rather than being
+  ## recomposed here: this rewrite REPLACES the build's file, so a value
+  ## defaulted here would erase provenance the build had resolved correctly.
+  ##
+  ## Same tryCatch argument as the debrief above, and the same reason it runs
+  ## after stage 3: only now is the diagnostics table complete.
+  if (!is.na(fix_report_path) && !is.null(build$value)) {
+    fix_error <- tryCatch({
+      gate <- build$value$validation_gate
+      findings <- gate$findings %||% .new_findings()
+      model <- ars_to_model(paths$ars_json)
+      write_fix_report(
+        findings, fix_report_path,
+        reservations = .reservations_from_findings(model, findings),
+        census = if (!is.null(fill)) fill$census else NULL,
+        diagnostics = diagnostics,
+        run = list(
+          extraction_mode  = build$value$extraction_mode,
+          supplement_trust = build$value$supplement_trust,
+          verdict          = gate$verdict,
+          timestamp        = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ",
+                                    tz = "UTC"),
+          shell_path       = shell_path,
+          adam_spec_path   = adam_spec_path,
+          adam_dir         = adam_dir,
+          ars_path         = paths$ars_json
+        )
+      )
+      if (file.exists(fix_report_path)) {
+        current_artifacts$fix_report <- fix_report_path
+      }
+      NULL
+    }, error = function(e) conditionMessage(e))
+    if (!is.null(fix_error)) {
+      diagnostics <- rbind(diagnostics, data.frame(
+        stage = "fix_report", severity = "WARN",
+        input = NA_character_, tlf_number = NA_character_,
+        location = fix_report_path,
+        problem = sprintf(
+          "The fix report could not be updated after the fill: %s",
+          fix_error),
+        action = paste("The build itself is complete; the fix report still",
+                       "holds what the build stage wrote."),
+        stringsAsFactors = FALSE))
+    }
+  }
+
   ## The census carries every cell; the app's unfilled table wants only the
   ## unresolved ones, with the full provenance needed to diagnose them.
   unfilled <- if (!is.null(fill)) {
@@ -444,6 +506,7 @@ ars_workflow_run <- function(shell_path, adam_spec_path, output_dir,
       ard_rds           = current_artifacts$ard_rds,
       filled_workbook   = current_artifacts$filled_workbook,
       fill_debrief      = current_artifacts$fill_debrief,
+      fix_report        = current_artifacts$fix_report,
       run_log           = log_path %||% NA_character_
     ),
     metadata = list(

@@ -543,6 +543,7 @@ ars_workflow <- function(project_dir = NULL) {
       ard_rds = NA_character_,
       filled_workbook = NA_character_,
       fill_debrief = NA_character_,
+      fix_report = NA_character_,
       run_log = paths$run_log %||% NA_character_
     ),
     validation_gate = NULL,
@@ -601,6 +602,13 @@ ars_workflow <- function(project_dir = NULL) {
   refused <- !errored && .workflow_payload_was_refused(payload)
   has_gaps <- !errored && !refused && .workflow_payload_has_gaps(payload)
 
+  ## A verdict with no path to the explanation is the thing this whole change
+  ## exists to avoid: "completed with gaps" is only actionable if the reader can
+  ## find out WHICH gaps. Resolved here, next to the flags that decide whether
+  ## it is shown, and named only when the file was actually written.
+  fix_report <- as.character(payload$artifacts$fix_report %||% NA_character_)
+  fix_report <- fix_report[!is.na(fix_report) & nzchar(fix_report)]
+
   ## "COMPLETED WITH GAPS", not "NEEDS FIXES": the run finished and produced
   ## every result it could, and what is missing is named. Amber rather than red
   ## because nothing was refused. An archived payload that WAS refused keeps
@@ -632,7 +640,11 @@ ars_workflow <- function(project_dir = NULL) {
     if (!is.na(seconds)) sprintf("%.1fs. ", seconds) else "",
     if (fails > 0) sprintf("%d blocking finding(s). ", fails) else "",
     if (!is.null(payload$error)) payload$error else "",
-    if (identical(status, "success") && fails == 0) "Nothing was left undone." else ""
+    if (identical(status, "success") && fails == 0) "Nothing was left undone." else "",
+    if ((has_gaps || refused) && length(fix_report) > 0) {
+      shiny::span("What to change, and where: ",
+                  shiny::tags$code(basename(fix_report[1])))
+    } else ""
   )
 }
 
@@ -1420,6 +1432,7 @@ ars_workflow <- function(project_dir = NULL) {
                   code_paths = "cards scripts", ard_rds = "ARD",
                   filled_workbook = "Filled workbook",
                   fill_debrief = "Fill debrief",
+                  fix_report = "Fix report (what to change, and where)",
                   run_log = "Run log (may contain console output -- review before sharing)")
       rows <- unlist(lapply(names(labels), function(key) {
         paths <- if (key %in% "code_paths") {
