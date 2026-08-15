@@ -415,6 +415,57 @@
 ## Emit the cards block(s) for one resolved analysis. Returns a list with
 ## `code` (character vector of lines) and `objs` (block object names to bind).
 #' @noRd
+## Method ids the event itself declares produce no computable result.
+##
+## Read from each method's own `supported` flag rather than from a list of
+## known ids, so a reporting event written elsewhere that marks its own method
+## the same way is honoured too.
+#' @noRd
+.reserved_method_ids <- function(spec) {
+  methods <- spec[["methods"]] %||% list()
+  ids <- vapply(methods, function(method) {
+    if (isFALSE(method[["supported"]])) method[["id"]] %||% "" else ""
+  }, character(1))
+  ids[nzchar(ids)]
+}
+
+## What an analysis gets in the emitted script when its method declares it
+## computes nothing.
+##
+## Never a calculation. The generic arm of `.method_call()` would otherwise
+## substitute a categorical n(%) for it -- a number the reporting event never
+## asked for, in a file whose whole purpose is to be a reproducible record of
+## what was computed. A substitute calculation is worse there than a missing
+## one: it is signed, re-runnable, and looks deliberate.
+##
+## What it gets instead is the method's own derivation note, carried through
+## verbatim, and no bound object -- so nothing this block "produces" can reach
+## the ARD.
+#' @noRd
+.emit_reserved_block <- function(res, method) {
+  template <- method[["codeTemplate"]][["code"]] %||% ""
+  reason   <- method[["description"]] %||% ""
+
+  lines <- c(
+    .block_comment(res),
+    "#",
+    "# Reserved: this method declares it computes no result, so arsbridge",
+    "# emits no calculation for it. The cell is reserved in the ARD instead",
+    "# -- see ars_manual_worklist().",
+    if (nzchar(reason)) paste0("# Reason: ", reason)
+  )
+
+  if (nzchar(template)) {
+    ## The method's own note, commented so the script still parses and runs.
+    note <- strsplit(template, "\n", fixed = TRUE)[[1]]
+    note <- sub("^#*\\s?", "", note)
+    lines <- c(lines, "#", paste0("# ", note))
+  }
+
+  paste(lines, collapse = "\n")
+}
+
+#' @noRd
 .emit_block <- function(res) {
   ## Declared-path mode: one block per declared result column, never a cross
   ## of the grouping variables. Stratified/inferential methods keep the flat
@@ -835,7 +886,21 @@
   ## Emit blocks, swapping inline ADSL-pop expressions for the named frames.
   blocks <- character(0)
   objs   <- character(0)
+  reserved_ids <- .reserved_method_ids(spec)
+  method_by_id <- stats::setNames(
+    spec[["methods"]] %||% list(),
+    vapply(spec[["methods"]] %||% list(),
+           function(method) method[["id"]] %||% "", character(1))
+  )
   for (res in reslist) {
+    ## A method that declares it computes nothing contributes a note and no
+    ## object -- so it cannot reach bind_ard(), and no substitute calculation
+    ## is written in its place.
+    if ((res$method_id %||% "") %in% reserved_ids) {
+      blocks <- c(blocks, "",
+                  .emit_reserved_block(res, method_by_id[[res$method_id]]))
+      next
+    }
     b  <- .emit_block(res)
     de <- .emit_require_plan(.denom_expr(res), res, "denominator")
     if (de != "ADSL" && de %in% names(pop_names)) {
@@ -846,8 +911,17 @@
     objs   <- c(objs, b$objs)
   }
 
-  bind_line <- sprintf("\n%s <- cards::bind_ard(\n  %s\n)",
-                       ard_obj, paste(objs, collapse = ",\n  "))
+  ## Every analysis on this output was reserved, so there is nothing to bind.
+  ## bind_ard() with no arguments would not run, and an empty frame would claim
+  ## the output produced results.
+  bind_line <- if (length(objs) == 0) {
+    sprintf(paste0("\n## Every analysis on this output is reserved, so this ",
+                   "script computes\n## nothing. %s stays NULL.\n%s <- NULL"),
+            ard_obj, ard_obj)
+  } else {
+    sprintf("\n%s <- cards::bind_ard(\n  %s\n)",
+            ard_obj, paste(objs, collapse = ",\n  "))
+  }
 
   paste(c(header, "", loaders,
           if (length(pop_defs)) c("", pop_defs),
