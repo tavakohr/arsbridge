@@ -35,9 +35,14 @@ validate_ars_model(model, spec = NULL, report = NULL)
 ## Value
 
 A data frame of findings, most severe first, with columns `severity`
-(`"FAIL"`, `"WARN"` or `"INFO"`), `entity` (the pool the finding is
+(`"GAP"`, `"WARN"` or `"INFO"`), `entity` (the pool the finding is
 about), `id`, `field`, `problem` and `action`. Zero rows means nothing
 to fix.
+
+`GAP` means a specific result will not be produced and the run has
+reserved it; `WARN` means a number exists but came from a fallback or an
+inference, so check it. Reports written before this release carry `FAIL`
+where they would now carry `GAP`, and still sort and render.
 
 ## What is checked
 
@@ -94,6 +99,6 @@ to fix.
 if (FALSE) { # \dontrun{
 model <- ars_to_model("reporting_event.json")
 findings <- validate_ars_model(model)
-subset(findings, severity == "FAIL")
+subset(findings, severity == "GAP")
 } # }
 ```
