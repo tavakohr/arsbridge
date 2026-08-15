@@ -297,7 +297,7 @@ test_that("no computed percentage exceeds its denominator", {
   spec
 }
 
-test_that("validate_ars_model() raises a blocking FAIL on the conflict", {
+test_that("validate_ars_model() raises a GAP on the conflict", {
   td <- .gd_adam(same_name = TRUE)
   path <- file.path(td, "conflict_v.json")
   jsonlite::write_json(.gd_conflict_spec(), path, auto_unbox = TRUE,
@@ -308,31 +308,58 @@ test_that("validate_ars_model() raises a blocking FAIL on the conflict", {
   hit <- findings[findings$field == "groupingDataset", , drop = FALSE]
 
   expect_equal(nrow(hit), 1L)
-  expect_equal(hit$severity[[1]], "FAIL")
+  expect_equal(hit$severity[[1]], "GAP")
   expect_match(hit$problem[[1]], "groupingDataset says ADAE", fixed = TRUE)
   expect_match(hit$problem[[1]], "groupingVariable.dataset says ADSL",
                fixed = TRUE)
-  ## FAIL is what the execution gate refuses on.
-  expect_true(arsbridge:::.model_validation_gate(model)$blocked)
+  ## GAP is what withholds results. `gaps` / `gap_refs` are the gate's fields
+  ## for exactly that (see .validation_gate()).
+  gate <- arsbridge:::.model_validation_gate(model)
+  expect_equal(gate$verdict, "COMPLETED WITH GAPS")
+  expect_true("GROUPING_DATASET_CONFLICT" %in% gate$gap_refs)
 })
 
-test_that("a conflicted grouping refuses the event on BOTH paths", {
+test_that("a conflicted grouping computes nothing on BOTH paths", {
   ## Not "the default path picks flat and legacy picks nested" -- that would be
-  ## two engines answering a question the spec does not settle.
+  ## two engines answering a question the spec does not settle. This is
+  ## wrong-number risk #2, and the worst of the set: `as.character()` drops the
+  ## conflict attribute, `.denominator_by_subject()` reads NA as "no declared
+  ## dataset", and one of two contradicting datasets silently wins the
+  ## denominator. The number that comes out is plausible and wrong.
   ##
-  ## The refusal is the STRUCTURAL gate, not a per-analysis blocked row: a
-  ## grouping that contradicts itself is a blocking validation FAIL, and
-  ## .assert_runnable_ars() refuses to execute an event with one. That is the
-  ## existing contract for structural findings and is strictly more
-  ## fail-closed than reserving cells -- nothing is computed at all.
+  ## The event is no longer refused wholesale; the analyses that resolve
+  ## through the contradictory grouping are reserved. The assertions below are
+  ## scoped to exactly those analyses -- asserting over the whole ARD would
+  ## pass for the wrong reason on any fixture that grew a second, unaffected
+  ## analysis.
   td <- .gd_adam(same_name = TRUE)
   for (lg in c(FALSE, TRUE)) {
     path <- file.path(td, paste0("conflict_", lg, ".json"))
     jsonlite::write_json(.gd_conflict_spec(), path, auto_unbox = TRUE,
                          null = "null")
-    expect_error(
-      suppressMessages(suppressWarnings(ars_to_ard(path, td, legacy = lg))),
-      "structural validation failed", info = paste("legacy", lg))
+    info <- paste("legacy", lg)
+
+    model <- ars_to_model(path)
+    affected <- arsbridge:::.analyses_referencing(model, "groupings", "GF_G")
+    expect_gt(length(affected), 0L)
+
+    ard <- as.data.frame(suppressMessages(suppressWarnings(
+      ars_to_ard(path, td, legacy = lg))))
+    rows <- ard[ard$analysis_id %in% affected, , drop = FALSE]
+
+    ## The rows exist -- reserved, not dropped -- and carry no number.
+    expect_gt(nrow(rows), 0L)
+    expect_false(any(rows$result_status %in% "computed"), info = info)
+    if ("stat" %in% names(rows)) {
+      expect_true(all(is.na(rows$stat)), info = info)
+    }
+    ## And they name the finding, so a reserved cell traces back to the
+    ## contradiction rather than only to the fact that something was wrong.
+    expect_true(
+      any(grepl("^structural:GROUPING_DATASET_CONFLICT",
+                rows$block_reason %||% character(0))),
+      info = info
+    )
   }
 })
 
@@ -344,7 +371,7 @@ test_that("the conflict names the grouping and both datasets", {
                        null = "null")
 
   gate <- arsbridge:::.model_validation_gate(ars_to_model(path))
-  hit <- gate$blocking_findings
+  hit <- gate$gaps
   hit <- hit[hit$field == "groupingDataset", , drop = FALSE]
 
   expect_equal(nrow(hit), 1L)

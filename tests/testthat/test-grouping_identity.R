@@ -279,7 +279,11 @@ test_that("empty result-group paths do not bypass flat-axis validation", {
   ]
 
   expect_equal(nrow(mismatch), 1L)
-  expect_true(.validation_gate(findings)$blocked)
+  ## Collected as a gap. The event is not refused -- the analyses this finding
+  ## reaches are the ones withheld.
+  gate <- .validation_gate(findings)
+  expect_false(gate$blocked)
+  expect_true(length(gate$gap_refs) > 0L)
 })
 
 test_that("a flat output must display one column per referenced group", {
@@ -297,7 +301,7 @@ test_that("a flat output must display one column per referenced group", {
   ]
 
   expect_equal(nrow(mismatch), 1L)
-  expect_equal(mismatch$severity, "FAIL")
+  expect_equal(mismatch$severity, "GAP")
 })
 
 test_that("a flat output cannot combine different fixed grouping definitions", {
@@ -338,7 +342,7 @@ test_that("a flat output with no result columns is a count mismatch", {
   ]
 
   expect_equal(nrow(mismatch), 1L)
-  expect_equal(mismatch$severity, "FAIL")
+  expect_equal(mismatch$severity, "GAP")
 })
 
 
@@ -357,7 +361,7 @@ test_that("flat output labels must match the referenced grouping", {
   ]
 
   expect_equal(nrow(mismatch), 1L)
-  expect_equal(mismatch$severity, "FAIL")
+  expect_equal(mismatch$severity, "GAP")
 })
 
 .gi_total_model <- function(include_total = c(TRUE, TRUE),

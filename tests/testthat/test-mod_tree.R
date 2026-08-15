@@ -89,6 +89,15 @@ test_that("an output's badge is the worst finding anywhere beneath it", {
 
   expect_equal(.worst_severity(c("INFO", "WARN")), "WARN")
   expect_true(is.na(.worst_severity(character(0))))
+
+  ## GAP is what a finding raised by this release carries, and it badges the
+  ## same way. FAIL above is not dead wood: it is what an ARS validated by an
+  ## earlier release still carries, and the panel has to keep rendering it.
+  gap_findings <- findings
+  gap_findings$severity <- c("INFO", "GAP")
+  expect_equal(.output_badge(.tree_data(model, gap_findings), output_id,
+                             gap_findings), "GAP")
+  expect_equal(.worst_severity(c("INFO", "WARN", "GAP")), "GAP")
 })
 
 test_that("the filter matches outputs and analyses, and is case-insensitive", {
@@ -262,7 +271,7 @@ test_that("selecting a finding navigates to the entity it is about", {
     args = list(state = state),
     {
       findings <- state$findings()
-      dangling <- which(findings$severity == "FAIL")[1]
+      dangling <- which(findings$severity == "GAP")[1]
       expect_false(is.na(dangling))
 
       session$setInputs(findings_rows_selected = dangling)

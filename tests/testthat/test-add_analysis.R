@@ -147,7 +147,7 @@ test_that("an added line leaves the event referentially intact", {
   updated <- .add_a_line(model)
   findings <- validate_ars_model(updated)
 
-  expect_equal(sum(findings$severity == "FAIL"), 0)
+  expect_equal(sum(findings$severity == "GAP"), 0)
 })
 
 test_that("adding to an output that does not exist is refused", {
@@ -165,7 +165,7 @@ test_that("removing a line removes every reference to it", {
   references <- unlist(lapply(updated$outputs$referenced_analysis_ids,
                               .split_values))
   expect_false(target %in% references)
-  expect_equal(sum(validate_ars_model(updated)$severity == "FAIL"), 0)
+  expect_equal(sum(validate_ars_model(updated)$severity == "GAP"), 0)
 })
 
 test_that("adding then removing a line restores the original event", {
@@ -193,7 +193,7 @@ test_that("removing the last line of an output leaves it empty, not broken", {
   expect_true(is.na(
     model$outputs$referenced_analysis_ids[model$outputs$id == output_id]
   ))
-  expect_equal(sum(validate_ars_model(model)$severity == "FAIL"), 0)
+  expect_equal(sum(validate_ars_model(model)$severity == "GAP"), 0)
 
   ## The now-empty output is reported, since it would render blank.
   findings <- validate_ars_model(model)
@@ -290,7 +290,7 @@ test_that("detaching gives one analysis its own copy of a shared population", {
   usage <- .entity_usage(detached)$analysis_sets
   expect_equal(.usage_count(usage, shared_id), before - 1)
   expect_equal(.usage_count(usage, variant_id), 1)
-  expect_equal(sum(validate_ars_model(detached)$severity == "FAIL"), 0)
+  expect_equal(sum(validate_ars_model(detached)$severity == "GAP"), 0)
 })
 
 test_that("editing a detached copy leaves the original alone", {
@@ -359,7 +359,7 @@ test_that("detaching a grouping repoints only that one entry", {
 
   expect_equal(length(after), length(before))
   expect_equal(after[1], variant_id)
-  expect_equal(sum(validate_ars_model(detached)$severity == "FAIL"), 0)
+  expect_equal(sum(validate_ars_model(detached)$severity == "GAP"), 0)
 })
 
 test_that("a method cannot be detached, because the engine dispatches on its id", {
@@ -417,11 +417,13 @@ test_that("a gap finding carries the variable it is about", {
   gap <- findings[findings$field == "analyses", ]
 
   expect_gt(nrow(gap), 0)
-  expect_equal(gap$ref[1], "ADSL.SEX")
+  ## `ref` says what KIND of finding this is; `detail` carries its payload.
+  expect_equal(gap$ref[1], "SHELL_LINE_NOT_ANALYSED")
+  expect_equal(gap$detail[1], "ADSL.SEX")
   expect_true(.is_gap_finding(gap[1, , drop = FALSE]))
 
   ## Which is what lets the wizard open pre-filled.
-  parts <- .split_variable_ref(gap$ref[1])
+  parts <- .split_variable_ref(gap$detail[1])
   expect_equal(parts$dataset, "ADSL")
   expect_equal(parts$variable, "SEX")
 })

@@ -37,6 +37,141 @@
 .SEMANTIC_SOURCE_REF <- "SEMANTIC_SOURCE_NOT_DECLARED"
 .UNRESOLVED_ROLE_REF <- "UNRESOLVED_VARIABLE_ROLE"
 
+## Every code `validate_ars_model()` may emit, in one place.
+##
+## A finding's `ref` is what the rest of the package joins on: which scope a
+## defect invalidates, which cells the engine must reserve, which fix to offer
+## the author. Matching any of that on the finding's `problem` text would tie
+## behaviour to display wording -- the same mistake `.check_semantic_source()`
+## exists to police -- so `ref` is a closed vocabulary and `.add_finding()`
+## refuses a code that is not listed here.
+##
+## The practical effect: a new check cannot ship without registering its code,
+## and nothing downstream can silently ignore a code it has no handling for.
+.VALIDATION_REFS <- c(
+  ## Identity and references -- the event does not resolve against itself.
+  ENTITY_ID_MISSING                        = "event",
+  ENTITY_ID_DUPLICATED                     = "event",
+  METHOD_REF_UNRESOLVED                    = "analysis",
+  ANALYSIS_SET_REF_UNRESOLVED              = "analysis",
+  DATA_SUBSET_REF_UNRESOLVED               = "analysis",
+  GROUPING_REF_UNRESOLVED                  = "analysis",
+  ANALYSIS_REF_UNRESOLVED                  = "advisory",
+  ANALYSIS_NOT_DISPLAYED                   = "advisory",
+  OUTPUT_HAS_NO_ANALYSES                   = "advisory",
+  CONTENTS_ANALYSIS_STALE                  = "advisory",
+  CONTENTS_OUTPUT_STALE                    = "advisory",
+
+  ## Semantics -- the analysis computes something other than what it declared.
+  SEMANTIC_SOURCE_NOT_DECLARED             = "analysis",
+  UNRESOLVED_VARIABLE_ROLE                 = "analysis",
+
+  ## Groupings and the column axis. A grouping is reserved through the
+  ## analyses that reference it, which is what "grouping" scope expands to.
+  GROUPING_DATASET_CONFLICT                = "grouping",
+  FIXED_GROUPING_EMPTY                     = "grouping",
+  GROUPING_VARIABLE_NOT_LINKED             = "analysis",
+  GROUPING_ORDER_AMBIGUOUS                 = "advisory",
+  FLAT_AXIS_COLUMN_COUNT_MISMATCH          = "advisory",
+  FLAT_AXIS_COLUMN_LABEL_MISMATCH          = "advisory",
+
+  ## Methods -- what the row shows against what the method computes.
+  METHOD_NOT_ASSIGNED                      = "analysis",
+  METHOD_PLACEHOLDER_SLOT_MISMATCH         = "cell",
+  METHOD_STRATA_MISSING                    = "advisory",
+  METHOD_NOT_EXECUTABLE                    = "advisory",
+  ## Advisory, not reserving. A method with no executor is approximated by the
+  ## generic summarizer, which IS a way to show a statistic the shell did not
+  ## ask for -- but the method exists and the event declared it, the old gate
+  ## never blocked on it (it is a WARN), and the behaviour is long-standing and
+  ## tested. Reserving here would be new behaviour rather than a replacement
+  ## for what the gate did, so it stays reported. The genuinely unresolvable
+  ## cases -- a methodId pointing at nothing, or no method at all -- are
+  ## METHOD_REF_UNRESOLVED and METHOD_NOT_ASSIGNED above, and those reserve.
+  METHOD_FALLBACK_SUMMARIZER               = "advisory",
+  METHOD_CONDITIONAL                       = "advisory",
+
+  ## Nested displays and declared result paths.
+  NESTED_CHILD_UNLINKED                    = "advisory",
+  NESTED_GROUPING_MISSING                  = "advisory",
+  HEADER_TREE_MISSING                      = "advisory",
+  DISPLAY_COLUMN_COUNT_MISMATCH            = "output",
+  UNMAPPED_LEAF_COLUMN                     = "output",
+  INVALID_CARTESIAN_PRODUCT                = "output",
+  SUBTOTAL_SCOPE_UNDEFINED                 = "output",
+  SUBTOTAL_EXCLUDES_UNDISPLAYED_CATEGORIES = "advisory",
+  DUPLICATE_RESULT_PATH                    = "output",
+
+  ## The shell and the ADaM spec.
+  SHELL_LINE_NOT_ANALYSED                  = "advisory",
+  POPULATION_NOT_PARSED                    = "advisory",
+  DATASET_NOT_IN_SPEC                      = "analysis",
+  VARIABLE_NOT_IN_SPEC                     = "advisory",
+  SEPARATOR_IN_CONDITION_VALUE             = "advisory"
+)
+
+## The scopes a finding may invalidate, widest last.
+##
+##   advisory  nothing is withheld; the reader is told, and that is all
+##   cell      one displayed cell has no statistic behind it
+##   analysis  this analysis must not compute
+##   grouping  every analysis referencing this grouping must not compute
+##   output    every analysis displayed on this output must not compute
+##   event     the defect is in the event's own identity, not in one entity
+.FINDING_SCOPES <- c("advisory", "cell", "analysis", "grouping", "output",
+                     "event")
+
+## The scopes that withhold a result. `advisory` findings are reported and no
+## more; a `cell` finding is refused by the fill, one cell at a time. Named here
+## rather than inside `.reservations_from_findings()` because the gate has to
+## ask the same question the map answers -- "should this finding have reserved
+## something?" -- and two copies of that list would eventually disagree.
+.RESERVING_SCOPES <- c("analysis", "grouping", "output", "event")
+
+## The severities a FINDING may carry.
+##
+##   GAP   a specific result will not be produced, and the run has reserved it
+##   WARN  a number exists, but it came from a fallback or an inference
+##   INFO  worth knowing; nothing is affected
+##
+## GAP replaces FAIL here, and the new word is the point. DIAGNOSTICS keep
+## FAIL | WARN | INFO -- the two channels say different things, and conflating
+## them is exactly why one broken grouping used to refuse ten sound outputs: a
+## finding is a statement about the REPORTING EVENT, a diagnostic is a statement
+## about a RUN.
+##
+## Why a new word rather than redefining FAIL. `validation_report.xlsx` is an
+## archived deliverable in a regulated workflow, and an auditor comparing two
+## months' reports must not find one word meaning both "the run was refused"
+## and "one cell was reserved". A new word cannot be misread; a redefined one
+## can only be misread.
+.FINDING_SEVERITIES <- c("GAP", "WARN", "INFO")
+
+## Ranking for display, most serious first.
+##
+## FAIL is kept at the front although nothing emits it any more: reports written
+## before this change are archived payloads that must still sort and render, and
+## a severity the ranking does not know sorts to NA and drifts to the bottom --
+## the most serious findings quietly last.
+.FINDING_SEVERITY_RANK <- c("FAIL", "GAP", "WARN", "INFO")
+
+## The severities that mean "a result is missing". Two entries for the same
+## reason the ranking has four: an archived report still reads correctly.
+.GAP_SEVERITIES <- c("GAP", "FAIL")
+
+## Which scope a code invalidates.
+##
+## Declared here, beside the code, rather than passed at each of the forty-odd
+## call sites. One table is auditable for completeness in a way forty arguments
+## are not, and no code in this package needs to raise the same code at two
+## different scopes. It is a declaration, not an inference from the string: a
+## code with no scope is a code `.add_finding()` refuses outright.
+#' @noRd
+.scope_for_ref <- function(ref) {
+  scope <- unname(.VALIDATION_REFS[ref])
+  if (is.na(scope)) NA_character_ else scope
+}
+
 #' An analysis's annotation as plain text, with "absent" spelled one way.
 #'
 #' `annotation` is an arsbridge extension: an ARS written by another tool
@@ -175,7 +310,7 @@
     if (length(undeclared) == 0) next
 
     findings <- .add_finding(
-      findings, "FAIL", "analyses", analyses$id[[i]], "variable",
+      findings, "GAP", "analyses", analyses$id[[i]], "variable",
       sprintf(
         paste0("Analysis %s resolves %s, but its annotation declares only %s. ",
                "The resolved analysis uses a semantic source not named by its ",
@@ -225,7 +360,7 @@
     if (length(roles) == 0) next
 
     findings <- .add_finding(
-      findings, "FAIL", "analyses", analyses$id[[i]], "variableRole",
+      findings, "GAP", "analyses", analyses$id[[i]], "variableRole",
       sprintf(
         paste0("Analysis %s carries an unresolved variable role (%s). A role ",
                "was proposed for this row but could not be attributed to it, ",
@@ -300,16 +435,82 @@
     problem  = character(0),
     action   = character(0),
     ref      = character(0),
+    detail   = character(0),
+    scope    = character(0),
+    ## Where in the author's own documents to go and change something. A
+    ## finding addressed only as "analyses / AN_..." names an entity the
+    ## author never typed; these name the cell they did.
+    source_doc = character(0),
+    sheet      = character(0),
+    cell_ref   = character(0),
+    row        = integer(0),
+    col        = integer(0),
+    locator    = character(0),
     stringsAsFactors = FALSE
   )
 }
 
-## `ref` carries whatever the finding is about in machine-readable form -- a
-## DATASET.VARIABLE for a gap, for instance -- so the editor can act on a
-## finding rather than only describe it.
+#' Where a finding came from, in the author's documents.
+#'
+#' `source_doc` says WHICH document to open -- the shell, the ADaM spec, the
+#' supplement, or the ARS itself. That is what makes "fix this in the
+#' annotation" distinguishable from "fix this in the spec" per finding rather
+#' than per code.
+#'
+#' Never synthesise an address. An absent one is NA. A wrong address sends the
+#' author to edit the wrong cell, which is the same class of harm as a wrong
+#' number -- and a check that genuinely cannot address a cell (a shared pool
+#' id, a Word shell with no cell grid) says so honestly through `locator`.
+#' @noRd
+.finding_at <- function(source_doc = NA_character_, sheet = NA_character_,
+                        cell_ref = NA_character_, row = NA_integer_,
+                        col = NA_integer_, locator = NA_character_) {
+  list(source_doc = as.character(source_doc), sheet = as.character(sheet),
+       cell_ref = as.character(cell_ref),
+       row = suppressWarnings(as.integer(row)),
+       col = suppressWarnings(as.integer(col)),
+       locator = as.character(locator))
+}
+
+## `ref` names WHAT KIND of defect this is, from the closed vocabulary in
+## `.VALIDATION_REFS`. `detail` carries the finding's own machine-readable
+## payload where it has one -- a DATASET.VARIABLE for a shell line no analysis
+## covers, say -- so the editor can act on a finding rather than only describe
+## it.
+##
+## The two were one field until the reservation work needed to join on the
+## code: a column that is sometimes a code and sometimes a variable name cannot
+## be a reliable key, and the gap findings that carried a payload were silently
+## outside every code-matching branch in the package.
 #' @noRd
 .add_finding <- function(findings, severity, entity, id, field, problem,
-                         action, ref = NA_character_) {
+                         action, ref, detail = NA_character_, at = NULL) {
+  ## A closed vocabulary for the same reason `ref` is one: everything
+  ## downstream branches on severity, and a check that raised an unknown word
+  ## would be counted by nothing and reported by nothing.
+  if (!severity %in% .FINDING_SEVERITIES) {
+    ## Bound to a local first: cli reads `{.name}` as a style, not a value.
+    allowed <- .FINDING_SEVERITIES
+    cli::cli_abort(c(
+      "Finding severity {.val {severity}} is not one a check may raise.",
+      "i" = "Use {.val {allowed}}.",
+      "i" = paste("{.val FAIL} belongs to the diagnostics channel; a finding",
+                  "that withholds a result is {.val GAP}.")
+    ))
+  }
+  if (!ref %in% names(.VALIDATION_REFS)) {
+    cli::cli_abort(c(
+      "Finding code {.val {ref}} is not registered.",
+      "i" = paste("Add it to {.code .VALIDATION_REFS} so the rest of the",
+                  "package can act on it.")
+    ))
+  }
+
+  ## `at` is the optional address argument declared in this function's own
+  ## signature (at = NULL); the empty frame in .new_findings() already declares
+  ## every column assembled below, so the rbind schemas match.
+  at <- at %||% .finding_at()
+
   rbind(findings, data.frame(
     severity = severity,
     entity   = entity,
@@ -318,6 +519,14 @@
     problem  = problem,
     action   = action,
     ref      = ref,
+    detail   = detail,
+    scope    = .scope_for_ref(ref),
+    source_doc = at$source_doc,
+    sheet      = at$sheet,
+    cell_ref   = at$cell_ref,
+    row        = at$row,
+    col        = at$col,
+    locator    = at$locator,
     stringsAsFactors = FALSE
   ))
 }
@@ -385,18 +594,20 @@
     missing <- which(is.na(ids) | !nzchar(ids))
     for (i in missing) {
       findings <- .add_finding(
-        findings, "FAIL", pool, paste0("row ", i), "id",
+        findings, "GAP", pool, paste0("row ", i), "id",
         paste0("This ", labels[[pool]], " has no id."),
-        "Give it a unique id -- every reference in the event resolves by id."
+        "Give it a unique id -- every reference in the event resolves by id.",
+        ref = "ENTITY_ID_MISSING"
       )
     }
 
     duplicated_ids <- unique(ids[duplicated(ids) & !is.na(ids)])
     for (dup in duplicated_ids) {
       findings <- .add_finding(
-        findings, "FAIL", pool, dup, "id",
+        findings, "GAP", pool, dup, "id",
         paste0("Id ", dup, " is used by more than one ", labels[[pool]], "."),
-        "Make each id unique -- references to it are ambiguous."
+        "Make each id unique -- references to it are ambiguous.",
+        ref = "ENTITY_ID_DUPLICATED"
       )
     }
   }
@@ -411,11 +622,11 @@
   ## Shared entities referenced by each analysis.
   reference_checks <- list(
     list(column = "methodId",      pool = "methods",
-         what = "method"),
+         what = "method",       ref = "METHOD_REF_UNRESOLVED"),
     list(column = "analysisSetId", pool = "analysis_sets",
-         what = "analysis set"),
+         what = "analysis set", ref = "ANALYSIS_SET_REF_UNRESOLVED"),
     list(column = "dataSubsetId",  pool = "data_subsets",
-         what = "data subset")
+         what = "data subset",  ref = "DATA_SUBSET_REF_UNRESOLVED")
   )
 
   for (check in reference_checks) {
@@ -429,11 +640,12 @@
       if (value %in% known) next
 
       findings <- .add_finding(
-        findings, "FAIL", "analyses", analyses$id[i], check$column,
+        findings, "GAP", "analyses", analyses$id[i], check$column,
         paste0("References ", check$what, " ", value,
                ", which is not in the reporting event."),
         paste0("Point it at an existing ", check$what,
-               ", or add ", value, " to the ", check$what, " pool.")
+               ", or add ", value, " to the ", check$what, " pool."),
+        ref = check$ref
       )
     }
   }
@@ -444,10 +656,11 @@
     for (grouping_id in .split_values(analyses$grouping_ids[i])) {
       if (grouping_id %in% known_groupings) next
       findings <- .add_finding(
-        findings, "FAIL", "analyses", analyses$id[i], "grouping_ids",
+        findings, "GAP", "analyses", analyses$id[i], "grouping_ids",
         paste0("References grouping ", grouping_id,
                ", which is not in the reporting event."),
-        "Point it at an existing grouping, or add that grouping."
+        "Point it at an existing grouping, or add that grouping.",
+        ref = "GROUPING_REF_UNRESOLVED"
       )
     }
   }
@@ -460,11 +673,12 @@
     referenced <- c(referenced, ids)
     for (analysis_id in setdiff(ids, known_analyses)) {
       findings <- .add_finding(
-        findings, "FAIL", "outputs", model$outputs$id[i],
+        findings, "GAP", "outputs", model$outputs$id[i],
         "referenced_analysis_ids",
         paste0("References analysis ", analysis_id,
                ", which is not in the reporting event."),
-        "Remove the reference, or add the analysis it points at."
+        "Remove the reference, or add the analysis it points at.",
+        ref = "ANALYSIS_REF_UNRESOLVED"
       )
     }
   }
@@ -473,7 +687,8 @@
     findings <- .add_finding(
       findings, "WARN", "analyses", analysis_id, "output_id",
       "No output references this analysis, so nothing will display it.",
-      "Add it to an output's analysis list, or delete it."
+      "Add it to an output's analysis list, or delete it.",
+      ref = "ANALYSIS_NOT_DISPLAYED"
     )
   }
 
@@ -488,7 +703,8 @@
       findings, "WARN", "outputs", model$outputs$id[i],
       "referenced_analysis_ids",
       "This output has no analyses, so it would render empty.",
-      "Add the analyses it should display, or drop the output."
+      "Add the analyses it should display, or drop the output.",
+      ref = "OUTPUT_HAS_NO_ANALYSES"
     )
   }
 
@@ -500,7 +716,8 @@
       findings, "WARN", "contents", analysis_id, "mainListOfContents",
       paste0("The table of contents lists analysis ", analysis_id,
              ", which is not in the reporting event."),
-      "Saving after any structural change rebuilds the contents lists."
+      "Saving after any structural change rebuilds the contents lists.",
+      ref = "CONTENTS_ANALYSIS_STALE"
     )
   }
   for (output_id in setdiff(contents$outputs, model$outputs$id)) {
@@ -508,7 +725,8 @@
       findings, "WARN", "contents", output_id, "listOfContents",
       paste0("The table of contents lists output ", output_id,
              ", which is not in the reporting event."),
-      "Saving after any structural change rebuilds the contents lists."
+      "Saving after any structural change rebuilds the contents lists.",
+      ref = "CONTENTS_OUTPUT_STALE"
     )
   }
 
@@ -531,10 +749,11 @@
     resolved <- .grouping_dataset(groupings$raw[[i]])
     if (!isTRUE(resolved$conflict)) next
     findings <- .add_finding(
-      findings, "FAIL", "groupings", groupings$id[i], "groupingDataset",
+      findings, "GAP", "groupings", groupings$id[i], "groupingDataset",
       paste0("groupingDataset says ", resolved$flat,
              " but groupingVariable.dataset says ", resolved$nested, "."),
-      "Make the two agree -- they decide which frame the denominator comes from."
+      "Make the two agree -- they decide which frame the denominator comes from.",
+      ref = "GROUPING_DATASET_CONFLICT"
     )
   }
 
@@ -542,7 +761,7 @@
   invalid <- which(is_fixed & groupings$n_groups == 0L)
   for (i in invalid) {
     findings <- .add_finding(
-      findings, "FAIL", "groupings", groupings$id[i], "groups",
+      findings, "GAP", "groupings", groupings$id[i], "groups",
       "This fixed grouping declares no groups, so it defines no result columns.",
       "Add the fixed groups, or mark the grouping as data-driven.",
       ref = "FIXED_GROUPING_EMPTY"
@@ -617,7 +836,7 @@
         "FLAT_AXIS_COLUMN_LABEL_MISMATCH"
       }
       findings <- .add_finding(
-        findings, "FAIL", "outputs", model$outputs$id[i], "columns",
+        findings, "GAP", "outputs", model$outputs$id[i], "columns",
         "The analyses displayed on this flat output use different fixed grouping definitions.",
         "Make every displayed analysis reference the same flat column grouping definition.",
         ref = ref
@@ -647,7 +866,7 @@
     }, logical(1))
     if (length(unique(includes_total)) > 1L) {
       findings <- .add_finding(
-        findings, "FAIL", "outputs", model$outputs$id[i], "columns",
+        findings, "GAP", "outputs", model$outputs$id[i], "columns",
         "The analyses displayed on this flat output disagree on whether a Total column is included.",
         "Make every displayed analysis use the same includeTotal setting.",
         ref = "FLAT_AXIS_COLUMN_COUNT_MISMATCH"
@@ -660,7 +879,7 @@
 
     if (length(result_labels) != expected_count) {
       findings <- .add_finding(
-        findings, "FAIL", "outputs", model$outputs$id[i], "columns",
+        findings, "GAP", "outputs", model$outputs$id[i], "columns",
         sprintf(
           "The flat shell displays %d result columns but grouping %s defines %d.",
           length(result_labels), model$groupings$id[grouping_row], expected_count
@@ -681,7 +900,7 @@
       total_labels <- .strip_n_placeholder(total_labels)
       if (length(unique(.fold_label(total_labels))) > 1L) {
         findings <- .add_finding(
-          findings, "FAIL", "outputs", model$outputs$id[i], "columns",
+          findings, "GAP", "outputs", model$outputs$id[i], "columns",
           "The analyses displayed on this flat output use different Total labels.",
           "Give every displayed analysis the same Total label.",
           ref = "FLAT_AXIS_COLUMN_LABEL_MISMATCH"
@@ -701,7 +920,7 @@
     if (has_total) labels_match <- labels_match && length(total_matches) == 1L
     if (!labels_match) {
       findings <- .add_finding(
-        findings, "FAIL", "outputs", model$outputs$id[i], "columns",
+        findings, "GAP", "outputs", model$outputs$id[i], "columns",
         sprintf(
           "The flat shell column labels do not match grouping %s.",
           model$groupings$id[grouping_row]
@@ -732,11 +951,32 @@
     model$analyses$id
   )
 
+  ## A method that declares it computes nothing -- arsbridge's own reservation
+  ## method, or one a foreign ARS marked the same way -- cannot under-provide
+  ## slots. It provides none by construction, and the row is reserved on
+  ## purpose. Read from the method's own `supported` flag rather than from its
+  ## id, so an ARS that declares its own unsupported method is handled too.
+  ##
+  ## Without this the reservation defeats itself: the no-drop path parks a row
+  ## on MTH_UNSUPPORTED_ANALYSIS (one operation), the shell shows an ordinary
+  ## "xx (xx.x)" (two slots), and the row arsbridge deliberately reserved
+  ## becomes a blocking finding against the whole event. `.check_methods()`
+  ## already reports the analysis as not executable, so there is nothing to say
+  ## a second time per cell.
+  declares_no_result <- stats::setNames(
+    vapply(method_ids, function(method_id) {
+      isFALSE(model$methods$supported[match(method_id, model$methods$id)])
+    }, logical(1)),
+    method_ids
+  )
+
   check_request <- function(findings, analysis_id, description,
-                            requested = character(0), n_slots = length(requested)) {
+                            requested = character(0), n_slots = length(requested),
+                            at = NULL) {
     if (is.na(analysis_id) || !nzchar(analysis_id)) return(findings)
     method_id <- method_by_analysis[[analysis_id]] %||% NA_character_
     if (is.na(method_id) || !nzchar(method_id)) return(findings)
+    if (isTRUE(unname(declares_no_result[method_id]))) return(findings)
 
     available <- stats_by_method[[method_id]] %||% character(0)
     missing <- setdiff(requested, available)
@@ -757,10 +997,10 @@
     }
 
     .add_finding(
-      findings, "FAIL", "analyses", analysis_id, "methodId",
+      findings, "GAP", "analyses", analysis_id, "methodId",
       problem,
       "Assign a method whose operation slots cover every statistic on this line.",
-      ref = "METHOD_PLACEHOLDER_SLOT_MISMATCH"
+      ref = "METHOD_PLACEHOLDER_SLOT_MISMATCH", at = at
     )
   }
 
@@ -793,12 +1033,21 @@
       if (key %in% seen_cells) next
       seen_cells <- c(seen_cells, key)
 
+      ## The cell map has been carrying these coordinates all along; they are
+      ## the difference between "analyses / AN_..." and "sheet X, cell D27".
       findings <- check_request(
         findings,
         analysis_id,
         sprintf("Placeholder '%s'", placeholder),
         requested = requested,
-        n_slots = length(slots)
+        n_slots = length(slots),
+        at = .finding_at(
+          source_doc = "shell",
+          sheet    = .chr_field(output_node[["_meta"]][["shell_fill"]][["source"]][["sheet"]]),
+          cell_ref = .chr_field(cell[["ref"]]),
+          row      = .int_field(cell[["row"]]),
+          col      = .int_field(cell[["col"]])
+        )
       )
     }
 
@@ -809,11 +1058,14 @@
       for (j in seq_len(nrow(layout))) {
         n_slots <- layout$n_slots[j]
         if (is.na(n_slots) || n_slots == 0L) next
+        ## A Word shell has no cell grid, so the row is the whole address.
+        ## Saying so beats inventing a cell reference that does not exist.
         findings <- check_request(
           findings,
           layout$analysis_id[j],
           sprintf("Shell row '%s'", layout$label[j]),
-          n_slots = n_slots
+          n_slots = n_slots,
+          at = .finding_at(source_doc = "shell", locator = layout$label[j])
         )
       }
     }
@@ -826,13 +1078,15 @@
       analysis_id <- rows$owner_analysis_id[j]
       method_id <- rows$method_id[j]
       if (is.null(requested) || is.na(analysis_id) || is.na(method_id)) next
+      ## Same reasoning as check_request(): a reserved row is not a mismatch.
+      if (isTRUE(unname(declares_no_result[method_id]))) next
 
       available <- stats_by_method[[method_id]] %||% character(0)
       missing <- setdiff(requested, available)
       if (length(missing) == 0L) next
 
       findings <- .add_finding(
-        findings, "FAIL", "analyses", analysis_id, "methodId",
+        findings, "GAP", "analyses", analysis_id, "methodId",
         sprintf(
           "Shell line '%s' requests %s, which method %s does not provide.",
           rows$label[j], paste(missing, collapse = ", "), method_id
@@ -857,36 +1111,41 @@
 
     if (identical(class, "missing")) {
       findings <- .add_finding(
-        findings, "FAIL", "analyses", analyses$id[i], "methodId",
+        findings, "GAP", "analyses", analyses$id[i], "methodId",
         "No method is assigned, so this analysis cannot be executed.",
-        "Assign a method -- the engine computes results from it."
+        "Assign a method -- the engine computes results from it.",
+        ref = "METHOD_NOT_ASSIGNED"
       )
     } else if (identical(class, "blocked")) {
       findings <- .add_finding(
         findings, "WARN", "analyses", analyses$id[i], "strata",
         "A CMH test needs a stratification variable, and none is set.",
-        "Set the stratification variable, or the engine reserves an empty cell."
+        "Set the stratification variable, or the engine reserves an empty cell.",
+        ref = "METHOD_STRATA_MISSING"
       )
     } else if (identical(class, "unsupported")) {
       findings <- .add_finding(
         findings, "WARN", "analyses", analyses$id[i], "methodId",
         paste0("Method ", method_id,
                " has no executor, so the engine reserves an empty cell."),
-        "Plan to compute this result manually, or choose an executable method."
+        "Plan to compute this result manually, or choose an executable method.",
+        ref = "METHOD_NOT_EXECUTABLE"
       )
     } else if (identical(class, "fallback")) {
       findings <- .add_finding(
         findings, "WARN", "analyses", analyses$id[i], "methodId",
         paste0("Method ", method_id,
                " has no executor; the generic summarizer runs instead."),
-        "Check the result is what the shell asks for, or change the method."
+        "Check the result is what the shell asks for, or change the method.",
+        ref = "METHOD_FALLBACK_SUMMARIZER"
       )
     } else if (identical(class, "conditional")) {
       findings <- .add_finding(
         findings, "INFO", "analyses", analyses$id[i], "methodId",
         paste0("Method ", method_id,
                " executes only when its prerequisites are met."),
-        "No action needed if the required package and operands are present."
+        "No action needed if the required package and operands are present.",
+        ref = "METHOD_CONDITIONAL"
       )
     }
   }
@@ -906,7 +1165,8 @@
       findings, "WARN", "analysis_sets", sets$id[i], "annotationText",
       paste0("The population \"", sets$annotationText[i],
              "\" was not parsed into a condition, so it filters nothing."),
-      "Express it as a condition, or confirm the analysis is unfiltered."
+      "Express it as a condition, or confirm the analysis is unfiltered.",
+      ref = "POPULATION_NOT_PARSED"
     )
   }
   findings
@@ -928,7 +1188,8 @@
         findings, "INFO", pool, df$id[i], "condition_value",
         paste0("A condition value contains a semicolon, which the editor ",
                "uses to separate values."),
-        "Edit this condition through the raw-JSON escape hatch instead."
+        "Edit this condition through the raw-JSON escape hatch instead.",
+        ref = "SEPARATOR_IN_CONDITION_VALUE"
       )
     }
   }
@@ -948,9 +1209,10 @@
 
     if (!dataset %in% known_datasets) {
       return(.add_finding(
-        findings, "FAIL", entity, id, field,
+        findings, "GAP", entity, id, field,
         paste0("Dataset ", dataset, " is not in the ADaM spec."),
-        "Correct the dataset, or add it to the spec."
+        "Correct the dataset, or add it to the spec.",
+        ref = "DATASET_NOT_IN_SPEC", detail = dataset
       ))
     }
     if (is.na(variable) || !nzchar(variable)) return(findings)
@@ -961,7 +1223,8 @@
     .add_finding(
       findings, "WARN", entity, id, field,
       paste0("Variable ", key, " is not in the ADaM spec."),
-      "Correct the variable, or confirm it is derived downstream."
+      "Correct the variable, or confirm it is derived downstream.",
+      ref = "VARIABLE_NOT_IN_SPEC", detail = key
     )
   }
 
@@ -1099,7 +1362,7 @@
       paste0("The shell annotates \"", described, "\" (", variable_ref,
              ") but no analysis in this output uses that variable."),
       "Add the missing analysis, or confirm the line is not an analysis.",
-      ref = variable_ref
+      ref = "SHELL_LINE_NOT_ANALYSED", detail = variable_ref
     )
   }
 
@@ -1253,7 +1516,7 @@
     ## disagrees with it means display columns were added or lost.
     if (length(leaf_nodes) > 0 && length(paths) != length(leaf_nodes)) {
       findings <- .add_finding(
-        findings, "FAIL", "outputs", out_id, "resultGroupPaths",
+        findings, "GAP", "outputs", out_id, "resultGroupPaths",
         sprintf("The shell header has %d result columns but %d path(s) are declared.",
                 length(leaf_nodes), length(paths)),
         "Each display column needs exactly one declared path -- regenerate or fix the path list.",
@@ -1264,7 +1527,7 @@
       leaf_id <- .chr_field(leaf[["id"]])
       if (!is.na(leaf_id) && nzchar(leaf_id) && !leaf_id %in% path_node_ids) {
         findings <- .add_finding(
-          findings, "FAIL", "outputs", out_id, "resultGroupPaths",
+          findings, "GAP", "outputs", out_id, "resultGroupPaths",
           sprintf("Shell column '%s' has no declared result path.",
                   .chr_field(leaf[["label"]]) %||% leaf_id),
           "Add the missing path (or regenerate) -- this display column would otherwise be silently dropped.",
@@ -1286,7 +1549,7 @@
       if (length(tree_ids) > 0 && !is.na(nid) && nzchar(nid) &&
           !nid %in% tree_ids) {
         findings <- .add_finding(
-          findings, "FAIL", "outputs", out_id, "resultGroupPaths",
+          findings, "GAP", "outputs", out_id, "resultGroupPaths",
           sprintf("Path '%s' matches no column of the shell header tree.", label),
           "Remove it -- only columns the shell displays may be declared.",
           ref = "INVALID_CARTESIAN_PRODUCT"
@@ -1298,7 +1561,7 @@
       }, character(1))
       if (anyDuplicated(stats::na.omit(gf_of))) {
         findings <- .add_finding(
-          findings, "FAIL", "outputs", out_id, "resultGroupPaths",
+          findings, "GAP", "outputs", out_id, "resultGroupPaths",
           sprintf("Path '%s' references two groups of the same grouping factor.", label),
           "A column cannot be two levels of one variable at once -- fix the path's groupIds.",
           ref = "INVALID_CARTESIAN_PRODUCT"
@@ -1307,7 +1570,7 @@
       for (gid in gids) {
         if (is.null(group_index[[gid]])) {
           findings <- .add_finding(
-            findings, "FAIL", "outputs", out_id, "resultGroupPaths",
+            findings, "GAP", "outputs", out_id, "resultGroupPaths",
             sprintf("Path '%s' references unknown group id '%s'.", label, gid),
             "Point the path at an existing group level, or add the missing group to its grouping factor.",
             ref = "GROUPING_VARIABLE_NOT_LINKED"
@@ -1318,7 +1581,7 @@
       if (identical(role, "SUBTOTAL") &&
           (is.na(.chr_field(p[["totalStrategy"]])) || length(gids) == 0)) {
         findings <- .add_finding(
-          findings, "FAIL", "outputs", out_id, "resultGroupPaths",
+          findings, "GAP", "outputs", out_id, "resultGroupPaths",
           sprintf("Subtotal path '%s' has no defined scope.", label),
           "Give it totalStrategy 'condition_based' and its parent group id -- an unscoped subtotal is ambiguous (parent condition vs sum of children).",
           ref = "SUBTOTAL_SCOPE_UNDEFINED"
@@ -1330,7 +1593,7 @@
       prior <- seen_conditions[[cond_key]]
       if (!is.null(prior)) {
         findings <- .add_finding(
-          findings, "FAIL", "outputs", out_id, "resultGroupPaths",
+          findings, "GAP", "outputs", out_id, "resultGroupPaths",
           sprintf("Paths '%s' and '%s' compose the same condition -- two columns would compute identical results.",
                   prior, label),
           "Make each path a distinct subject set (check the groupIds).",
@@ -1383,7 +1646,7 @@
       missing <- setdiff(used_gf_order, an_gids)
       if (length(missing) > 0) {
         findings <- .add_finding(
-          findings, "FAIL", "analyses", analyses$id[j], "grouping_ids",
+          findings, "GAP", "analyses", analyses$id[j], "grouping_ids",
           sprintf("This analysis does not reference grouping factor(s) %s that the output's result paths require.",
                   paste(missing, collapse = ", ")),
           "Add the grouping(s) in 'Grouped by' -- without them this line cannot fill the hierarchical columns.",
@@ -1424,9 +1687,14 @@
 #'   corresponding analysis are reported as gaps.
 #'
 #' @return A data frame of findings, most severe first, with columns
-#'   `severity` (`"FAIL"`, `"WARN"` or `"INFO"`), `entity` (the pool the
+#'   `severity` (`"GAP"`, `"WARN"` or `"INFO"`), `entity` (the pool the
 #'   finding is about), `id`, `field`, `problem` and `action`. Zero rows means
 #'   nothing to fix.
+#'
+#'   `GAP` means a specific result will not be produced and the run has
+#'   reserved it; `WARN` means a number exists but came from a fallback or an
+#'   inference, so check it. Reports written before this release carry `FAIL`
+#'   where they would now carry `GAP`, and still sort and render.
 #'
 #' @section What is checked:
 #' \describe{
@@ -1458,7 +1726,7 @@
 #' \dontrun{
 #' model <- ars_to_model("reporting_event.json")
 #' findings <- validate_ars_model(model)
-#' subset(findings, severity == "FAIL")
+#' subset(findings, severity == "GAP")
 #' }
 #' @export
 validate_ars_model <- function(model, spec = NULL, report = NULL) {
@@ -1486,49 +1754,75 @@ validate_ars_model <- function(model, spec = NULL, report = NULL) {
   }
 
   ## Most severe first, so the panel and the console summary agree on order.
-  severity_rank <- match(findings$severity, c("FAIL", "WARN", "INFO"))
+  severity_rank <- match(findings$severity, .FINDING_SEVERITY_RANK)
   findings <- findings[order(severity_rank), , drop = FALSE]
   rownames(findings) <- NULL
   findings
 }
 
-## One representation for every place that decides whether an ARS event may
-## become an executable deliverable. WARN and INFO remain visible, but only a
-## FAIL closes the gate.
+## One representation for every place that reads what validation concluded.
+##
+## `gaps` and `gap_refs` are the vocabulary from here on: the findings naming
+## results that will not be produced. `blocking_findings` and `blocking_refs`
+## are the same rows under their old names, kept because several callers and
+## archived payloads read them, and renaming a field is not what this change is
+## for.
 #' @noRd
 .validation_gate <- function(findings) {
-  blocking <- findings[findings$severity %in% "FAIL", , drop = FALSE]
-  refs <- blocking$ref[
-    !is.na(blocking$ref) & nzchar(blocking$ref)
+  gaps <- findings[findings$severity %in% .GAP_SEVERITIES, , drop = FALSE]
+  refs <- gaps$ref[
+    !is.na(gaps$ref) & nzchar(gaps$ref)
   ]
   refs <- unique(refs)
 
-  actions <- blocking$action[
-    !is.na(blocking$action) & nzchar(blocking$action)
+  actions <- gaps$action[
+    !is.na(gaps$action) & nzchar(gaps$action)
   ]
   actions <- unique(actions)
 
-  blocked <- nrow(blocking) > 0L
-  summary <- if (blocked) {
+  has_gaps <- nrow(gaps) > 0L
+  ## Counts FINDINGS, and says so. How many RESULTS each one withholds is a
+  ## question about the model -- one finding can reach many analyses, or none
+  ## when nothing references the entity it names -- and this function has only
+  ## the findings.
+  summary <- if (has_gaps) {
     action_text <- if (length(actions) > 0L) {
       paste(actions, collapse = " ")
     } else {
-      "Review the blocking findings and repair the reporting event."
+      "Review the gap findings and repair the reporting event."
     }
     paste0(
-      nrow(blocking), " blocking finding",
-      if (nrow(blocking) == 1L) "" else "s",
-      ". To fix: ", action_text
+      nrow(gaps), " gap finding",
+      if (nrow(gaps) == 1L) "" else "s",
+      "; the results each one names are withheld. To fix: ", action_text
     )
   } else {
-    "No blocking findings. WARN and INFO findings remain available for review."
+    "No gap findings. WARN and INFO findings remain available for review."
   }
 
   list(
-    blocked = blocked,
-    status = if (blocked) "needs-fixes" else "ready",
+    ## FALSE, always. A gap used to refuse the whole reporting event, so ten
+    ## sound outputs were withheld for one unresolvable row.
+    ##
+    ## What replaced it is not "nothing". Every path that turns an event into a
+    ## deliverable now reads the same reservation map and withholds the same
+    ## analyses: `ars_to_ard()` reserves before it reads any data,
+    ## `.emit_tlf_script()` emits a reservation instead of a calculation, and
+    ## the fill carries the ARD's own reason into the workbook. That the three
+    ## agree is asserted end to end, on a deliberately damaged event, in
+    ## `test-reserved_end_to_end.R`; that no finding code escapes the map is
+    ## asserted in `test-reservation_coverage.R`. Both run on every suite.
+    ##
+    ## Kept rather than deleted because archived payloads carry this field and
+    ## readers branch on it; a reader finding it FALSE draws the right
+    ## conclusion, which is that this run was not refused.
+    blocked = FALSE,
+    status = if (has_gaps) "completed-with-gaps" else "ready",
+    verdict = if (has_gaps) "COMPLETED WITH GAPS" else "DONE",
     findings = findings,
-    blocking_findings = blocking,
+    gaps = gaps,
+    gap_refs = refs,
+    blocking_findings = gaps,
     blocking_refs = refs,
     summary = summary
   )
@@ -1539,30 +1833,30 @@ validate_ars_model <- function(model, spec = NULL, report = NULL) {
   .validation_gate(validate_ars_model(model, spec = spec, report = report))
 }
 
-## Refuse to turn a structurally invalid event into a runnable artifact. This is
-## deliberately called at each direct execution boundary, not only by the
-## higher-level workflow, because these helpers are also callable on their own.
-#' @noRd
-.assert_runnable_ars <- function(ars) {
-  model <- if (inherits(ars, "ars_model")) ars else ars_to_model(ars)
-  gate <- .model_validation_gate(model)
-  if (!gate$blocked) return(invisible(gate))
-
-  refs <- if (length(gate$blocking_refs) > 0L) {
-    paste(gate$blocking_refs, collapse = ", ")
-  } else {
-    "unreferenced structural finding"
-  }
-  cli::cli_abort(c(
-    "This reporting event cannot be executed because structural validation failed.",
-    "x" = gate$summary,
-    "i" = paste("Blocking references:", refs),
-    "i" = "Repair the reporting event and validate it again before execution."
-  ))
-}
+## `.assert_runnable_ars()` used to stand here. It was called at each execution
+## boundary -- ars_to_ard(), write_tlf_code(), ars_fill_shell() -- and refused
+## the whole reporting event when any finding was FAIL, which is why one
+## unresolvable row cost ten sound outputs. All three call sites are gone, and
+## so is the helper; nothing in the package calls it.
+##
+## What replaced it is not a weaker version of the same thing: it is the same
+## guarantee applied to a cell instead of a run. Each of those three paths now
+## reads the same reservation map and withholds the same analyses --
+## `ars_to_ard()` before it reads any data, `.emit_tlf_script()` instead of
+## emitting a calculation, and the fill by carrying the ARD's own reason into
+## the workbook. That the three agree is asserted end to end on deliberately
+## damaged events in `test-reserved_end_to_end.R`, and that no finding code
+## escapes the map is asserted in `test-reservation_coverage.R`.
 
 ## Translate model findings into the workflow diagnostics contract without
 ## throwing away entity, id and field context.
+##
+## The severity is translated, not copied. The two channels have deliberately
+## different vocabularies -- a finding is a statement about the reporting event
+## and says GAP, a diagnostic is a statement about a run and says FAIL -- and
+## this is the one place they meet. `ars_blockers()` is an exported contract
+## that promises FAIL, so a GAP crossing here without translation would empty
+## it: the most serious findings would arrive under a word no consumer counts.
 #' @noRd
 .validation_gate_diagnostics <- function(gate) {
   findings <- gate$findings
@@ -1576,9 +1870,12 @@ validate_ars_model <- function(model, spec = NULL, report = NULL) {
     if (length(parts) == 0L) NA_character_ else paste(parts, collapse = " / ")
   }, character(1))
 
+  severity <- findings$severity
+  severity[severity %in% .GAP_SEVERITIES] <- "FAIL"
+
   data.frame(
     stage = "validate_ars",
-    severity = findings$severity,
+    severity = severity,
     input = INPUT_ARS,
     tlf_number = NA_character_,
     location = locations,

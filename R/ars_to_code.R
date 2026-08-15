@@ -415,6 +415,93 @@
 ## Emit the cards block(s) for one resolved analysis. Returns a list with
 ## `code` (character vector of lines) and `objs` (block object names to bind).
 #' @noRd
+## Method ids the event itself declares produce no computable result.
+##
+## Read from each method's own `supported` flag rather than from a list of
+## known ids, so a reporting event written elsewhere that marks its own method
+## the same way is honoured too.
+#' @noRd
+.reserved_method_ids <- function(spec) {
+  methods <- spec[["methods"]] %||% list()
+  ids <- vapply(methods, function(method) {
+    if (isFALSE(method[["supported"]])) method[["id"]] %||% "" else ""
+  }, character(1))
+  ids[nzchar(ids)]
+}
+
+## What an analysis gets in the emitted script when its method declares it
+## computes nothing.
+##
+## Never a calculation. The generic arm of `.method_call()` would otherwise
+## substitute a categorical n(%) for it -- a number the reporting event never
+## asked for, in a file whose whole purpose is to be a reproducible record of
+## what was computed. A substitute calculation is worse there than a missing
+## one: it is signed, re-runnable, and looks deliberate.
+##
+## What it gets instead is the method's own derivation note, carried through
+## verbatim, and no bound object -- so nothing this block "produces" can reach
+## the ARD.
+#' @noRd
+.emit_reserved_block <- function(res, method) {
+  template <- method[["codeTemplate"]][["code"]] %||% ""
+  reason   <- method[["description"]] %||% ""
+
+  lines <- c(
+    .block_comment(res),
+    "#",
+    "# Reserved: this method declares it computes no result, so arsbridge",
+    "# emits no calculation for it. The cell is reserved in the ARD instead",
+    "# -- see ars_manual_worklist().",
+    if (nzchar(reason)) paste0("# Reason: ", reason)
+  )
+
+  if (nzchar(template)) {
+    ## The method's own note, commented so the script still parses and runs.
+    note <- strsplit(template, "\n", fixed = TRUE)[[1]]
+    note <- sub("^#*\\s?", "", note)
+    lines <- c(lines, "#", paste0("# ", note))
+  }
+
+  paste(lines, collapse = "\n")
+}
+
+## A block for an analysis the STRUCTURE reserved, rather than one whose method
+## declared it computes nothing.
+##
+## Both end the same way -- a comment and no object, so nothing reaches
+## bind_ard() and no substitute calculation is written -- but they are not the
+## same situation and the script must not pretend they are. A reserved method
+## is somebody's job: the semantics are known and a programmer can derive the
+## number by hand. A structural reservation is nobody's job yet, because the
+## event does not say what the number would mean -- an analysis set that
+## resolves to nothing has no population to derive against, and inviting a hand
+## derivation would be inviting an invented one.
+##
+## The finding's code travels into the script on purpose. A reader holding the
+## generated program and the validation report has to be able to join them, and
+## the code is the only thing both carry.
+#' @noRd
+.emit_structural_reserved_block <- function(res, reservation) {
+  reason <- reservation$reason %||% ""
+  ref    <- reservation$ref %||% ""
+
+  lines <- c(
+    .block_comment(res),
+    "#",
+    "# Reserved: the reporting event does not resolve for this analysis, so",
+    "# arsbridge emits no calculation for it. Computing anyway would produce a",
+    "# number the event never asked for, which is the one thing a generated",
+    "# program must not contain.",
+    if (nzchar(ref)) paste0("# Finding: ", ref),
+    if (nzchar(reason)) paste0("# Reason: ", reason),
+    "#",
+    "# Repair the reporting event and regenerate; this block computes then."
+  )
+
+  paste(lines, collapse = "\n")
+}
+
+#' @noRd
 .emit_block <- function(res) {
   ## Declared-path mode: one block per declared result column, never a cross
   ## of the grouping variables. Stratified/inferential methods keep the flat
@@ -747,11 +834,19 @@
 .emit_tlf_script <- function(output_id, spec, subject_key = "USUBJID",
                              adam_dir = ".", grouping_map = NULL,
                              analysis_to_output = NULL,
-                             grouping_groups = NULL, output_paths = NULL) {
+                             grouping_groups = NULL, output_paths = NULL,
+                             reservations = NULL) {
   if (is.null(grouping_map))       grouping_map       <- .build_grouping_map(spec)
   if (is.null(analysis_to_output)) analysis_to_output <- .build_analysis_to_output(spec)
   if (is.null(grouping_groups))    grouping_groups    <- .build_grouping_groups_map(spec)
   if (is.null(output_paths))       output_paths       <- .build_output_paths_map(spec)
+  ## The same map `ars_to_ard()` reserves from, so the generated program and
+  ## the ARD withhold the same analyses. Built here when the caller did not
+  ## build it; `write_tlf_code()` builds it once for the whole event rather
+  ## than re-validating per output.
+  if (is.null(reservations)) {
+    reservations <- .spec_reservations(spec)$by_analysis
+  }
 
   ## Resolve the analyses referenced by this output, in spec (display) order.
   reslist <- list()
@@ -835,7 +930,32 @@
   ## Emit blocks, swapping inline ADSL-pop expressions for the named frames.
   blocks <- character(0)
   objs   <- character(0)
+  reserved_ids <- .reserved_method_ids(spec)
+  method_by_id <- stats::setNames(
+    spec[["methods"]] %||% list(),
+    vapply(spec[["methods"]] %||% list(),
+           function(method) method[["id"]] %||% "", character(1))
+  )
   for (res in reslist) {
+    ## Structure first. An analysis whose references do not resolve has no
+    ## sound calculation to write, whatever its method says -- and checking the
+    ## method first would emit "derive this by hand" for a row whose population
+    ## nobody can name.
+    structural <- reservations[[res$analysis_id %||% ""]]
+    if (!is.null(structural)) {
+      blocks <- c(blocks, "",
+                  .emit_structural_reserved_block(res, structural))
+      next
+    }
+
+    ## A method that declares it computes nothing contributes a note and no
+    ## object -- so it cannot reach bind_ard(), and no substitute calculation
+    ## is written in its place.
+    if ((res$method_id %||% "") %in% reserved_ids) {
+      blocks <- c(blocks, "",
+                  .emit_reserved_block(res, method_by_id[[res$method_id]]))
+      next
+    }
     b  <- .emit_block(res)
     de <- .emit_require_plan(.denom_expr(res), res, "denominator")
     if (de != "ADSL" && de %in% names(pop_names)) {
@@ -846,8 +966,17 @@
     objs   <- c(objs, b$objs)
   }
 
-  bind_line <- sprintf("\n%s <- cards::bind_ard(\n  %s\n)",
-                       ard_obj, paste(objs, collapse = ",\n  "))
+  ## Every analysis on this output was reserved, so there is nothing to bind.
+  ## bind_ard() with no arguments would not run, and an empty frame would claim
+  ## the output produced results.
+  bind_line <- if (length(objs) == 0) {
+    sprintf(paste0("\n## Every analysis on this output is reserved, so this ",
+                   "script computes\n## nothing. %s stays NULL.\n%s <- NULL"),
+            ard_obj, ard_obj)
+  } else {
+    sprintf("\n%s <- cards::bind_ard(\n  %s\n)",
+            ard_obj, paste(objs, collapse = ",\n  "))
+  }
 
   paste(c(header, "", loaders,
           if (length(pop_defs)) c("", pop_defs),
@@ -939,8 +1068,6 @@ write_tlf_code <- function(spec_or_path, code_dir, output_ids = NULL,
     jsonlite::fromJSON(spec_or_path, simplifyVector = FALSE)
   } else spec_or_path
 
-  .assert_runnable_ars(spec)
-
   if (!dir.exists(code_dir)) {
     dir.create(code_dir, recursive = TRUE, showWarnings = FALSE)
   }
@@ -949,6 +1076,10 @@ write_tlf_code <- function(spec_or_path, code_dir, output_ids = NULL,
   analysis_to_output <- .build_analysis_to_output(spec)
   grouping_groups    <- .build_grouping_groups_map(spec)
   output_paths       <- .build_output_paths_map(spec)
+  ## Built once for the whole event, not per output: it validates the event,
+  ## and validating once per script would repeat that work for every TLF while
+  ## giving every script the same answer.
+  reservations       <- .spec_reservations(spec)$by_analysis
 
   ## All output ids, optionally filtered (by id or name, case-insensitive).
   all_outputs <- spec[["outputs"]] %||% list()
@@ -1001,7 +1132,7 @@ write_tlf_code <- function(spec_or_path, code_dir, output_ids = NULL,
       .emit_tlf_script(
         oid, spec, subject_key, adam_dir,
         grouping_map, analysis_to_output,
-        grouping_groups, output_paths
+        grouping_groups, output_paths, reservations
       ),
       error = function(e) {
         emit_error <<- e

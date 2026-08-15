@@ -65,7 +65,12 @@
   OP_Q1     = "p25",
   OP_Q3     = "p75",
   OP_MIN    = "min",
-  OP_MAX    = "max"
+  OP_MAX    = "max",
+  ## The reservation operation. Without this entry it fell through to the
+  ## lower-cased operation NAME ("manual derivation"), while the ARD stub
+  ## carried .MANUAL_STAT_NAME -- so the join missed and a deliberately
+  ## reserved cell was reported as having no result at all.
+  OP_MANUAL = .MANUAL_STAT_NAME
 )
 
 #' The ARD stat_name an operation will produce. Falls back to the operation's

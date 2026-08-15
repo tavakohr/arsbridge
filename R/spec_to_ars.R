@@ -654,14 +654,24 @@ spec_to_ars <- function(shell_path,
       )
     }
     character(0)
-  } else if (validation_gate$blocked) {
-    if (verbose) {
-      cli::cli_alert_danger(
-        "Runnable code was not emitted: {validation_gate$summary}"
+  } else {
+    ## The `validation_gate$blocked` branch that stood here is gone because it
+    ## is unreachable: `.validation_gate()` sets `blocked = FALSE`
+    ## unconditionally now, so this arm could never be taken.
+    ##
+    ## What it used to do has not been dropped, it has moved INSIDE the
+    ## emitter. `.emit_tlf_script()` reads the same reservation map
+    ## `ars_to_ard()` uses and writes a reservation instead of a calculation
+    ## for every analysis that does not resolve -- so a gap costs that analysis
+    ## its block and nothing else, and no substitute calculation reaches a
+    ## signed `.R` deliverable. Skipping the whole emission would withhold the
+    ## programs for every sound output on the event, which is the behaviour
+    ## this change exists to end.
+    if (verbose && length(validation_gate$gap_refs %||% character(0)) > 0) {
+      cli::cli_alert_warning(
+        "Some analyses are reserved and emit no calculation: {validation_gate$summary}"
       )
     }
-    character(0)
-  } else {
     tryCatch(
       write_tlf_code(output_path, code_dir, adam_dir = adam_dir,
                      log = if (verbose) function(m) cli::cli_alert(m) else NULL),
@@ -679,7 +689,13 @@ spec_to_ars <- function(shell_path,
   ## --- Diagnostics summary + report ----------------------------------
   diagnostics <- diag_records()
   blockers    <- ars_blockers(diagnostics)
-  write_report <- isTRUE(validate) || validation_gate$blocked
+  ## The report is written when it was asked for, or when the event has gaps.
+  ## The second half used to read `validation_gate$blocked`, which meant "the
+  ## run was refused"; it now reads the gaps directly, because a reserved
+  ## result is precisely the case where the reader needs the report even
+  ## though the run finished.
+  write_report <- isTRUE(validate) ||
+    length(validation_gate$gap_refs %||% character(0)) > 0
   if (nrow(diagnostics) > 0) {
     n_fail <- sum(diagnostics$severity == "FAIL")
     n_warn_diag <- sum(diagnostics$severity == "WARN")

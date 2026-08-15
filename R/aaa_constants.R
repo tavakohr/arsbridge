@@ -96,3 +96,16 @@
 ## the editor.
 .DEFAULT_ANALYSIS_REASON  <- "SPECIFIED IN SAP"
 .DEFAULT_ANALYSIS_PURPOSE <- "EXPLORATORY OUTCOME MEASURE"
+
+## The stat_name a reserved cell carries.
+##
+## Two independent code paths have to agree on this string or the cell map and
+## the ARD never meet. `.build_table_cells()` derives a cell's stat_name from
+## the method's operation; `.reserve_blocked_ard()` and the manual_pending stub
+## write the ARD row. `.ard_value()` joins them on stat_name, so a disagreement
+## does not fail loudly -- the lookup simply misses, and a cell that was
+## deliberately reserved gets reported as "no result in the ARD", which reads
+## as "the analysis failed" rather than "this is somebody's job".
+##
+## Naming it once is the fix. Neither side may spell it independently.
+.MANUAL_STAT_NAME <- "result"

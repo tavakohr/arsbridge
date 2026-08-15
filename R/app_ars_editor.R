@@ -70,6 +70,9 @@
 .severity_class <- function(severity) {
   switch(
     severity,
+    ## A reserved result is the most serious thing the panel shows, whether the
+    ## payload calls it GAP or -- written by an earlier release -- FAIL.
+    GAP = "danger",
     FAIL = "danger",
     WARN = "warning",
     INFO = "secondary",
@@ -80,7 +83,7 @@
 ## The worst severity among a set of findings, or NA when there are none.
 #' @noRd
 .worst_severity <- function(severities) {
-  for (level in c("FAIL", "WARN", "INFO")) {
+  for (level in .FINDING_SEVERITY_RANK) {
     if (level %in% severities) return(level)
   }
   NA_character_
@@ -191,32 +194,38 @@ mod_status_server <- function(id, state, parent_session = NULL) {
   shiny::moduleServer(id, function(input, output, session) {
     output$status <- shiny::renderUI({
       findings <- state$findings()
+      ## `.FINDING_SEVERITY_RANK` is the severity LABELS, most serious first
+      ## ("FAIL", "GAP", "WARN", "INFO"); vapply over it names the counts.
       counts <- vapply(
-        c("FAIL", "WARN", "INFO"),
-        function(level) sum(findings$severity == level),
+        .FINDING_SEVERITY_RANK,
+        function(level) sum(findings$severity == level, na.rm = TRUE),
         integer(1)
       )
+      ## GAP and FAIL are the same statement in two vocabularies -- the second
+      ## only reachable from a payload written before this release -- so the
+      ## badge counts them together rather than showing a stale word. Indexed
+      ## with `[`, which yields NA rather than erroring if a label is absent.
+      n_gap <- sum(counts[.GAP_SEVERITIES], na.rm = TRUE)
+      n_warn <- sum(counts["WARN"], na.rm = TRUE)
+      n_info <- sum(counts["INFO"], na.rm = TRUE)
 
-      summary_text <- if (counts[["FAIL"]] > 0) {
-        paste0(counts[["FAIL"]], " blocking problem",
-               if (counts[["FAIL"]] == 1) "" else "s")
+      summary_text <- if (n_gap > 0) {
+        paste0(n_gap, " reserved result", if (n_gap == 1) "" else "s")
       } else {
-        "No blocking problems"
+        "Nothing reserved"
       }
 
       shiny::div(
         class = "d-flex align-items-center gap-2 mb-2",
         shiny::span(
-          class = paste0(
-            "badge text-bg-",
-            if (counts[["FAIL"]] > 0) "danger" else "success"
-          ),
+          class = paste0("badge text-bg-",
+                         if (n_gap > 0) "danger" else "success"),
           summary_text
         ),
         shiny::span(class = "badge text-bg-warning",
-                    paste(counts[["WARN"]], "to review")),
+                    paste(n_warn, "to review")),
         shiny::span(class = "badge text-bg-secondary",
-                    paste(counts[["INFO"]], "notes")),
+                    paste(n_info, "notes")),
         if (identical(state$mode, "edit")) {
           shiny::div(class = "ms-auto", mod_save_ui(session$ns("save")))
         }

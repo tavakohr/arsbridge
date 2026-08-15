@@ -20,9 +20,14 @@ corresponding analysis are reported as gaps.}
 }
 \value{
 A data frame of findings, most severe first, with columns
-\code{severity} (\code{"FAIL"}, \code{"WARN"} or \code{"INFO"}), \code{entity} (the pool the
+\code{severity} (\code{"GAP"}, \code{"WARN"} or \code{"INFO"}), \code{entity} (the pool the
 finding is about), \code{id}, \code{field}, \code{problem} and \code{action}. Zero rows means
 nothing to fix.
+
+\code{GAP} means a specific result will not be produced and the run has
+reserved it; \code{WARN} means a number exists but came from a fallback or an
+inference, so check it. Reports written before this release carry \code{FAIL}
+where they would now carry \code{GAP}, and still sort and render.
 }
 \description{
 Runs the checks that make the review stage guided rather than generic: that
@@ -60,7 +65,7 @@ carries -- lines the generator missed.}
 \dontrun{
 model <- ars_to_model("reporting_event.json")
 findings <- validate_ars_model(model)
-subset(findings, severity == "FAIL")
+subset(findings, severity == "GAP")
 }
 }
 \seealso{

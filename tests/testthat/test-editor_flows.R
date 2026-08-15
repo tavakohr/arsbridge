@@ -89,7 +89,7 @@ test_that("choosing a catalogue method inserts it before pointing at it", {
     expect_true("MTH_KAPLAN_MEIER_ESTIMATE" %in% model$methods$id)
     expect_equal(model$analyses$methodId[model$analyses$id == target],
                  "MTH_KAPLAN_MEIER_ESTIMATE")
-    expect_equal(sum(validate_ars_model(model)$severity == "FAIL"), 0)
+    expect_equal(sum(validate_ars_model(model)$severity == "GAP"), 0)
   })
 })
 
@@ -285,7 +285,7 @@ test_that("the wizard refuses a line with no variable, then adds a real one", {
     expect_equal(added$pool, "analyses")
     expect_equal(model$analyses$label[model$analyses$id == added$id], "SMOKFL")
     expect_null(state$add_request())
-    expect_equal(sum(validate_ars_model(model)$severity == "FAIL"), 0)
+    expect_equal(sum(validate_ars_model(model)$severity == "GAP"), 0)
   })
 })
 
@@ -377,20 +377,32 @@ test_that("the status header summarizes safety, with save controls in edit mode"
   viewer <- .flows_state(mode = "view")
   shiny::testServer(mod_status_server, args = list(state = viewer), {
     rendered <- paste(as.character(output$status), collapse = " ")
-    expect_match(rendered, "No blocking problems")
+    expect_match(rendered, "Nothing reserved")
     expect_false(grepl("Save and close", rendered))
   })
 
   editor <- .flows_state(mode = "edit")
-  editor$findings(rbind(
-    shiny::isolate(editor$findings()),
-    data.frame(severity = "FAIL", entity = "analyses", id = "AN_X",
-               field = "methodId", problem = "x", action = "y",
-               ref = NA_character_, stringsAsFactors = FALSE)
-  ))
+  ## Deliberately hand-built with no `ref`: the status header also has to
+  ## count findings that did not come from validate_ars_model() -- an archived
+  ## payload, or a frame from another tool -- and those carry no code.
+  ## Deliberately built with no `ref`: the status header also has to count
+  ## findings that did not come from validate_ars_model() -- an archived
+  ## payload, or a frame from another tool -- and those carry no code.
+  ##
+  ## Its shape is taken from .new_findings() rather than written out, so the
+  ## row cannot drift from the schema the next time a column is added.
+  foreign <- .new_findings()[1, , drop = FALSE]
+  foreign$severity <- "GAP"
+  foreign$entity   <- "analyses"
+  foreign$id       <- "AN_X"
+  foreign$field    <- "methodId"
+  foreign$problem  <- "x"
+  foreign$action   <- "y"
+
+  editor$findings(rbind(shiny::isolate(editor$findings()), foreign))
   shiny::testServer(mod_status_server, args = list(state = editor), {
     rendered <- paste(as.character(output$status), collapse = " ")
-    expect_match(rendered, "1 blocking problem")
+    expect_match(rendered, "1 reserved result")
     expect_match(rendered, "Save and close")
   })
 })
@@ -601,7 +613,8 @@ test_that("a finding carries the name the rest of the app uses", {
   model <- .flows_model()
   findings <- .new_findings()
   findings <- .add_finding(findings, "WARN", "outputs", model$outputs$id[1],
-                           "columns", "problem", "action")
+                           "columns", "problem", "action",
+                           ref = "OUTPUT_HAS_NO_ANALYSES")
 
   named <- .with_finding_names(findings, model)
 
@@ -616,9 +629,11 @@ test_that("a finding whose entity has gone keeps the row and drops the name", {
   model <- .flows_model()
   findings <- .new_findings()
   findings <- .add_finding(findings, "WARN", "outputs", "OUT_DELETED",
-                           "columns", "problem", "action")
+                           "columns", "problem", "action",
+                           ref = "OUTPUT_HAS_NO_ANALYSES")
   findings <- .add_finding(findings, "INFO", "not_a_pool", "X",
-                           "f", "problem", "action")
+                           "f", "problem", "action",
+                           ref = "METHOD_CONDITIONAL")
 
   named <- .with_finding_names(findings, model)
 
@@ -644,7 +659,8 @@ test_that("selecting a finding opens the entity it is about", {
   ## request the library already listens for.
   grouping_id <- model$groupings$id[1]
   findings <- .add_finding(.new_findings(), "WARN", "groupings", grouping_id,
-                           "groups", "problem", "action")
+                           "groups", "problem", "action",
+                           ref = "FIXED_GROUPING_EMPTY")
   state$findings(findings)
 
   shiny::testServer(mod_validation_server, args = list(state = state), {
@@ -668,7 +684,8 @@ test_that("selecting an output finding selects it without an entity jump", {
   ## An output is not in the Entities tab, so it must NOT be requested there
   ## -- the library would ignore it and the reviewer would land nowhere.
   state$findings(.add_finding(.new_findings(), "WARN", "outputs", output_id,
-                              "columns", "problem", "action"))
+                              "columns", "problem", "action",
+                              ref = "OUTPUT_HAS_NO_ANALYSES"))
 
   shiny::testServer(mod_validation_server, args = list(state = state), {
     session$setInputs(findings_rows_selected = 1)

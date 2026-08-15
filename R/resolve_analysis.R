@@ -309,11 +309,12 @@ resolve_analysis <- function(ana, spec, subject_key = "USUBJID",
       by <- c(by, gf_var)
       ## A conflicted grouping resolves to NA here, carrying `conflict` as an
       ## attribute; as.character() drops it. Nothing downstream chooses a
-      ## dataset from a conflict -- ars_to_ard() never sees one, because
-      ## .assert_runnable_ars() refuses the event on the blocking FAIL that
-      ## validate_ars_model() raises. resolve_analysis() is directly callable,
-      ## so a caller that bypasses that gate gets NA, which is "no declared
-      ## dataset" and therefore population-first.
+      ## dataset from a conflict -- ars_to_ard() never computes one, because
+      ## GROUPING_DATASET_CONFLICT reserves every analysis referencing that
+      ## grouping before any data is read. resolve_analysis() is directly
+      ## callable, so a caller reaching past that gets NA, which is "no
+      ## declared dataset" and therefore population-first: a conservative
+      ## answer rather than one of the two contradicting datasets.
       by_datasets <- c(by_datasets,
                        as.character(grouping_ds[[gf_id]] %||% NA_character_))
     }

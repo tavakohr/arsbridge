@@ -11,8 +11,25 @@
 ## Row-tint fill colours, keyed by status / severity. Single source of truth
 ## for the tinting AND the Legend sheet, so a colour change can never make the
 ## two disagree.
+##
+## One palette across three sheets whose vocabularies are NOT the same, which
+## is why each word here has to be read with its sheet:
+##
+##   Validation      PASS / WARN / FAIL -- an annotation against the ADaM spec
+##   Diagnostics     FAIL / WARN / INFO -- what happened during this run
+##   ARS validation  GAP  / WARN / INFO -- what this event will not produce
+##
+## So FAIL is current and live: an annotation the spec could not validate, and
+## a stage that failed. What FAIL is no longer is an ARS FINDING -- those say
+## GAP now -- although a report written before that change still carries it.
+##
+## GAP sits off the pass/warn/fail axis on purpose. It is not "worse than WARN"
+## or "not quite FAIL" -- it is a different statement: this result was reserved
+## rather than computed. A violet the eye does not read as a temperature keeps
+## it from being ranked on a scale it is not on.
 .REPORT_STATUS_FILL <- c(PASS = "E2EFDA",   # light green
                          WARN = "FFF2CC",   # light amber
+                         GAP  = "E4DFEC",   # light violet
                          FAIL = "FCE4D6",   # light red
                          INFO = "DDEBF7")   # light blue
 
@@ -96,14 +113,25 @@ write_validation_report <- function(report_df, output_path, diagnostics = NULL,
 #' tinting itself, so the key can never drift from the report.
 #' @noRd
 .write_legend_sheet <- function(wb) {
+  statuses <- c("PASS", "WARN", "GAP", "FAIL", "INFO")
   legend <- data.frame(
-    Status = c("PASS", "WARN", "FAIL", "INFO"),
+    Status = statuses,
     Meaning = c(
       "Annotation matched a dataset + variable in the ADaM spec. No action needed.",
-      "Needs review (e.g. an uncertain mapping). The ARS JSON is still generated.",
-      "Could not be validated (invalid dataset/variable, or a blocking gap). Fix before use.",
+      paste("Needs review. Validation sheet: an uncertain mapping; the ARS",
+            "JSON is still generated. ARS validation sheet: a number was",
+            "produced, but from a fallback or an inference -- check it."),
+      paste("ARS validation sheet only. This result was reserved, not",
+            "computed: the run produced everything else and left this cell",
+            "empty. Fix the annotation, supply a supplement, or edit the ARS,",
+            "then re-run."),
+      paste("Validation sheet: this annotation could not be validated",
+            "(unknown dataset or variable, or a value the spec cannot hold).",
+            "Diagnostics sheet: a stage of this run failed. On the ARS",
+            "validation sheet, FAIL is what a report written before this",
+            "release called what is now GAP."),
       "Informational note (mainly the Diagnostics sheet). Not a validation failure."),
-    `Fill (hex)` = unname(.REPORT_STATUS_FILL[c("PASS", "WARN", "FAIL", "INFO")]),
+    `Fill (hex)` = unname(.REPORT_STATUS_FILL[statuses]),
     check.names = FALSE,
     stringsAsFactors = FALSE
   )
