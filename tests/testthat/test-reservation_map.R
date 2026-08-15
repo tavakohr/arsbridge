@@ -19,37 +19,7 @@
 ## A two-analysis event: one that the seeded defect reaches, one that it must
 ## not. Built from invented ADaM identifiers, and returned as a model so the
 ## expansion is exercised over the real reference graph.
-.rmap_model <- function(vocab = .RSV_NAMES_A) {
-  event <- .rsv_event(vocab = vocab, method = .rsv_counting_method(),
-                      n_slots = 1L)
 
-  ## The bystander. Its own method, its own population, its own grouping and
-  ## its own output, so no seeded defect can reach it by accident.
-  event$methods[[2]] <- .rsv_counting_method(id = "MTH_SUBJECT_COUNT_PCT")
-  event$analysisSets[[2]] <- list(
-    id = "AS_OTHER", name = "Other", label = "Other", level = 1L, order = 1L,
-    condition = list(dataset = vocab$ds, variable = vocab$pop,
-                     comparator = "EQ", value = list("Y"))
-  )
-  event$analysisGroupings[[2]] <- list(
-    id = "GF_OTHER", name = vocab$arm, groupingDataset = vocab$ds,
-    groupingVariable = vocab$arm, dataDriven = TRUE, groups = list()
-  )
-  event$analyses[[2]] <- list(
-    id = "AN_BYSTANDER", name = "bystander", label = "bystander",
-    description = "bystander",
-    analysisSetId = "AS_OTHER", methodId = "MTH_SUBJECT_COUNT_PCT",
-    dataset = vocab$ds, variable = vocab$var,
-    analysisVariable = list(dataset = vocab$ds, variable = vocab$var),
-    orderedGroupings = list(list(order = 1L, groupingId = "GF_OTHER",
-                                 resultsByGroup = TRUE))
-  )
-  event$outputs[[2]] <- list(
-    id = "T_OTHER", name = "Other", label = "Other", outputType = "TABLE",
-    referencedAnalysisIds = list("AN_BYSTANDER")
-  )
-  ars_to_model(event)
-}
 
 ## Seed one defect, expand the findings, and report what was reserved.
 .rmap_reserved <- function(mutate, vocab = .RSV_NAMES_A) {
