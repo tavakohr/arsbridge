@@ -26,7 +26,8 @@ test_that("the generated fixture has no blocking findings", {
   expect_equal(
     names(findings),
     c("severity", "entity", "id", "field", "problem", "action", "ref",
-      "detail")
+      "detail", "scope", "source_doc", "sheet", "cell_ref", "row", "col",
+      "locator")
   )
   expect_equal(sum(findings$severity == "FAIL"), 0)
   expect_true(all(findings$severity %in% c("FAIL", "WARN", "INFO")))
@@ -45,7 +46,7 @@ test_that("every finding carries a code from the registry", {
   for (model in models) {
     findings <- validate_ars_model(model)
     checked <- checked + nrow(findings)
-    expect_true(all(findings$ref %in% .VALIDATION_REFS))
+    expect_true(all(findings$ref %in% names(.VALIDATION_REFS)))
     expect_false(any(is.na(findings$ref)))
   }
 
@@ -63,7 +64,40 @@ test_that("an unregistered code is refused rather than recorded", {
 })
 
 test_that("the registry has no duplicates", {
-  expect_equal(anyDuplicated(.VALIDATION_REFS), 0L)
+  expect_equal(anyDuplicated(names(.VALIDATION_REFS)), 0L)
+})
+
+test_that("every registered code declares a known scope", {
+  ## The scope is what the engine reserves on. A code with a scope nothing
+  ## recognises would be silently treated as advisory -- i.e. would permit
+  ## execution where it should withhold it.
+  expect_true(all(.VALIDATION_REFS %in% .FINDING_SCOPES))
+  expect_gt(length(.VALIDATION_REFS), 30L)
+})
+
+test_that("a finding can address the shell cell it came from", {
+  model <- .rsv_model(method = .rsv_counting_method(), n_slots = 2L)
+  findings <- validate_ars_model(model)
+  slot <- findings[findings$ref == "METHOD_PLACEHOLDER_SLOT_MISMATCH", ]
+
+  expect_equal(nrow(slot), 1L)
+  expect_equal(slot$scope, "cell")
+  expect_equal(slot$source_doc, "shell")
+  expect_equal(slot$cell_ref, "B6")
+  expect_equal(slot$row, 6L)
+  expect_true(nzchar(slot$sheet))
+})
+
+test_that("an address is never invented", {
+  ## A finding with no authored source says so, rather than pointing the
+  ## author at a cell that has nothing to do with it.
+  model <- .ars_validate_legacy_model()
+  findings <- validate_ars_model(model)
+  grouping <- findings[findings$ref == "FIXED_GROUPING_EMPTY", ]
+
+  expect_gt(nrow(grouping), 0L)
+  expect_true(all(is.na(grouping$cell_ref)))
+  expect_true(all(is.na(grouping$row)))
 })
 
 test_that("a legacy fixed grouping with no groups is a blocker", {

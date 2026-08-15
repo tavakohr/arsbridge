@@ -50,56 +50,81 @@
 ## and nothing downstream can silently ignore a code it has no handling for.
 .VALIDATION_REFS <- c(
   ## Identity and references -- the event does not resolve against itself.
-  "ENTITY_ID_MISSING",
-  "ENTITY_ID_DUPLICATED",
-  "METHOD_REF_UNRESOLVED",
-  "ANALYSIS_SET_REF_UNRESOLVED",
-  "DATA_SUBSET_REF_UNRESOLVED",
-  "GROUPING_REF_UNRESOLVED",
-  "ANALYSIS_REF_UNRESOLVED",
-  "ANALYSIS_NOT_DISPLAYED",
-  "OUTPUT_HAS_NO_ANALYSES",
-  "CONTENTS_ANALYSIS_STALE",
-  "CONTENTS_OUTPUT_STALE",
+  ENTITY_ID_MISSING                        = "event",
+  ENTITY_ID_DUPLICATED                     = "event",
+  METHOD_REF_UNRESOLVED                    = "analysis",
+  ANALYSIS_SET_REF_UNRESOLVED              = "analysis",
+  DATA_SUBSET_REF_UNRESOLVED               = "analysis",
+  GROUPING_REF_UNRESOLVED                  = "analysis",
+  ANALYSIS_REF_UNRESOLVED                  = "advisory",
+  ANALYSIS_NOT_DISPLAYED                   = "advisory",
+  OUTPUT_HAS_NO_ANALYSES                   = "advisory",
+  CONTENTS_ANALYSIS_STALE                  = "advisory",
+  CONTENTS_OUTPUT_STALE                    = "advisory",
 
   ## Semantics -- the analysis computes something other than what it declared.
-  .SEMANTIC_SOURCE_REF,
-  .UNRESOLVED_ROLE_REF,
+  SEMANTIC_SOURCE_NOT_DECLARED             = "analysis",
+  UNRESOLVED_VARIABLE_ROLE                 = "analysis",
 
-  ## Groupings and the column axis.
-  "GROUPING_DATASET_CONFLICT",
-  "FIXED_GROUPING_EMPTY",
-  "GROUPING_VARIABLE_NOT_LINKED",
-  "GROUPING_ORDER_AMBIGUOUS",
-  "FLAT_AXIS_COLUMN_COUNT_MISMATCH",
-  "FLAT_AXIS_COLUMN_LABEL_MISMATCH",
+  ## Groupings and the column axis. A grouping is reserved through the
+  ## analyses that reference it, which is what "grouping" scope expands to.
+  GROUPING_DATASET_CONFLICT                = "grouping",
+  FIXED_GROUPING_EMPTY                     = "grouping",
+  GROUPING_VARIABLE_NOT_LINKED             = "analysis",
+  GROUPING_ORDER_AMBIGUOUS                 = "advisory",
+  FLAT_AXIS_COLUMN_COUNT_MISMATCH          = "advisory",
+  FLAT_AXIS_COLUMN_LABEL_MISMATCH          = "advisory",
 
   ## Methods -- what the row shows against what the method computes.
-  "METHOD_NOT_ASSIGNED",
-  "METHOD_PLACEHOLDER_SLOT_MISMATCH",
-  "METHOD_STRATA_MISSING",
-  "METHOD_NOT_EXECUTABLE",
-  "METHOD_FALLBACK_SUMMARIZER",
-  "METHOD_CONDITIONAL",
+  METHOD_NOT_ASSIGNED                      = "analysis",
+  METHOD_PLACEHOLDER_SLOT_MISMATCH         = "cell",
+  METHOD_STRATA_MISSING                    = "advisory",
+  METHOD_NOT_EXECUTABLE                    = "advisory",
+  METHOD_FALLBACK_SUMMARIZER               = "analysis",
+  METHOD_CONDITIONAL                       = "advisory",
 
   ## Nested displays and declared result paths.
-  "NESTED_CHILD_UNLINKED",
-  "NESTED_GROUPING_MISSING",
-  "HEADER_TREE_MISSING",
-  "DISPLAY_COLUMN_COUNT_MISMATCH",
-  "UNMAPPED_LEAF_COLUMN",
-  "INVALID_CARTESIAN_PRODUCT",
-  "SUBTOTAL_SCOPE_UNDEFINED",
-  "SUBTOTAL_EXCLUDES_UNDISPLAYED_CATEGORIES",
-  "DUPLICATE_RESULT_PATH",
+  NESTED_CHILD_UNLINKED                    = "advisory",
+  NESTED_GROUPING_MISSING                  = "advisory",
+  HEADER_TREE_MISSING                      = "advisory",
+  DISPLAY_COLUMN_COUNT_MISMATCH            = "output",
+  UNMAPPED_LEAF_COLUMN                     = "output",
+  INVALID_CARTESIAN_PRODUCT                = "output",
+  SUBTOTAL_SCOPE_UNDEFINED                 = "output",
+  SUBTOTAL_EXCLUDES_UNDISPLAYED_CATEGORIES = "advisory",
+  DUPLICATE_RESULT_PATH                    = "output",
 
   ## The shell and the ADaM spec.
-  "SHELL_LINE_NOT_ANALYSED",
-  "POPULATION_NOT_PARSED",
-  "DATASET_NOT_IN_SPEC",
-  "VARIABLE_NOT_IN_SPEC",
-  "SEPARATOR_IN_CONDITION_VALUE"
+  SHELL_LINE_NOT_ANALYSED                  = "advisory",
+  POPULATION_NOT_PARSED                    = "advisory",
+  DATASET_NOT_IN_SPEC                      = "analysis",
+  VARIABLE_NOT_IN_SPEC                     = "advisory",
+  SEPARATOR_IN_CONDITION_VALUE             = "advisory"
 )
+
+## The scopes a finding may invalidate, widest last.
+##
+##   advisory  nothing is withheld; the reader is told, and that is all
+##   cell      one displayed cell has no statistic behind it
+##   analysis  this analysis must not compute
+##   grouping  every analysis referencing this grouping must not compute
+##   output    every analysis displayed on this output must not compute
+##   event     the defect is in the event's own identity, not in one entity
+.FINDING_SCOPES <- c("advisory", "cell", "analysis", "grouping", "output",
+                     "event")
+
+## Which scope a code invalidates.
+##
+## Declared here, beside the code, rather than passed at each of the forty-odd
+## call sites. One table is auditable for completeness in a way forty arguments
+## are not, and no code in this package needs to raise the same code at two
+## different scopes. It is a declaration, not an inference from the string: a
+## code with no scope is a code `.add_finding()` refuses outright.
+#' @noRd
+.scope_for_ref <- function(ref) {
+  scope <- unname(.VALIDATION_REFS[ref])
+  if (is.na(scope)) NA_character_ else scope
+}
 
 #' An analysis's annotation as plain text, with "absent" spelled one way.
 #'
@@ -365,8 +390,40 @@
     action   = character(0),
     ref      = character(0),
     detail   = character(0),
+    scope    = character(0),
+    ## Where in the author's own documents to go and change something. A
+    ## finding addressed only as "analyses / AN_..." names an entity the
+    ## author never typed; these name the cell they did.
+    source_doc = character(0),
+    sheet      = character(0),
+    cell_ref   = character(0),
+    row        = integer(0),
+    col        = integer(0),
+    locator    = character(0),
     stringsAsFactors = FALSE
   )
+}
+
+#' Where a finding came from, in the author's documents.
+#'
+#' `source_doc` says WHICH document to open -- the shell, the ADaM spec, the
+#' supplement, or the ARS itself. That is what makes "fix this in the
+#' annotation" distinguishable from "fix this in the spec" per finding rather
+#' than per code.
+#'
+#' Never synthesise an address. An absent one is NA. A wrong address sends the
+#' author to edit the wrong cell, which is the same class of harm as a wrong
+#' number -- and a check that genuinely cannot address a cell (a shared pool
+#' id, a Word shell with no cell grid) says so honestly through `locator`.
+#' @noRd
+.finding_at <- function(source_doc = NA_character_, sheet = NA_character_,
+                        cell_ref = NA_character_, row = NA_integer_,
+                        col = NA_integer_, locator = NA_character_) {
+  list(source_doc = as.character(source_doc), sheet = as.character(sheet),
+       cell_ref = as.character(cell_ref),
+       row = suppressWarnings(as.integer(row)),
+       col = suppressWarnings(as.integer(col)),
+       locator = as.character(locator))
 }
 
 ## `ref` names WHAT KIND of defect this is, from the closed vocabulary in
@@ -381,14 +438,19 @@
 ## outside every code-matching branch in the package.
 #' @noRd
 .add_finding <- function(findings, severity, entity, id, field, problem,
-                         action, ref, detail = NA_character_) {
-  if (!ref %in% .VALIDATION_REFS) {
+                         action, ref, detail = NA_character_, at = NULL) {
+  if (!ref %in% names(.VALIDATION_REFS)) {
     cli::cli_abort(c(
       "Finding code {.val {ref}} is not registered.",
       "i" = paste("Add it to {.code .VALIDATION_REFS} so the rest of the",
                   "package can act on it.")
     ))
   }
+
+  ## `at` is the optional address argument declared in this function's own
+  ## signature (at = NULL); the empty frame in .new_findings() already declares
+  ## every column assembled below, so the rbind schemas match.
+  at <- at %||% .finding_at()
 
   rbind(findings, data.frame(
     severity = severity,
@@ -399,6 +461,13 @@
     action   = action,
     ref      = ref,
     detail   = detail,
+    scope    = .scope_for_ref(ref),
+    source_doc = at$source_doc,
+    sheet      = at$sheet,
+    cell_ref   = at$cell_ref,
+    row        = at$row,
+    col        = at$col,
+    locator    = at$locator,
     stringsAsFactors = FALSE
   ))
 }
@@ -843,7 +912,8 @@
   )
 
   check_request <- function(findings, analysis_id, description,
-                            requested = character(0), n_slots = length(requested)) {
+                            requested = character(0), n_slots = length(requested),
+                            at = NULL) {
     if (is.na(analysis_id) || !nzchar(analysis_id)) return(findings)
     method_id <- method_by_analysis[[analysis_id]] %||% NA_character_
     if (is.na(method_id) || !nzchar(method_id)) return(findings)
@@ -871,7 +941,7 @@
       findings, "FAIL", "analyses", analysis_id, "methodId",
       problem,
       "Assign a method whose operation slots cover every statistic on this line.",
-      ref = "METHOD_PLACEHOLDER_SLOT_MISMATCH"
+      ref = "METHOD_PLACEHOLDER_SLOT_MISMATCH", at = at
     )
   }
 
@@ -904,12 +974,21 @@
       if (key %in% seen_cells) next
       seen_cells <- c(seen_cells, key)
 
+      ## The cell map has been carrying these coordinates all along; they are
+      ## the difference between "analyses / AN_..." and "sheet X, cell D27".
       findings <- check_request(
         findings,
         analysis_id,
         sprintf("Placeholder '%s'", placeholder),
         requested = requested,
-        n_slots = length(slots)
+        n_slots = length(slots),
+        at = .finding_at(
+          source_doc = "shell",
+          sheet    = .chr_field(output_node[["_meta"]][["shell_fill"]][["source"]][["sheet"]]),
+          cell_ref = .chr_field(cell[["ref"]]),
+          row      = .int_field(cell[["row"]]),
+          col      = .int_field(cell[["col"]])
+        )
       )
     }
 
@@ -920,11 +999,14 @@
       for (j in seq_len(nrow(layout))) {
         n_slots <- layout$n_slots[j]
         if (is.na(n_slots) || n_slots == 0L) next
+        ## A Word shell has no cell grid, so the row is the whole address.
+        ## Saying so beats inventing a cell reference that does not exist.
         findings <- check_request(
           findings,
           layout$analysis_id[j],
           sprintf("Shell row '%s'", layout$label[j]),
-          n_slots = n_slots
+          n_slots = n_slots,
+          at = .finding_at(source_doc = "shell", locator = layout$label[j])
         )
       }
     }

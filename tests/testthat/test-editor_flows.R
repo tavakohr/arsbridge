@@ -385,13 +385,21 @@ test_that("the status header summarizes safety, with save controls in edit mode"
   ## Deliberately hand-built with no `ref`: the status header also has to
   ## count findings that did not come from validate_ars_model() -- an archived
   ## payload, or a frame from another tool -- and those carry no code.
-  editor$findings(rbind(
-    shiny::isolate(editor$findings()),
-    data.frame(severity = "FAIL", entity = "analyses", id = "AN_X",
-               field = "methodId", problem = "x", action = "y",
-               ref = NA_character_, detail = NA_character_,
-               stringsAsFactors = FALSE)
-  ))
+  ## Deliberately built with no `ref`: the status header also has to count
+  ## findings that did not come from validate_ars_model() -- an archived
+  ## payload, or a frame from another tool -- and those carry no code.
+  ##
+  ## Its shape is taken from .new_findings() rather than written out, so the
+  ## row cannot drift from the schema the next time a column is added.
+  foreign <- .new_findings()[1, , drop = FALSE]
+  foreign$severity <- "FAIL"
+  foreign$entity   <- "analyses"
+  foreign$id       <- "AN_X"
+  foreign$field    <- "methodId"
+  foreign$problem  <- "x"
+  foreign$action   <- "y"
+
+  editor$findings(rbind(shiny::isolate(editor$findings()), foreign))
   shiny::testServer(mod_status_server, args = list(state = editor), {
     rendered <- paste(as.character(output$status), collapse = " ")
     expect_match(rendered, "1 blocking problem")
