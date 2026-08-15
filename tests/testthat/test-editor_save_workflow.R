@@ -134,6 +134,19 @@ test_that("every explicit save confirmation revalidates the current model", {
     ## held open by the refusal.
     suppressMessages(session$setInputs(confirm_save = 1))
     expect_true(stop_called)
+
+    ## The three facts the old refusal used to establish, inverted rather than
+    ## dropped. Under the refusal the crash-recovery copy survived and no audit
+    ## sidecar was written, because nothing had been saved; now the work is on
+    ## disk, so the recovery copy has nothing left to protect and the edits are
+    ## recorded beside the file.
+    expect_null(.read_autosave(source_path))
+    expect_true(file.exists(
+      paste0(sub("\\.json$", "", source_path), ".edits.json")
+    ))
+    expect_true(file.exists(
+      paste0(sub("\\.json$", "", copy_path), ".edits.json")
+    ))
   })
 })
 
