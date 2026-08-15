@@ -1007,6 +1007,14 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
   ## Methods this reporting event declares produce no computable result.
   declared_unsupported <- .reserved_method_ids(spec)
 
+  ## Which analyses a structural defect invalidates.
+  ##
+  ## This is what replaces the all-or-nothing gate. Where that refused the
+  ## whole event on any FAIL, this names the analyses each defect actually
+  ## reaches -- so a broken grouping withholds the analyses that group by it
+  ## and leaves every other output computing normally.
+  reservations <- .spec_reservations(spec)$by_analysis
+
   for (ana in spec[["analyses"]]) {
     ## Finished count, then the label of the analysis now running -- see the
     ## same pattern in ars_fill_shell(). An analysis reads its ADaM datasets,
@@ -1028,7 +1036,6 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
       next
     }
     out_id <- res$output_id
-    if (!is.null(out_id) && out_id %in% unresolvable_path_outputs) next
 
     # Filter by user-selected output_ids and analysis_ids
     if (user_filtered) {
@@ -1051,6 +1058,34 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
     method_id    <- res$method_id
     analysis_var <- res$variable
     analysis_ds  <- res$dataset
+
+    ## Structurally reserved: this analysis must not compute.
+    ##
+    ## Placed after the user's output/analysis filter, so an unselected
+    ## analysis is neither reserved nor counted -- and before the dataset is
+    ## opened, because every defect here is one where computing would SUCCEED
+    ## and be wrong rather than fail loudly. A dangling analysisSetId computes
+    ## over the whole dataset; a contradictory grouping dataset moves the
+    ## denominator; a dangling methodId falls through to the generic
+    ## summarizer. Each yields a plausible number that fills and formats.
+    ##
+    ## An output whose declared result paths did not resolve joins them here.
+    ## It used to `next` silently, which left no ARD row at all -- so the fill
+    ## reported "no result in the ARD", i.e. "the analysis failed", about
+    ## something arsbridge had decided not to attempt. Reserving says which.
+    hit <- reservations[[analysis_id]]
+    if (is.null(hit) && !is.null(out_id) &&
+        out_id %in% unresolvable_path_outputs) {
+      hit <- list(ref = "UNMAPPED_LEAF_COLUMN",
+                  reason = "This output's declared result paths did not resolve.")
+    }
+    if (!is.null(hit)) {
+      ard_list[[length(ard_list) + 1L]] <- .reserve_blocked_ard(
+        .structural_block(hit$ref, hit$reason),
+        analysis_id, res, method_id, out_id, analysis_var
+      )
+      next
+    }
 
     if (is.null(analysis_ds) || !nzchar(analysis_ds)) {
       cli::cli_warn("Skipping analysis {.val {analysis_id}}: primary dataset not specified.")

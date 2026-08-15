@@ -39,7 +39,11 @@
   )
 }
 
-.rsv_counting_method <- function(id = "MTH_SYNTH_COUNT") {
+## A method arsbridge computes NATIVELY. The id matters: a method arsbridge
+## has no executor for is routed to the generic summarizer, which is itself one
+## of the wrong-number risks and therefore reserves -- so an invented id here
+## would make every "this analysis still computes" control reserve instead.
+.rsv_counting_method <- function(id = "MTH_SUBJECT_COUNT") {
   list(
     id = id, name = "Subject Count", label = "Subject Count",
     description = "Unique subject count.",

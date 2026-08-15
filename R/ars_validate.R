@@ -80,7 +80,15 @@
   METHOD_PLACEHOLDER_SLOT_MISMATCH         = "cell",
   METHOD_STRATA_MISSING                    = "advisory",
   METHOD_NOT_EXECUTABLE                    = "advisory",
-  METHOD_FALLBACK_SUMMARIZER               = "analysis",
+  ## Advisory, not reserving. A method with no executor is approximated by the
+  ## generic summarizer, which IS a way to show a statistic the shell did not
+  ## ask for -- but the method exists and the event declared it, the old gate
+  ## never blocked on it (it is a WARN), and the behaviour is long-standing and
+  ## tested. Reserving here would be new behaviour rather than a replacement
+  ## for what the gate did, so it stays reported. The genuinely unresolvable
+  ## cases -- a methodId pointing at nothing, or no method at all -- are
+  ## METHOD_REF_UNRESOLVED and METHOD_NOT_ASSIGNED above, and those reserve.
+  METHOD_FALLBACK_SUMMARIZER               = "advisory",
   METHOD_CONDITIONAL                       = "advisory",
 
   ## Nested displays and declared result paths.
