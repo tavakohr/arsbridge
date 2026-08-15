@@ -254,6 +254,18 @@ Invisibly returns a named list:
 
   Path to the validation report (if validate=TRUE).
 
+- `supplement_trust`:
+
+  How supplement values resolved on this run, or `NA` when no supplement
+  ran.
+
+- `fix_report_path`:
+
+  Path to `fix_report_<mode>.xlsx` – what this run could not resolve and
+  where to change it. Written on every run, including a clean one;
+  `NULL` only if writing it failed, which is recorded as a diagnostic
+  rather than raised.
+
 - `adam_spec_path`:
 
   The ADaM spec this run read, so the review stage can be opened with

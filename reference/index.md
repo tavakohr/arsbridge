@@ -88,6 +88,8 @@ diagnosis.
   for.
 - [`write_fill_debrief()`](https://tavakohr.github.io/arsbridge/reference/write_fill_debrief.md)
   : Write the fill debrief workbook.
+- [`write_fix_report()`](https://tavakohr.github.io/arsbridge/reference/write_fix_report.md)
+  : Write the fix report workbook.
 
 ## LLM providers
 

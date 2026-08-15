@@ -13,7 +13,7 @@ siera::readARS()."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9133</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9134</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -288,6 +288,16 @@ Callback errors are ignored.</p></dd>
 
 <dt><code>report_path</code></dt>
 <dd><p>Path to the validation report (if validate=TRUE).</p></dd>
+
+<dt><code>supplement_trust</code></dt>
+<dd><p>How supplement values resolved on this run,
+or <code>NA</code> when no supplement ran.</p></dd>
+
+<dt><code>fix_report_path</code></dt>
+<dd><p>Path to <code>fix_report_&lt;mode&gt;.xlsx</code> – what this
+run could not resolve and where to change it. Written on every run,
+including a clean one; <code>NULL</code> only if writing it failed, which is
+recorded as a diagnostic rather than raised.</p></dd>
 
 <dt><code>adam_spec_path</code></dt>
 <dd><p>The ADaM spec this run read, so the review
