@@ -823,11 +823,31 @@
     model$analyses$id
   )
 
+  ## A method that declares it computes nothing -- arsbridge's own reservation
+  ## method, or one a foreign ARS marked the same way -- cannot under-provide
+  ## slots. It provides none by construction, and the row is reserved on
+  ## purpose. Read from the method's own `supported` flag rather than from its
+  ## id, so an ARS that declares its own unsupported method is handled too.
+  ##
+  ## Without this the reservation defeats itself: the no-drop path parks a row
+  ## on MTH_UNSUPPORTED_ANALYSIS (one operation), the shell shows an ordinary
+  ## "xx (xx.x)" (two slots), and the row arsbridge deliberately reserved
+  ## becomes a blocking finding against the whole event. `.check_methods()`
+  ## already reports the analysis as not executable, so there is nothing to say
+  ## a second time per cell.
+  declares_no_result <- stats::setNames(
+    vapply(method_ids, function(method_id) {
+      isFALSE(model$methods$supported[match(method_id, model$methods$id)])
+    }, logical(1)),
+    method_ids
+  )
+
   check_request <- function(findings, analysis_id, description,
                             requested = character(0), n_slots = length(requested)) {
     if (is.na(analysis_id) || !nzchar(analysis_id)) return(findings)
     method_id <- method_by_analysis[[analysis_id]] %||% NA_character_
     if (is.na(method_id) || !nzchar(method_id)) return(findings)
+    if (isTRUE(unname(declares_no_result[method_id]))) return(findings)
 
     available <- stats_by_method[[method_id]] %||% character(0)
     missing <- setdiff(requested, available)
@@ -917,6 +937,8 @@
       analysis_id <- rows$owner_analysis_id[j]
       method_id <- rows$method_id[j]
       if (is.null(requested) || is.na(analysis_id) || is.na(method_id)) next
+      ## Same reasoning as check_request(): a reserved row is not a mismatch.
+      if (isTRUE(unname(declares_no_result[method_id]))) next
 
       available <- stats_by_method[[method_id]] %||% character(0)
       missing <- setdiff(requested, available)
