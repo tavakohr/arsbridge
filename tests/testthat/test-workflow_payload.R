@@ -80,8 +80,12 @@ test_that("the payload names every artifact it produced", {
   p <- payload_run()
   expect_named(p$artifacts,
                c("ars_json", "validation_report", "code_dir", "code_paths",
-                 "ard_rds", "filled_workbook", "fill_debrief", "run_log"))
-  for (name in c("ars_json", "ard_rds", "filled_workbook")) {
+                 "ard_rds", "filled_workbook", "fill_debrief", "fix_report",
+                 "run_log"))
+  ## The fix report is written on every run, including a clean one -- an
+  ## absent file would be ambiguous between "nothing to fix" and "the report
+  ## failed", so it is checked alongside the artifacts a run always produces.
+  for (name in c("ars_json", "ard_rds", "filled_workbook", "fix_report")) {
     expect_true(file.exists(p$artifacts[[name]]), info = name)
   }
 })

@@ -135,6 +135,12 @@
 #'       `"deterministic"`. Also stored in the JSON as
 #'       `_meta.extraction_mode`.}
 #'     \item{`report_path`}{Path to the validation report (if validate=TRUE).}
+#'     \item{`supplement_trust`}{How supplement values resolved on this run,
+#'       or `NA` when no supplement ran.}
+#'     \item{`fix_report_path`}{Path to `fix_report_<mode>.xlsx` -- what this
+#'       run could not resolve and where to change it. Written on every run,
+#'       including a clean one; `NULL` only if writing it failed, which is
+#'       recorded as a diagnostic rather than raised.}
 #'     \item{`adam_spec_path`}{The ADaM spec this run read, so the review
 #'       stage can be opened with `edit_ars(result)` alone.}
 #'     \item{`code_dir`}{Where per-TLF `{cards}` `.R` programs would be
@@ -613,8 +619,15 @@ spec_to_ars <- function(shell_path,
 
   ## Validate the in-memory event before any executable code can be emitted.
   ## The JSON itself remains repairable and is always written below.
+  ##
+  ## The model is bound rather than passed inline because the fix report has to
+  ## build its reservation map from THIS validation's findings. A second
+  ## `validate_ars_model()` call would be a different, differently-parameterised
+  ## set -- one lacking the spec-dependent findings, say -- and the report would
+  ## then describe reservations the engine never made.
+  ars_model <- ars_to_model(re)
   validation_gate <- .model_validation_gate(
-    ars_to_model(re), spec = spec, report = validation
+    ars_model, spec = spec, report = validation
   )
   ars_validation <- validation_gate$findings
   gate_diagnostics <- .validation_gate_diagnostics(validation_gate)
@@ -721,10 +734,54 @@ spec_to_ars <- function(shell_path,
     )
   }
 
+  ## The fix report is written UNCONDITIONALLY, unlike the validation report.
+  ## A run with nothing wrong still gets one, because "no fixes needed" is an
+  ## answer the author wants in writing -- and because an absent file is
+  ## ambiguous between "clean" and "the report failed".
+  ##
+  ## Wrapped, because bookkeeping about a run must never take a finished run
+  ## down: a report that cannot be written becomes a diagnostic, not an error
+  ## thrown after the ARS, the code and the ARD were all produced successfully.
+  fix_report_path <- .fix_report_path(dirname(report_path), extraction_mode)
+  fix_report_written <- tryCatch({
+    write_fix_report(
+      ars_validation, fix_report_path,
+      reservations = .reservations_from_findings(ars_model, ars_validation),
+      diagnostics = diagnostics,
+      run = list(
+        extraction_mode  = extraction_mode,
+        supplement_trust = if (identical(extraction_mode, "supplement"))
+                             supplement_trust else NA_character_,
+        verdict          = validation_gate$verdict,
+        timestamp        = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ",
+                                  tz = "UTC"),
+        shell_path       = shell_path,
+        adam_spec_path   = adam_spec_path,
+        ars_path         = output_path
+      )
+    )
+    TRUE
+  }, error = function(e) {
+    diag_add(
+      stage = "fix_report", severity = "WARN",
+      input = NA_character_, tlf_number = NA_character_,
+      location = fix_report_path,
+      problem = paste("The fix report could not be written:",
+                      conditionMessage(e)),
+      action = "Read the findings with ars_validation() instead."
+    )
+    FALSE
+  })
+
   result <- list(
     ars_path        = output_path,
     extraction_mode = extraction_mode,
+    ## Carried so a later stage rewriting the fix report records the same
+    ## provenance this run resolved, rather than defaulting it back.
+    supplement_trust = if (identical(extraction_mode, "supplement"))
+                         supplement_trust else NA_character_,
     report_path     = if (write_report) report_path else NULL,
+    fix_report_path = if (isTRUE(fix_report_written)) fix_report_path else NULL,
     ## Carried so the review stage can wire up spec-driven dropdowns and
     ## spec validation from the result alone: edit_ars(result).
     adam_spec_path  = adam_spec_path,

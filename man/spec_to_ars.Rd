@@ -184,6 +184,12 @@ Invisibly returns a named list:
 \code{"deterministic"}. Also stored in the JSON as
 \verb{_meta.extraction_mode}.}
 \item{\code{report_path}}{Path to the validation report (if validate=TRUE).}
+\item{\code{supplement_trust}}{How supplement values resolved on this run,
+or \code{NA} when no supplement ran.}
+\item{\code{fix_report_path}}{Path to \verb{fix_report_<mode>.xlsx} -- what this
+run could not resolve and where to change it. Written on every run,
+including a clean one; \code{NULL} only if writing it failed, which is
+recorded as a diagnostic rather than raised.}
 \item{\code{adam_spec_path}}{The ADaM spec this run read, so the review
 stage can be opened with \code{edit_ars(result)} alone.}
 \item{\code{code_dir}}{Where per-TLF \code{{cards}} \code{.R} programs would be
