@@ -297,11 +297,24 @@ test_that("a figure gets its series anchor and declared aspects", {
 ## ---------------------------------------------------------------------------
 
 test_that("the cell map does not affect conformance", {
+  ## `ars_conformance()` aborts rather than returning empty when jsonvalidate
+  ## is absent, so this skips for the same reason the dedicated conformance
+  ## tests do.
+  skip_if_not_installed("jsonvalidate")
+
   out <- withr::local_tempfile(fileext = ".json")
   writeLines(jsonlite::toJSON(fill_ars(), auto_unbox = TRUE, pretty = TRUE),
              out)
   findings <- ars_conformance(out)
-  expect_equal(nrow(findings[findings$severity == "FAIL", , drop = FALSE]), 0L)
+
+  ## The frame's own columns, asserted before anything is counted. This test
+  ## used to filter on `findings$severity` -- a column `ars_conformance()` has
+  ## never had -- so the filter selected nothing, the count was zero, and the
+  ## test passed without reading a single finding. Pinning the shape is what
+  ## stops that recurring: a return frame that changes turns this red instead
+  ## of quietly vacuous again.
+  expect_named(findings, c("where", "keyword", "problem"))
+  expect_identical(nrow(findings), 0L)
 })
 
 ## ---------------------------------------------------------------------------

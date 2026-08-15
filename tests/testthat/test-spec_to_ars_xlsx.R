@@ -58,9 +58,20 @@ test_that("one file given as both shell and spec is refused", {
 ## ---------------------------------------------------------------------------
 
 test_that("an Excel shell produces a conformant ARS reporting event", {
+  ## `ars_conformance()` aborts rather than returning empty when jsonvalidate
+  ## is absent, so this skips for the same reason the dedicated conformance
+  ## tests do.
+  skip_if_not_installed("jsonvalidate")
+
   built <- build_apx()
   findings <- ars_conformance(built$path)
-  expect_equal(nrow(findings[findings$severity == "FAIL", , drop = FALSE]), 0L)
+
+  ## Shape first, then the count. Filtering on `findings$severity` -- a column
+  ## this function has never returned -- selected nothing and made the test
+  ## pass without reading a finding. Asserting the columns is what keeps the
+  ## count meaningful.
+  expect_named(findings, c("where", "keyword", "problem"))
+  expect_identical(nrow(findings), 0L)
 })
 
 test_that("every output in the workbook reaches the reporting event", {
