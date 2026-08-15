@@ -319,14 +319,15 @@ ars_workflow <- function(project_dir = NULL) {
   if (!.workflow_payload_needs_fixes(payload)) return(NULL)
 
   gate <- payload$validation_gate %||% list()
-  findings <- gate$blocking_findings
+  findings <- gate$gaps %||% gate$blocking_findings
   if (is.null(findings) && is.data.frame(gate$findings)) {
     severity <- if ("severity" %in% names(gate$findings)) {
       gate$findings$severity
     } else {
       rep(NA_character_, nrow(gate$findings))
     }
-    findings <- gate$findings[severity %in% "FAIL", , drop = FALSE]
+    ## Both words, so a payload archived before this release still renders.
+    findings <- gate$findings[severity %in% .GAP_SEVERITIES, , drop = FALSE]
   }
   if (is.null(findings) || !is.data.frame(findings)) {
     findings <- data.frame()

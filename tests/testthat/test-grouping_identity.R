@@ -297,7 +297,7 @@ test_that("a flat output must display one column per referenced group", {
   ]
 
   expect_equal(nrow(mismatch), 1L)
-  expect_equal(mismatch$severity, "FAIL")
+  expect_equal(mismatch$severity, "GAP")
 })
 
 test_that("a flat output cannot combine different fixed grouping definitions", {
@@ -338,7 +338,7 @@ test_that("a flat output with no result columns is a count mismatch", {
   ]
 
   expect_equal(nrow(mismatch), 1L)
-  expect_equal(mismatch$severity, "FAIL")
+  expect_equal(mismatch$severity, "GAP")
 })
 
 
@@ -357,7 +357,7 @@ test_that("flat output labels must match the referenced grouping", {
   ]
 
   expect_equal(nrow(mismatch), 1L)
-  expect_equal(mismatch$severity, "FAIL")
+  expect_equal(mismatch$severity, "GAP")
 })
 
 .gi_total_model <- function(include_total = c(TRUE, TRUE),

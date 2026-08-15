@@ -29,8 +29,8 @@ test_that("the generated fixture has no blocking findings", {
       "detail", "scope", "source_doc", "sheet", "cell_ref", "row", "col",
       "locator")
   )
-  expect_equal(sum(findings$severity == "FAIL"), 0)
-  expect_true(all(findings$severity %in% c("FAIL", "WARN", "INFO")))
+  expect_equal(sum(findings$severity == "GAP"), 0)
+  expect_true(all(findings$severity %in% c("GAP", "WARN", "INFO")))
 })
 
 
@@ -57,7 +57,7 @@ test_that("every finding carries a code from the registry", {
 
 test_that("an unregistered code is refused rather than recorded", {
   expect_error(
-    .add_finding(.new_findings(), "FAIL", "analyses", "AN_X", "methodId",
+    .add_finding(.new_findings(), "GAP", "analyses", "AN_X", "methodId",
                  "problem", "action", ref = "NOT_A_REGISTERED_CODE"),
     "not registered"
   )
@@ -100,7 +100,7 @@ test_that("an address is never invented", {
   expect_true(all(is.na(grouping$row)))
 })
 
-test_that("a legacy fixed grouping with no groups is a blocker", {
+test_that("a legacy fixed grouping with no groups is a gap", {
   model <- .ars_validate_legacy_model()
 
   findings <- validate_ars_model(model)
@@ -111,7 +111,7 @@ test_that("a legacy fixed grouping with no groups is a blocker", {
   ]
 
   expect_equal(nrow(invalid), 1L)
-  expect_equal(invalid$severity, "FAIL")
+  expect_equal(invalid$severity, "GAP")
   expect_equal(invalid$id, "GF_TRT01A")
 })
 
@@ -129,7 +129,7 @@ test_that("an empty grouping with omitted dataDriven is fixed and blocked", {
   ]
 
   expect_equal(nrow(invalid), 1L)
-  expect_equal(invalid$severity, "FAIL")
+  expect_equal(invalid$severity, "GAP")
   expect_equal(invalid$id, "GF_TRT01A")
 })
 
@@ -177,7 +177,7 @@ test_that("a statistic line must be supported by its analysis method", {
   ]
 
   expect_gt(nrow(mismatch), 0L)
-  expect_true(all(mismatch$severity == "FAIL"))
+  expect_true(all(mismatch$severity == "GAP"))
 })
 
 test_that("persisted placeholder slots must be supported for scalar rows", {
@@ -220,13 +220,13 @@ test_that("findings come back most severe first", {
   model$analyses$methodId[1] <- "MTH_DOES_NOT_EXIST"
 
   findings <- validate_ars_model(model)
-  ranks <- match(findings$severity, c("FAIL", "WARN", "INFO"))
+  ranks <- match(findings$severity, c("GAP", "WARN", "INFO"))
 
   expect_false(is.unsorted(ranks))
-  expect_equal(findings$severity[1], "FAIL")
+  expect_equal(findings$severity[1], "GAP")
 })
 
-test_that("a duplicate id is a blocker", {
+test_that("a duplicate id is a gap", {
   model <- .ars_validate_model()
   model$analyses$id[2] <- model$analyses$id[1]
 
@@ -235,10 +235,10 @@ test_that("a duplicate id is a blocker", {
                           findings$id == model$analyses$id[1], ]
 
   expect_gt(nrow(duplicate), 0)
-  expect_equal(duplicate$severity[1], "FAIL")
+  expect_equal(duplicate$severity[1], "GAP")
 })
 
-test_that("a missing id is a blocker", {
+test_that("a missing id is a gap", {
   model <- .ars_validate_model()
   model$methods$id[1] <- NA_character_
 
@@ -246,17 +246,17 @@ test_that("a missing id is a blocker", {
   missing <- findings[findings$entity == "methods" & findings$field == "id", ]
 
   expect_gt(nrow(missing), 0)
-  expect_equal(missing$severity[1], "FAIL")
+  expect_equal(missing$severity[1], "GAP")
 })
 
-test_that("references that do not resolve are blockers", {
+test_that("references that do not resolve are gaps", {
   model <- .ars_validate_model()
   model$analyses$methodId[1]      <- "MTH_GONE"
   model$analyses$analysisSetId[2] <- "AS_GONE"
   model$analyses$dataSubsetId[3]  <- "DS_GONE"
 
   findings <- validate_ars_model(model)
-  dangling <- findings[findings$severity == "FAIL", ]
+  dangling <- findings[findings$severity == "GAP", ]
 
   expect_true(any(grepl("MTH_GONE", dangling$problem)))
   expect_true(any(grepl("AS_GONE", dangling$problem)))
@@ -273,7 +273,7 @@ test_that("an empty dataSubsetId is not treated as a dangling reference", {
   expect_equal(nrow(subset_findings), 0)
 })
 
-test_that("a grouping reference that does not resolve is a blocker", {
+test_that("a grouping reference that does not resolve is a gap", {
   model <- .ars_validate_model()
   model$analyses$grouping_ids[1] <- "GF_GONE"
 
@@ -281,10 +281,10 @@ test_that("a grouping reference that does not resolve is a blocker", {
   grouping <- findings[findings$field == "grouping_ids", ]
 
   expect_gt(nrow(grouping), 0)
-  expect_equal(grouping$severity[1], "FAIL")
+  expect_equal(grouping$severity[1], "GAP")
 })
 
-test_that("an output referencing an analysis that is gone is a blocker", {
+test_that("an output referencing an analysis that is gone is a gap", {
   model <- .ars_validate_model()
   refs <- .split_values(model$outputs$referenced_analysis_ids[1])
   model$outputs$referenced_analysis_ids[1] <- paste(
@@ -295,7 +295,7 @@ test_that("an output referencing an analysis that is gone is a blocker", {
   dangling <- findings[findings$field == "referenced_analysis_ids", ]
 
   expect_gt(nrow(dangling), 0)
-  expect_equal(dangling$severity[1], "FAIL")
+  expect_equal(dangling$severity[1], "GAP")
   expect_true(any(grepl("AN_GONE", dangling$problem)))
 })
 
@@ -345,7 +345,7 @@ test_that("a CMH test without a stratification variable is a warning", {
   expect_equal(blocked$severity, "WARN")
 })
 
-test_that("an analysis with no method at all is a blocker", {
+test_that("an analysis with no method at all is a gap", {
   model <- .ars_validate_model()
   model$analyses$methodId[1] <- NA_character_
 
@@ -353,7 +353,7 @@ test_that("an analysis with no method at all is a blocker", {
   no_method <- findings[findings$id == model$analyses$id[1] &
                           findings$field == "methodId", ]
 
-  expect_equal(no_method$severity[1], "FAIL")
+  expect_equal(no_method$severity[1], "GAP")
 })
 
 test_that("a population that was never parsed is a warning", {
@@ -367,7 +367,7 @@ test_that("a population that was never parsed is a warning", {
   expect_equal(unparsed$severity, "WARN")
 })
 
-test_that("contents entries pointing at nothing are a warning, not a blocker", {
+test_that("contents entries pointing at nothing are a warning, not a gap", {
   model <- .ars_validate_model()
   model$analyses <- model$analyses[-1, ]
 
@@ -405,14 +405,14 @@ test_that("the ADaM spec overlay flags datasets and variables it cannot find", {
   model <- ars_to_model(ars_path)
 
   clean <- validate_ars_model(model, spec = spec)
-  expect_equal(sum(clean$severity == "FAIL"), 0)
+  expect_equal(sum(clean$severity == "GAP"), 0)
 
   model$analyses$dataset[1]  <- "ADNOPE"
   model$analyses$variable[2] <- "NOSUCHVAR"
   findings <- validate_ars_model(model, spec = spec)
 
   bad_dataset <- findings[findings$id == model$analyses$id[1] &
-                            findings$severity == "FAIL", ]
+                            findings$severity == "GAP", ]
   expect_gt(nrow(bad_dataset), 0)
   expect_true(any(grepl("ADNOPE", bad_dataset$problem)))
 
@@ -494,7 +494,7 @@ test_that("validate_ars_model() refuses anything that is not a model", {
   expect_error(validate_ars_model(list(a = 1)), "must be an")
 })
 
-test_that("the validation gate blocks only FAIL findings", {
+test_that("the validation gate collects only GAP findings", {
   findings <- rbind(
     .add_finding(.new_findings(), "WARN", "analyses", "AN_WARN",
                  "methodId", "Review this method.", "Choose a native method.",
@@ -512,7 +512,7 @@ test_that("the validation gate blocks only FAIL findings", {
   expect_length(review_gate$blocking_refs, 0L)
 
   blocking <- .add_finding(
-    findings, "FAIL", "groupings", "GF_EMPTY", "groups",
+    findings, "GAP", "groupings", "GF_EMPTY", "groups",
     "This fixed grouping has no groups.", "Add groups or make it data-driven.",
     ref = "FIXED_GROUPING_EMPTY"
   )

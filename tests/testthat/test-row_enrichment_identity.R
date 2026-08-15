@@ -395,7 +395,7 @@ test_that("an unresolved role blocks execution instead of defaulting to ANALYSIS
     f <- as.data.frame(validate_ars_model(model))
     hit <- f[!is.na(f$ref) & f$ref == .UNRESOLVED_ROLE_REF, , drop = FALSE]
     expect_equal(nrow(hit), 1L)
-    expect_equal(hit$severity, "FAIL")
+    expect_equal(hit$severity, "GAP")
     ## The proposed role is named, so a different lost role is a failure.
     expect_match(hit$problem, "GROUPING", fixed = TRUE)
 

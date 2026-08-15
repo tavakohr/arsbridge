@@ -171,7 +171,7 @@ test_that("an event-scoped defect that resolves to nothing widens, not vanishes"
   ## nothing.
   model <- .rmap_model()
   findings <- .add_finding(
-    .new_findings(), "FAIL", "methods", "row 2", "id",
+    .new_findings(), "GAP", "methods", "row 2", "id",
     "This method has no id.", "Give it a unique id.",
     ref = "ENTITY_ID_MISSING"
   )
@@ -192,7 +192,7 @@ test_that("advisory and cell findings reserve nothing", {
                 "METHOD_PLACEHOLDER_SLOT_MISMATCH",
                 "OUTPUT_HAS_NO_ANALYSES")) {
     findings <- .add_finding(
-      .new_findings(), "FAIL", "analyses", "AN_SYNTH_001", "methodId",
+      .new_findings(), "GAP", "analyses", "AN_SYNTH_001", "methodId",
       "problem", "action", ref = ref
     )
     reserved <- names(.reservations_from_findings(model, findings)$by_analysis)
@@ -205,7 +205,7 @@ test_that("a clean event reserves nothing at all", {
   model <- .rmap_model()
   findings <- validate_ars_model(model)
 
-  expect_equal(sum(findings$severity == "FAIL"), 0L)
+  expect_equal(sum(findings$severity == "GAP"), 0L)
   expect_length(
     names(.reservations_from_findings(model, findings)$by_analysis), 0L
   )
@@ -240,7 +240,7 @@ test_that("reintroducing first-match output lookup lets a duplicate escape", {
   model <- .rmap_model()
   model$outputs$id[2] <- model$outputs$id[1]
   findings <- .add_finding(
-    .new_findings(), "FAIL", "outputs", model$outputs$id[1], "columns",
+    .new_findings(), "GAP", "outputs", model$outputs$id[1], "columns",
     "Two declared paths compose the same condition.",
     "Make each path a distinct subject set.",
     ref = "DUPLICATE_RESULT_PATH"
@@ -260,7 +260,7 @@ test_that("the repaired traversal reserves through both copies", {
   model <- .rmap_model()
   model$outputs$id[2] <- model$outputs$id[1]
   findings <- .add_finding(
-    .new_findings(), "FAIL", "outputs", model$outputs$id[1], "columns",
+    .new_findings(), "GAP", "outputs", model$outputs$id[1], "columns",
     "Two declared paths compose the same condition.",
     "Make each path a distinct subject set.",
     ref = "DUPLICATE_RESULT_PATH"

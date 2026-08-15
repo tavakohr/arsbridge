@@ -115,12 +115,12 @@ test_that("an edit re-runs validation", {
 
   state <- .edit_state()
   target <- state$model()$analyses$id[1]
-  expect_equal(sum(state$findings()$severity == "FAIL"), 0)
+  expect_equal(sum(state$findings()$severity == "GAP"), 0)
 
   apply_edit(state, "analyses", target, "methodId", "MTH_GONE")
 
   findings <- state$findings()
-  expect_gt(sum(findings$severity == "FAIL"), 0)
+  expect_gt(sum(findings$severity == "GAP"), 0)
   expect_true(any(grepl("MTH_GONE", findings$problem)))
 })
 
@@ -220,7 +220,7 @@ test_that("choosing a catalogue method adds it to the file first", {
   expect_equal(model$analyses$methodId[1], "MTH_SUBJECT_COUNT")
 
   ## The reference resolves, so no dangling-method finding.
-  expect_equal(sum(state$findings()$severity == "FAIL"), 0)
+  expect_equal(sum(state$findings()$severity == "GAP"), 0)
 })
 
 test_that("entity dropdowns say how many analyses share each entity", {

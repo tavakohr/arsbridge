@@ -238,15 +238,15 @@ test_that("an edited model executes into an ARD", {
 
 test_that("the save summary speaks to each severity level", {
   ## Direct calls: these cli branches are what the reviewer sees after every
-  ## save, so each one gets exercised -- blocking, review-only, and clean.
+  ## save, so each one gets exercised -- reserved, review-only, and clean.
   log <- .new_edit_log()
 
   blocking <- data.frame(
-    severity = "FAIL", entity = "analyses", id = "AN_1", field = "methodId",
+    severity = "GAP", entity = "analyses", id = "AN_1", field = "methodId",
     problem = "x", action = "y", ref = NA_character_,
     stringsAsFactors = FALSE
   )
-  expect_message(.report_save("out.json", log, blocking), "blocking problem")
+  expect_message(.report_save("out.json", log, blocking), "still reserved")
 
   clean <- .new_findings()
   expect_message(.report_save("out.json", log, clean), "Nothing left to fix")

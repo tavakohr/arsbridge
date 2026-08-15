@@ -15,7 +15,8 @@
 ## So the coverage has to be checked mechanically rather than remembered. This
 ## file reads every `.add_finding()` call in the package out of the loaded
 ## namespace's own syntax trees, resolves what severity and what code each one
-## emits, and requires that every code the package raises at FAIL either
+## emits, and requires that every code the package raises at GAP -- the
+## severity that was FAIL until the gate came down -- either
 ##
 ##   (a) reserves -- proven by running the map, not by reading a table; or
 ##   (b) appears in a short allowlist, each entry of which is justified by an
@@ -195,7 +196,7 @@
 
 
 ## ---------------------------------------------------------------------------
-## The four codes that are raised at FAIL and deliberately do not reserve.
+## The four codes that are raised at GAP and deliberately do not reserve.
 ##
 ## Each is here because reserving would DISCARD CORRECT NUMBERS, and each is
 ## safe only because the fill already refuses the affected cell on its own. The
@@ -235,7 +236,7 @@
     list(entity = "analyses", id = "AN_SYNTH_001")
 
   findings <- .add_finding(
-    .new_findings(), "FAIL", where$entity, where$id, "field",
+    .new_findings(), "GAP", where$entity, where$id, "field",
     "synthetic", "synthetic", ref = ref
   )
   length(.reservations_from_findings(model, findings)$by_analysis) > 0L
@@ -308,11 +309,11 @@ test_that("the dynamic-code declarations match the functions they describe", {
 })
 
 
-test_that("every code raised at FAIL reserves, or is justified and proven", {
+test_that("every code raised at GAP reserves, or is justified and proven", {
   sites <- .rcov_finding_sites()
-  blocking <- sort(unique(sites$ref[sites$severity == "FAIL"]))
+  blocking <- sort(unique(sites$ref[sites$severity == "GAP"]))
 
-  ## Non-vacuity: FAIL is the severity the gate refused the event on, and the
+  ## Non-vacuity: GAP is what the gate used to refuse the event on, and the
   ## package raises it in many places. An empty set here would mean the
   ## extraction, not the package, had changed.
   expect_gt(length(blocking), 15L)
@@ -335,12 +336,12 @@ test_that("every code raised at FAIL reserves, or is justified and proven", {
   )
 
   ## And the allowlist stays honest in the other direction: an entry that has
-  ## since started reserving, or that is no longer raised at FAIL at all, is a
+  ## since started reserving, or that is no longer raised at GAP at all, is a
   ## justification for something that is not happening.
   stale <- setdiff(names(.RCOV_JUSTIFIED_NON_RESERVING), blocking[!reserves])
   expect_equal(
     length(stale), 0L,
-    info = paste("justified but no longer a non-reserving FAIL:",
+    info = paste("justified but no longer a non-reserving GAP:",
                  paste(stale, collapse = ", "))
   )
 })
@@ -349,7 +350,7 @@ test_that("every code raised at FAIL reserves, or is justified and proven", {
 test_that("demoting a reserving code to advisory is caught by the barrier", {
   ## Mutation: the exact shape of silent under-reservation. A code that
   ## withholds results is marked advisory -- the finding is still raised, still
-  ## reported, still FAIL, and nothing is withheld any more. Under the old gate
+  ## reported, still GAP, and nothing is withheld any more. Under the old gate
   ## this was impossible; under the map it is one word in a table.
   ##
   ## Patched through `.rsv_install()` so the namespace copy the validator
@@ -362,7 +363,7 @@ test_that("demoting a reserving code to advisory is caught by the barrier", {
   .rsv_install(".VALIDATION_REFS", demoted)
 
   sites <- .rcov_finding_sites()
-  blocking <- sort(unique(sites$ref[sites$severity == "FAIL"]))
+  blocking <- sort(unique(sites$ref[sites$severity == "GAP"]))
   model <- .rmap_model()
   reserves <- vapply(blocking, .rcov_reserves, logical(1), model = model)
   escaped <- blocking[!reserves &

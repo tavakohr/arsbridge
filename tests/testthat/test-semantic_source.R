@@ -94,7 +94,7 @@ test_that("analysing one variable while restricting on another is not a finding"
   expect_equal(nrow(.ssrc_hits(model)), 0L)
 })
 
-test_that("a source the annotation never named is a FAIL", {
+test_that("a source the annotation never named is a GAP", {
   ## A-11 in miniature: the annotation says ETHNICN, the analysis resolves RACEN.
   model <- .ssrc_model(
     analyses = list(.ssrc_analysis("AN_BAD", "ADSL", "RACEN",
@@ -103,7 +103,7 @@ test_that("a source the annotation never named is a FAIL", {
   )
   hits <- .ssrc_hits(model)
   expect_equal(nrow(hits), 1L)
-  expect_equal(hits$severity, "FAIL")
+  expect_equal(hits$severity, "GAP")
   expect_equal(hits$id, "AN_BAD")
   ## The message has to be actionable without looking at any number.
   expect_match(hits$problem, "ADSL.RACEN", fixed = TRUE)

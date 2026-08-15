@@ -161,7 +161,7 @@ test_that("a blocked build needs fixes and reports only this run's artifacts", {
   writeLines("stale debrief", paths$debrief)
 
   findings <- .add_finding(
-    .new_findings(), "FAIL", "groupings", "GF_EMPTY", "groups",
+    .new_findings(), "GAP", "groupings", "GF_EMPTY", "groups",
     "This fixed grouping has no groups.", "Add groups or make it data-driven.",
     ref = "FIXED_GROUPING_EMPTY"
   )

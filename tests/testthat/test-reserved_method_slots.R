@@ -50,7 +50,7 @@ test_that("the same shape on a computing method is still a mismatch", {
       findings$ref %in% "METHOD_PLACEHOLDER_SLOT_MISMATCH", , drop = FALSE
     ]
     expect_equal(nrow(mismatch), 1L, info = nm)
-    expect_equal(mismatch$severity, "FAIL", info = nm)
+    expect_equal(mismatch$severity, "GAP", info = nm)
     expect_equal(mismatch$id, "AN_SYNTH_001", info = nm)
   }
 })

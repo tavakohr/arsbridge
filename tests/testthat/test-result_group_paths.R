@@ -102,8 +102,8 @@ test_that("validate_ars_model passes the intact event and catches damage", {
     }
   }
   f2 <- validate_ars_model(ars_to_model(broken))
-  expect_true(any(f2$ref == "DISPLAY_COLUMN_COUNT_MISMATCH" & f2$severity == "FAIL"))
-  expect_true(any(f2$ref == "UNMAPPED_LEAF_COLUMN" & f2$severity == "FAIL"))
+  expect_true(any(f2$ref == "DISPLAY_COLUMN_COUNT_MISMATCH" & f2$severity == "GAP"))
+  expect_true(any(f2$ref == "UNMAPPED_LEAF_COLUMN" & f2$severity == "GAP"))
 
   # Damage 2: invent a Cohort B > Mild cross -> INVALID_CARTESIAN_PRODUCT.
   crossed <- event
@@ -119,7 +119,7 @@ test_that("validate_ars_model passes the intact event and catches damage", {
     crossed$outputs[[i]]$resultGroupPaths <- rgp
   }
   f3 <- validate_ars_model(ars_to_model(crossed))
-  expect_true(any(f3$ref == "INVALID_CARTESIAN_PRODUCT" & f3$severity == "FAIL"))
+  expect_true(any(f3$ref == "INVALID_CARTESIAN_PRODUCT" & f3$severity == "GAP"))
 
   # Damage 3: strip a subtotal's scope -> SUBTOTAL_SCOPE_UNDEFINED.
   unscoped <- event
@@ -131,7 +131,7 @@ test_that("validate_ars_model passes the intact event and catches damage", {
     unscoped$outputs[[i]]$resultGroupPaths <- rgp
   }
   f4 <- validate_ars_model(ars_to_model(unscoped))
-  expect_true(any(f4$ref == "SUBTOTAL_SCOPE_UNDEFINED" & f4$severity == "FAIL"))
+  expect_true(any(f4$ref == "SUBTOTAL_SCOPE_UNDEFINED" & f4$severity == "GAP"))
 
   # Damage 4: unlink a grouping from an analysis -> GROUPING_VARIABLE_NOT_LINKED.
   unlinked <- event
@@ -142,7 +142,7 @@ test_that("validate_ars_model passes the intact event and catches damage", {
     break
   }
   f5 <- validate_ars_model(ars_to_model(unlinked))
-  expect_true(any(f5$ref == "GROUPING_VARIABLE_NOT_LINKED" & f5$severity == "FAIL"))
+  expect_true(any(f5$ref == "GROUPING_VARIABLE_NOT_LINKED" & f5$severity == "GAP"))
 })
 
 test_that("the paths survive the editor model round trip", {

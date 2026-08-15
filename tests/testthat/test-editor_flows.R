@@ -89,7 +89,7 @@ test_that("choosing a catalogue method inserts it before pointing at it", {
     expect_true("MTH_KAPLAN_MEIER_ESTIMATE" %in% model$methods$id)
     expect_equal(model$analyses$methodId[model$analyses$id == target],
                  "MTH_KAPLAN_MEIER_ESTIMATE")
-    expect_equal(sum(validate_ars_model(model)$severity == "FAIL"), 0)
+    expect_equal(sum(validate_ars_model(model)$severity == "GAP"), 0)
   })
 })
 
@@ -285,7 +285,7 @@ test_that("the wizard refuses a line with no variable, then adds a real one", {
     expect_equal(added$pool, "analyses")
     expect_equal(model$analyses$label[model$analyses$id == added$id], "SMOKFL")
     expect_null(state$add_request())
-    expect_equal(sum(validate_ars_model(model)$severity == "FAIL"), 0)
+    expect_equal(sum(validate_ars_model(model)$severity == "GAP"), 0)
   })
 })
 
@@ -377,7 +377,7 @@ test_that("the status header summarizes safety, with save controls in edit mode"
   viewer <- .flows_state(mode = "view")
   shiny::testServer(mod_status_server, args = list(state = viewer), {
     rendered <- paste(as.character(output$status), collapse = " ")
-    expect_match(rendered, "No blocking problems")
+    expect_match(rendered, "Nothing reserved")
     expect_false(grepl("Save and close", rendered))
   })
 
@@ -392,7 +392,7 @@ test_that("the status header summarizes safety, with save controls in edit mode"
   ## Its shape is taken from .new_findings() rather than written out, so the
   ## row cannot drift from the schema the next time a column is added.
   foreign <- .new_findings()[1, , drop = FALSE]
-  foreign$severity <- "FAIL"
+  foreign$severity <- "GAP"
   foreign$entity   <- "analyses"
   foreign$id       <- "AN_X"
   foreign$field    <- "methodId"
@@ -402,7 +402,7 @@ test_that("the status header summarizes safety, with save controls in edit mode"
   editor$findings(rbind(shiny::isolate(editor$findings()), foreign))
   shiny::testServer(mod_status_server, args = list(state = editor), {
     rendered <- paste(as.character(output$status), collapse = " ")
-    expect_match(rendered, "1 blocking problem")
+    expect_match(rendered, "1 reserved result")
     expect_match(rendered, "Save and close")
   })
 })

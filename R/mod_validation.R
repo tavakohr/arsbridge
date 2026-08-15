@@ -31,29 +31,35 @@ mod_validation_server <- function(id, state, parent_session = NULL) {
         ))
       }
 
+      ## `.FINDING_SEVERITY_RANK` is the severity LABELS, most serious first
+      ## ("FAIL", "GAP", "WARN", "INFO"); vapply over it names the counts.
       counts <- vapply(
-        c("FAIL", "WARN", "INFO"),
-        function(level) sum(findings$severity == level),
+        .FINDING_SEVERITY_RANK,
+        function(level) sum(findings$severity == level, na.rm = TRUE),
         integer(1)
       )
+      ## GAP and FAIL name one thing in two vocabularies; a payload written
+      ## before this release carries the older word. `[` yields NA on a label
+      ## the frame does not use, so the sum stays safe.
+      n_gap <- sum(counts[.GAP_SEVERITIES], na.rm = TRUE)
 
       bslib::layout_columns(
         col_widths = c(4, 4, 4),
         bslib::value_box(
-          title = "Blocking",
-          value = counts[["FAIL"]],
+          title = "Reserved",
+          value = n_gap,
           theme = "danger",
-          shiny::span(class = "small", "References or methods that will fail")
+          shiny::span(class = "small", "Results this run will not produce")
         ),
         bslib::value_box(
           title = "To review",
-          value = counts[["WARN"]],
+          value = sum(counts["WARN"], na.rm = TRUE),
           theme = "warning",
           shiny::span(class = "small", "Results may not be what the shell asks")
         ),
         bslib::value_box(
           title = "Notes",
-          value = counts[["INFO"]],
+          value = sum(counts["INFO"], na.rm = TRUE),
           theme = "secondary",
           shiny::span(class = "small", "Nothing to do unless something looks off")
         )

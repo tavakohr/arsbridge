@@ -220,7 +220,7 @@ test_that("a blocked reporting event keeps repair artifacts but emits no code", 
   code_dir <- file.path(td, "code")
 
   blocked <- .add_finding(
-    .new_findings(), "FAIL", "groupings", "GF_EMPTY", "groups",
+    .new_findings(), "GAP", "groupings", "GF_EMPTY", "groups",
     "This fixed grouping has no groups.", "Add groups or make it data-driven.",
     ref = "FIXED_GROUPING_EMPTY"
   )

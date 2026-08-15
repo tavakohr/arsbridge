@@ -67,13 +67,13 @@ test_that("undo restores the findings, not just the model", {
 
   state <- .history_state()
   target <- state$model()$analyses$id[1]
-  expect_equal(sum(state$findings()$severity == "FAIL"), 0)
+  expect_equal(sum(state$findings()$severity == "GAP"), 0)
 
   apply_edit(state, "analyses", target, "methodId", "MTH_GONE")
-  expect_gt(sum(state$findings()$severity == "FAIL"), 0)
+  expect_gt(sum(state$findings()$severity == "GAP"), 0)
 
   .undo(state)
-  expect_equal(sum(state$findings()$severity == "FAIL"), 0)
+  expect_equal(sum(state$findings()$severity == "GAP"), 0)
 })
 
 test_that("a new edit after undoing abandons the redo branch", {

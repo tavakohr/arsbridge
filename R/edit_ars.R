@@ -238,15 +238,15 @@ review_ars <- edit_ars
     "Saved {n_edits} edit{?s} to {.path {output_path}}"
   )
 
-  n_fail <- sum(findings$severity == "FAIL")
-  n_warn <- sum(findings$severity == "WARN")
+  n_gap <- sum(findings$severity %in% .GAP_SEVERITIES, na.rm = TRUE)
+  n_warn <- sum(findings$severity == "WARN", na.rm = TRUE)
 
-  if (n_fail > 0) {
+  if (n_gap > 0) {
     cli::cli_alert_danger(
-      "{n_fail} blocking problem{?s} remain{?s/} -- run {.code validate_ars_model()} to list {?it/them}."
+      "{n_gap} result{?s} {?is/are} still reserved -- run {.code validate_ars_model()} to list {?it/them}."
     )
   } else if (n_warn > 0) {
-    cli::cli_alert_info("No blocking problems; {n_warn} thing{?s} to review.")
+    cli::cli_alert_info("Nothing reserved; {n_warn} thing{?s} to review.")
   } else {
     cli::cli_alert_success("Nothing left to fix.")
   }

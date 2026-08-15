@@ -297,7 +297,7 @@ test_that("no computed percentage exceeds its denominator", {
   spec
 }
 
-test_that("validate_ars_model() raises a blocking FAIL on the conflict", {
+test_that("validate_ars_model() raises a GAP on the conflict", {
   td <- .gd_adam(same_name = TRUE)
   path <- file.path(td, "conflict_v.json")
   jsonlite::write_json(.gd_conflict_spec(), path, auto_unbox = TRUE,
@@ -308,7 +308,7 @@ test_that("validate_ars_model() raises a blocking FAIL on the conflict", {
   hit <- findings[findings$field == "groupingDataset", , drop = FALSE]
 
   expect_equal(nrow(hit), 1L)
-  expect_equal(hit$severity[[1]], "FAIL")
+  expect_equal(hit$severity[[1]], "GAP")
   expect_match(hit$problem[[1]], "groupingDataset says ADAE", fixed = TRUE)
   expect_match(hit$problem[[1]], "groupingVariable.dataset says ADSL",
                fixed = TRUE)
