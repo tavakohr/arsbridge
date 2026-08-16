@@ -288,6 +288,64 @@
   )
 )
 
+## A count expressed over person-time -- "E (E/100 PY)", "n/1000 patient-years".
+## Its denominator is a sum of exposure, which no method in the catalogue
+## carries, so a row asking for one cannot be computed from the standard
+## methods however it is otherwise annotated.
+##
+## Standards-level clinical wording, in the same way "n (%)" is. No study's
+## dataset, variable or row identifier participates.
+.RE_PERSON_TIME_RATE <- paste0(
+  "(?i)/\\s*[0-9]*\\s*",
+  "(?:PY\\b|(?:patient|person|subject)[-\\s]*(?:year|time))"
+)
+
+## The description carried by the shared MTH_UNSUPPORTED_ANALYSIS object when
+## rows are reserved for stating a statistic this package cannot compute.
+##
+## Deliberately generic: one method object serves every such row in a section,
+## so a reason taken from whichever row happened to register it first would be
+## wrong for the others. The row-specific reason travels with the row instead,
+## in its own diagnostic.
+.UNSUPPORTED_ROW_REASON <-
+  "the row states a statistic arsbridge does not compute"
+
+#' The statistic a row asks for that arsbridge has no method to compute, or
+#' NULL when the row states nothing of the kind.
+#'
+#' Saying so plainly is the whole value of this function. Both shapes below
+#' were previously built as a summary of whichever variable the row named,
+#' which puts a number -- the wrong one -- into a cell that looks finished:
+#'
+#'   * an aggregation over records, which no catalogue method performs
+#'   * a rate over exposure time, whose denominator no catalogue method carries
+#'
+#' The annotation states the derivation and the label states the statistic the
+#' cell shows. The author speaks about intent in either, so both are read.
+#'
+#' @param row Stub row (`annotation`, and `label` when the shell carries one).
+#' @return A reason string for the reservation, or NULL.
+#' @noRd
+.unsupported_row_intent <- function(row) {
+  text <- paste(as.character(row$annotation %||% ""),
+                as.character(row$label %||% ""))
+  if (!nzchar(trimws(text))) return(NULL)
+
+  ## Masked first, so an aggregation word or a person-time unit occurring
+  ## INSIDE a quoted level is data rather than intent -- the same rule the
+  ## where-clause grammar follows, for the same reason.
+  masked <- .mask_literals(text)
+  probe  <- if (is.null(masked)) text else masked$text
+
+  if (grepl("(?i)\\bsum\\s+of\\b", probe, perl = TRUE)) {
+    return("the row asks for a sum over records, which arsbridge does not compute")
+  }
+  if (grepl(.RE_PERSON_TIME_RATE, probe, perl = TRUE)) {
+    return("the row asks for a rate over exposure time, which arsbridge does not compute")
+  }
+  NULL
+}
+
 #' Infer the analysis method for one stub row from its bound annotation form
 #' (ADR 0003 Layer C). Deterministic: the annotation is authored ground truth,
 #' so it overrides the section-level LLM method for this row.
@@ -296,12 +354,24 @@
 #'   many statistics the row displays).
 #' @param var_is_categorical NA/TRUE/FALSE -- the spec's verdict on the row's
 #'   primary variable (from `.var_is_categorical`).
-#' @return list(method = standard-catalogue name, kind = layout kind), or
-#'   NULL when the form is unrecognised (caller keeps the section default).
+#' @return list(method = standard-catalogue name, kind = layout kind); or
+#'   list(method = NULL, kind = "manual", unsupported = <reason>) when the row
+#'   asks for a statistic no catalogue method computes, which the caller
+#'   reserves rather than substituting for; or NULL when the form is
+#'   unrecognised (caller keeps the section default).
 #' @noRd
 .infer_row_method <- function(row, var_is_categorical = NA) {
   ann <- as.character(row$annotation %||% "")
   if (!nzchar(trimws(ann))) return(NULL)
+
+  ## Before any method is chosen: the row may ask for a statistic this package
+  ## has no way to produce. Choosing some other method for it is exactly how a
+  ## wrong number ships -- the cell fills, looks finished, and reads as an
+  ## answer to the question the author asked.
+  unsupported <- .unsupported_row_intent(row)
+  if (!is.null(unsupported)) {
+    return(list(method = NULL, kind = "manual", unsupported = unsupported))
+  }
 
   ## The placeholder shape decides whether a subject-count row also declares a
   ## percentage. Both Excel and Word readers carry `n_slots` when the shell
@@ -320,12 +390,19 @@
     kind <- if (has_percentage_slot) "subject_count_pct" else "subject_count"
     return(list(method = subject_count_method, kind = kind))
   }
-  ## Value filter present. A filter ON the primary variable itself
-  ## ("ADSL.SAFFL='Y'") means "count subjects in this state" -> subject count
-  ## within the subset. A filter on ANOTHER variable
+  ## A condition is present. One ON the primary variable itself
+  ## ("ADSL.SAFFL='Y'", "ADEX.TRTDUR GE 16") means "count subjects in this
+  ## state" -> subject count within the subset. One on ANOTHER variable
   ## ("ADEX.AVAL WHERE PARAMCD='DURD'") only scopes the data -- the primary
   ## variable is still summarised by its own type below.
-  if (grepl("=\\s*'[^']*'", ann) || grepl("(?i)\\bwhere\\b", ann, perl = TRUE)) {
+  ##
+  ## What decides this is that a condition is THERE, not how it is spelled.
+  ## Looking for a quoted equality or the word "where" recognised a character
+  ## level as a restriction but not a numeric threshold on the very same row,
+  ## so a threshold row was summarised instead of counted -- reporting a mean
+  ## of the unrestricted variable into a count slot, which looks like a
+  ## plausible number and is an answer to a question nobody asked.
+  if (.has_condition_evidence(ann)) {
     primary <- extract_annotation_vars(ann)
     primary <- if (length(primary) > 0) sub("^.*\\.", "", primary[1]) else ""
     fs <- flat_data_subset(ann)
@@ -1108,8 +1185,26 @@ build_ars_json <- function(sections,
       cat_verdict2 <- .var_is_categorical(er2$primary_dataset, er2$primary_variable)
       inferred2    <- .infer_row_method(row2, cat_verdict2)
       method2_id   <- mth_obj$id
-      cand2        <- if (!is.null(inferred2)) .STANDARD_METHODS[[inferred2$method]] else NULL
-      if (!is.null(cand2)) {
+      ## A statistic this package cannot produce reserves the row, and is
+      ## checked before the catalogue: there is no catalogue entry to consult.
+      unsupported2 <- if (!is.null(inferred2)) inferred2$unsupported else NULL
+      cand2        <- if (!is.null(inferred2) && is.null(unsupported2)) {
+        .STANDARD_METHODS[[inferred2$method]]
+      } else NULL
+      if (!is.null(unsupported2)) {
+        method2_id <- "MTH_UNSUPPORTED_ANALYSIS"
+        if (!method2_id %in% seen_mth) {
+          methods[[length(methods) + 1L]] <<- .build_unsupported_method(
+            list(unsupported_reason = .UNSUPPORTED_ROW_REASON))
+          seen_mth <<- c(seen_mth, method2_id)
+        }
+        diag_add(
+          stage = "build_ars", severity = "WARN",
+          problem = sprintf("Row '%s': %s", label %||% "?", unsupported2),
+          tlf_number = sec$tlf_number,
+          action = "Reserved as manual_pending rather than computed as a different statistic -- see ars_manual_worklist()"
+        )
+      } else if (!is.null(cand2)) {
         method2_id <- cand2$id
         if (!cand2$id %in% seen_mth) {
           methods[[length(methods) + 1L]] <<- .with_op_self_rels(cand2)
@@ -1401,6 +1496,25 @@ build_ars_json <- function(sections,
                             row$label %||% "?"),
           tlf_number = sec$tlf_number,
           action = "Reserved as manual_pending so the authored row is kept -- see ars_manual_worklist()"
+        )
+      } else if (!is.null(inferred) && !is.null(inferred$unsupported)) {
+        ## The row states a statistic this package cannot produce. Reserving it
+        ## is the honest outcome: computing a different statistic into the same
+        ## cell yields a number that formats, renders, and answers a question
+        ## the author did not ask.
+        row_method_id <- "MTH_UNSUPPORTED_ANALYSIS"
+        row_kind      <- "manual"
+        if (!"MTH_UNSUPPORTED_ANALYSIS" %in% seen_mth) {
+          methods[[length(methods) + 1L]] <- .build_unsupported_method(
+            list(unsupported_reason = .UNSUPPORTED_ROW_REASON))
+          seen_mth <- c(seen_mth, "MTH_UNSUPPORTED_ANALYSIS")
+        }
+        diag_add(
+          stage = "build_ars", severity = "WARN",
+          problem = sprintf("Row '%s': %s", row$label %||% "?",
+                            inferred$unsupported),
+          tlf_number = sec$tlf_number,
+          action = "Reserved as manual_pending rather than computed as a different statistic -- see ars_manual_worklist()"
         )
       } else if (!is.null(inferred)) {
         ## Deterministic method from the annotation form -- overrides the
