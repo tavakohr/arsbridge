@@ -7,8 +7,11 @@
 ars_fill_summary(census)
 }
 \arguments{
-\item{census}{The \code{census} frame \code{ars_fill_shell()} returns: one row per
-cell record, filled cells included.}
+\item{census}{The \code{census} frame \code{ars_fill_shell()} returns -- one row per
+cell record, filled cells included -- or the fill result itself, which
+carries that frame. Both are accepted, because both are what a reader has
+in hand after a fill. \code{NULL} summarises to three empty tables; anything
+else is an error naming what to pass.}
 }
 \value{
 A list of three data frames:
