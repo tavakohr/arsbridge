@@ -35,9 +35,21 @@ test_that("annotation references survive the conditions the parser cannot read",
                "ADSL.STRAT2")
   expect_equal(.annotation_source_refs("ADEX.TRTDUR >= 16"), "ADEX.TRTDUR")
 
-  ## Confirm the premise: the condition parser genuinely fails on these.
-  expect_null(parse_where_clause("ADSL.RACE='BLACK OR AFRICAN AMERICAN'"))
+  ## Two of the three now parse: masking quoted literals fixed the joiner
+  ## inside a value and the comparison character inside a value, which is what
+  ## the first two annotations are. They stay here because the point of this
+  ## test is that the detector declares its sources WHATEVER the condition
+  ## parser can do with the text -- a case that starts parsing must not quietly
+  ## drop out of the suite.
+  expect_false(is.null(parse_where_clause("ADSL.RACE='BLACK OR AFRICAN AMERICAN'")))
+  expect_false(is.null(parse_where_clause("ADSL.STRAT2='Adolescent (<18)'")))
+
+  ## The premise still needs a genuinely unreadable condition, or the
+  ## independence claim above is no longer exercised by anything. A bare ">="
+  ## symbol is not in the supported grammar (which spells it GE), so this one
+  ## remains unparseable -- and the detector still names its source.
   expect_null(parse_where_clause("ADEX.TRTDUR >= 16"))
+  expect_equal(.annotation_source_refs("ADEX.TRTDUR >= 16"), "ADEX.TRTDUR")
 
   ## Unqualified text declares nothing -- it is not checkable, not clean.
   expect_length(.annotation_source_refs("no qualified reference here"), 0L)
