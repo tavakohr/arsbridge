@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9141</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9142</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -54,8 +54,11 @@
 
 
 <dl><dt id="arg-census">census<a class="anchor" aria-label="anchor" href="#arg-census"></a></dt>
-<dd><p>The <code>census</code> frame <code><a href="ars_fill_shell.html">ars_fill_shell()</a></code> returns: one row per
-cell record, filled cells included.</p></dd>
+<dd><p>The <code>census</code> frame <code><a href="ars_fill_shell.html">ars_fill_shell()</a></code> returns – one row per
+cell record, filled cells included – or the fill result itself, which
+carries that frame. Both are accepted, because both are what a reader has
+in hand after a fill. <code>NULL</code> summarises to three empty tables; anything
+else is an error naming what to pass.</p></dd>
 
 </dl></div>
     <div class="section level2">
