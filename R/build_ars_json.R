@@ -1826,7 +1826,23 @@ build_ars_json <- function(sections,
         }
       }
     }
-    if (!build_layout) shell_layout <- list()
+    ## The layout is dropped for output kinds that have no stub axis at all: a
+    ## listing's rows are records and a figure has none, so a row-to-analysis
+    ## map would describe nothing.
+    ##
+    ## A capability-gated TABLE used to be caught by the same test, because the
+    ## flag above is false for it too. It is a different case: still a table,
+    ## its rows still sit on sheet rows, and its analyses are reserved rather
+    ## than absent. Discarding its layout left the fill unable to bind them, so
+    ## every cell reported "no analysis covers this row" while the event held
+    ## reserved results for those very analyses -- the table came back blank
+    ## instead of visibly reserved, which reads as "not run yet".
+    ##
+    ## The flag stays in the test so that a future reason to skip building a
+    ## layout still takes effect for the kinds that have no stub.
+    if (!build_layout && !identical(sec$tlf_type %||% "TABLE", "TABLE")) {
+      shell_layout <- list()
+    }
 
     ## Executable inferential methods (ADR 0001): one analysis each on the
     ## section's primary response variable, carrying any operand (e.g. CMH
