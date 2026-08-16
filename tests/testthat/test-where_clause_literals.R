@@ -41,7 +41,13 @@
 ## The parsed shape, reduced to what the assertions care about. Returned as a
 ## plain list so two vocabularies can be compared structurally.
 .wcl_shape <- function(wc) {
-  if (is.null(wc)) return(list(kind = "dropped"))
+  ## Three outcomes, and keeping them distinct is the point of B1b: NULL means
+  ## no condition was supplied, `unresolved` means one was supplied and could
+  ## not be read, and anything else is a clause.
+  if (.is_unresolved_condition(wc)) {
+    return(list(kind = "unresolved", text = .unresolved_condition_text(wc)))
+  }
+  if (is.null(wc)) return(list(kind = "absent"))
   if (!is.null(wc$condition)) {
     return(list(kind = "condition",
                 comparator = wc$condition$comparator,
@@ -203,7 +209,7 @@ test_that("renaming every identifier and value changes nothing structural", {
   ## above is between real parses rather than between two NULLs.
   kinds <- vapply(c(a_exprs, b_exprs),
                   function(e) .wcl_shape(.wcl_parse(e))$kind, character(1))
-  expect_false(any(kinds == "dropped"))
+  expect_false(any(kinds %in% c("absent", "unresolved")))
   expect_equal(length(kinds), 10L)
 })
 
@@ -231,14 +237,13 @@ test_that("a value containing the marker characters is preserved, not edited", {
 })
 
 
-test_that("an expression that cannot be masked is reported, not parsed", {
+test_that("an expression that cannot be masked reserves, rather than running", {
   ## If no delimiter pair is free, the structure cannot be separated from the
-  ## values and the expression is not parsed.
+  ## values and the expression cannot be read at all.
   ##
-  ## What this asserts is exactly that: the parser declines and says so. It
-  ## returns NULL, which is the same answer given for any unreadable
-  ## condition, so this is a visibility guarantee rather than a safety one.
-  ## Converting NULL into a signal that reserves is a separate change.
+  ## That is now an UNRESOLVED condition rather than NULL, so it reserves
+  ## instead of executing as "no filter" -- the safety guarantee B1a described
+  ## as visibility-only.
   ##
   ## The candidate set is narrowed to one character to make the state
   ## reachable at all.
@@ -252,10 +257,13 @@ test_that("an expression that cannot be masked is reported, not parsed", {
   ## Fewer than two candidates, so masking cannot proceed.
   expect_null(.mask_literals(expr))
 
-  ## The parser declines, and the run carries a diagnostic naming the reason
-  ## rather than passing over it in silence.
+  ## The parser returns UNRESOLVED -- not NULL -- so the expression reserves
+  ## rather than executing as "no filter", and the run carries a diagnostic
+  ## naming the reason.
   diag_reset()
-  expect_null(suppressWarnings(parse_where_clause(expr)))
+  result <- suppressWarnings(parse_where_clause(expr))
+  expect_true(.is_unresolved_condition(result))
+  expect_identical(.unresolved_condition_text(result), expr)
   reported <- ars_diagnostics()
   expect_true(any(grepl("could not be separated", reported$problem)))
   expect_true(any(reported$severity == "WARN"))
@@ -278,8 +286,11 @@ test_that("masking is what fixes it: removing it brings the defect back", {
   expr <- sprintf("%s.%s='%s'", vocab$ds, vocab$var, vocab$joined_or)
 
   ## Unmasked, the joiner inside the value splits the expression and both
-  ## halves fail to parse -- the condition is dropped, exactly as before.
-  expect_identical(.wcl_shape(.wcl_parse(expr))$kind, "dropped")
+  ## halves fail to parse. The clause is then UNRESOLVED rather than a
+  ## clause -- which is the defect returning, since the author's filter is
+  ## no longer applied. It is not "absent": the annotation did supply a
+  ## condition, and that distinction is exactly what B1b preserves.
+  expect_identical(.wcl_shape(.wcl_parse(expr))$kind, "unresolved")
 })
 
 
@@ -313,5 +324,5 @@ test_that("every previously supported spelling still parses", {
   ## these identifiers, every entry would be "dropped" and the count is what
   ## says so rather than an empty pass.
   expect_equal(length(kinds), 14L)
-  expect_false(any(kinds == "dropped"))
+  expect_false(any(kinds %in% c("absent", "unresolved")))
 })

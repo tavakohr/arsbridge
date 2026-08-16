@@ -72,6 +72,17 @@
     label  <- .strip_n_placeholder(cell$text %||% "")
     n_hint <- .parse_n_hint(cell$text %||% "")
 
+    ## A header whose condition could not be read declares NO usable condition,
+    ## so `condition` stays NULL and every structural decision below -- whether
+    ## the axis is a hierarchy, what each path composes to -- treats it as
+    ## unconditioned, which it is. The author's text travels separately so the
+    ## grouping built from this node carries the marker and validation can
+    ## reserve on it. Storing the unreadable object in `condition` instead
+    ## would let it be composed into a result path as though it selected
+    ## records.
+    parsed <- parse_where_clause(cell$annotation %||% "")
+    unreadable <- .is_unresolved_condition(parsed)
+
     nodes[[length(nodes) + 1L]] <- list(
       id           = sprintf("CT%02d", length(nodes) + 1L),
       label        = label,
@@ -81,7 +92,12 @@
       node_type    = "leaf",
       grouping_ref = .annotation_first_ref(cell$annotation %||% ""),
       annotation   = cell$annotation %||% "",
-      condition    = parse_where_clause(cell$annotation %||% ""),
+      condition    = if (unreadable) NULL else parsed,
+      unresolved_condition = if (unreadable) {
+        .unresolved_condition_text(parsed)
+      } else {
+        NULL
+      },
       n_hint       = n_hint,
       source       = list(
         header_row = cell$row,

@@ -183,6 +183,47 @@
       "They must name the same source.")
   ),
 
+  ANALYSIS_SET_CONDITION_UNRESOLVED = list(
+    cause = paste(
+      "The population statement names a condition this package could not",
+      "read."),
+    consequence = paste(
+      "Every analysis using this population is reserved. Running them without",
+      "the filter is the dangerous alternative: each count and percentage",
+      "would be computed over the whole dataset rather than the population,",
+      "and would look entirely ordinary."),
+    fix_where = "annotation",
+    fix = paste(
+      "Restate the population as a condition in the supported grammar, or",
+      "supply a typed condition through the supplement.")
+  ),
+
+  GROUPING_LEVEL_CONDITION_UNRESOLVED = list(
+    cause = paste(
+      "A column header states a condition this package could not read."),
+    consequence = paste(
+      "Every analysis using that grouping is reserved. The level is kept so",
+      "the column axis holds its shape -- dropping it would close the gap and",
+      "leave a column showing a different subgroup than its header claims."),
+    fix_where = "annotation",
+    fix = paste(
+      "Restate the header's condition so it names a value of the grouping",
+      "variable, as the ADaM spec records that value.")
+  ),
+
+  ANALYSIS_CONDITION_UNRESOLVED = list(
+    cause = paste(
+      "The row states a filter this package could not read."),
+    consequence = paste(
+      "The analysis is reserved and carries no data subset. Without the",
+      "filter it would compute over every record rather than the rows the",
+      "annotation selected, and the number would still format and render."),
+    fix_where = "annotation",
+    fix = paste(
+      "Restate the row's filter in the supported grammar, or supply a typed",
+      "condition through the supplement.")
+  ),
+
   UNRESOLVED_VARIABLE_ROLE = list(
     cause = paste(
       "A variable's role in the analysis -- what it groups, filters or",

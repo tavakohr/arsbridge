@@ -2244,8 +2244,15 @@
 #' `mean of ADVS.AVAL`; only the first qualified reference is the variable.
 #' @noRd
 .figure_ref <- function(value) {
+  ## Normalised ONCE, then used for both arguments. Guarding only the pattern's
+  ## input left `regmatches()` with a zero-length `x` against a length-one
+  ## match, which errors -- so a figure sheet naming no series directive
+  ## crashed the fill instead of simply having no series.
+  ## `.figure_label_ref()` below already normalises both, which is why it never
+  ## showed the same failure.
+  value <- value %||% ""
   m <- regmatches(value, regexpr("[A-Za-z][A-Za-z0-9]*\\.[A-Za-z][A-Za-z0-9_]*",
-                                 value %||% ""))
+                                 value))
   if (length(m) == 0) return(NULL)
   parts <- strsplit(m[[1]], ".", fixed = TRUE)[[1]]
   list(dataset = toupper(parts[[1]]), variable = parts[[2]])
@@ -2327,12 +2334,23 @@
     ## .listing_eval_where() expects; wrapping it again makes the filter a
     ## silent no-op that averages every parameter in the dataset together.
     wc <- parse_where_clause(filter_txt)
-    if (is.null(wc)) {
+    ## A figure's filter never reaches the reporting event -- it is a fill-time
+    ## directive on the sheet -- so there is no entity to mark and no finding to
+    ## raise. The reservation happens here instead, and it is the same
+    ## reservation either way: the series is not computed and the cell says why.
+    ##
+    ## Both outcomes must be caught. `NULL` means the directive stated no
+    ## readable filter; an unresolved clause means it stated one this grammar
+    ## could not read. Only the first was handled before, and an unresolved
+    ## clause is NOT null -- left to fall through it would reach the evaluator
+    ## as an object that is not a WhereClause at all.
+    if (is.null(wc) || .is_unresolved_condition(wc)) {
       .diag_gap(
         stage = "fill_shell", severity = "WARN", input = INPUT_SHELL,
         problem = sprintf("Figure filter %s could not be parsed.",
                           dQuote(filter_txt, q = FALSE)),
-        why = "The series would be computed over unfiltered data.",
+        why = paste("The series is reserved rather than computed over",
+                    "unfiltered data."),
         fix = "Write the filter as DATASET.VAR='VALUE'.",
         location = sheet %||% "")
       record$status <- "pending"

@@ -58,7 +58,14 @@
   ## `check$ref` iterates the local `reference_checks` table.
   .check_references = c("METHOD_REF_UNRESOLVED",
                         "ANALYSIS_SET_REF_UNRESOLVED",
-                        "DATA_SUBSET_REF_UNRESOLVED")
+                        "DATA_SUBSET_REF_UNRESOLVED"),
+  ## `spec$ref` iterates the local `pools` table: one entry per entity type
+  ## that can carry an unreadable condition. Declared here rather than
+  ## inferred, so adding a fourth entity type to that table without listing
+  ## its code here turns this barrier red instead of passing unnoticed.
+  .check_unresolved_condition = c("ANALYSIS_SET_CONDITION_UNRESOLVED",
+                                  "GROUPING_LEVEL_CONDITION_UNRESOLVED",
+                                  "ANALYSIS_CONDITION_UNRESOLVED")
 )
 
 ## A length-1 character constant, or NULL for anything else.

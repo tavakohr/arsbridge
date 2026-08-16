@@ -111,10 +111,16 @@ test_that("annotated header cells become ordered column-group definitions", {
   expect_true(any(secs[[1]]$col_headers == "Cohort A (N=XX)"))
 })
 
-test_that("an axis header that fails to parse is reported, not silently dropped", {
+test_that("an axis header that fails to parse is kept as a reserved level", {
   diag_reset()
   ## Two parseable COHORTN headers set the axis; a third names COHORTN but
-  ## uses an unsupported operator, so it drops out of the groups.
+  ## uses an unsupported operator.
+  ##
+  ## That third column used to be DROPPED from the groups, which silently
+  ## reshapes the axis: the remaining levels close the gap, and a column ends
+  ## up showing a different subgroup than its header claims. It is now kept
+  ## and marked, so the column holds its place and validation reserves
+  ## whatever computes through the grouping.
   sec <- list(
     tlf_number = "T-14-9-9", tlf_type = "TABLE", title = "Guardrail",
     .pending_column_annotations = list(
@@ -123,14 +129,29 @@ test_that("an axis header that fails to parse is reported, not silently dropped"
                       "ADSL.COHORTN ~= 3")))
   out <- .resolve_table_column_groups(sec)
 
-  ## The two good columns survive.
-  expect_length(out$column_groups$groups, 2)
-  ## The dropped column is surfaced with both counts.
-  d <- ars_diagnostics()
-  hit <- grepl("did not parse into a condition", d$problem)
-  expect_true(any(hit))
-  expect_true(any(grepl("1 of 3 ADSL.COHORTN column headers", d$problem[hit],
-                        fixed = TRUE)))
+  ## All three columns survive -- the axis keeps its shape.
+  expect_length(out$column_groups$groups, 3)
+
+  ## And the unreadable one becomes a level with NO condition and the author's
+  ## text under `unresolvedCondition`, which is what the validator reads.
+  out$by_variable <- "COHORTN"
+  out$by_variable_dataset <- "ADSL"
+  gf <- .build_grouping(out)
+  expect_length(gf$groups, 3)
+
+  marked <- Filter(function(g) !is.null(g$unresolvedCondition), gf$groups)
+  expect_length(marked, 1L)
+  expect_identical(marked[[1]]$label, "Odd")
+  expect_identical(marked[[1]]$unresolvedCondition, "ADSL.COHORTN ~= 3")
+  ## It must not also look like a level that selects records.
+  expect_null(marked[[1]]$condition)
+  expect_null(marked[[1]]$compoundExpression)
+
+  ## The two readable levels are untouched.
+  readable <- Filter(function(g) is.null(g$unresolvedCondition), gf$groups)
+  expect_length(readable, 2L)
+  expect_true(all(vapply(readable, function(g) !is.null(g$condition),
+                         logical(1))))
 })
 
 ## --- ARS JSON groups[] ------------------------------------------------------

@@ -606,17 +606,39 @@
 .subset_from_annotation <- function(ann) {
   ann <- as.character(ann %||% "")
   if (!nzchar(trimws(ann))) return(NULL)
+
   fs <- flat_data_subset(ann)
   if (!is.null(fs)) return(fs)
   p <- regmatches(ann, regexec(
     paste0("^\\s*(", .ADAM_DS, ")\\.(", .ADAM_VAR, ")\\s+(?i:where)\\s+(.+)$"),
     ann, perl = TRUE))[[1]]
-  if (length(p) != 4) return(NULL)
+
+  ## The unresolved check runs LAST, on whichever text is actually the
+  ## condition -- never on the whole annotation up front.
+  ##
+  ## "DATASET.VAR where <condition>" is a supported form whose condition is the
+  ## tail, and the whole string is not a clause this grammar reads. Asking
+  ## about the whole string first therefore calls a perfectly good annotation
+  ## unreadable and reserves a row that computes correctly, which is the
+  ## over-reservation failure: withholding results nobody needed withheld is
+  ## its own kind of wrong answer.
+  if (length(p) != 4) {
+    unreadable <- parse_where_clause(ann)
+    if (.is_unresolved_condition(unreadable)) return(unreadable)
+    return(NULL)
+  }
   tail <- trimws(p[4])
   if (!grepl(paste0("^", .ADAM_DS, "\\."), tail, perl = TRUE)) {
     tail <- paste0(p[2], ".", tail)
   }
-  flat_data_subset(tail)
+  subset <- flat_data_subset(tail)
+  if (!is.null(subset)) return(subset)
+
+  ## A stated filter that could not be read. Returned as unresolved rather than
+  ## NULL, because an analysis with no DataSubset computes over every record.
+  unreadable <- parse_where_clause(tail)
+  if (.is_unresolved_condition(unreadable)) return(unreadable)
+  NULL
 }
 
 #' Build a CDISC ARS v1.0 ReportingEvent list from enriched sections.
@@ -1053,7 +1075,12 @@ build_ars_json <- function(sections,
           er2$data_subset <- flat
         }
       } else {
-        er2$data_subset <- .subset_from_annotation(annotation)
+        subset2 <- .subset_from_annotation(annotation)
+        if (.is_unresolved_condition(subset2)) {
+          er2$unresolved_condition <- .unresolved_condition_text(subset2)
+        } else {
+          er2$data_subset <- subset2
+        }
       }
       if (!nzchar(er2$primary_variable %||% "")) return(invisible(NULL))
       idx2    <- length(analysis_ids) + 1L
@@ -1276,7 +1303,18 @@ build_ars_json <- function(sections,
             er$data_subset <- flat
           }
         } else {
-          er$data_subset <- .subset_from_annotation(row$annotation)
+          subset <- .subset_from_annotation(row$annotation)
+          if (.is_unresolved_condition(subset)) {
+            ## The row states a filter that could not be read. It gets NO data
+            ## subset -- there is nothing valid to give it -- and carries the
+            ## marker instead, which `.build_analysis()` writes onto the
+            ## Analysis and `.check_unresolved_condition()` turns into a GAP,
+            ## so the reservation map withholds this analysis rather than
+            ## letting it compute over every record.
+            er$unresolved_condition <- .unresolved_condition_text(subset)
+          } else {
+            er$data_subset <- subset
+          }
         }
       }
 
@@ -1819,13 +1857,36 @@ build_ars_json <- function(sections,
     name  = pop_text,
     label = pop_text
   )
-  if (!is.null(cond)) {
+  if (.is_unresolved_condition(cond)) {
+    ## A population WAS written and could not be read. The text is kept, as it
+    ## always was, and the set is additionally MARKED so validation reserves
+    ## the analyses that use it.
+    ##
+    ## Marking matters more here than anywhere else in the builder: without it
+    ## the set carries no condition, every analysis pointing at it computes
+    ## over the whole dataset, and each percentage lands over the wrong N while
+    ## looking entirely ordinary.
+    obj$annotationText <- pop_annot
+    obj$unresolvedCondition <- .unresolved_condition_text(cond)
+    diag_add(
+      stage = "build_ars", severity = "WARN", tlf_number = sec$tlf_number,
+      location = sec$title %||% "",
+      problem = sprintf(
+        "Population filter '%s' did not parse into an ARS WhereClause; carried as annotationText",
+        pop_annot),
+      action = "Results using this population are reserved until the filter is expressible -- review the population annotation"
+    )
+  } else if (!is.null(cond)) {
     obj <- modifyList(obj, cond)
   } else if (nzchar(pop_annot)) {
-    ## The shell/supplement carried a population filter but it did not parse
-    ## into an ARS WhereClause. Keep the raw text on the set (never silently
-    ## drop it): the renderer can still show the intended filter and QA can
-    ## see it, instead of the analyses defaulting to the full population.
+    ## Non-empty, but the parser reports no condition ATTEMPT -- prose like
+    ## "Safety Population", or a bare variable pointer. Unchanged behaviour:
+    ## the text is kept so the renderer and QA can see the intent, and the
+    ## analyses run on the full population.
+    ##
+    ## Deliberately NOT marked unresolved. Nothing failed to parse here; the
+    ## annotation simply expresses no filter, and reserving on it would
+    ## withhold results for every population named in words.
     obj$annotationText <- pop_annot
     diag_add(
       stage = "build_ars", severity = "WARN", tlf_number = sec$tlf_number,
@@ -2033,6 +2094,30 @@ build_ars_json <- function(sections,
   g
 }
 
+#' A Group whose condition was written but could not be read.
+#'
+#' Deliberately carries NO `condition` and NO `compoundExpression`: the group
+#' must not look like a level that selects records, because it does not select
+#' any. It keeps its identity, its label and its order so the column axis holds
+#' its shape, and it carries the author's text under `unresolvedCondition` so
+#' validation can reserve what computes through it and the fix report can quote
+#' what was written.
+#'
+#' The model invariant elsewhere in this package -- a group holds either a
+#' condition or a compoundExpression, never both -- is respected by holding
+#' neither, which is the honest description of a level nobody can evaluate.
+#' @noRd
+.official_group_unresolved <- function(variable, label, order, text) {
+  list(
+    id    = make_group_id(variable, label),
+    name  = label,
+    label = label,
+    level = 1L,
+    order = order,
+    unresolvedCondition = text
+  )
+}
+
 #' Per-level Group objects derived from the ADaM spec codelist of the
 #' grouping variable -- the fallback when the shell's column headers carried
 #' no parseable conditions. One EQ condition per codelist term, labelled by
@@ -2087,6 +2172,26 @@ build_ars_json <- function(sections,
     ## A typed supplement group (v3) carries the ARS WhereClause directly;
     ## a shell-derived group carries only the annotation string to parse.
     condition <- def$condition %||% parse_where_clause(def$annotation %||% "")
+    if (.is_unresolved_condition(condition)) {
+      ## The level WAS defined and could not be read. Dropping it silently
+      ## re-shapes the column axis: the remaining levels close the gap, so a
+      ## column ends up showing a different subgroup than its header claims.
+      ##
+      ## So the level is kept and marked instead. Validation reserves whatever
+      ## computes through this grouping, and the header keeps its own identity.
+      out[[length(out) + 1L]] <- .official_group_unresolved(
+        bare_var, def$label %||% "", def$order %||% (length(out) + 1L),
+        .unresolved_condition_text(condition)
+      )
+      diag_add(
+        stage = "build_ars", severity = "WARN",
+        problem = sprintf(
+          "Column group '%s' has a condition that could not be read (%s)",
+          def$label %||% "", def$annotation %||% ""),
+        action = "Results in that column are reserved until the condition is expressible"
+      )
+      next
+    }
     if (is.null(condition)) {
       diag_add(
         stage = "build_ars", severity = "WARN",
@@ -2443,6 +2548,33 @@ build_ars_json <- function(sections,
   unresolved_role <- enrichment$unresolved_variable_role %||% character(0)
   if (length(unresolved_role) > 0) {
     node$unresolvedVariableRole <- as.list(as.character(unresolved_role))
+  }
+
+  ## Extension field: a row filter the author wrote that this grammar could not
+  ## read. Written only when a non-empty condition failed -- never as an empty
+  ## string, and never when the row simply states no filter.
+  ##
+  ## The analysis deliberately carries NO data subset in this case, so without
+  ## the marker it would be indistinguishable from a row that never asked to be
+  ## filtered, and would compute over every record.
+  ## `.check_unresolved_condition()` turns this into a GAP that reserves.
+  ## The section's Total column contributes here too. An authored Total whose
+  ## own annotation could not be read has no grouping level to carry it -- a
+  ## Total is never a level -- so the analysis displaying it is marked instead,
+  ## and `totalWhere` is left absent rather than holding an unreadable object.
+  ##
+  ## Every OTHER unreadable header is a level, and the grouping it belongs to
+  ## reserves whatever computes through it, the Total cell included. This
+  ## branch is only for the case nothing else covers.
+  unresolved_condition <- c(
+    enrichment$unresolved_condition %||% character(0),
+    section$total_unresolved %||% character(0)
+  )
+  unresolved_condition <- unresolved_condition[
+    !is.na(unresolved_condition) & nzchar(unresolved_condition)
+  ]
+  if (length(unresolved_condition) > 0) {
+    node$unresolvedCondition <- unresolved_condition[[1]]
   }
   node
 }
