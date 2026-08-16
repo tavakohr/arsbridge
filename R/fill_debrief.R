@@ -42,8 +42,11 @@
 
 #' Roll a fill census up into the three tables a reader actually asks for.
 #'
-#' @param census The `census` frame `ars_fill_shell()` returns: one row per
-#'   cell record, filled cells included.
+#' @param census The `census` frame `ars_fill_shell()` returns -- one row per
+#'   cell record, filled cells included -- or the fill result itself, which
+#'   carries that frame. Both are accepted, because both are what a reader has
+#'   in hand after a fill. `NULL` summarises to three empty tables; anything
+#'   else is an error naming what to pass.
 #' @return A list of three data frames:
 #'   \describe{
 #'     \item{`sheets`}{One row per sheet: cell counts by status.}
@@ -57,8 +60,8 @@ ars_fill_summary <- function(census) {
   empty <- function(...) {
     data.frame(..., stringsAsFactors = FALSE)[0, , drop = FALSE]
   }
-  if (is.null(census) || nrow(census) == 0) {
-    return(list(
+  nothing_to_summarise <- function() {
+    list(
       sheets  = empty(sheet = character(), cells = integer(),
                       filled = integer(), partial = integer(),
                       pending = integer(), skipped = integer()),
@@ -67,8 +70,31 @@ ars_fill_summary <- function(census) {
                       filled = integer(), modal_reason = character()),
       reasons = empty(reason = character(), n_cells = integer(),
                       n_sheets = integer(), hint = character())
+    )
+  }
+
+  ## `ars_fill_shell()` returns a LIST carrying the census, so handing that
+  ## list straight to this function is the natural thing for a reader to do.
+  ## It used to reach the `nrow()` comparison below with a list, where `nrow()`
+  ## is NULL, and die with "missing value where TRUE/FALSE needed" -- a message
+  ## naming neither the argument at fault nor what to pass instead. Take the
+  ## census out of the result rather than failing on it.
+  if (is.list(census) && !is.data.frame(census) &&
+      is.data.frame(census[["census"]])) {
+    census <- census[["census"]]
+  }
+
+  ## Every input class is decided here, in one place, rather than by the order
+  ## in which a later expression happens to fail.
+  if (is.null(census)) return(nothing_to_summarise())
+  if (!is.data.frame(census)) {
+    cli::cli_abort(c(
+      "{.arg census} must be a fill census, or the list {.fun ars_fill_shell} returns.",
+      "x" = "Got {.cls {class(census)[[1]]}}.",
+      "i" = "Pass {.code fs} or {.code fs$census}, from {.code fs <- ars_fill_shell(...)}."
     ))
   }
+  if (nrow(census) == 0) return(nothing_to_summarise())
 
   count_by <- function(rows, statuses) {
     sum(census$status[rows] %in% statuses)
