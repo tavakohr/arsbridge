@@ -885,12 +885,70 @@
     function(column) .chr_field(column[["label"]]),
     character(1)
   )
-  if (!is.null(.shell_layout(output_node)) && length(labels) > 0L) {
+  ## Which physical sheet column each display column came from, tracked from
+  ## the start: the cell map addresses columns by physical position, so the
+  ## correspondence has to be recorded while it still holds -- every filter
+  ## below renumbers the vector.
+  physical <- seq_along(labels)
+
+  has_layout <- !is.null(.shell_layout(output_node))
+  if (has_layout && length(labels) > 0L) {
     labels <- labels[-1]
+    physical <- physical[-1]
   }
 
-  labels <- .strip_n_placeholder(labels[!is.na(labels)])
+  keep <- !is.na(labels)
+  labels <- .strip_n_placeholder(labels[keep])
+  physical <- physical[keep]
+
+  ## Blank-headed columns are dropped only where the shell can be shown to put
+  ## nothing in them at all. `has_layout` gates the physical correspondence:
+  ## the compact ARS shape carries result columns only, so a display index is
+  ## not a sheet column there and the map could not be read against it.
+  if (has_layout) {
+    empty <- .empty_result_columns(output_node, labels, physical)
+    if (length(empty) > 0L) labels <- labels[-empty]
+  }
   labels
+}
+
+#' Display columns that carry nothing: no header label, and no body cell.
+#'
+#' A spreadsheet's used range routinely reaches past the table -- a cleared
+#' cell, a stray format, a column deleted by clearing rather than removing --
+#' and each of those arrives as a display column with a blank label. Counted as
+#' result columns they make a structurally correct shell disagree with its own
+#' grouping, over a difference the author cannot see on the page.
+#'
+#' Two things keep this from silently discarding real columns.
+#'
+#' The rule is POSITIVE EVIDENCE ONLY: a column goes only when its header is
+#' blank AND the cell map records no cell in that physical column. A blank
+#' header above real cells stays, because it IS a result column -- one nothing
+#' can bind to a group level, which is a true finding and must survive. Where
+#' there is no cell map at all (a Word shell), the second half cannot be
+#' evaluated and nothing is dropped.
+#'
+#' The evidence is the map's own cells, which are the placeholder and template
+#' cells -- the ones that would receive a result. A column holding only text
+#' the author typed receives nothing and is not a result column either, so
+#' reading placeholders rather than every literal is the narrower and the
+#' truer test.
+#'
+#' Blankness is judged on the label after `.strip_n_placeholder()`, the same
+#' point `.fill_result_columns()` judges it, so the validator and the fill
+#' agree on which columns the shell offers.
+#' @noRd
+.empty_result_columns <- function(output_node, labels, physical) {
+  blank <- which(!nzchar(labels))
+  if (length(blank) == 0L) return(integer(0))
+
+  fill <- output_node[["_meta"]][["shell_fill"]]
+  if (is.null(fill)) return(integer(0))
+
+  occupied <- vapply(fill[["cells"]] %||% list(),
+                     function(cell) .int_field(cell[["col"]]), integer(1))
+  blank[!(physical[blank] %in% occupied)]
 }
 
 #' @noRd
