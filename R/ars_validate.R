@@ -891,8 +891,16 @@
   ## below renumbers the vector.
   physical <- seq_along(labels)
 
-  has_layout <- !is.null(.shell_layout(output_node))
-  if (has_layout && length(labels) > 0L) {
+  ## An output carries a physical stub column whenever it came from a shell.
+  ## The row layout is the usual evidence, but it is not the only one: a
+  ## capability-gated section, and any table none of whose rows are annotated,
+  ## emits no layout while still carrying a cell map -- the durable form of the
+  ## same fact. Reading the layout alone made such a table look like a compact
+  ## ARS output, so its stub was counted as a result column and the axis was
+  ## reported as one column wider than the shell draws it.
+  has_stub <- !is.null(.shell_layout(output_node)) ||
+    !is.null(output_node[["_meta"]][["shell_fill"]])
+  if (has_stub && length(labels) > 0L) {
     labels <- labels[-1]
     physical <- physical[-1]
   }
@@ -902,10 +910,10 @@
   physical <- physical[keep]
 
   ## Blank-headed columns are dropped only where the shell can be shown to put
-  ## nothing in them at all. `has_layout` gates the physical correspondence:
-  ## the compact ARS shape carries result columns only, so a display index is
-  ## not a sheet column there and the map could not be read against it.
-  if (has_layout) {
+  ## nothing in them at all. `has_stub` gates the physical correspondence: the
+  ## compact ARS shape carries result columns only, so a display index is not a
+  ## sheet column there and the map could not be read against it.
+  if (has_stub) {
     empty <- .empty_result_columns(output_node, labels, physical)
     if (length(empty) > 0L) labels <- labels[-empty]
   }

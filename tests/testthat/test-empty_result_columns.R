@@ -280,13 +280,29 @@ test_that("a column is dropped only on evidence that it is empty", {
     c("Alfa", "Bravo", "")
   )
 
-  ## The compact ARS shape carries result columns only, so display index 3 is
-  ## not sheet column 3 and the map must not be read against it -- even though
-  ## a map is present.
+  ## The compact ARS shape carries result columns only: no stub to drop, and
+  ## no cell map to read a physical position against.
+  ##
+  ## An earlier version of this case gave the node a cell map while withholding
+  ## the layout, to assert that the map "must not be read". That combination
+  ## cannot occur: a cell map is built only for a parsed workbook section, and
+  ## such a section always has a physical stub. Asserting against an
+  ## unreachable state pinned the wrong invariant -- it said the stub is
+  ## identified by the layout, when what identifies it is having come from a
+  ## shell at all. A gated section, which emits no layout, is exactly the case
+  ## that distinguishes the two.
   expect_equal(
-    .flat_display_labels(.erc_node(c("Alfa", "Bravo", ""),
-                                   cell_cols = c(2L, 3L), layout = FALSE)),
+    .flat_display_labels(.erc_node(c("Alfa", "Bravo", ""), layout = FALSE)),
     c("Alfa", "Bravo", "")
+  )
+
+  ## And the case that motivates reading the map rather than the layout: an
+  ## output with a cell map but NO layout still has a stub, because only a
+  ## workbook section produces a cell map.
+  expect_equal(
+    .flat_display_labels(.erc_node(c("Item", "Alfa", "Bravo", ""),
+                                   cell_cols = c(2L, 3L), layout = FALSE)),
+    c("Alfa", "Bravo")
   )
 
   ## Blankness is judged after the "(N=XX)" decoration is stripped, the same
