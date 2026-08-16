@@ -121,11 +121,20 @@
 ## own -- they are the parent's results, one line each -- so a cell on one of
 ## them is filled from the parent, selected by what the line is called.
 ##
-## The names on the right are {cards} stat_names, and the mapping is the
-## inverse of `.statline_for()` in ars_to_tfrmt.R, which turns the same
-## statistics back into the same line labels when rendering.
-## test-shell_fill_meta.R asserts the two agree, so a change to one is caught
-## rather than quietly splitting the round trip.
+## The names on the right are {cards} stat_names, and for the lines arsbridge
+## itself writes the mapping is the inverse of `.statline_for()` in
+## ars_to_tfrmt.R, which turns the same statistics back into the same line
+## labels when rendering. test-shell_fill_meta.R asserts those agree, so a
+## change to one is caught rather than quietly splitting the round trip.
+##
+## The two are not required to be inverses everywhere, and cannot be. This map
+## reads what an AUTHOR wrote in a shell; `.statline_for()` decides what
+## arsbridge writes when it lays a table out itself. An author may put several
+## statistics on ONE line -- "Median (Q1, Q3)" is the standard clinical form --
+## where the renderer, laying out its own table, gives each its own line. The
+## shell dictates the layout when an authored workbook is being filled, so a
+## combined line has to be readable here whether or not anything ever writes
+## it.
 .STAT_LINE_STATS <- list(
   "n"          = "n",
   "n (%)"      = c("n", "p"),
@@ -137,7 +146,15 @@
   "max, min"   = c("max", "min"),
   "range"      = c("min", "max"),
   "q1, q3"     = c("p25", "p75"),
-  "q3, q1"     = c("p75", "p25")
+  "q3, q1"     = c("p75", "p25"),
+  ## Combined lines: one row showing a centre and its spread together. Without
+  ## these the line matches nothing, the cell is left on its placeholder, and
+  ## the census reports "no result in the ARD for this cell" -- which is not
+  ## what happened. The results were in the ARD; nothing could name them.
+  "median (q1, q3)" = c("median", "p25", "p75"),
+  "median (q3, q1)" = c("median", "p75", "p25"),
+  "median (min, max)" = c("median", "min", "max"),
+  "mean (min, max)"   = c("mean", "min", "max")
 )
 
 #' The statistics a row label names, or NULL when the label is not a
