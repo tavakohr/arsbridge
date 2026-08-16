@@ -101,6 +101,118 @@
   masked
 }
 
+## ---------------------------------------------------------------------------
+## The unresolved signal
+##
+## `parse_where_clause()` used to answer NULL to two different questions:
+## "does this annotation supply a condition?" and "could you read the
+## condition it supplies?". A no to the first is ordinary -- a bare variable
+## pointer, a directive, plain prose. A no to the second means a filter the
+## author wrote will not be applied, and every count behind it is computed over
+## the wrong records.
+##
+## Sharing one answer meant the second silently became the first: an unreadable
+## filter executed as no filter. This is the separate answer. It carries the
+## author's own text so the finding, the fix report and the editor can quote
+## what was written rather than describing it.
+
+## What makes a piece of text an attempted CONDITION rather than a variable
+## with descriptive text around it.
+##
+## The distinction is expensive to get wrong in one direction and cheap in the
+## other, which is why it is not the same predicate the warning uses. Warning
+## about an annotation that turns out to be fine costs the author a moment;
+## RESERVING it withholds a result that would have been correct. Real shells
+## are full of qualified references with text around them that no one ever
+## meant as a filter:
+##
+##     count of ADSL.USUBJID              a measure description
+##     ADSL.AGE (unit ADSL.AGEU)          a variable and its unit
+##     ADAE.ASEV / ASEVN                  a coded/decoded pair
+##     ADEX.AVAL by ADEX.PARAMCD          a by-variable specification
+##
+## None of those states a condition, none was ever filtered, and reserving them
+## would withhold results nobody needed withheld.
+##
+## So the evidence required is an OPERATOR: a comparison symbol, a comparator
+## keyword on token boundaries, or a presence/absence test. Token boundaries
+## matter -- without them "INDICATION" contains IN, and "between-group" contains
+## BETWEEN, so ordinary prose would read as a filter.
+## Word boundaries alone are not enough, because several comparator keywords
+## are ordinary English. `\bIN\b` matches "contained in the listing"; `\bBETWEEN\b`
+## matches "between-group summary". Both are prose, and both would reserve a row
+## that states no filter.
+##
+## So each keyword is required in the SHAPE the grammar actually reads: IN and
+## NOT IN take a parenthesised list, BETWEEN and CONTAINS take a following
+## value. Prose uses the same words without that shape, which is what separates
+## them.
+.RE_CONDITION_EVIDENCE <- paste0(
+  "(?i)(?:",
+  ## Comparison symbols. "=" also covers "==", "<=" and ">=".
+  "[<>]=?|!=|=",
+  ## Two-letter comparators. Not English words, so a boundary is enough.
+  "|\\b(?:EQ|NE|GT|GE|LT|LE)\\b",
+  ## Value-list membership: only with the parenthesis that carries the list.
+  "|\\b(?:NOT\\s+IN|NOTIN|IN)\\s*\\(",
+  ## Range and substring: only with a following value.
+  "|\\bBETWEEN\\s+\\S",
+  "|\\bCONTAINS\\s+\\S",
+  ## Presence and absence tests, in each spelling the grammar accepts.
+  ## "missingness" and "nullable" do not match -- no boundary after the word.
+  "|\\b(?:IS\\s+)?(?:NOT\\s+)?(?:NULL|MISSING)\\b",
+  "|\\b(?:is\\.na|missing)\\s*\\(",
+  ")"
+)
+
+#' Does this text attempt to express a condition?
+#'
+#' Read on MASKED text, so an operator inside a quoted value cannot be mistaken
+#' for one in the expression -- `ADQX.NOTE='a=b'` states a condition because of
+#' the outer `=`, not the inner one, and a label like `'up to 5%'` states none.
+#' @noRd
+.has_condition_evidence <- function(text) {
+  masked <- .mask_literals(as.character(text)[1])
+  ## No free delimiter pair means the values cannot be separated from the
+  ## structure, so no honest answer is available from the text alone. Treated
+  ## as evidence: the caller's other branch reserves, which is the safe
+  ## direction when the question cannot be settled.
+  if (is.null(masked)) return(TRUE)
+  grepl(.RE_CONDITION_EVIDENCE, masked$text, perl = TRUE)
+}
+
+#' A condition that was supplied but could not be read.
+#'
+#' @param text The original expression, exactly as the author wrote it.
+#' @param dropped The individual clauses that failed, for the message.
+#' @noRd
+.unresolved_condition <- function(text, dropped = character(0)) {
+  structure(
+    list(text = as.character(text)[1], dropped = as.character(dropped)),
+    class = "arsbridge_unresolved_condition"
+  )
+}
+
+#' Is this an unresolved condition rather than a WhereClause?
+#'
+#' Every consumer of `parse_where_clause()` must ask this before treating the
+#' result as a condition: the object is deliberately NOT a valid WhereClause,
+#' so writing it into an ARS would produce a malformed event rather than a
+#' silently wrong number.
+#' @noRd
+.is_unresolved_condition <- function(x) {
+  inherits(x, "arsbridge_unresolved_condition")
+}
+
+#' The author's text for an unresolved condition, or `NA`.
+#' @noRd
+.unresolved_condition_text <- function(x) {
+  if (!.is_unresolved_condition(x)) return(NA_character_)
+  txt <- x$text
+  if (length(txt) == 0 || is.na(txt) || !nzchar(txt)) return(NA_character_)
+  txt
+}
+
 #' Put the quoted literals back, exactly as they were written.
 #' @noRd
 .unmask_literals <- function(text, masked) {
@@ -205,7 +317,14 @@
 #' @noRd
 parse_where_clause <- function(expr) {
   expr <- trimws(expr %||% "")
+  ## Empty in, `NULL` out, and that is the honest answer: no condition was
+  ## supplied. Only a non-empty expression can be UNRESOLVED, which is why the
+  ## marker downstream is never written as an empty string.
   if (!nzchar(expr)) return(NULL)
+
+  ## Kept for the unresolved signal: every step below rewrites `expr`, and what
+  ## the finding and the fix report must quote is what the author wrote.
+  original <- expr
 
   ## Everything from here to the split reads STRUCTURE, so every quoted value
   ## is masked to an opaque token first and restored once the clauses are
@@ -213,19 +332,19 @@ parse_where_clause <- function(expr) {
   ## the four steps below was individually unsafe on raw text.
   masked <- .mask_literals(expr)
   ## Without a free delimiter pair the structure cannot be separated from the
-  ## values, so the expression is reported and not parsed. This returns NULL,
-  ## which is the same answer given for any unreadable condition -- the
-  ## diagnostic makes the case visible, not safe.
+  ## values, so the expression cannot be read at all -- which is exactly what
+  ## `unresolved` says. It reserves rather than computing, so this path is now
+  ## safe and not merely visible.
   if (is.null(masked)) {
     diag_add(
       stage = "where_clause", severity = "WARN",
       problem = "Condition could not be separated from its quoted values",
       location = expr,
-      action = paste("Condition dropped -- the annotation uses private-use",
+      action = paste("Results reserved -- the annotation uses private-use",
                      "characters this parser reserves for internal markers.",
                      "Remove them and re-run.")
     )
-    return(NULL)
+    return(.unresolved_condition(original))
   }
   expr <- masked$text
 
@@ -295,9 +414,11 @@ parse_where_clause <- function(expr) {
   ## Warning about it told the author to fix an annotation the package
   ## understood perfectly.
   is_directive <- function(s) !is.null(.once_per_subject_var(s))
+  dropped <- character(0)
   for (u in unparsed) {
     if (is_directive(u)) next
     if (grepl(paste0(.ADAM_DS, "\\.", .ADAM_VAR), u, perl = TRUE) && is_attempt(u)) {
+      dropped <- c(dropped, u)
       diag_add(
         stage = "where_clause", severity = "WARN",
         problem = "Condition could not be parsed into an ARS WhereClause",
@@ -305,6 +426,33 @@ parse_where_clause <- function(expr) {
         action = "Condition dropped -- filtering will be weaker than the annotation intends (supported: =, EQ/NE/IN/NOTIN/GT/GE/LT/LE incl. unquoted numerics, IN lists of quoted values or bare numbers, BETWEEN x AND y, CONTAINS 'text', is/not null/missing, is.na()/missing() incl. negation; string values may be 'single' or \"double\" quoted)"
       )
     }
+  }
+
+  ## An attempted condition this grammar could not read makes the WHOLE
+  ## expression unresolved -- including when other clauses parsed perfectly.
+  ##
+  ## Returning the clauses that did parse is the tempting behaviour and it is
+  ## the dangerous one. "A and B" that loses B restricts LESS than the author
+  ## wrote, so it over-counts; "A or B" that loses B restricts MORE, so it
+  ## under-counts. Both produce a number, and neither looks wrong. There is no
+  ## safe way to partially honour a filter.
+  ##
+  ## `unresolved` is not `NULL`. `NULL` says "this annotation supplies no
+  ## condition", which is a legitimate, common answer -- a bare variable
+  ## pointer, a directive, plain prose, an empty string. `unresolved` says
+  ## "this annotation supplies a condition I could not read", which must
+  ## reserve rather than compute. Collapsing the two is what let an unreadable
+  ## filter execute as no filter at all.
+  ##
+  ## Reserving requires stronger evidence than warning does, and deliberately
+  ## so. The warning above fires whenever anything follows a qualified
+  ## reference; that is right for a note and wrong for a reservation, because
+  ## "ADQX.MEASURE (unit ADQX.UNIT)" follows a reference and states no filter.
+  ## Withholding a correct result is its own wrong answer, so only text
+  ## carrying an actual operator reserves.
+  unreadable <- Filter(.has_condition_evidence, dropped)
+  if (length(unreadable) > 0) {
+    return(.unresolved_condition(original, unreadable))
   }
 
   if (length(conditions) == 0) return(NULL)

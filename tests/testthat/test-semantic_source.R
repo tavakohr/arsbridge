@@ -47,8 +47,15 @@ test_that("annotation references survive the conditions the parser cannot read",
   ## The premise still needs a genuinely unreadable condition, or the
   ## independence claim above is no longer exercised by anything. A bare ">="
   ## symbol is not in the supported grammar (which spells it GE), so this one
-  ## remains unparseable -- and the detector still names its source.
-  expect_null(parse_where_clause("ADEX.TRTDUR >= 16"))
+  ## remains unreadable -- and the detector still names its source.
+  ##
+  ## It now returns UNRESOLVED rather than NULL. That is the distinction B1b
+  ## introduced: NULL means the annotation supplies no condition, unresolved
+  ## means it supplies one that could not be read. The detector must reach its
+  ## source in the second case just as much as the first, which is precisely
+  ## what makes it independent of this parser.
+  unreadable <- parse_where_clause("ADEX.TRTDUR >= 16")
+  expect_true(.is_unresolved_condition(unreadable))
   expect_equal(.annotation_source_refs("ADEX.TRTDUR >= 16"), "ADEX.TRTDUR")
 
   ## Unqualified text declares nothing -- it is not checkable, not clean.

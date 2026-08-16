@@ -147,6 +147,23 @@ skip_if_not_installed("openxlsx2")
       analysis$unresolvedVariableRole <- list("GROUPING")
       analysis
     }
+  ),
+  list(
+    ## A row filter the author wrote and this grammar could not read. The
+    ## analysis carries no data subset as a result, so without the marker it is
+    ## indistinguishable from a row that never asked to be filtered -- and it
+    ## would compute over every record while looking entirely ordinary.
+    ##
+    ## The text is a bare ">=", which the grammar spells GE. It carries
+    ## operator evidence, so it reserves; text with a qualified reference and
+    ## no operator does not, and that distinction has its own tests.
+    name = "a row filter that could not be read",
+    ref  = "ANALYSIS_CONDITION_UNRESOLVED",
+    apply = function(analysis) {
+      analysis$dataSubsetId <- NULL
+      analysis$unresolvedCondition <- "ADQX.SCORE >= 16"
+      analysis
+    }
   )
 )
 

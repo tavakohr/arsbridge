@@ -219,6 +219,16 @@ write_supplement_draft <- function(shell_path,
     group <- list(label = label, order = length(groups) + 1L)
     condition <- definition$condition %||%
       parse_where_clause(definition$annotation %||% "")
+    if (.is_unresolved_condition(condition)) {
+      ## Asked for by hand rather than recorded in a field of its own: the
+      ## supplement reader validates against a fixed shape, so a field it does
+      ## not know is a field it ignores -- and the group would be ingested as
+      ## an unconditioned level, which is the silent-wrong-column outcome.
+      review <- c(review, sprintf(
+        "Column group '%s': condition '%s' could not be read -- state it by hand.",
+        label, definition$annotation %||% ""))
+      next
+    }
     if (!is.null(condition)) group$condition <- condition
     groups[[length(groups) + 1L]] <- group
   }
@@ -256,7 +266,11 @@ write_supplement_draft <- function(shell_path,
   pop_annot <- trimws(sec$population_annot %||% "")
   if (nzchar(pop_annot)) {
     pop_where <- parse_where_clause(pop_annot)
-    if (!is.null(pop_where)) {
+    if (.is_unresolved_condition(pop_where)) {
+      review <- c(review, sprintf(
+        "Population annotation '%s' could not be read -- results using it are reserved; state the analysisSet by hand.",
+        pop_annot))
+    } else if (!is.null(pop_where)) {
       analysis_set <- pop_where
       pop_label <- trimws(sec$population_text %||% "")
       if (nzchar(pop_label)) {
@@ -320,6 +334,20 @@ write_supplement_draft <- function(shell_path,
       order    = length(analyses) + 1L
     )
     wc <- parse_where_clause(row$annotation)
+    if (.is_unresolved_condition(wc)) {
+      ## The row states a filter this grammar cannot read. The draft omits the
+      ## analysis entirely and asks for it by hand.
+      ##
+      ## Emitting it without the filter is the tempting alternative and it is
+      ## the dangerous one: the supplement reader would ingest a perfectly
+      ## valid analysis that computes over every record, and the fact that a
+      ## filter was ever intended would exist nowhere in the pipeline. A
+      ## missing analysis is visible; a silently unfiltered one is not.
+      review <- c(review, sprintf(
+        "Row '%s': filter '%s' could not be read -- the analysis is omitted; state its whereClause by hand.",
+        label, row$annotation))
+      next
+    }
     if (!is.null(wc)) analysis$whereClause <- wc
     conf <- toupper(row$detection_confidence %||% "")
     if (conf %in% c("HIGH", "MEDIUM", "LOW")) analysis$confidence <- conf

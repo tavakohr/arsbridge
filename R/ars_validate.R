@@ -66,6 +66,18 @@
   SEMANTIC_SOURCE_NOT_DECLARED             = "analysis",
   UNRESOLVED_VARIABLE_ROLE                 = "analysis",
 
+  ## Conditions the author wrote and this grammar could not read. Three codes
+  ## rather than one, because the three name different things to go and fix --
+  ## a population statement, a column header, a row's own filter -- and the fix
+  ## report is only useful if it can say which.
+  ##
+  ## All three reserve. An unreadable condition is not a missing one: the
+  ## records it would have selected are unknown, so any number computed without
+  ## it is computed over the wrong set while looking entirely ordinary.
+  ANALYSIS_SET_CONDITION_UNRESOLVED        = "analysis",
+  GROUPING_LEVEL_CONDITION_UNRESOLVED      = "grouping",
+  ANALYSIS_CONDITION_UNRESOLVED            = "analysis",
+
   ## Groupings and the column axis. A grouping is reserved through the
   ## analyses that reference it, which is what "grouping" scope expands to.
   GROUPING_DATASET_CONFLICT                = "grouping",
@@ -375,6 +387,96 @@
     )
   }
   findings
+}
+
+#' Conditions the author wrote that this package could not read.
+#'
+#' The builder records these as an `unresolvedCondition` extension on the
+#' entity, carrying the author's own text. This turns each one into a GAP, so
+#' the reservation map withholds whatever computes through it.
+#'
+#' Why a marker and not a build-time abort: the parse failure happens before
+#' any model exists, and refusing the run is exactly the behaviour PR #51
+#' removed. Recording it on the entity lets one mechanism -- validate, then
+#' reserve -- cover a defect discovered at build time.
+#'
+#' Three entity types, one traversal, because the failure is identical in each
+#' and only the fix location differs: a population, a column level, a row.
+#'
+#' Structural, like every check here: it reads the event alone, no data.
+#' @noRd
+.check_unresolved_condition <- function(findings, model) {
+  pools <- list(
+    list(pool = "analysis_sets", entity = "analysis_sets", field = "condition",
+         ref = "ANALYSIS_SET_CONDITION_UNRESOLVED", what = "population",
+         consequence = paste(
+           "every analysis using this population would compute over the whole",
+           "dataset, putting each percentage over the wrong N"),
+         fix = paste("Restate the population as a condition this grammar can",
+                     "read, or supply it through the supplement.")),
+    list(pool = "groupings", entity = "groupings", field = "groups",
+         ref = "GROUPING_LEVEL_CONDITION_UNRESOLVED", what = "column level",
+         consequence = paste(
+           "the column would show whatever the level failed to restrict,",
+           "under a header claiming otherwise"),
+         fix = paste("Restate the column header's condition so it names a",
+                     "value of the grouping variable.")),
+    list(pool = "analyses", entity = "analyses", field = "whereClause",
+         ref = "ANALYSIS_CONDITION_UNRESOLVED", what = "row filter",
+         consequence = paste(
+           "the analysis would compute over every record instead of the rows",
+           "the annotation selected"),
+         fix = paste("Restate the row's filter in the supported grammar, or",
+                     "supply a typed condition through the supplement."))
+  )
+
+  for (spec in pools) {
+    table <- model[[spec$pool]]
+    if (is.null(table) || nrow(table) == 0) next
+    raw <- attr(table, "raw") %||% table$raw
+    if (is.null(raw)) next
+
+    for (i in seq_len(nrow(table))) {
+      node <- raw[[i]]
+      if (!is.list(node)) next
+      texts <- .unresolved_texts_in(node)
+      if (length(texts) == 0) next
+
+      findings <- .add_finding(
+        findings, "GAP", spec$entity, table$id[[i]], spec$field,
+        sprintf(
+          paste0("The %s of %s states a condition this package could not ",
+                 "read (%s). Results are reserved rather than computed, ",
+                 "because %s."),
+          spec$what, table$id[[i]], paste(texts, collapse = "; "),
+          spec$consequence),
+        spec$fix,
+        ref = spec$ref,
+        detail = texts[[1]]
+      )
+    }
+  }
+  findings
+}
+
+#' Every `unresolvedCondition` on a node, including one level of children.
+#'
+#' A grouping carries its levels underneath it, so the marker can sit on the
+#' node itself (a population, an analysis) or on one of its groups (a column
+#' level). Both are the same defect and both must be found, or a grouping whose
+#' level failed would validate clean.
+#' @noRd
+.unresolved_texts_in <- function(node) {
+  own <- as.character(node[["unresolvedCondition"]] %||% character(0))
+  kids <- unlist(
+    lapply(node[["groups"]] %||% list(), function(g) {
+      if (!is.list(g)) return(character(0))
+      as.character(g[["unresolvedCondition"]] %||% character(0))
+    }),
+    use.names = FALSE
+  )
+  texts <- c(own, kids %||% character(0))
+  texts[!is.na(texts) & nzchar(texts)]
 }
 
 #' How much of the event the semantic-source check could speak to.
@@ -1745,6 +1847,7 @@ validate_ars_model <- function(model, spec = NULL, report = NULL) {
   findings <- .check_nested_layout(findings, model)
   findings <- .check_semantic_source(findings, model)
   findings <- .check_unresolved_variable_role(findings, model)
+  findings <- .check_unresolved_condition(findings, model)
 
   if (!is.null(spec)) {
     findings <- .check_against_spec(findings, model, spec)

@@ -1061,6 +1061,23 @@ bind_annotations <- function(sec) {
   ## that if only the normalized form survives.
   authored <- Filter(function(cand) !is.null(cand$condition), overall)
   if (length(authored) > 0) {
+    ## An authored Total whose own annotation could not be read is the one
+    ## unresolved condition with nowhere else to go. Every other unreadable
+    ## header is also a LEVEL of the axis, so it reaches the builder as a
+    ## marked group and the grouping reserves what computes through it -- but a
+    ## Total is never a level (it overlaps them by construction), so nothing
+    ## else carries it.
+    ##
+    ## Assigning it here is what must not happen: `total_condition` becomes
+    ## `totalWhere` on the analysis, so the unreadable object would be written
+    ## into the ARS as though it selected records.
+    if (.is_unresolved_condition(authored[[1]]$condition)) {
+      sec$total_condition  <- NULL
+      sec$total_annotation <- authored[[1]]$annotation %||% ""
+      sec$total_unresolved <- .unresolved_condition_text(
+        authored[[1]]$condition)
+      return(sec)
+    }
     sec$total_condition  <- authored[[1]]$condition
     sec$total_annotation <- authored[[1]]$annotation %||% ""
     return(sec)
@@ -1072,6 +1089,23 @@ bind_annotations <- function(sec) {
   level_conditions <- lapply(groups, function(g) {
     parse_where_clause(g$annotation %||% "")
   })
+
+  ## A Total built by unioning the group columns is only correct if EVERY
+  ## column could be read. One unreadable level silently removes a branch from
+  ## the OR, and the Total then covers fewer records than the columns it sits
+  ## beside -- a total that does not equal the sum of its parts, with nothing
+  ## on the page to say so.
+  ##
+  ## So the union is abandoned rather than narrowed, and the unresolved text is
+  ## carried for validation to reserve on.
+  unreadable <- Filter(.is_unresolved_condition, level_conditions)
+  if (length(unreadable) > 0) {
+    sec$total_condition <- NULL
+    sec$total_unresolved <- vapply(unreadable, .unresolved_condition_text,
+                                   character(1))
+    return(sec)
+  }
+
   sec$total_condition <- do.call(
     combine_conditions, c(level_conditions, list(operator = "OR")))
   sec
@@ -1174,8 +1208,14 @@ bind_annotations <- function(sec) {
   ## annotations parsed into real conditions. Bare references (no operator)
   ## do not count as conditions -- a repeated bare DS.VAR keeps today's
   ## single column_annotation semantics below.
+  ##
+  ## An unresolved condition does not count either, and the distinction is not
+  ## cosmetic: a header whose condition could not be read has not established
+  ## which subgroup its column shows, so letting it vote for the axis would
+  ## build the axis out of a column nobody can evaluate.
   conditioned <- Filter(function(cand) {
-    nzchar(cand$variable) && !is.null(cand$condition)
+    nzchar(cand$variable) && !is.null(cand$condition) &&
+      !.is_unresolved_condition(cand$condition)
   }, candidates)
   var_counts <- table(vapply(conditioned, function(cand) cand$variable,
                              character(1)))
@@ -1268,8 +1308,26 @@ bind_annotations <- function(sec) {
   ## grouping is a first-match-wins case_when factor -- so a Total level would
   ## be shadowed by the very columns it is meant to total and report zero.
   ## It becomes the overall-column pass instead, below.
+  ## Levels come from every header that STATES a condition, readable or not --
+  ## unlike the axis vote above, which uses `conditioned` and excludes the
+  ## unreadable ones.
+  ##
+  ## The two questions are different. Voting for the axis asks "which variable
+  ## does this column establish?", and an unreadable header establishes
+  ## nothing. Building the levels asks "which columns did the author define?",
+  ## and an unreadable header defines one -- it just cannot say which records
+  ## it selects. Dropping it here would delete the column from the axis
+  ## silently: the remaining levels close the gap, and a column ends up showing
+  ## a different subgroup than its header claims.
+  ##
+  ## Keeping it carries its annotation through to `.build_group_levels()`,
+  ## which re-parses it, sees the same unresolved answer, and emits a level
+  ## marked `unresolvedCondition` -- so validation reserves whatever computes
+  ## through this grouping instead of quietly reshaping the table.
+  level_candidates <- Filter(function(cand) !is.null(cand$condition),
+                             candidates)
   groups <- list()
-  for (cand in conditioned) {
+  for (cand in level_candidates) {
     if (!is_axis_header(cand)) next
     if (.is_overall_label(cand$label)) next
     ## Display level label: the header text without its (N=XX) placeholder.
