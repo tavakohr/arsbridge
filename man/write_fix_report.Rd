@@ -38,6 +38,8 @@ Invisibly, \code{output_path}.
 }
 \description{
 The per-phase record of what a run could not resolve and where to change it.
-Six sheets: the run's own facts, the fix list, the per-code rollup, the
-cells that carry no number, the run diagnostics, and the shared legend.
+Always six sheets: the run's own facts, the fix list, the per-code rollup,
+the cells that carry no number, the run diagnostics, and the shared legend.
+A sheet with nothing to report says so in a row rather than being omitted --
+a missing sheet cannot be told apart from a writer that gave up.
 }

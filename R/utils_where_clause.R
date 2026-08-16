@@ -22,6 +22,97 @@
 ## A number written without quotes: "1", "-2.5".
 .RE_NUMBER <- "[-+]?\\d+(?:\\.\\d+)?"
 
+## ---------------------------------------------------------------------------
+## Literal masking
+##
+## Everything below this line that reasons about the STRUCTURE of an expression
+## -- where the clauses join, which operator applies, where a range ends -- must
+## not read the CONTENTS of a quoted value. The two are different languages that
+## happen to share a string.
+##
+## Without that separation the parser reads text the author never meant as
+## grammar. A value containing a joiner is the clearest case: given
+##
+##     ADSL.RACE='BLACK OR AFRICAN AMERICAN'
+##
+## the joiner scan finds " OR ", splits the expression into "ADSL.RACE='BLACK"
+## and "AFRICAN AMERICAN'", and neither half parses. The condition is dropped,
+## and a dropped condition does not produce an error -- it produces an
+## UNRESTRICTED count, which looks exactly like a correct one.
+##
+## The same failure has three other doors into the same function, so the fix is
+## applied once at the top rather than at each: `==` normalisation rewrote
+## inside literals on the assumption that clinical values never contain "==";
+## the BETWEEN protection looked for " and " anywhere; and the boilerplate strip
+## matched on raw text. An assumption about what study values contain is exactly
+## what breaks on the next study.
+##
+## So: mask every quoted literal to an opaque token, do all structural work on
+## the masked text, and restore the literals before any clause is interpreted.
+##
+## The token delimiters are CHOSEN PER EXPRESSION rather than fixed, from code
+## points the expression does not contain. A fixed pair would have to assume no
+## study value ever contains it -- and "no annotation contains this character"
+## is the same kind of assumption as "no value contains ==", which is the thing
+## this change exists to remove. Deleting such a character from the input
+## instead would be worse: it would silently alter a value that this function
+## promises to preserve exactly.
+##
+## Candidates come from the Unicode private use area, which is reserved for
+## exactly this sort of internal marker and carries no meaning in an
+## annotation. Any pair chosen survives every pattern here: no spaces (the
+## joiner split), no "=" (the equality normaliser), nothing in [A-Z0-9] (the
+## boilerplate strip and the ADaM identifier grammar).
+.MASK_CANDIDATES <- vapply(0xE000:0xE03F, intToUtf8, character(1))
+
+#' Replace every quoted literal with an opaque token.
+#'
+#' The input is never modified. A delimiter is usable only if the expression
+#' does not already contain it, so the pair is drawn from whatever is free --
+#' deleting an inconvenient character from the input instead would silently
+#' alter a value this function promises to preserve exactly.
+#'
+#' @return `list(text, literals, token_pattern, open, close)`. `text` is
+#'   structurally identical to `expr` with each literal replaced by its token;
+#'   `literals` holds the originals, quotes included, indexed by token number;
+#'   `token_pattern` matches any token, for the structural patterns that must
+#'   recognise one. `NULL` when no free delimiter pair exists -- the caller
+#'   must treat that as "this expression cannot be analysed safely", never as
+#'   "this expression has no conditions".
+#' @noRd
+.mask_literals <- function(expr) {
+  taken <- vapply(.MASK_CANDIDATES,
+                  function(ch) grepl(ch, expr, fixed = TRUE), logical(1))
+  free <- .MASK_CANDIDATES[!taken]
+  if (length(free) < 2L) return(NULL)
+  open <- free[[1]]
+  close <- free[[2]]
+
+  matches <- gregexpr(.RE_QUOTED, expr, perl = TRUE)
+  literals <- regmatches(expr, matches)[[1]]
+  masked <- list(text = expr, literals = character(0),
+                 token_pattern = paste0(open, "[0-9]+", close),
+                 open = open, close = close)
+  if (length(literals) == 0) return(masked)
+
+  regmatches(expr, matches) <- list(paste0(open, seq_along(literals), close))
+  masked$text <- expr
+  masked$literals <- literals
+  masked
+}
+
+#' Put the quoted literals back, exactly as they were written.
+#' @noRd
+.unmask_literals <- function(text, masked) {
+  literals <- masked$literals %||% character(0)
+  if (length(literals) == 0 || !length(text)) return(text)
+  for (i in seq_along(literals)) {
+    token <- paste0(masked$open, i, masked$close)
+    text <- gsub(token, literals[[i]], text, fixed = TRUE)
+  }
+  text
+}
+
 ## Single condition: "ADSL.SAFFL='Y'" (also matches ARS-style "EQ 'Y'")
 .RE_CONDITION_EQ <- paste0(
   "(", .ADAM_DS, ")\\.(", .ADAM_VAR, ")",
@@ -116,12 +207,34 @@ parse_where_clause <- function(expr) {
   expr <- trimws(expr %||% "")
   if (!nzchar(expr)) return(NULL)
 
+  ## Everything from here to the split reads STRUCTURE, so every quoted value
+  ## is masked to an opaque token first and restored once the clauses are
+  ## separated. See the masking block near the top of this file for why each of
+  ## the four steps below was individually unsafe on raw text.
+  masked <- .mask_literals(expr)
+  ## Without a free delimiter pair the structure cannot be separated from the
+  ## values, so the expression is reported and not parsed. This returns NULL,
+  ## which is the same answer given for any unreadable condition -- the
+  ## diagnostic makes the case visible, not safe.
+  if (is.null(masked)) {
+    diag_add(
+      stage = "where_clause", severity = "WARN",
+      problem = "Condition could not be separated from its quoted values",
+      location = expr,
+      action = paste("Condition dropped -- the annotation uses private-use",
+                     "characters this parser reserves for internal markers.",
+                     "Remove them and re-run.")
+    )
+    return(NULL)
+  }
+  expr <- masked$text
+
   ## Normalise the R/Python double-equals equality operator to the single "="
   ## the grammar below expects (shells and supplements write both
   ## "ADSL.COHORTN=99" and "ADSL.COHORTN==99"). "!=", ">=" and "<=" never
-  ## contain the "==" substring, so they are left untouched. Comparison values
-  ## in clinical filters do not contain "==", so this is safe on the whole
-  ## expression.
+  ## contain the "==" substring, so they are left untouched. A literal
+  ## containing "==" is untouched too, because literals are masked -- this no
+  ## longer rests on an assumption about what study values contain.
   expr <- gsub("==", "=", expr, fixed = TRUE)
 
   ## Strip leading/trailing "unique USUBJID in DATASET where" boilerplate so
@@ -130,12 +243,16 @@ parse_where_clause <- function(expr) {
               "", expr, perl = TRUE)
 
   ## Protect BETWEEN's inner "and" with a marker BEFORE joiner splitting
-  ## ("AGE between 18 and 65" must not be torn into two clauses).
-  expr <- gsub(paste0("(?i)(between\\s+(?:", .RE_QUOTED, "|", .RE_NUMBER,
-                      "))\\s+and\\s+"),
+  ## ("AGE between 18 and 65" must not be torn into two clauses). The bounds
+  ## may be numbers, which are still bare here, or quoted values, which are
+  ## now tokens -- so both spellings are matched.
+  expr <- gsub(paste0("(?i)(between\\s+(?:", masked$token_pattern, "|",
+                      .RE_NUMBER, "))\\s+and\\s+"),
                "\\1 ~AND~ ", expr, perl = TRUE)
 
   ## Detect logical joiner -- "and"/"&"/"AND" produce AND; "or"/"|"/"OR" → OR.
+  ## Reading masked text, so a joiner word inside a value cannot be mistaken
+  ## for the joiner between two clauses.
   joiner <- NULL
   if (grepl("\\s+(?i:and|&&|and)\\s+|\\s&\\s", expr, perl = TRUE)) joiner <- "AND"
   if (is.null(joiner) &&
@@ -147,7 +264,10 @@ parse_where_clause <- function(expr) {
   } else {
     expr
   }
-  parts <- trimws(parts)
+  ## Literals restored before any clause is interpreted or reported: from here
+  ## on the text is the author's own again, so `.one_condition()` sees real
+  ## values and a dropped-condition diagnostic quotes what they actually wrote.
+  parts <- .unmask_literals(trimws(parts), masked)
   parts <- parts[nzchar(parts)]
 
   conditions <- lapply(parts, .one_condition)
