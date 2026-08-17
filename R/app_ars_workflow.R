@@ -379,13 +379,24 @@ ars_workflow <- function(project_dir = NULL) {
     )
   })
 
+  ## The reserved-result count, and the fallback list when the payload carried
+  ## refs but no findings frame.
+  ##
+  ## `refs` used to be assigned only inside the fallback branch below, while the
+  ## heading further down read `length(refs)` unconditionally. So the panel
+  ## worked when there was nothing to report and failed with "object 'refs' not
+  ## found" whenever there WAS -- which, since a defect reserves rather than
+  ## refuses, is the ordinary outcome of a run with gaps.
+  refs <- as.character(gate$blocking_refs %||% character())
+  refs <- refs[!is.na(refs) & nzchar(refs)]
   if (length(finding_items) == 0L) {
-    refs <- as.character(gate$blocking_refs %||% character())
-    refs <- refs[!is.na(refs) & nzchar(refs)]
     finding_items <- lapply(refs, function(ref) {
       shiny::tags$li(shiny::tags$code(ref))
     })
   }
+  ## Count what is actually listed: the findings frame is the fuller record, and
+  ## the refs are a de-duplicated code list, so the two can differ.
+  reserved_n <- max(length(finding_items), length(refs))
 
   refused <- .workflow_payload_was_refused(payload)
 
@@ -399,7 +410,7 @@ ars_workflow <- function(project_dir = NULL) {
       "NEEDS FIXES -- runnable outputs blocked."
     } else {
       sprintf("COMPLETED WITH GAPS -- %d result%s reserved.",
-              length(refs), if (length(refs) == 1L) "" else "s")
+              reserved_n, if (reserved_n == 1L) "" else "s")
     }),
     shiny::p(
       class = "mb-1",
