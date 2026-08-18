@@ -324,16 +324,22 @@ test_that("an analysis no output displays is a warning", {
 })
 
 test_that("a method with no executor is flagged by how it will behave", {
-  ## MTH_UNSUPPORTED_ANALYSIS reserves an empty cell; a method with no
-  ## executor at all falls back to the generic summarizer.
+  ## Three ways to have no native executor, and the difference is what the
+  ## run DOES about it: reserve a keyed cell, or approximate with the generic
+  ## summarizer. A method arsbridge knows it cannot compute reserves; only a
+  ## method it has never heard of falls back.
   expect_equal(.method_execution_class("MTH_COUNT_AND_PERCENTAGE"), "native")
   expect_equal(.method_execution_class("MTH_LISTING"), "native")
   expect_equal(.method_execution_class("MTH_UNSUPPORTED_ANALYSIS"),
                "unsupported")
+  ## Kaplan-Meier reserves. It used to be classed "fallback", which is how a
+  ## request for median survival came back as a mean of the raw times.
   expect_equal(.method_execution_class("MTH_KAPLAN_MEIER_ESTIMATE"),
-               "fallback")
+               "unsupported")
   expect_equal(.method_execution_class("MTH_PROPORTION_CI_EXACT"),
                "conditional")
+  ## An id in none of the tables is the only thing that still falls back.
+  expect_equal(.method_execution_class("MTH_NEVER_HEARD_OF_THIS"), "fallback")
   expect_equal(.method_execution_class(NA_character_), "missing")
 })
 

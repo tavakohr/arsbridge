@@ -151,13 +151,24 @@ test_that("unknown method falls back and records FALLBACK method_actual", {
   ## ADSL present so the population-denominator lookup stays quiet.
   utils::write.csv(data.frame(USUBJID = c("01", "02", "03")),
                    file.path(td, "adsl.csv"), row.names = FALSE)
-  ars <- .write_mini_ars(td, "MTH_KAPLAN_MEIER_ESTIMATE", "ADTTE", "AVAL")
+  ## An id arsbridge has never heard of. Kaplan-Meier used to stand in for
+  ## "unknown" here, which was itself the defect: a DECLARED standard method
+  ## with no executor was being approximated by the generic summarizer rather
+  ## than reserved. It now reserves, so it is no longer an example of this
+  ## behaviour -- the behaviour itself is unchanged and still asserted.
+  unknown <- "MTH_NEVER_HEARD_OF_THIS"
+  expect_false(unknown %in% names(.UNEXECUTABLE_METHODS))
+  expect_false(unknown %in% vapply(.STANDARD_METHODS,
+                                   function(m) as.character(m$id),
+                                   character(1)))
+
+  ars <- .write_mini_ars(td, unknown, "ADTTE", "AVAL")
   expect_warning(ard <- ars_to_ard(ars, td), "fallback")
-  expect_true(all(ard$method_intended == "MTH_KAPLAN_MEIER_ESTIMATE"))
+  expect_true(all(ard$method_intended == unknown))
   expect_true(all(ard$method_actual == "FALLBACK_CONTINUOUS"))
   recs <- ars_diagnostics()
   expect_true(any(recs$stage == "execute_ard" &
-                    grepl("MTH_KAPLAN_MEIER_ESTIMATE", recs$problem)))
+                    grepl(unknown, recs$problem)))
 })
 
 test_that("custom subject_key drives subject counting", {

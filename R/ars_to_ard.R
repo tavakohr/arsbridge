@@ -134,7 +134,26 @@
   MTH_PROPORTION_CI_EXACT      = list(stats = c("conf.low", "conf.high"),
                                       by_group = TRUE),
   MTH_PROPORTION_DIFF_NEWCOMBE = list(stats = c("estimate", "conf.low",
-                                                "conf.high"), by_group = FALSE)
+                                                "conf.high"), by_group = FALSE),
+  ## Kaplan-Meier. arsbridge has no survival executor, and until now the method
+  ## was in neither table -- so a row asking for median survival and its 95%
+  ## confidence interval fell through to the generic fallback summarizer and
+  ## came back as an ordinary mean or count, under a different method id.
+  ##
+  ## That is the worst available outcome: a real, well-formatted number of a
+  ## statistic nobody asked for. `method_actual` recorded the substitution, but
+  ## the filled cell did not, and the post-execution coverage check skips a
+  ## substituted method precisely because its operation set legitimately
+  ## differs. Reserving instead makes the cell say "reserved for manual
+  ## derivation" and puts it on `ars_manual_worklist()`.
+  ##
+  ## Per group: a median survival and its limits are reported per arm. The
+  ## stat names are the ones the method's own operations resolve to -- asserted
+  ## in test-reserved_stat_name.R, because the cell map and the stub have to
+  ## meet on this string or the join silently misses.
+  MTH_KAPLAN_MEIER_ESTIMATE    = list(stats = c("events", "median",
+                                                "conf.low", "conf.high"),
+                                      by_group = TRUE)
 )
 
 ## Methods that DO have an executor emitted by .emit_block, and so are computed
