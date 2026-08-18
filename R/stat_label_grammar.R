@@ -532,3 +532,130 @@
   if (length(res$unsupported) > 0L) return(NULL)
   vapply(res$stats, function(s) as.character(s$stat_name), character(1))
 }
+
+## ---------------------------------------------------------------------------
+## Classifying a row as a statistic row, before any method is known
+## ---------------------------------------------------------------------------
+
+## The question this section answers is NOT the one `.parse_stat_label()`
+## answers, and keeping them apart is the design.
+##
+## At FILL time a row's parent has a method, so "which statistics does this
+## label ask for?" can be resolved against what that method declares, and a
+## label under a per-category parent is never read at all -- it is a codelist
+## value, whatever it resembles.
+##
+## At PARSE time none of that exists. The only question is the narrower one:
+## "is this row a statistic sub-row of the block above it, so an analysis must
+## not be bound to it?" A wrong YES refuses an analysis a row genuinely wanted.
+## A wrong NO lets an LLM or supplement bind an analysis to a layout row and
+## produces a duplicate block.
+##
+## This used to be answered by a separate closed list of fifteen exact
+## spellings, which is the same defect shape the grammar replaced at fill time:
+## an author writing "Standard Deviation" instead of "SD" got a different
+## answer for no reason anyone could state. The vocabulary is now shared; the
+## DECISION stays deliberately narrower, in the two ways below.
+
+## Which statistics a parse-time site may recognise.
+##
+## Narrower than `.STAT_TOKENS` on purpose. Recognising a statistic here has
+## no method behind it, so the scope is held to the statistics the historical
+## list already covered rather than to everything the grammar can read.
+##
+## `pct` is in scope for one specific reason worth writing down: the old site
+## compared `.norm_label(label)`, whose `[[:punct:]]` strip turns "n (%)" into
+## "n" -- so an "n (%)" row has ALWAYS been treated as a statistic sub-row,
+## as a side effect of normalisation rather than by intent. Dropping `pct`
+## would change that, so it stays.
+##
+## Deliberately OUT of scope, so no new KIND of statistic becomes a parse-time
+## statistic row: `ci_low`, `ci_high`, `events`, `pvalue`. A "95% CI",
+## "p-value" or "events" row classifies exactly as it did before.
+.STATLINE_TOKEN_SCOPE <- c(
+  "count", "pct", "mean", "sd", "median",
+  "min", "max", "q1", "q3", "se", "cv", "geomean"
+)
+
+## Historical statistic-row labels the grammar cannot express.
+##
+## "n missing" was in the old list and the grammar rejects it, because
+## `missing` is not a statistic token: no method declares a missing-count
+## operation, and `missing` is also a perfectly ordinary codelist value. Both
+## of those remain true, so this is NOT fixed by adding a token -- that would
+## claim a resolvable statistic the engine cannot produce.
+##
+## It is preserved here instead, as exactly what it is: a backward-compatible
+## classification with no resolution behind it. The row is still a layout row
+## of the block above, so no analysis binds to it; and at fill time it is
+## still unreadable, so it surfaces in `ars_unresolved_labels()` -- which is
+## where a request nothing can compute belongs.
+##
+## Real support for a missing count is a later, explicit feature needing a
+## method operation and ARD evidence. Other spellings ("Number missing") are
+## deliberately NOT listed: they were not in the historical set, and adding
+## them here would be that feature, smuggled in as a compatibility shim.
+.STATLINE_LEGACY_LABELS <- "n missing"
+
+#' Is this row a statistic sub-row of the block above it?
+#'
+#' Parse-time classification, with no method in hand. See the section comment
+#' above for why this is narrower than `.parse_stat_label()`.
+#' @noRd
+.is_statline_row_label <- function(label) {
+  raw <- as.character(label %||% "")
+  if (length(raw) != 1L || is.na(raw) || !nzchar(trimws(raw))) return(FALSE)
+
+  ## The historical exceptions, compared the way the old site compared them.
+  if (.norm_label(raw) %in% .STATLINE_LEGACY_LABELS) return(TRUE)
+
+  ## A label that is nothing but a composite WORD -- "Range", "IQR" -- is one
+  ## word standing for a pair, and is exactly the shape of a codelist value.
+  ## The historical set contained no such entry, and a categorical block whose
+  ## levels include "Range" must keep them. Spelled-out forms ("Min - Max",
+  ## "Q1, Q3") are unaffected: they name their statistics explicitly.
+  if (.norm_stat_label(raw) %in% names(.STAT_COMPOSITES)) return(FALSE)
+
+  tokens <- .parse_stat_label(raw)
+  length(tokens) > 0L && all(tokens %in% .STATLINE_TOKEN_SCOPE)
+}
+
+## The placeholder shape a statistic line gets when arsbridge AUTHORS a shell.
+##
+## The third place that used to restate the statistic vocabulary: a chain of
+## six `.norm_label()` comparisons in shell_table.R, deciding how many numbers
+## a generated row shows and at what precision. Keyed on the STATISTICS the
+## label names rather than on six exact spellings, so "Mean (Standard
+## Deviation)" gets the same shape as "Mean (SD)" -- which it always should
+## have, and did not.
+##
+## This is the forward direction (arsbridge writing a shell from its own ARS),
+## so there is no sponsor text to misread here: the labels come from
+## `.statline_for()`. The shapes below are exactly the ones the chain produced.
+##
+## Order matters only in that the first exact token-vector match wins; the
+## vectors are distinct, so there is nothing to disambiguate.
+.STATLINE_PLACEHOLDER_SHAPES <- list(
+  list(tokens = c("count"),              placeholder = "xx"),
+  list(tokens = c("mean", "sd"),         placeholder = "xx.x (x.xx)"),
+  list(tokens = c("median"),             placeholder = "xx.x"),
+  list(tokens = c("min", "max"),         placeholder = "(xx.x, xx.x)"),
+  list(tokens = c("q1", "q3"),           placeholder = "(xx.x, xx.x)"),
+  list(tokens = c("median", "q1", "q3"), placeholder = "xx.x (xx.x, xx.x)")
+)
+
+## A single unrecognised or unlisted statistic line shows one decimal number.
+## Unchanged: it is what the chain's final `return("xx.x")` did.
+.STATLINE_PLACEHOLDER_DEFAULT <- "xx.x"
+
+#' The placeholder a generated statistic line carries.
+#' @noRd
+.statline_placeholder <- function(label) {
+  tokens <- .parse_stat_label(label)
+  if (length(tokens) > 0L) {
+    for (shape in .STATLINE_PLACEHOLDER_SHAPES) {
+      if (identical(tokens, shape$tokens)) return(shape$placeholder)
+    }
+  }
+  .STATLINE_PLACEHOLDER_DEFAULT
+}

@@ -105,13 +105,6 @@
 #'
 #' @keywords internal
 #' @noRd
-## Normalised stub labels that are statistic sub-lines of the row above,
-## never analyses of their own (compared after .norm_label()).
-.STATLINE_ROW_LABELS <- c(
-  "mean sd", "mean", "sd", "median", "min max", "min", "max",
-  "q1 q3", "q1", "q3", "n", "se", "cv", "geometric mean", "n missing"
-)
-
 extract_shell_llm <- function(section, spec_lookup = NULL,
                               provider = NULL, model = NULL, api_key = NULL,
                               call_fn = .enrich_structured) {
@@ -171,7 +164,7 @@ extract_shell_llm <- function(section, spec_lookup = NULL,
     ## above it, not an analysis of its own -- annotating it would create a
     ## duplicate analysis block (ADR 0003). Leave it label-only; the
     ## layout-driven renderer fills it from the parent analysis.
-    if (.norm_label(rows[[idx]]$label %||% "") %in% .STATLINE_ROW_LABELS) next
+    if (.is_statline_row_label(rows[[idx]]$label)) next
 
     ds  <- toupper(trimws(p$dataset  %||% ""))
     var <- toupper(trimws(p$variable %||% ""))

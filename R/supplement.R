@@ -589,7 +589,7 @@ read_supplement <- function(path) {
 
     ## Statistic sub-rows belong to the analysis row above them; binding one
     ## would create a duplicate analysis block (same gate as the LLM path).
-    if (.norm_label(sec$stub_rows[[idx]]$label %||% "") %in% .STATLINE_ROW_LABELS) {
+    if (.is_statline_row_label(sec$stub_rows[[idx]]$label)) {
       diag_add(
         stage = "supplement", severity = "INFO", input = INPUT_SUPPLEMENT,
         problem = sprintf("Analysis for statistic sub-row '%s' skipped", label),
