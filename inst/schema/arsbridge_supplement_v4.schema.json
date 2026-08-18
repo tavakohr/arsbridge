@@ -495,6 +495,13 @@
         },
         "provenance": {
           "$ref": "#/definitions/provenance"
+        },
+        "statisticRows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/statisticRow"
+          },
+          "description": "Optional. What the rows naming statistics mean, where the label alone could not say."
         }
       },
       "not": {
@@ -591,6 +598,129 @@
           }
         }
       }
+    },
+    "statisticRow": {
+      "type": "object",
+      "description": "What a shell row that names STATISTICS means, when the label grammar could not read it. Optional and additive: a supplement written before this existed is unchanged and still valid. This may propose MEANING only -- it may never name an ARS operation or an engine statistic name, and only status='reviewed' is ever applied.",
+      "additionalProperties": false,
+      "required": [
+        "row_label",
+        "semantic_tokens",
+        "status",
+        "source"
+      ],
+      "properties": {
+        "row_label": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The stub text exactly as the shell writes it. Rows are matched by LABEL, never by index."
+        },
+        "semantic_tokens": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": [
+              "count",
+              "pct",
+              "mean",
+              "sd",
+              "se",
+              "median",
+              "q1",
+              "q3",
+              "min",
+              "max",
+              "cv",
+              "geomean",
+              "ci_low",
+              "ci_high",
+              "events",
+              "pvalue"
+            ]
+          },
+          "description": "The statistics the row shows, in the order it shows them. Duplicates are meaningful and are kept. These are SEMANTIC names: arsbridge chooses the ARS operation from the row's method, so an OP_* id or an engine name (N, p25, conf.low) is rejected here."
+        },
+        "status": {
+          "enum": [
+            "proposal",
+            "reviewed"
+          ],
+          "description": "Only 'reviewed' is applied. A 'proposal' is recorded and reported, and binds nothing."
+        },
+        "source": {
+          "enum": [
+            "supplement",
+            "llm"
+          ],
+          "description": "Provenance only. It never decides whether the row binds -- status does that alone."
+        },
+        "reviewed_by": {
+          "type": "string",
+          "description": "Who reviewed it. REQUIRED when status is 'reviewed'."
+        },
+        "override": {
+          "type": "boolean",
+          "default": false,
+          "description": "Per-row. When the label ALSO resolves and disagrees, the label wins unless this is true. Only a reviewed row may set it true."
+        },
+        "expected_scope": {
+          "enum": [
+            "continuous",
+            "categorical"
+          ],
+          "description": "A cross-check, never an input: scope is the method's property. A disagreement is reported and never overrides the method."
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "For ordering a review queue. Never gates acceptance."
+        },
+        "generator": {
+          "type": "string",
+          "description": "Model or assistant that produced a proposal."
+        },
+        "evidence": {
+          "type": "string",
+          "description": "What the proposer read. Free text, never parsed."
+        },
+        "proposed_at": {
+          "type": "string",
+          "description": "ISO-8601 UTC."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "reviewed"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "reviewed_by"
+            ],
+            "properties": {
+              "reviewed_by": {
+                "minLength": 1
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "override": {
+                "const": false
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }
