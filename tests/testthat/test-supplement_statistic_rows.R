@@ -16,13 +16,15 @@ CONT <- "MTH_SUMMARY_STATISTICS_CONTINUOUS"
 ## A statistic row under a continuous parent, resolved directly. `entry` is the
 ## layout record the fill stage sees; `stat_tokens` is what a REVIEWED
 ## supplement put there.
-.s3_bind <- function(label, tokens = NULL, override = FALSE, method_id = CONT) {
+.s3_bind <- function(label, tokens = NULL, override = FALSE, method_id = CONT,
+                     scope = "") {
   entry <- list(label = label, sheet_row = 6L)
   if (!is.null(tokens)) {
     entry$stat_tokens <- tokens
     entry$stat_tokens_source <- "supplement"
     entry$stat_tokens_override <- override
   }
+  if (nzchar(scope)) entry$stat_expected_scope <- scope
   .fill_row_binding(
     entry  = entry,
     parent = list(analysis_id = "AN_1", label = "Measure [ADQX.MEAS]"),
@@ -31,6 +33,42 @@ CONT <- "MTH_SUMMARY_STATISTICS_CONTINUOUS"
 }
 
 .s3_ops <- function(b) vapply(b$stats, function(s) s$operation_id, character(1))
+
+## A minimal two-column table sheet holding one statistic row under one
+## analysis, so the diagnostics `.build_table_cells()` emits can be read the
+## way a reader actually receives them. Two columns on purpose: a per-row
+## report must not fire once per cell.
+.s3_columns <- function() {
+  list(list(col = 2L, order = 1L, label = "Drug A"),
+       list(col = 3L, order = 2L, label = "Placebo"))
+}
+
+.s3_slot <- function() {
+  list(list(token = "xx.x", type = "num", decimals = 1L, start = 1L, stop = 4L))
+}
+
+.s3_cells <- function(scope = "", tokens = c("q1", "q3"), method_id = CONT) {
+  entry <- list(order = 2L, label = "Interquartile spread", indent = 0L,
+                analysis_id = NA_character_, kind = "label", sheet_row = 6L,
+                stat_tokens = tokens, stat_tokens_source = "supplement",
+                stat_tokens_override = FALSE)
+  if (nzchar(scope)) entry$stat_expected_scope <- scope
+  layout <- list(
+    list(order = 1L, label = "Measure [ADQX.MEAS]", indent = 0L,
+         analysis_id = "AN_1", kind = "label", sheet_row = 5L),
+    entry)
+  grid <- data.frame(row = c(6L, 6L), col = c(2L, 3L), ref = c("B6", "C6"),
+                     kind = "placeholder", n_slots = 1L,
+                     stringsAsFactors = FALSE)
+  grid$slots <- list(.s3_slot(), .s3_slot())
+  .build_table_cells(
+    section      = list(sheet_name = "T14-2-1", tlf_number = "14.2.1"),
+    shell_layout = layout,
+    analyses     = list(list(id = "AN_1", methodId = method_id)),
+    methods      = .STANDARD_METHODS,
+    columns      = .s3_columns(),
+    grid         = grid)
+}
 
 .s3_rows <- function(...) .supp_statistic_rows(list(statisticRows = list(...)))
 
@@ -262,4 +300,201 @@ test_that("the shipped schema describes exactly the tokens the code accepts", {
   expect_equal(length(enum), 16L)
   ## The field is reachable from a TLF entry, or nothing could ever use it.
   expect_false(is.null(schema$definitions$tlfEntry$properties$statisticRows))
+})
+
+## --- FAIL must mean no binding ---------------------------------------------
+
+test_that("a fatal statisticRows finding drops the entry and binds nothing", {
+  ## General defect class: a validator can report a finding and then apply the
+  ## entry anyway. The diagnostic then states the opposite of what happened --
+  ## "the entry was dropped" while its tokens sit on a row -- and a reviewer
+  ## reading the FAIL believes a cell is unresolved when it is bound.
+  ##
+  ## General invariant: every problem this parser reports is FATAL. An entry
+  ## that produced one is not returned as applicable and cannot reach a stub
+  ## row, so severity and action text describe what actually happened.
+  base <- function(...) .s3_row("Interquartile spread", c("q1", "q3"), ...)
+  sec  <- list(tlf_number = "14.2.1",
+               stub_rows = list(list(label = "Interquartile spread")))
+  apply_one <- function(entry) suppressMessages(
+    .apply_supplement_statistic_rows(sec, list(statisticRows = list(entry))))
+
+  ## Non-vacuity first: the entry every case below is built from DOES bind, so
+  ## a case that stops binding stopped for the reason under test rather than
+  ## because the fixture was malformed to begin with.
+  expect_equal(apply_one(base())$stub_rows[[1]]$supplement_stat_tokens,
+               c("q1", "q3"))
+
+  fatal <- list(
+    ## A field the format does not define -- usually a misspelling of one that
+    ## DECIDES something, where "ignored" binds the row without the qualifier
+    ## its author wrote.
+    "unknown field"         = base(overide = TRUE),
+    "unknown field (prose)" = base(comment = "looks right to me"),
+    ## A scope outside the enum: the cross-check it asks for cannot run.
+    "unknown scope"         = base(expected_scope = "contnuous"),
+    ## And a scope that is not a scalar at all. `.supp_scalar()` returns NA
+    ## here, and reading NA as "absent" would bind while silently discarding
+    ## the safeguard the author attached.
+    "non-scalar scope"      = base(expected_scope = list("continuous")))
+
+  for (nm in names(fatal)) {
+    parsed <- .s3_rows(fatal[[nm]])
+    expect_equal(length(parsed$rows), 0L, info = nm)
+    expect_gt(length(parsed$problems), 0L)
+
+    applied <- apply_one(fatal[[nm]])
+    expect_null(applied$stub_rows[[1]]$supplement_stat_tokens, info = nm)
+    expect_null(applied$stub_rows[[1]]$supplement_stat_proposal, info = nm)
+    expect_null(applied$stub_rows[[1]]$supplement_stat_scope, info = nm)
+  }
+
+  ## The diagnostic agrees with the runtime behaviour, which is the whole
+  ## point: FAIL, and an action that says the entry was dropped.
+  diag_reset()
+  invisible(apply_one(base(overide = TRUE)))
+  recs <- ars_diagnostics()
+  hit  <- recs[recs$severity == "FAIL" & grepl("statisticRows", recs$problem), ]
+  expect_gt(nrow(hit), 0L)
+  expect_true(any(grepl("dropped", hit$action, fixed = TRUE)))
+  diag_reset()
+})
+
+
+## --- one stub row, one entry -----------------------------------------------
+
+test_that("two labels resolving to one stub row bind nothing, not last-write-wins", {
+  ## General defect class: ambiguity was detected on the text a supplement
+  ## SUPPLIED rather than on the row it RESOLVES to. The matcher accepts
+  ## prefix and containment, so two spellings reach one row, pass a check that
+  ## compares only the supplied labels, and the second overwrites the first.
+  ##
+  ## General invariant: two entries claiming one actual stub row is ambiguity,
+  ## and ambiguity resolves to unresolved -- neither binds.
+  sec <- list(tlf_number = "14.2.1",
+              stub_rows = list(list(label = "Mean (SD)")))
+
+  ## Scope assertion: these two labels really do collide on one row. Were the
+  ## matcher ever made exact-only, this goes red rather than the test passing
+  ## while checking nothing.
+  stub <- .norm_label("Mean (SD)")
+  expect_equal(.match_stub_label(.norm_label("Mean"), stub), 1L)
+  expect_equal(.match_stub_label(.norm_label("Mean (SD)"), stub), 1L)
+
+  ## And each binds on its own, so the collision case below is not passing
+  ## merely because one of them never bound.
+  for (lbl in c("Mean", "Mean (SD)")) {
+    solo <- suppressMessages(.apply_supplement_statistic_rows(
+      sec, list(statisticRows = list(.s3_row(lbl, c("mean", "sd"))))))
+    expect_equal(solo$stub_rows[[1]]$supplement_stat_tokens, c("mean", "sd"),
+                 info = lbl)
+  }
+
+  both <- suppressMessages(.apply_supplement_statistic_rows(
+    sec, list(statisticRows = list(
+      .s3_row("Mean", c("mean", "sd")),
+      .s3_row("Mean (SD)", c("min", "max"))))))
+  expect_null(both$stub_rows[[1]]$supplement_stat_tokens)
+  expect_null(both$stub_rows[[1]]$supplement_stat_proposal)
+
+  ## Order is not a tie-breaker: reversing the entries changes nothing.
+  rev <- suppressMessages(.apply_supplement_statistic_rows(
+    sec, list(statisticRows = list(
+      .s3_row("Mean (SD)", c("min", "max")),
+      .s3_row("Mean", c("mean", "sd"))))))
+  expect_null(rev$stub_rows[[1]]$supplement_stat_tokens)
+
+  ## Reported as a contested ROW, naming both claimants.
+  diag_reset()
+  invisible(suppressMessages(.apply_supplement_statistic_rows(
+    sec, list(statisticRows = list(
+      .s3_row("Mean", c("mean", "sd")),
+      .s3_row("Mean (SD)", c("min", "max")))))))
+  recs <- ars_diagnostics()
+  hit  <- recs[recs$severity == "FAIL" & grepl("resolve to it", recs$problem), ]
+  expect_equal(nrow(hit), 1L)
+  ## Guarded: indexing a zero-row frame ERRORS, and an error reads as "the
+  ## mutant was not detected" -- the one direction that hides a real gap.
+  if (nrow(hit) == 1L) {
+    expect_match(hit$problem[[1]], "'Mean'", fixed = TRUE)
+    expect_match(hit$problem[[1]], "'Mean (SD)'", fixed = TRUE)
+  }
+  diag_reset()
+
+  ## Two entries on two different rows are ordinary and unaffected.
+  two <- list(tlf_number = "14.2.1",
+              stub_rows = list(list(label = "Mean (SD)"),
+                               list(label = "Interquartile spread")))
+  ok <- suppressMessages(.apply_supplement_statistic_rows(
+    two, list(statisticRows = list(
+      .s3_row("Mean (SD)", c("mean", "sd")),
+      .s3_row("Interquartile spread", c("q1", "q3"))))))
+  expect_equal(ok$stub_rows[[1]]$supplement_stat_tokens, c("mean", "sd"))
+  expect_equal(ok$stub_rows[[2]]$supplement_stat_tokens, c("q1", "q3"))
+})
+
+
+## --- the contract's smaller promises ---------------------------------------
+
+test_that("expected_scope is cross-checked against the method and never applied", {
+  ## The schema calls it "a cross-check, never an input: a disagreement is
+  ## reported and never overrides the method". So it has to be checked, the
+  ## disagreement has to reach a diagnostic, and it must change nothing.
+  sec <- list(tlf_number = "14.2.1",
+              stub_rows = list(list(label = "Interquartile spread")))
+  applied <- suppressMessages(.apply_supplement_statistic_rows(
+    sec, list(statisticRows = list(
+      .s3_row("Interquartile spread", c("q1", "q3"),
+              expected_scope = "categorical")))))
+  expect_equal(applied$stub_rows[[1]]$supplement_stat_scope, "categorical")
+
+  ## Declared scope disagrees with the method: reported, and the tokens still
+  ## bind exactly as they would without it.
+  bad <- .s3_bind("Interquartile spread", tokens = c("q1", "q3"),
+                  scope = "categorical")
+  expect_equal(.s3_ops(bad), c("OP_Q1", "OP_Q3"))
+  expect_equal(bad$scope_conflict$declared, "categorical")
+  expect_equal(bad$scope_conflict$actual, "continuous")
+
+  ## Agreement is not a conflict, and an entry that declared nothing has
+  ## nothing to check.
+  expect_null(.s3_bind("Interquartile spread", tokens = c("q1", "q3"),
+                       scope = "continuous")$scope_conflict)
+  expect_null(.s3_bind("Interquartile spread", tokens = c("q1", "q3"))$scope_conflict)
+
+  ## Checked in BOTH directions: a per-category parent reports it too, which
+  ## is the half that never fires if the check sits below the decode gate.
+  cat_side <- .s3_bind("Median", tokens = c("median"), scope = "continuous",
+                       method_id = "MTH_COUNT_AND_PERCENTAGE")
+  expect_equal(cat_side$variable_level, "Median")
+  expect_equal(cat_side$scope_conflict$actual, "categorical")
+
+  ## And it reaches the reader as a WARN naming the row, the declaration and
+  ## the method -- a cross-check nobody is told about is not a cross-check.
+  diag_reset()
+  invisible(.s3_cells(scope = "categorical"))
+  recs <- ars_diagnostics()
+  hit  <- recs[recs$severity == "WARN" & grepl("expected_scope", recs$problem), ]
+  expect_equal(nrow(hit), 1L)
+  if (nrow(hit) == 1L) {
+    expect_match(hit$problem[[1]], "categorical", fixed = TRUE)
+    expect_match(hit$problem[[1]], CONT, fixed = TRUE)
+  }
+  diag_reset()
+
+  ## One report per sheet row, not one per cell: the harness above has two
+  ## result columns.
+  expect_gt(length(.s3_columns()), 1L)
+})
+
+
+test_that("proposed_at survives the parse", {
+  ## It is in the schema and in the field whitelist, so an author can write
+  ## it, watch validation pass, and reasonably expect it to still be there.
+  got <- .s3_rows(.s3_row("Interquartile spread", c("q1", "q3"),
+                          proposed_at = "2026-08-18T09:00:00Z"))
+  expect_equal(length(got$rows), 1L)
+  expect_equal(got$rows[[1]]$proposed_at, "2026-08-18T09:00:00Z")
+  ## Absent is empty, never NA: it is provenance text, and NA would print.
+  expect_equal(.s3_rows(.s3_row("X", c("mean")))$rows[[1]]$proposed_at, "")
 })

@@ -423,6 +423,30 @@
   analysis <- by_id(parent$analysis_id)
   if (is.null(analysis)) return(NULL)
 
+  ## `expected_scope` is a CROSS-CHECK, never an input. Scope is a property of
+  ## the METHOD and is already known from the ARS, so a supplement declaring
+  ## one is stating which kind of block it believed it was reading. A
+  ## disagreement means the entry was written against a different row -- its
+  ## tokens may be attached to this row and be about another one -- so it is
+  ## reported and never allowed to change what the method says.
+  ##
+  ## Checked HERE, above the per-category gate, so it is reported in both
+  ## directions. Below the gate only continuous parents would ever reach it,
+  ## and the more informative half -- an entry declaring "continuous" on a row
+  ## that is in fact a category level -- would be the half that never fired.
+  declared_scope <- tolower(as.character(entry$stat_expected_scope %||% ""))
+  if (length(declared_scope) != 1L || is.na(declared_scope)) declared_scope <- ""
+  actual_scope <- if ((analysis$methodId %||% "") %in% .DECODE_METHOD_IDS) {
+    "categorical"
+  } else {
+    "continuous"
+  }
+  scope_conflict <- if (nzchar(declared_scope) &&
+                          !identical(declared_scope, actual_scope)) {
+    list(declared = declared_scope, actual = actual_scope,
+         method_id = analysis$methodId %||% "?")
+  }
+
   ## Under a per-category parent an unannotated child row is a LEVEL, whatever
   ## its label looks like, and the grammar is not consulted at all.
   ##
@@ -435,6 +459,7 @@
   if ((analysis$methodId %||% "") %in% .DECODE_METHOD_IDS) {
     return(list(analysis_id = parent$analysis_id, analysis = analysis,
                 stats = method_stats(analysis),
+                scope_conflict = scope_conflict,
                 variable_level = entry$label %||% NA_character_))
   }
 
@@ -480,7 +505,7 @@
   if (length(tokens) == 0L) {
     return(list(analysis_id = parent$analysis_id, analysis = analysis,
                 stats = list(), stat_line = entry$label,
-                unreadable = TRUE,
+                unreadable = TRUE, scope_conflict = scope_conflict,
                 available = vapply(method_stats(analysis),
                                    function(s) as.character(s$operation_id %||% "?"),
                                    character(1))))
@@ -495,12 +520,13 @@
     return(list(analysis_id = parent$analysis_id, analysis = analysis,
                 stats = list(), stat_line = entry$label,
                 tokens = tokens, token_source = token_source,
-                conflict = conflict,
+                conflict = conflict, scope_conflict = scope_conflict,
                 unsupported = res$unsupported, available = res$available))
   }
   list(analysis_id = parent$analysis_id, analysis = analysis,
        stats = res$stats, stat_line = entry$label,
-       tokens = tokens, token_source = token_source, conflict = conflict)
+       tokens = tokens, token_source = token_source, conflict = conflict,
+       scope_conflict = scope_conflict)
 }
 
 #' One record per body cell of a table sheet.
@@ -550,7 +576,7 @@
   refused_rows <- list()
   ## Rows where the label and a reviewed supplement each named statistics and
   ## disagreed. Reported once per row, whichever side won.
-  conflict_rows <- list()
+  conflict_rows <- list(); scope_rows <- list()
   for (i in seq_len(nrow(grid))) {
     ## A literal is a label, a footnote, or a number the author typed. The
     ## fill writer must leave every one of them exactly as authored.
@@ -640,6 +666,13 @@
         binding$conflict,
         list(row = grid$row[[i]], label = binding$stat_line %||% ""))
     }
+    ## Keyed by sheet row, so a row spanning many columns is reported once.
+    if (!is.null(binding$scope_conflict)) {
+      lbl <- binding$stat_line %||% binding$variable_level %||% ""
+      if (length(lbl) != 1L || is.na(lbl)) lbl <- ""
+      scope_rows[[as.character(grid$row[[i]])]] <- c(
+        binding$scope_conflict, list(row = grid$row[[i]], label = lbl))
+    }
     record$slots <- .bind_slots(grid$slots[[i]], binding$stats)
     if (length(record$slots) == 0) {
       record$kind <- "pending"
@@ -708,6 +741,28 @@
         "Remove `override` from this row if the label was right."
       else
         "If the supplement is right, set `override: true` on this row after checking it against the shell.",
+      tlf_number = section$tlf_number, location = section$sheet_name %||% "")
+  }
+
+  ## The supplement declared which KIND of block it was reading, and the
+  ## method says otherwise. Reported, never acted on: `expected_scope` is
+  ## documented as a cross-check, and the method is the thing that knows.
+  ## Worth saying out loud because an entry that misread the block is an entry
+  ## whose tokens probably belong to a different row.
+  for (sc in scope_rows) {
+    .diag_gap(
+      stage = "build_ars", severity = "WARN", input = INPUT_SUPPLEMENT,
+      problem = sprintf(
+        paste("Row %d of %s: the supplement declares expected_scope %s for",
+              "%s, but the row's method (%s) is %s."),
+        sc$row, section$sheet_name %||% section$tlf_number %||% "?",
+        dQuote(sc$declared, q = FALSE), dQuote(sc$label, q = FALSE),
+        sc$method_id, sc$actual),
+      why = paste("expected_scope is a cross-check, not an input: the method",
+                  "decides the scope, so the declaration was not applied."),
+      fix = paste("Check the entry against the shell -- an entry that misread",
+                  "the block may be naming the wrong row. Correct the scope,",
+                  "or drop the field if it was guesswork."),
       tlf_number = section$tlf_number, location = section$sheet_name %||% "")
   }
 

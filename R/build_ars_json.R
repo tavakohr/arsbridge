@@ -1291,6 +1291,12 @@ build_ars_json <- function(sections,
             as.character(row$supplement_stat_source %||% "supplement")
           label_entry$stat_tokens_override <-
             isTRUE(row$supplement_stat_override)
+          ## Declared scope travels with the tokens, and only as a claim to be
+          ## checked: the method decides what the row's scope IS.
+          if (nzchar(row$supplement_stat_scope %||% "")) {
+            label_entry$stat_expected_scope <-
+              as.character(row$supplement_stat_scope)
+          }
         }
         shell_layout[[length(shell_layout) + 1L]] <- label_entry
         next

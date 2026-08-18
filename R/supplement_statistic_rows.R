@@ -90,7 +90,15 @@
 }
 
 #' Read and validate one TLF's `statisticRows`.
-#' @return list(rows, problems); `rows` holds only entries that passed.
+#'
+#' Every problem this returns is FATAL, and that is the point: the entry that
+#' produced one is not in `rows`, so it cannot reach a stub row and cannot
+#' bind. A finding reported as FAIL and then applied anyway would make the
+#' diagnostic worse than useless -- it would say the entry was dropped while
+#' its tokens were being attached. If a future finding is genuinely advisory
+#' it needs its own channel and its own severity, not a place in this vector.
+#'
+#' @return list(rows, problems); `rows` holds only entries with NO problem.
 #' @noRd
 .supp_statistic_rows <- function(entry, where = "statisticRows") {
   raw <- entry$statisticRows %||% list()
@@ -109,8 +117,19 @@
     if (!is.list(r) || is.null(names(r))) {
       note("regenerate: %s must be a JSON object with named fields.", at); next
     }
-    for (f in setdiff(names(r), .SUPP_STAT_ROW_FIELDS)) {
-      note("%s: unknown field '%s' ignored.", at, f)
+    ## A field the format does not define is FATAL, not ignored. The shipped
+    ## schema already sets `additionalProperties: false`, so a file carrying
+    ## one is invalid there; accepting it here would mean a supplement that
+    ## fails its own schema still binds. And the common case is a misspelling
+    ## of a field that decides something -- `overide`, `reviewd_by` -- where
+    ## "ignored" means the row binds WITHOUT the qualifier its author wrote.
+    unknown_fields <- setdiff(names(r), .SUPP_STAT_ROW_FIELDS)
+    if (length(unknown_fields) > 0) {
+      note("regenerate: %s has field%s this format does not define (%s). Known fields: %s.",
+           at, if (length(unknown_fields) == 1L) "" else "s",
+           paste(sprintf("'%s'", unknown_fields), collapse = ", "),
+           paste(.SUPP_STAT_ROW_FIELDS, collapse = ", "))
+      next
     }
 
     label <- .supp_scalar(r$row_label)
@@ -155,12 +174,27 @@
            at, label); next
     }
 
-    scope <- tolower(.supp_scalar(r$expected_scope) %|NA|% "")
+    ## Also fatal, and read in two steps rather than through `%|NA|%`.
+    ## `.supp_scalar()` returns NA for a non-scalar, and collapsing that to ""
+    ## would read `"expected_scope": ["continuous"]` as ABSENT -- the entry
+    ## would bind with the safeguard silently discarded. `%|NA|%` is for
+    ## provenance text, never for a field that decides something.
+    ##
+    ## The enum check is fatal for the same reason: this field's whole purpose
+    ## is to be CHECKED against the method, so a value outside the enum is a
+    ## check that cannot be performed, and the entry does not say what its
+    ## author believes it says.
+    scope_raw <- .supp_scalar(r$expected_scope)
+    if (is.na(scope_raw)) {
+      note("regenerate: %s ('%s') needs 'expected_scope' to be a single string (%s), not an array or object.",
+           at, label,
+           paste(sprintf("'%s'", .SUPP_STAT_SCOPES), collapse = " or ")); next
+    }
+    scope <- tolower(scope_raw)
     if (nzchar(scope) && !scope %in% .SUPP_STAT_SCOPES) {
-      note("%s ('%s'): unknown 'expected_scope' '%s' ignored (expected %s).",
+      note("regenerate: %s ('%s') has an unknown 'expected_scope' '%s' (expected %s).",
            at, label, scope,
-           paste(sprintf("'%s'", .SUPP_STAT_SCOPES), collapse = " or "))
-      scope <- ""
+           paste(sprintf("'%s'", .SUPP_STAT_SCOPES), collapse = " or ")); next
     }
 
     conf <- .supp_scalar(r$confidence) %|NA|% ""
@@ -174,7 +208,11 @@
       ## chose decide whether a cell gets filled.
       confidence = if (nzchar(conf)) suppressWarnings(as.numeric(conf)) else NA_real_,
       generator = .supp_scalar(r$generator) %|NA|% "",
-      evidence  = .supp_scalar(r$evidence)  %|NA|% "")
+      evidence  = .supp_scalar(r$evidence)  %|NA|% "",
+      ## Accepted by the schema and by the field whitelist, so it is kept.
+      ## A field the contract admits and the parser drops is one an author can
+      ## write, watch validate clean, and never find again.
+      proposed_at = .supp_scalar(r$proposed_at) %|NA|% "")
   }
   list(rows = rows, problems = problems)
 }
@@ -253,22 +291,59 @@
                         function(r) .norm_label(r$label %||% ""), character(1))
   n_bound <- 0L; n_proposed <- 0L
 
-  ## Two entries naming the same row are AMBIGUOUS, and ambiguity resolves to
-  ## unresolved -- never to whichever came first. Detected before anything is
-  ## attached, so a duplicate cannot bind and then be reported.
-  keys  <- vapply(parsed$rows, function(p) .norm_label(p$row_label), character(1))
-  duped <- unique(keys[duplicated(keys)])
+  ## Two entries claiming one row are AMBIGUOUS, and ambiguity resolves to
+  ## unresolved -- never to whichever came first.
+  ##
+  ## What counts as "one row" is the row they RESOLVE to, not the text they
+  ## supplied. `.match_stub_label()` matches on prefix and containment as well
+  ## as on equality, so two entries can name a row differently -- "Mean" and
+  ## "Mean (SD)" -- and still land on the same stub row. Comparing the
+  ## supplied labels catches only the obvious half of that, and the half it
+  ## misses is the dangerous one: both entries pass, both attach, and the
+  ## second silently replaces the first's tokens on the row they share.
+  ##
+  ## So resolve every entry first, then decide. Nothing is attached until
+  ## every claim on every row is known.
+  keys <- vapply(parsed$rows, function(p) .norm_label(p$row_label), character(1))
+  resolved_idx <- unname(vapply(keys, function(k) {
+    hit <- .match_stub_label(k, labels_norm)
+    if (length(hit) != 1L) NA_integer_ else as.integer(hit)
+  }, integer(1)))
 
-  for (p in parsed$rows) {
-    key <- .norm_label(p$row_label)
-    if (key %in% duped) {
-      diag_add(stage = "supplement", severity = "FAIL", input = INPUT_SUPPLEMENT,
-        problem = sprintf("Row '%s': several statisticRows entries claim it.", p$row_label),
-        tlf_number = sec$tlf_number,
-        action = "None was applied -- ambiguity is never resolved by first match. Keep one entry per row.")
-      next
-    }
-    idx <- .match_stub_label(key, labels_norm)
+  contested <- rep(FALSE, length(parsed$rows))
+  claimants <- function(who) {
+    paste(sprintf("'%s'", vapply(parsed$rows[who], function(p) p$row_label,
+                                 character(1))), collapse = ", ")
+  }
+
+  for (j in unique(resolved_idx[!is.na(resolved_idx) & duplicated(resolved_idx)])) {
+    who <- which(!is.na(resolved_idx) & resolved_idx == j)
+    contested[who] <- TRUE
+    diag_add(stage = "supplement", severity = "FAIL", input = INPUT_SUPPLEMENT,
+      problem = sprintf("Stub row '%s': %d statisticRows entries resolve to it (%s).",
+                        sec$stub_rows[[j]]$label %||% "?", length(who), claimants(who)),
+      tlf_number = sec$tlf_number,
+      action = "None was applied -- ambiguity is never resolved by first match. Keep one entry per stub row, naming it as the shell writes it.")
+  }
+  ## Entries resolving to no row at all are reported one by one below, but if
+  ## two of them supply the same label they are ambiguous about the row they
+  ## meant, and neither should quietly become the answer if the label later
+  ## starts matching.
+  for (k in unique(keys[duplicated(keys)])) {
+    who <- which(keys == k & is.na(resolved_idx))
+    if (length(who) == 0) next
+    contested[who] <- TRUE
+    diag_add(stage = "supplement", severity = "FAIL", input = INPUT_SUPPLEMENT,
+      problem = sprintf("%d statisticRows entries claim the row '%s', which matched no stub row.",
+                        length(who), parsed$rows[[who[1]]]$row_label),
+      tlf_number = sec$tlf_number,
+      action = "None was applied -- keep one entry per stub row, naming it as the shell writes it.")
+  }
+
+  for (i in seq_along(parsed$rows)) {
+    if (contested[i]) next
+    p   <- parsed$rows[[i]]
+    idx <- resolved_idx[[i]]
     if (is.na(idx)) {
       diag_add(stage = "supplement", severity = "WARN", input = INPUT_SUPPLEMENT,
         problem = sprintf("statisticRows label '%s' matched no stub row.", p$row_label),
@@ -295,6 +370,14 @@
     sec$stub_rows[[idx]]$supplement_stat_source   <- p$source
     sec$stub_rows[[idx]]$supplement_stat_override <- isTRUE(p$override)
     sec$stub_rows[[idx]]$supplement_stat_reviewer <- p$reviewed_by
+    ## Carried so the CROSS-CHECK the field promises can actually run. It is
+    ## checked against the method at fill time, where the method is known --
+    ## here there is no analysis yet, so there is nothing to check against.
+    ## `%||%` because the field is optional: an entry that declared no scope
+    ## has nothing to check and must not be read as declaring "".
+    if (nzchar(p$expected_scope %||% "")) {
+      sec$stub_rows[[idx]]$supplement_stat_scope <- p$expected_scope
+    }
     n_bound <- n_bound + 1L
   }
 
