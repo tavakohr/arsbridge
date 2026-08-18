@@ -762,6 +762,11 @@ read_supplement <- function(path) {
   ## Channels arsbridge records but does not yet compute: kept on the section
   ## (and later copied to the output _meta) so a reviewer -- and a future
   ## engine -- can see them, with one INFO naming what was recorded.
+  ## Reviewed statistic-row meanings: the answer to a label the grammar
+  ## could not read. Applied after the analysis bindings, because it attaches
+  ## to the same stub rows and must see the same section.
+  sec <- .apply_supplement_statistic_rows(sec, supp_tlf)
+
   sec <- .record_supplement_extras(sec, supp_tlf)
 
   ## Anchor crosscheck: a cheap guard that the assistant read the SAME table

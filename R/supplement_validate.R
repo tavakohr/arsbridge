@@ -15,7 +15,7 @@
   "title", "outputType", "analysis_type", "methodId", "is_supported",
   "unsupported_reason", "analysisSet", "recordFilter", "groupings",
   "includeTotal", "columnHierarchy", "analyses", "listingColumns", "sorting",
-  "anchors", "provenance"
+  "anchors", "provenance", "statisticRows"
 )
 
 #' Validate a Copilot supplement file (format v4) before running spec_to_ars()
@@ -126,6 +126,13 @@ ars_validate_supplement <- function(path, adam_spec_path = NULL) {
       if (!nzchar(trimws(as.character(entry$title %||% "")))) {
         note("INFO", tlf, "title",
              "add a 'title' (the shell heading text) so arsbridge can confirm it parsed this same table")
+      }
+
+      ## Statistic-row meanings. Every problem is a FAIL: an entry that does
+      ## not validate is dropped, and a dropped entry means a row the author
+      ## believes is answered is silently still unresolved.
+      for (p in .supp_statistic_rows(entry)$problems) {
+        note("FAIL", tlf, "statisticRows", p)
       }
 
       ot <- toupper(trimws(as.character(entry$outputType %||% "")))

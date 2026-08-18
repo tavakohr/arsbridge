@@ -423,6 +423,30 @@
   analysis <- by_id(parent$analysis_id)
   if (is.null(analysis)) return(NULL)
 
+  ## `expected_scope` is a CROSS-CHECK, never an input. Scope is a property of
+  ## the METHOD and is already known from the ARS, so a supplement declaring
+  ## one is stating which kind of block it believed it was reading. A
+  ## disagreement means the entry was written against a different row -- its
+  ## tokens may be attached to this row and be about another one -- so it is
+  ## reported and never allowed to change what the method says.
+  ##
+  ## Checked HERE, above the per-category gate, so it is reported in both
+  ## directions. Below the gate only continuous parents would ever reach it,
+  ## and the more informative half -- an entry declaring "continuous" on a row
+  ## that is in fact a category level -- would be the half that never fired.
+  declared_scope <- tolower(as.character(entry$stat_expected_scope %||% ""))
+  if (length(declared_scope) != 1L || is.na(declared_scope)) declared_scope <- ""
+  actual_scope <- if ((analysis$methodId %||% "") %in% .DECODE_METHOD_IDS) {
+    "categorical"
+  } else {
+    "continuous"
+  }
+  scope_conflict <- if (nzchar(declared_scope) &&
+                          !identical(declared_scope, actual_scope)) {
+    list(declared = declared_scope, actual = actual_scope,
+         method_id = analysis$methodId %||% "?")
+  }
+
   ## Under a per-category parent an unannotated child row is a LEVEL, whatever
   ## its label looks like, and the grammar is not consulted at all.
   ##
@@ -435,6 +459,7 @@
   if ((analysis$methodId %||% "") %in% .DECODE_METHOD_IDS) {
     return(list(analysis_id = parent$analysis_id, analysis = analysis,
                 stats = method_stats(analysis),
+                scope_conflict = scope_conflict,
                 variable_level = entry$label %||% NA_character_))
   }
 
@@ -442,25 +467,66 @@
   ## reading could never match and there is nothing to lose by reading the
   ## label. What there IS to lose is binding it wrongly, so a label this
   ## grammar cannot read binds nothing and says so.
-  req <- request(analysis)
-  if (is.null(req)) {
+  ## Two sources can answer, and which wins is decided here, once:
+  ##
+  ##   grammar only        the ordinary case.
+  ##   supplement only     the gap this channel exists for: nothing could read
+  ##                       the label, so a reviewed request stands in for it.
+  ##   both, agreeing      no conflict; the grammar is the recorded source,
+  ##                       because it needed no review to get there.
+  ##   both, disagreeing   `fill_gaps` is the default and the DETERMINISTIC
+  ##                       reading wins. Only a per-row reviewed override
+  ##                       changes that -- never a file-wide trust mode, which
+  ##                       would let one setting silently re-mean every
+  ##                       statistic row in a shell. Either way both sides are
+  ##                       recorded and the disagreement is reported.
+  grammar <- .parse_stat_label(entry$label)
+  supp    <- as.character(entry$stat_tokens %||% character())
+
+  tokens       <- grammar
+  token_source <- if (length(grammar) > 0L) "grammar" else NA_character_
+  conflict     <- NULL
+
+  if (length(supp) > 0L) {
+    if (length(grammar) == 0L) {
+      tokens       <- supp
+      token_source <- "supplement"
+    } else if (!identical(grammar, supp)) {
+      override <- isTRUE(entry$stat_tokens_override)
+      conflict <- list(grammar = grammar, supplement = supp,
+                       resolved_to = if (override) "supplement" else "grammar")
+      if (override) {
+        tokens       <- supp
+        token_source <- "supplement"
+      }
+    }
+  }
+
+  if (length(tokens) == 0L) {
     return(list(analysis_id = parent$analysis_id, analysis = analysis,
                 stats = list(), stat_line = entry$label,
-                unreadable = TRUE,
+                unreadable = TRUE, scope_conflict = scope_conflict,
                 available = vapply(method_stats(analysis),
                                    function(s) as.character(s$operation_id %||% "?"),
                                    character(1))))
   }
-  if (length(req$resolved$unsupported) > 0L) {
+
+  ## The method gate applies to BOTH sources, unchanged. A reviewed request for
+  ## a statistic this method does not declare is refused exactly as a label
+  ## asking for it would be: review makes a request legible, not possible, and
+  ## no reviewer can make an engine produce a statistic it has no operation for.
+  res <- .resolve_stat_tokens(tokens, methods, analysis$methodId %||% "")
+  if (length(res$unsupported) > 0L) {
     return(list(analysis_id = parent$analysis_id, analysis = analysis,
                 stats = list(), stat_line = entry$label,
-                tokens = req$tokens,
-                unsupported = req$resolved$unsupported,
-                available = req$resolved$available))
+                tokens = tokens, token_source = token_source,
+                conflict = conflict, scope_conflict = scope_conflict,
+                unsupported = res$unsupported, available = res$available))
   }
   list(analysis_id = parent$analysis_id, analysis = analysis,
-       stats = req$resolved$stats, stat_line = entry$label,
-       tokens = req$tokens)
+       stats = res$stats, stat_line = entry$label,
+       tokens = tokens, token_source = token_source, conflict = conflict,
+       scope_conflict = scope_conflict)
 }
 
 #' One record per body cell of a table sheet.
@@ -508,6 +574,9 @@
   ## named a statistic the method does not declare. Same one-report-per-row
   ## treatment, different message, because they are different problems.
   refused_rows <- list()
+  ## Rows where the label and a reviewed supplement each named statistics and
+  ## disagreed. Reported once per row, whichever side won.
+  conflict_rows <- list(); scope_rows <- list()
   for (i in seq_len(nrow(grid))) {
     ## A literal is a label, a footnote, or a number the author typed. The
     ## fill writer must leave every one of them exactly as authored.
@@ -584,6 +653,26 @@
     if (!is.null(binding$stat_line)) {
       record$stat_line <- binding$stat_line
     }
+    ## Provenance, recorded only when it is NOT the grammar. Stamping every
+    ## statistic cell with "grammar" would say nothing a reader does not
+    ## already assume, and would move the cell map of every shell that has
+    ## one. An absent field means the label was read; a present one names what
+    ## answered instead.
+    if (identical(binding$token_source, "supplement")) {
+      record$binding_source <- "supplement"
+    }
+    if (!is.null(binding$conflict)) {
+      conflict_rows[[as.character(grid$row[[i]])]] <- c(
+        binding$conflict,
+        list(row = grid$row[[i]], label = binding$stat_line %||% ""))
+    }
+    ## Keyed by sheet row, so a row spanning many columns is reported once.
+    if (!is.null(binding$scope_conflict)) {
+      lbl <- binding$stat_line %||% binding$variable_level %||% ""
+      if (length(lbl) != 1L || is.na(lbl)) lbl <- ""
+      scope_rows[[as.character(grid$row[[i]])]] <- c(
+        binding$scope_conflict, list(row = grid$row[[i]], label = lbl))
+    }
     record$slots <- .bind_slots(grid$slots[[i]], binding$stats)
     if (length(record$slots) == 0) {
       record$kind <- "pending"
@@ -623,6 +712,58 @@
         n_stats = length(binding$stats))
     }
     cells[[length(cells) + 1L]] <- record
+  }
+
+  ## The label and a reviewed supplement disagreed. Never silent in either
+  ## direction: under the default the deterministic reading won and the
+  ## reviewer needs to know their correction did not apply; under a per-row
+  ## override the reviewer replaced a reading that DID resolve, which is the
+  ## more consequential of the two.
+  for (cf in conflict_rows) {
+    won <- identical(cf$resolved_to, "supplement")
+    .diag_gap(
+      stage = "build_ars", severity = "WARN", input = INPUT_SUPPLEMENT,
+      problem = sprintf(
+        "Row %d of %s: the label %s reads as %s; the reviewed supplement says %s. %s",
+        cf$row, section$sheet_name %||% section$tlf_number %||% "?",
+        dQuote(cf$label, q = FALSE), paste(cf$grammar, collapse = ", "),
+        paste(cf$supplement, collapse = ", "),
+        if (won) "The supplement was used (override set on this row)."
+        else "The label was used."),
+      why = if (won)
+        paste("A per-row reviewed override replaces a reading that resolved on",
+              "its own -- the strongest thing a supplement can do.")
+      else
+        paste("fill_gaps is the default: a supplement answers where the",
+              "deterministic reading could not, and does not replace one that",
+              "could."),
+      fix = if (won)
+        "Remove `override` from this row if the label was right."
+      else
+        "If the supplement is right, set `override: true` on this row after checking it against the shell.",
+      tlf_number = section$tlf_number, location = section$sheet_name %||% "")
+  }
+
+  ## The supplement declared which KIND of block it was reading, and the
+  ## method says otherwise. Reported, never acted on: `expected_scope` is
+  ## documented as a cross-check, and the method is the thing that knows.
+  ## Worth saying out loud because an entry that misread the block is an entry
+  ## whose tokens probably belong to a different row.
+  for (sc in scope_rows) {
+    .diag_gap(
+      stage = "build_ars", severity = "WARN", input = INPUT_SUPPLEMENT,
+      problem = sprintf(
+        paste("Row %d of %s: the supplement declares expected_scope %s for",
+              "%s, but the row's method (%s) is %s."),
+        sc$row, section$sheet_name %||% section$tlf_number %||% "?",
+        dQuote(sc$declared, q = FALSE), dQuote(sc$label, q = FALSE),
+        sc$method_id, sc$actual),
+      why = paste("expected_scope is a cross-check, not an input: the method",
+                  "decides the scope, so the declaration was not applied."),
+      fix = paste("Check the entry against the shell -- an entry that misread",
+                  "the block may be naming the wrong row. Correct the scope,",
+                  "or drop the field if it was guesswork."),
+      tlf_number = section$tlf_number, location = section$sheet_name %||% "")
   }
 
   ## A row whose label arsbridge refused to bind. Reported once per row, and

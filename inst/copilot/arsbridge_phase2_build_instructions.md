@@ -202,3 +202,47 @@ Before delivery: compare inventory counts against the blueprint; reject
 duplicates and placeholders; confirm no incomplete TLF is labelled complete;
 confirm the report agrees with the supplement; parse both as strict JSON.
 Deliver both complete files, not a preview.
+
+## Statistic rows (optional): `statisticRows`
+
+Some rows name STATISTICS rather than a variable -- "Mean (SD)", "Median",
+"Q1; Q3". arsbridge reads those labels itself and usually needs no help. When
+it cannot read one, it fills nothing on that row and reports it, because
+guessing would write a real number of the wrong statistic.
+
+`statisticRows` is how you answer that report. Include an entry ONLY for a row
+whose label arsbridge could not read; there is no value in restating labels it
+already understands.
+
+```json
+"statisticRows": [
+  {
+    "row_label": "Adjusted mean (95% CI)",
+    "semantic_tokens": ["mean", "ci_low", "ci_high"],
+    "status": "proposal",
+    "source": "llm",
+    "confidence": 0.94,
+    "evidence": "row 12, under \"LS mean change [ADQX.CHG]\""
+  }
+]
+```
+
+- **`row_label`** — the stub text exactly as the shell writes it. Rows are
+  matched by label, never by position.
+- **`semantic_tokens`** — the statistics the row shows, **in the order it shows
+  them**, from exactly this list: `count`, `pct`, `mean`, `sd`, `se`, `median`,
+  `q1`, `q3`, `min`, `max`, `cv`, `geomean`, `ci_low`, `ci_high`, `events`,
+  `pvalue`. Repeat a token if the row shows that statistic twice.
+- **`status`** — **write `"proposal"`.** Only a person may write `"reviewed"`,
+  and only a `"reviewed"` row is ever applied. A proposal is recorded and
+  reported so a human can check it; it changes no output.
+- **`source`** — `"llm"` if you produced it, `"supplement"` if a person did.
+- **`reviewed_by`** — required when `status` is `"reviewed"`. Do not write this.
+- **`override`** — for a reviewed row only, and only when arsbridge's own
+  reading of the label disagrees and the reviewer wants theirs used instead.
+
+**Never name an ARS operation (`OP_MEAN`) or an engine statistic name (`N`,
+`p25`, `conf.low`) in `semantic_tokens`.** Name the statistic; arsbridge
+chooses the operation from the row's method. A row asking for a statistic the
+method does not produce is refused whole and reported -- being reviewed makes a
+request legible, not possible.

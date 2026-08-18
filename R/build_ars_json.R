@@ -1275,10 +1275,30 @@ build_ars_json <- function(sections,
         ## the layout so the renderer keeps it, but it has no analysis.
         ## A spacer also ends any categorical block above it.
         cat_parent <- NULL
-        shell_layout[[length(shell_layout) + 1L]] <- .with_sheet_row(list(
+        label_entry <- .with_sheet_row(list(
           order = length(shell_layout) + 1L,
           label = row$label %||% "", indent = indent,
           analysis_id = NA_character_, kind = "label"), row)
+        ## A REVIEWED supplement may say what a statistic row means when the
+        ## label grammar could not read it. Carried on the layout entry
+        ## because that is the only record of this row the fill stage sees.
+        ## Only TOKENS travel -- what the row asks for. Whether the row's
+        ## method can provide them is decided at fill time, by the method,
+        ## exactly as it is for a label the grammar did read.
+        if (length(row$supplement_stat_tokens %||% character()) > 0) {
+          label_entry$stat_tokens <- as.character(row$supplement_stat_tokens)
+          label_entry$stat_tokens_source <-
+            as.character(row$supplement_stat_source %||% "supplement")
+          label_entry$stat_tokens_override <-
+            isTRUE(row$supplement_stat_override)
+          ## Declared scope travels with the tokens, and only as a claim to be
+          ## checked: the method decides what the row's scope IS.
+          if (nzchar(row$supplement_stat_scope %||% "")) {
+            label_entry$stat_expected_scope <-
+              as.character(row$supplement_stat_scope)
+          }
+        }
+        shell_layout[[length(shell_layout) + 1L]] <- label_entry
         next
       }
 
