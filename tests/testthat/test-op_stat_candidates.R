@@ -320,9 +320,9 @@ test_that("the count line of a continuous block fills", {
   ## filled the count by shifting the other statistics onto the wrong
   ## operations fails here.
   for (j in 2:4) {
-    expect_true(grepl("^[0-9.]+ \\([0-9.]+\\)$", out$cell(6, j)), info = j)
-    expect_false(grepl("x", out$cell(7, j), ignore.case = TRUE), info = j)
-    expect_false(grepl("x", out$cell(8, j), ignore.case = TRUE), info = j)
+    expect_true(grepl("^[0-9.]+ \\([0-9.]+\\)$", out$cell(6, j)), info = as.character(j))
+    expect_false(grepl("x", out$cell(7, j), ignore.case = TRUE), info = as.character(j))
+    expect_false(grepl("x", out$cell(8, j), ignore.case = TRUE), info = as.character(j))
   }
 
   ## Every cell of the block filled -- all four lines, both arms and Total.

@@ -183,6 +183,22 @@ ars_fill_summary <- function(census) {
           "annotation typed the row as something else. Annotate the row",
           "as what the placeholder shows (a count, a count with",
           "percentage, a summary)."),
+  "the row's label does not name a statistic arsbridge can read" =
+    paste("The row shows a placeholder under a summary block, but its label",
+          "names no statistic the label grammar recognises -- so nothing was",
+          "bound, rather than binding whichever statistic the method happens",
+          "to list first. The build stage logged a WARN naming the label and",
+          "the statistics the method does produce. Rename the row to a",
+          "statistic (Mean (SD), Median, Q1, Q3, Min - Max, 95% CI, ...) or",
+          "annotate it so it is analysed in its own right."),
+  "the row's label names a statistic this analysis does not produce" =
+    paste("The label was read correctly, and the analysis cannot supply what",
+          "it asks for -- an SE line over a method declaring no standard",
+          "error, say. The whole row is left on placeholder rather than",
+          "part-filled, because binding only the statistics that did resolve",
+          "would shift the rest onto the wrong ones. The build stage logged a",
+          "WARN naming the statistic, the method, and what that method",
+          "declares. Change the row, or assign a method that produces it."),
   "not bound to an analysis" =
     paste("The cell reached the writer without an analysis behind it: the",
           "row's annotation never resolved. Check the stub row's",

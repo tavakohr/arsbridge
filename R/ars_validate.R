@@ -1255,15 +1255,20 @@
     ## persisted placeholder metadata.
     rows <- .shell_table_data(output_node, model)$rows
     for (j in seq_len(nrow(rows))) {
-      requested <- .stats_for_line(rows$label[j])
+      ## The label names SEMANTIC statistics -- "n" is a count, whatever the
+      ## engine will spell it -- so the comparison cannot be against engine
+      ## names. `.resolve_stat_tokens()` is the one place that decides whether
+      ## a method covers a request, which is what keeps this check and the
+      ## fill layer from disagreeing about the same row.
+      requested <- .parse_stat_label(rows$label[j])
       analysis_id <- rows$owner_analysis_id[j]
       method_id <- rows$method_id[j]
       if (is.null(requested) || is.na(analysis_id) || is.na(method_id)) next
       ## Same reasoning as check_request(): a reserved row is not a mismatch.
       if (isTRUE(unname(declares_no_result[method_id]))) next
 
-      avail <- stats_by_method[[method_id]] %||% list(names = character(0))
-      missing <- setdiff(requested, avail$names)
+      missing <- .resolve_stat_tokens(requested, model$methods$raw,
+                                      method_id)$unsupported
       if (length(missing) == 0L) next
 
       findings <- .add_finding(
