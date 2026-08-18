@@ -109,3 +109,22 @@
 ##
 ## Naming it once is the fix. Neither side may spell it independently.
 .MANUAL_STAT_NAME <- "result"
+
+## Why a statistic row's label bound nothing.
+##
+## Stated once because three places must agree: `.build_table_cells()` records
+## the code, `ars_unresolved_labels()` reports it, and the supplement channel
+## that will answer these rows decides what it may answer FROM it. The two are
+## genuinely different problems and lead to different work, so they are never
+## collapsed into one "unresolved":
+##
+##   unreadable  arsbridge could not read the label as a statistic at all.
+##               The vocabulary is missing a spelling, or the row is not a
+##               statistic row. Somebody must say what it means.
+##   unsupported the label was read correctly and names a statistic the row's
+##               method does not declare. The meaning is not in doubt; the
+##               method is wrong for the row, or the statistic is beyond the
+##               engine. Nobody can supply a synonym that fixes this.
+.UNRESOLVED_UNREADABLE  <- "unreadable"
+.UNRESOLVED_UNSUPPORTED <- "unsupported"
+.UNRESOLVED_REASONS     <- c(.UNRESOLVED_UNREADABLE, .UNRESOLVED_UNSUPPORTED)

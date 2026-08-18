@@ -103,6 +103,7 @@ reference:
   contents:
   - ars_diagnostics
   - ars_blockers
+  - ars_unresolved_labels
   - ars_fill_summary
   - write_fill_debrief
   - write_fix_report
