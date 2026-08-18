@@ -87,6 +87,54 @@
   tolower(nm)
 }
 
+## Where the method changes what an operation is CALLED in the ARD.
+##
+## `.OP_STAT_NAMES` above reads the operation id alone, and that is not enough:
+## the engine spells the same operation differently depending on the idiom the
+## method runs under. The count of non-missing observations of a continuous
+## variable comes back as "N"; the frequency of a category comes back as "n",
+## and for the counting methods "N" is the DENOMINATOR. One global map cannot be
+## right for both -- with `OP_N = "n"` the count line of every continuous block
+## joins nothing and is reported as having no result at all, which reads as "the
+## analysis failed" for a number that is sitting in the ARD under another name.
+##
+## So the mapping is a property of the (method, operation) pair. Only the
+## departures from `.OP_STAT_NAMES` are listed; everything else falls through to
+## it. Each entry is an ordered set of CANDIDATES and a cell matches if the ARD
+## carries any of them, which is what makes the map tolerant of an engine that
+## spells a statistic differently without making it guess.
+##
+## The invariant that keeps this safe, and that test-op_stat_candidates.R
+## asserts over the whole method catalogue: within one method, no two operations
+## may share a candidate. If they did, one operation would answer another's cell
+## -- exactly the `OP_N`/`OP_DENOM` collision a blanket case-insensitive match
+## would have introduced here.
+.OP_STAT_CANDIDATES <- list(
+  MTH_SUMMARY_STATISTICS_CONTINUOUS = list(
+    ## "n" trails "N" so the map still reads an engine that lower-cases the
+    ## count. It cannot collide: this method declares no denominator.
+    OP_N = c("N", "n")
+  )
+)
+
+#' Every ARD stat_name an operation may produce under one method, best first.
+#'
+#' The first element is the primary -- what the cell map records and what the
+#' census reports. The rest widen the join only.
+#' @noRd
+.operation_stat_names <- function(method_id, op_id, op_name) {
+  id  <- as.character(op_id %||% "")
+  mid <- as.character(method_id %||% "")
+  if (length(mid) != 1L || is.na(mid)) mid <- ""
+  ## Exact `%in% names()` before `[[`: a list subscripted by an unknown key
+  ## errors rather than returning NULL, and an unknown method here is ordinary.
+  if (nzchar(id) && nzchar(mid) && mid %in% names(.OP_STAT_CANDIDATES)) {
+    per_method <- .OP_STAT_CANDIDATES[[mid]]
+    if (id %in% names(per_method)) return(as.character(per_method[[id]]))
+  }
+  .operation_stat_name(op_id, op_name)
+}
+
 #' The statistics one method emits, in the order its operations declare --
 #' which is the order a compound placeholder's slots are read in.
 #'
@@ -108,8 +156,13 @@
   ## slot after it onto the wrong statistic.
   ops <- Filter(function(o) !identical(o$id, "OP_DENOM"), ops)
   lapply(ops, function(o) {
-    list(operation_id = o$id %||% NA_character_,
-         stat_name    = .operation_stat_name(o$id, o$name))
+    candidates <- .operation_stat_names(method_id, o$id, o$name)
+    slot <- list(operation_id = o$id %||% NA_character_,
+                 stat_name    = candidates[[1]])
+    ## Only carried when it says something the primary does not, so the cell
+    ## map stays byte-identical for every operation with one spelling.
+    if (length(candidates) > 1L) slot$stat_names <- candidates
+    slot
   })
 }
 
@@ -373,9 +426,23 @@
   named <- .stats_for_line(entry$label)
   if (!is.null(named)) {
     all_stats <- method_stats(analysis)
-    by_name <- stats::setNames(all_stats,
-                               vapply(all_stats, function(s) s$stat_name,
-                                      character(1)))
+    ## Index the method's operations by EVERY spelling each can produce, not
+    ## only the primary one. A statistic line names its statistic in the
+    ## engine's vocabulary -- an "n" line asks for a count -- while the
+    ## operation that produces it may carry another spelling as its primary
+    ## ("N", for a continuous summary). Keying on the primary alone leaves the
+    ## line bound to a name the ARD does not carry, which is the same defect
+    ## one layer up.
+    ##
+    ## Well-defined because candidates are disjoint within a method (asserted
+    ## in test-op_stat_candidates.R), so no spelling can name two operations.
+    by_name <- list()
+    for (s in all_stats) {
+      for (nm in (s$stat_names %||% s$stat_name)) {
+        if (is.na(nm) || !nzchar(nm) || !is.null(by_name[[nm]])) next
+        by_name[[nm]] <- s
+      }
+    }
     ## Keep the order the LINE states, and carry a stat the method did not
     ## declare rather than dropping it -- the shell asked for it, and the
     ## fill writer reporting it as pending is more use than its silent
@@ -581,6 +648,11 @@
       operation_id = if (is.null(op)) NA_character_ else op$operation_id,
       stat_name    = if (is.null(op)) NA_character_ else op$stat_name
     )
+    ## The widened join key, when the operation has one. A statistic line
+    ## builds its own single-spelling operations, so most slots carry none.
+    if (!is.null(op) && length(op$stat_names %||% character()) > 1L) {
+      out[[length(out)]]$stat_names <- op$stat_names
+    }
   }
   out
 }
