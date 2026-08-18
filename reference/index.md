@@ -83,6 +83,8 @@ diagnosis.
   : Retrieve pipeline diagnostics from the most recent run
 - [`ars_blockers()`](https://tavakohr.github.io/arsbridge/reference/ars_blockers.md)
   : Blocking problems from the most recent run, in plain English
+- [`ars_unresolved_labels()`](https://tavakohr.github.io/arsbridge/reference/ars_unresolved_labels.md)
+  : The statistic rows arsbridge refused to bind
 - [`ars_fill_summary()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_summary.md)
   : Roll a fill census up into the three tables a reader actually asks
   for.
