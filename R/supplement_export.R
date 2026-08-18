@@ -296,7 +296,7 @@ write_supplement_draft <- function(shell_path,
     row <- rows[[i]]
     label <- trimws(row$label %||% "")
     if (!nzchar(label)) next
-    is_statline <- .norm_label(label) %in% .STATLINE_ROW_LABELS
+    is_statline <- .is_statline_row_label(label)
 
     if (!isTRUE(row$has_annot)) {
       if (!is_statline) {

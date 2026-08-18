@@ -41,16 +41,11 @@
     if (identical(owner_kind, "categorical")) return("xx (xx.x%)")
     if (identical(owner_kind, "manual")) return(.MANUAL_MARKER)
 
-    ## A stat line under a continuous parent, keyed on its authored text the
-    ## same way the renderer matches it (.norm_label).
-    key <- .norm_label(label)
-    if (identical(key, "n"))            return("xx")
-    if (identical(key, "mean sd"))      return("xx.x (x.xx)")
-    if (identical(key, "median"))       return("xx.x")
-    if (identical(key, "min max"))      return("(xx.x, xx.x)")
-    if (identical(key, "q1 q3"))        return("(xx.x, xx.x)")
-    if (identical(key, "median q1 q3")) return("xx.x (xx.x, xx.x)")
-    return("xx.x")
+    ## A stat line under a continuous parent. The shape follows the
+    ## STATISTICS the label names, not its exact spelling -- this used to be
+    ## six .norm_label() comparisons, so "Mean (Standard Deviation)" got a
+    ## different shape from "Mean (SD)" for no stateable reason.
+    return(.statline_placeholder(label))
   }
 
   ## Synthesized fallback rows and supplement additions: read the method.
