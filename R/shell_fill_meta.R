@@ -275,8 +275,16 @@
     return(fill)
   }
 
-  fill$cells  <- .build_table_cells(section, shell_layout, analyses, methods,
-                                    fill$columns, grid)
+  built <- .build_table_cells(section, shell_layout, analyses, methods,
+                              fill$columns, grid)
+  fill$cells <- built$cells
+  ## Rows whose label bound no statistic, carried so `ars_unresolved_labels()`
+  ## can report them. Recorded only when there ARE any: an absent field keeps
+  ## the cell map of a shell with nothing unresolved byte-identical to what it
+  ## was before this existed, which is what makes the golden diff readable.
+  if (length(built$unresolved) > 0) {
+    fill$unresolved <- built$unresolved
+  }
   fill$nested <- .build_nested_fill(shell_layout)
   categorical <- .build_categorical_fills(section, shell_layout)
   if (length(categorical) > 0) {
@@ -595,7 +603,13 @@
         refused_rows[[as.character(grid$row[[i]])]] <- list(
           row         = grid$row[[i]],
           label       = binding$stat_line %||% "",
+          analysis_id = binding$analysis_id %||% NA_character_,
           method_id   = binding$analysis$methodId %||% "?",
+          ## The same two-way split the pending reason above makes, as a
+          ## stable code rather than a sentence: a reader deciding what to do
+          ## about the row keys on this, and prose is not a key.
+          reason      = if (isTRUE(binding$unreadable)) .UNRESOLVED_UNREADABLE
+                        else .UNRESOLVED_UNSUPPORTED,
           tokens      = binding$tokens %||% character(),
           unsupported = binding$unsupported %||% character(),
           available   = binding$available %||% character())
@@ -664,7 +678,13 @@
                   "percentage)."),
       tlf_number = section$tlf_number, location = section$sheet_name %||% "")
   }
-  cells
+
+  ## The refusals travel back with the cells rather than living only in the
+  ## WARNs above. A diagnostic is prose addressed to a reader; this is the
+  ## same facts as data, so a caller can work the queue instead of parsing
+  ## sentences. `unname()` because the keys were only ever row numbers used
+  ## to make the accumulation one-per-row.
+  list(cells = cells, unresolved = unname(refused_rows))
 }
 
 #' The column-axis grouping an analysis reports its results by.
