@@ -258,10 +258,16 @@ test_that("a slot resolves through a secondary spelling of its operation", {
           sprintf("%s.%s='%s'", vocab$ds, vocab$arm, vocab$a)), 3, 2L)
   put(ann(sprintf("%s (N=XX)", vocab$b),
           sprintf("%s.%s='%s'", vocab$ds, vocab$arm, vocab$b)), 3, 3L)
+  ## A Total column: the header names the scope it sums over rather than a
+  ## level of the column axis. Every statistic must resolve here too -- a
+  ## Total is a second pass of the same method, not a different one.
+  put(ann("Total (N=XX)",
+          sprintf("[%s.%s IN ('%s','%s')]", vocab$ds, vocab$arm,
+                  vocab$a, vocab$b)), 3, 4L)
   put(ann("Measure (units)", sprintf("[%s.%s]", vocab$ds, vocab$num)), 4)
   for (i in seq_along(.osc_LINES)) {
     put(.osc_LINES[[i]]$label, 4L + i)
-    for (j in 2:3) put(.osc_LINES[[i]]$placeholder, 4L + i, j)
+    for (j in 2:4) put(.osc_LINES[[i]]$placeholder, 4L + i, j)
   }
   shell <- file.path(dir, "shell.xlsx")
   wb$save(shell)
@@ -300,23 +306,34 @@ test_that("the count line of a continuous block fills", {
   expect_gt(sum(as.character(out$ard$stat_name) %in% "N", na.rm = TRUE), 0L)
 
   ## Row 5 is the count line (the block's parent row is row 4). Five of six
-  ## values are non-missing in the first arm, six of six in the second.
+  ## values are non-missing in the first arm, six of six in the second, and
+  ## eleven of twelve over the Total scope -- so the Total is distinguishable
+  ## from either column and from the number of subjects.
   expect_equal(out$cell(5, 2), "5")
   expect_equal(out$cell(5, 3), "6")
+  expect_equal(out$cell(5, 4), "11")
 
   ## And the placeholder is gone, which is the thing the reader sees.
   expect_false(grepl("x", out$cell(5, 2), ignore.case = TRUE))
 
-  ## The lines that already worked still work: a fix that filled the count by
-  ## shifting the other statistics onto the wrong operations fails here.
-  expect_true(grepl("^[0-9.]+ \\([0-9.]+\\)$", out$cell(6, 2)))
-  expect_false(grepl("x", out$cell(7, 2), ignore.case = TRUE))
-  expect_false(grepl("x", out$cell(8, 2), ignore.case = TRUE))
+  ## The lines that already worked still work, in every column: a fix that
+  ## filled the count by shifting the other statistics onto the wrong
+  ## operations fails here.
+  for (j in 2:4) {
+    expect_true(grepl("^[0-9.]+ \\([0-9.]+\\)$", out$cell(6, j)), info = j)
+    expect_false(grepl("x", out$cell(7, j), ignore.case = TRUE), info = j)
+    expect_false(grepl("x", out$cell(8, j), ignore.case = TRUE), info = j)
+  }
 
-  ## Every cell of the block filled -- all four lines, both columns.
+  ## Every cell of the block filled -- all four lines, both arms and Total.
   body <- out$census[out$census$row >= 5L, , drop = FALSE]
-  expect_equal(nrow(body), 8L)
-  expect_equal(sum(body$status %in% "filled"), 8L)
+  expect_equal(nrow(body), 12L)
+  expect_equal(sum(body$status %in% "filled"), 12L)
+
+  ## The Total column specifically: every statistic, not only the count.
+  total <- body[body$col == 4L, , drop = FALSE]
+  expect_equal(nrow(total), 4L)
+  expect_equal(sum(total$status %in% "filled"), 4L)
 
   ## The only cells still on a placeholder are the header's "(N=XX)", and they
   ## stay there for the documented reason: a table showing no percentage has no
@@ -328,7 +345,7 @@ test_that("the count line of a continuous block fills", {
   ## a leak there would fill these two cells with the count of one arm and pass
   ## silently. This is what notices.
   pending <- out$census[out$census$status %in% "pending", , drop = FALSE]
-  expect_equal(nrow(pending), 2L)
+  expect_equal(nrow(pending), 3L)   # both arms and Total
   expect_true(all(pending$row == 3L))
   expect_true(all(pending$reason ==
                     "no result in this column is shown as a percentage"))
@@ -346,10 +363,11 @@ test_that("the same block reads identically in a second vocabulary", {
 
   expect_equal(out$cell(5, 2), "5")
   expect_equal(out$cell(5, 3), "6")
+  expect_equal(out$cell(5, 4), "11")
 
   body <- out$census[out$census$row >= 5L, , drop = FALSE]
-  expect_equal(nrow(body), 8L)
-  expect_equal(sum(body$status %in% "filled"), 8L)
+  expect_equal(nrow(body), 12L)
+  expect_equal(sum(body$status %in% "filled"), 12L)
 })
 
 
