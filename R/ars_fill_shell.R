@@ -223,9 +223,14 @@
   none <- function(status, reason = NA_character_) {
     list(value = NA_real_, status = status, reason = reason)
   }
-  if (is.null(index) || is.na(stat_name %||% NA_character_)) {
+  ## `stat_name` may be a set of candidate spellings for one operation (see
+  ## .operation_stat_names). `||` on a vector is an error, so the emptiness
+  ## test is written for a vector and reads identically for the scalar case.
+  stat_name <- stat_name %||% NA_character_
+  if (is.null(index) || length(stat_name) == 0L || all(is.na(stat_name))) {
     return(none("no_row"))
   }
+  stat_name <- stat_name[!is.na(stat_name)]
 
   rows <- index$analysis_id %in% analysis_id & index$stat_name %in% stat_name
 
@@ -984,12 +989,17 @@
       statuses[[i]] <- "unbound"
       next
     }
+    ## The operation's full candidate set when the method spells it more than
+    ## one way; the primary alone otherwise. Widening the key here rather than
+    ## in the map is what keeps the persisted cell map unchanged for every
+    ## operation that has a single spelling.
+    stat_key <- slot$stat_names %||% stat
     hit <- .ard_value(
       index          = index,
       analysis_id    = analysis_id,
       group_level    = group_level,
       variable_level = level,
-      stat_name      = stat,
+      stat_name      = stat_key,
       nest_level     = nest_level,
       total_column   = total_column)
     statuses[[i]] <- hit$status

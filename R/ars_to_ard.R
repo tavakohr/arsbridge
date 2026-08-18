@@ -1664,7 +1664,105 @@ ars_to_ard <- function(ars_path, adam_dir, output_ids = NULL,
   computed <- !is.na(final_ard[["result_status"]]) &
     final_ard[["result_status"]] == "computed"
   final_ard[["derived_dt"]][computed] <- ts
+
+  ## Last, on the finished ARD: which declared operations produced no record.
+  .check_operation_coverage(final_ard, spec)
+
   return(final_ard)
+}
+
+#' Operations a method declared that the ARD carries no record for.
+#'
+#' The last thing a run can still say for itself. A cell reports "no result in
+#' the ARD" whether the analysis never ran, ran and produced nothing, or ran
+#' fine and wrote the statistic under a name the cell map does not ask for --
+#' three very different problems behind one sentence, and the reader cannot
+#' tell them apart from the filled workbook.
+#'
+#' This compares what the method DECLARED against what the ARD actually
+#' carries, once, after everything has executed, and names the operations with
+#' no record alongside the statistic names the engine did emit. That pairing is
+#' the whole point: an operation missing while the engine emitted eight
+#' statistics is a naming disagreement, and an operation missing while the
+#' engine emitted nothing is a failed analysis.
+#'
+#' Deliberately scoped to analyses that computed something AND ran the method
+#' they declared. A substituted method genuinely produces a different operation
+#' set (`method_actual` records the swap), so reporting that as a shortfall
+#' would bury the real ones.
+#'
+#' @noRd
+.check_operation_coverage <- function(ard, spec) {
+  need <- c("analysis_id", "stat_name", "result_status")
+  if (is.null(ard) || nrow(ard) == 0 || !all(need %in% names(ard))) {
+    return(invisible(NULL))
+  }
+  methods <- spec[["methods"]] %||% list()
+  if (length(methods) == 0) return(invisible(NULL))
+  by_id <- stats::setNames(
+    methods,
+    vapply(methods, function(m) as.character(m[["id"]] %||% ""), character(1)))
+
+  chr <- function(col, fallback = NULL) {
+    v <- ard[[col]]
+    if (is.null(v)) v <- fallback
+    if (is.null(v)) return(rep(NA_character_, nrow(ard)))
+    as.character(v)
+  }
+  aid      <- chr("analysis_id")
+  stat     <- chr("stat_name")
+  status   <- chr("result_status")
+  intended <- chr("method_intended", ard[["method_id"]])
+  actual   <- chr("method_actual",   ard[["method_id"]])
+
+  for (a in unique(aid[!is.na(aid)])) {
+    rows <- which(aid %in% a)
+    if (!any(status[rows] %in% "computed")) next
+
+    mid <- unique(intended[rows])
+    mid <- mid[!is.na(mid) & nzchar(mid)]
+    if (length(mid) != 1L) next
+    run <- unique(actual[rows])
+    run <- run[!is.na(run) & nzchar(run)]
+    if (!identical(run, mid)) next
+    ## `%in% names()` before `[[`: an unknown method id is ordinary here, and
+    ## `[[` on a list would error rather than return NULL.
+    if (!mid %in% names(by_id)) next
+
+    ops <- by_id[[mid]][["operations"]] %||% list()
+    if (length(ops) == 0) next
+
+    observed <- unique(stat[rows])
+    observed <- observed[!is.na(observed)]
+
+    absent <- character(0)
+    for (o in ops) {
+      cand <- .operation_stat_names(mid, o[["id"]], o[["name"]])
+      cand <- cand[!is.na(cand)]
+      if (length(cand) == 0 || any(cand %in% observed)) next
+      absent <- c(absent, sprintf("%s (expects %s)",
+                                  as.character(o[["id"]] %||% "?"),
+                                  paste(cand, collapse = " or ")))
+    }
+    if (length(absent) == 0) next
+
+    .diag_gap(
+      stage = "execute_ard", severity = "WARN", input = INPUT_ARS,
+      problem = sprintf(
+        paste("Analysis %s (%s) declares %d operation%s the ARD has no result",
+              "for: %s. The statistics it did emit are: %s."),
+        a, mid, length(absent), if (length(absent) == 1L) "" else "s",
+        paste(absent, collapse = "; "),
+        if (length(observed)) paste(observed, collapse = ", ") else "none"),
+      why = paste("Every cell bound to one of those operations will report",
+                  "that no result is in the ARD, which reads as a failed",
+                  "analysis whether or not the number was computed."),
+      fix = paste("If the engine emitted the statistic under another name,",
+                  "the operation's candidate spellings need it",
+                  "(.OP_STAT_CANDIDATES). If it emitted nothing, the",
+                  "analysis produced no value for that operation."))
+  }
+  invisible(NULL)
 }
 
 #' Manual-derivation worklist from an ARD

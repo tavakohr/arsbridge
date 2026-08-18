@@ -1107,12 +1107,25 @@
   method_ids <- model$methods$id[
     !is.na(model$methods$id) & nzchar(model$methods$id)
   ]
+  ## Two different quantities, and conflating them is a defect either way.
+  ##
+  ## `names` is every spelling the method's operations can produce, because a
+  ## shell line names its statistic in the ENGINE's vocabulary while an
+  ## operation may carry a different spelling as its primary -- a continuous
+  ## count is written "n" on the line and "N" in the ARD. Testing membership
+  ## against primaries alone reports a correct line as unprovidable.
+  ##
+  ## `n` is the number of visible operations, which is how many slots the
+  ## method can fill. It stays one per operation however many spellings that
+  ## operation answers to; counting spellings instead would quietly let a
+  ## placeholder ask for more numbers than exist.
   stats_by_method <- stats::setNames(lapply(method_ids, function(method_id) {
     slots <- .method_operation_slots(model$methods$raw, method_id)
-    available <- vapply(slots, function(slot) {
-      slot$stat_name %||% NA_character_
-    }, character(1))
-    stats::na.omit(available)
+    spellings <- unlist(lapply(slots, function(slot) {
+      slot$stat_names %||% slot$stat_name %||% NA_character_
+    }), use.names = FALSE)
+    spellings <- spellings[!is.na(spellings) & nzchar(spellings)]
+    list(names = unique(spellings), n = length(slots))
   }), method_ids)
   method_by_analysis <- stats::setNames(
     model$analyses$methodId,
@@ -1146,9 +1159,9 @@
     if (is.na(method_id) || !nzchar(method_id)) return(findings)
     if (isTRUE(unname(declares_no_result[method_id]))) return(findings)
 
-    available <- stats_by_method[[method_id]] %||% character(0)
-    missing <- setdiff(requested, available)
-    too_many <- n_slots > length(available)
+    avail <- stats_by_method[[method_id]] %||% list(names = character(0), n = 0L)
+    missing <- setdiff(requested, avail$names)
+    too_many <- n_slots > avail$n
     if (length(missing) == 0L && !too_many) return(findings)
 
     problem <- if (length(missing) > 0L) {
@@ -1159,8 +1172,8 @@
     } else {
       sprintf(
         "%s has %d slots, but method %s provides %d visible operation%s.",
-        description, n_slots, method_id, length(available),
-        if (length(available) == 1L) "" else "s"
+        description, n_slots, method_id, avail$n,
+        if (avail$n == 1L) "" else "s"
       )
     }
 
@@ -1249,8 +1262,8 @@
       ## Same reasoning as check_request(): a reserved row is not a mismatch.
       if (isTRUE(unname(declares_no_result[method_id]))) next
 
-      available <- stats_by_method[[method_id]] %||% character(0)
-      missing <- setdiff(requested, available)
+      avail <- stats_by_method[[method_id]] %||% list(names = character(0))
+      missing <- setdiff(requested, avail$names)
       if (length(missing) == 0L) next
 
       findings <- .add_finding(
