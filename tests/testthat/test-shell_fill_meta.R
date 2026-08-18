@@ -325,18 +325,38 @@ test_that("statistic lines round-trip through the renderer's own mapping", {
   ## .stats_for_line() is the inverse of .statline_for(). If one gains a
   ## statistic and the other does not, a shell line stops being fillable
   ## with no error anywhere -- so they are held together here.
+  ## `.statline_for()` speaks ENGINE names, so the round trip is asserted on
+  ## the label read THROUGH a method -- which is the only point at which a
+  ## semantic statistic becomes an engine one.
+  cont <- "MTH_SUMMARY_STATISTICS_CONTINUOUS"
+  eng <- function(line) .stats_for_line(line, .STANDARD_METHODS, cont)
+
   for (line in c("Mean (SD)", "Median")) {
-    stats <- .stats_for_line(line)
+    stats <- eng(line)
     expect_false(is.null(stats), info = line)
     for (sn in stats) {
       expect_equal(.statline_for(sn), line, info = paste(line, sn))
     }
   }
   ## The quartile and range lines the renderer writes with parentheses.
-  expect_equal(.stats_for_line("Q1, Q3"), c("p25", "p75"))
+  expect_equal(eng("Q1, Q3"), c("p25", "p75"))
   expect_equal(.statline_for("p25"), "(Q1, Q3)")
-  expect_equal(.stats_for_line("Min, Max"), c("min", "max"))
+  expect_equal(eng("Min, Max"), c("min", "max"))
   expect_equal(.statline_for("min"), "(Min, Max)")
+
+  ## The containment invariant, generated over every statistic the continuous
+  ## method declares rather than hand-listed: whatever line the renderer
+  ## writes for a statistic must read back as naming that statistic. A new
+  ## operation with no alias now turns this red by itself.
+  slots <- .method_operation_slots(.STANDARD_METHODS, cont)
+  checked <- 0L
+  for (s in slots) {
+    sn <- s$stat_name
+    back <- eng(.statline_for(sn))
+    expect_true(sn %in% back, info = paste(sn, "->", .statline_for(sn)))
+    checked <- checked + 1L
+  }
+  expect_gt(checked, 5L)
 })
 
 test_that("a label that is not a statistic line is treated as a level", {

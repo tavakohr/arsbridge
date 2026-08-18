@@ -166,68 +166,14 @@
   })
 }
 
-## Which statistics a STATISTIC LINE asks for.
+## The statistic-line lexicon moved to stat_label_grammar.R.
 ##
-## A continuous block is authored as a parent row carrying the variable
-## ("Age (years) [ADSL.AGE]") over unannotated lines that name the statistics
-## ("Mean (SD)", "Median", "Q1, Q3"). Those lines have no analysis of their
-## own -- they are the parent's results, one line each -- so a cell on one of
-## them is filled from the parent, selected by what the line is called.
-##
-## The names on the right are {cards} stat_names, and for the lines arsbridge
-## itself writes the mapping is the inverse of `.statline_for()` in
-## ars_to_tfrmt.R, which turns the same statistics back into the same line
-## labels when rendering. test-shell_fill_meta.R asserts those agree, so a
-## change to one is caught rather than quietly splitting the round trip.
-##
-## The two are not required to be inverses everywhere, and cannot be. This map
-## reads what an AUTHOR wrote in a shell; `.statline_for()` decides what
-## arsbridge writes when it lays a table out itself. An author may put several
-## statistics on ONE line -- "Median (Q1, Q3)" is the standard clinical form --
-## where the renderer, laying out its own table, gives each its own line. The
-## shell dictates the layout when an authored workbook is being filled, so a
-## combined line has to be readable here whether or not anything ever writes
-## it.
-.STAT_LINE_STATS <- list(
-  "n"          = "n",
-  "n (%)"      = c("n", "p"),
-  "mean"       = "mean",
-  "mean (sd)"  = c("mean", "sd"),
-  "sd"         = "sd",
-  "median"     = "median",
-  "min, max"   = c("min", "max"),
-  "max, min"   = c("max", "min"),
-  "range"      = c("min", "max"),
-  "q1, q3"     = c("p25", "p75"),
-  "q3, q1"     = c("p75", "p25"),
-  ## Combined lines: one row showing a centre and its spread together. Without
-  ## these the line matches nothing, the cell is left on its placeholder, and
-  ## the census reports "no result in the ARD for this cell" -- which is not
-  ## what happened. The results were in the ARD; nothing could name them.
-  "median (q1, q3)" = c("median", "p25", "p75"),
-  "median (q3, q1)" = c("median", "p75", "p25"),
-  "median (min, max)" = c("median", "min", "max"),
-  "mean (min, max)"   = c("mean", "min", "max")
-)
-
-#' The statistics a row label names, or NULL when the label is not a
-#' statistic line at all (in which case it is a level of the parent).
-#' @noRd
-.stats_for_line <- function(label) {
-  key <- tolower(trimws(gsub("[()]", " ", as.character(label %||% ""))))
-  key <- trimws(gsub("\\s+", " ", key))
-  ## "Mean (SD)" normalises to "mean sd"; look the label up both with its
-  ## parentheses collapsed to a space and in its original punctuated form,
-  ## so "n (%)" and "Q1, Q3" both resolve.
-  direct <- tolower(trimws(as.character(label %||% "")))
-  for (nm in names(.STAT_LINE_STATS)) {
-    flat <- trimws(gsub("\\s+", " ", gsub("[()]", " ", nm)))
-    if (identical(direct, nm) || identical(key, flat)) {
-      return(.STAT_LINE_STATS[[nm]])
-    }
-  }
-  NULL
-}
+## It was a closed list of fifteen exact spellings matched with `identical()`,
+## so any other way of writing the same statistics matched nothing and the row
+## was reclassified as a category level. `.stats_for_line()` now reads a
+## grammar, and returns SEMANTIC statistics rather than engine names unless a
+## method is supplied to resolve them -- see that file's header for why a
+## label may not decide an operation on its own.
 
 #' The result columns of a table sheet: which sheet column shows which
 #' position on the column axis, and what the shell labelled it.
@@ -404,6 +350,22 @@
     .method_operation_slots(methods, analysis$methodId %||% "")
   }
 
+  ## A label's request, resolved against one analysis's method, or NULL when
+  ## the label is not a statistic line.
+  ##
+  ## This is the whole point of the three-stage split: the label says WHAT it
+  ## wants, the method says whether it can provide it, and only then is an
+  ## operation chosen. A token the method does not declare refuses the ROW --
+  ## every slot of it -- because binding the tokens that did resolve would
+  ## shift the remainder onto the wrong statistics, which is a plausible wrong
+  ## number rather than a visible gap.
+  request <- function(analysis) {
+    tokens <- .parse_stat_label(entry$label)
+    if (is.null(tokens)) return(NULL)
+    res <- .resolve_stat_tokens(tokens, methods, analysis$methodId %||% "")
+    list(tokens = tokens, resolved = res)
+  }
+
   ## The row's own analysis.
   own_id <- entry$analysis_id %||% NA_character_
   if (!is.na(own_id)) {
@@ -411,9 +373,29 @@
     if (is.null(analysis)) return(NULL)
     binding <- list(analysis_id = own_id, analysis = analysis,
                     stats = method_stats(analysis))
-    ## A level row recorded as such by the builder already knows its value.
+    ## A level row recorded as such by the builder already knows its value,
+    ## and its label is a CODELIST VALUE -- which may read as a statistic
+    ## ("Range", "Median", "n (%)") and must never be parsed as one.
     if (identical(entry$kind, "level")) {
       binding$variable_level <- entry$level %||% NA_character_
+      return(binding)
+    }
+    ## An analysis row whose label names statistics outright ("n (%)") takes
+    ## them from the label rather than from operation order. Positional
+    ## binding stays for every other row -- a title like "Age (years)" or
+    ## "Sex, n (%)" carries an unrecognised word and is rejected whole, so in
+    ## practice only a bare statistic label reaches this branch.
+    req <- request(analysis)
+    if (!is.null(req)) {
+      binding$stat_line <- entry$label
+      binding$tokens    <- req$tokens
+      if (length(req$resolved$unsupported) > 0L) {
+        binding$stats       <- list()
+        binding$unsupported <- req$resolved$unsupported
+        binding$available   <- req$resolved$available
+      } else {
+        binding$stats <- req$resolved$stats
+      }
     }
     return(binding)
   }
@@ -423,41 +405,44 @@
   analysis <- by_id(parent$analysis_id)
   if (is.null(analysis)) return(NULL)
 
-  named <- .stats_for_line(entry$label)
-  if (!is.null(named)) {
-    all_stats <- method_stats(analysis)
-    ## Index the method's operations by EVERY spelling each can produce, not
-    ## only the primary one. A statistic line names its statistic in the
-    ## engine's vocabulary -- an "n" line asks for a count -- while the
-    ## operation that produces it may carry another spelling as its primary
-    ## ("N", for a continuous summary). Keying on the primary alone leaves the
-    ## line bound to a name the ARD does not carry, which is the same defect
-    ## one layer up.
-    ##
-    ## Well-defined because candidates are disjoint within a method (asserted
-    ## in test-op_stat_candidates.R), so no spelling can name two operations.
-    by_name <- list()
-    for (s in all_stats) {
-      for (nm in (s$stat_names %||% s$stat_name)) {
-        if (is.na(nm) || !nzchar(nm) || !is.null(by_name[[nm]])) next
-        by_name[[nm]] <- s
-      }
-    }
-    ## Keep the order the LINE states, and carry a stat the method did not
-    ## declare rather than dropping it -- the shell asked for it, and the
-    ## fill writer reporting it as pending is more use than its silent
-    ## absence.
-    stats_out <- lapply(named, function(sn) {
-      by_name[[sn]] %||% list(operation_id = NA_character_, stat_name = sn)
-    })
+  ## Under a per-category parent an unannotated child row is a LEVEL, whatever
+  ## its label looks like, and the grammar is not consulted at all.
+  ##
+  ## A codelist value is arbitrary sponsor-authored text: `Range`, `Median`,
+  ## `Q1, Q3` and `n (%)` are all values a codelist may legitimately contain.
+  ## Deciding by how the label reads would reserve or misfill a genuine
+  ## category level on nothing better than lexical resemblance. The method is
+  ## the evidence: these ARD rows all carry a variable_level, so the level
+  ## reading is the one that can match.
+  if ((analysis$methodId %||% "") %in% .DECODE_METHOD_IDS) {
     return(list(analysis_id = parent$analysis_id, analysis = analysis,
-                stats = stats_out, stat_line = entry$label))
+                stats = method_stats(analysis),
+                variable_level = entry$label %||% NA_character_))
   }
 
-  ## Not a statistic line, so it is a level of the parent's variable.
+  ## Under any other method the ARD carries no variable_level, so the level
+  ## reading could never match and there is nothing to lose by reading the
+  ## label. What there IS to lose is binding it wrongly, so a label this
+  ## grammar cannot read binds nothing and says so.
+  req <- request(analysis)
+  if (is.null(req)) {
+    return(list(analysis_id = parent$analysis_id, analysis = analysis,
+                stats = list(), stat_line = entry$label,
+                unreadable = TRUE,
+                available = vapply(method_stats(analysis),
+                                   function(s) as.character(s$operation_id %||% "?"),
+                                   character(1))))
+  }
+  if (length(req$resolved$unsupported) > 0L) {
+    return(list(analysis_id = parent$analysis_id, analysis = analysis,
+                stats = list(), stat_line = entry$label,
+                tokens = req$tokens,
+                unsupported = req$resolved$unsupported,
+                available = req$resolved$available))
+  }
   list(analysis_id = parent$analysis_id, analysis = analysis,
-       stats = method_stats(analysis),
-       variable_level = entry$label %||% NA_character_)
+       stats = req$resolved$stats, stat_line = entry$label,
+       tokens = req$tokens)
 }
 
 #' One record per body cell of a table sheet.
@@ -501,6 +486,10 @@
   ## Rows whose placeholder asks for more statistics than the analysis
   ## produces -- collected here and reported once per row after the walk.
   unbound_rows <- list()
+  ## Rows whose LABEL was refused: either the grammar could not read it, or it
+  ## named a statistic the method does not declare. Same one-report-per-row
+  ## treatment, different message, because they are different problems.
+  refused_rows <- list()
   for (i in seq_len(nrow(grid))) {
     ## A literal is a label, a footnote, or a number the author typed. The
     ## fill writer must leave every one of them exactly as authored.
@@ -579,8 +568,28 @@
     }
     record$slots <- .bind_slots(grid$slots[[i]], binding$stats)
     if (length(record$slots) == 0) {
-      record$kind   <- "pending"
-      record$reason <- "the method declares no statistic for this placeholder"
+      record$kind <- "pending"
+      ## Three different ways to have no statistic, and they send the reader
+      ## to three different places. Saying "the method declares no statistic"
+      ## for a line the grammar could not read sends them to the ARS to fix a
+      ## method that is not the problem.
+      record$reason <- if (isTRUE(binding$unreadable)) {
+        "the row's label does not name a statistic arsbridge can read"
+      } else if (length(binding$unsupported %||% character()) > 0L) {
+        "the row's label names a statistic this analysis does not produce"
+      } else {
+        "the method declares no statistic for this placeholder"
+      }
+      if (isTRUE(binding$unreadable) ||
+          length(binding$unsupported %||% character()) > 0L) {
+        refused_rows[[as.character(grid$row[[i]])]] <- list(
+          row         = grid$row[[i]],
+          label       = binding$stat_line %||% "",
+          method_id   = binding$analysis$methodId %||% "?",
+          tokens      = binding$tokens %||% character(),
+          unsupported = binding$unsupported %||% character(),
+          available   = binding$available %||% character())
+      }
     }
     unbound <- sum(vapply(record$slots, function(s) is.na(s$stat_name),
                           logical(1)))
@@ -590,6 +599,40 @@
         n_stats = length(binding$stats))
     }
     cells[[length(cells) + 1L]] <- record
+  }
+
+  ## A row whose label arsbridge refused to bind. Reported once per row, and
+  ## deliberately verbose: the reader needs the label as authored, the
+  ## statistic it asked for, the method that could not provide it, and what
+  ## that method DOES provide -- otherwise "no result in the ARD" is the only
+  ## thing they get, and it is not true.
+  for (r in refused_rows) {
+    .diag_gap(
+      stage = "build_ars", severity = "WARN", input = INPUT_SHELL,
+      problem = if (length(r$unsupported) > 0L) {
+        sprintf(paste("Row %d of %s reads %s as the statistic%s %s, which",
+                      "method %s does not produce. It declares: %s."),
+                r$row, section$sheet_name %||% section$tlf_number %||% "?",
+                dQuote(r$label, q = FALSE),
+                if (length(r$unsupported) == 1L) "" else "s",
+                paste(r$unsupported, collapse = ", "), r$method_id,
+                if (length(r$available)) paste(r$available, collapse = ", ")
+                else "no operations")
+      } else {
+        sprintf(paste("Row %d of %s shows a placeholder, but its label %s",
+                      "names no statistic arsbridge recognises. Method %s",
+                      "declares: %s."),
+                r$row, section$sheet_name %||% section$tlf_number %||% "?",
+                dQuote(r$label, q = FALSE), r$method_id,
+                if (length(r$available)) paste(r$available, collapse = ", ")
+                else "no operations")
+      },
+      why = paste("Every cell on the row is left on its placeholder rather",
+                  "than bound to whichever statistic happens to come first --",
+                  "that would write a real number of the wrong statistic."),
+      fix = paste("Either rename the row to a statistic the method produces,",
+                  "or annotate it so it is analysed in its own right."),
+      tlf_number = section$tlf_number, location = section$sheet_name %||% "")
   }
 
   ## A placeholder that asks for two numbers where the analysis produces one

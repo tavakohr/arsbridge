@@ -116,14 +116,26 @@
 
 
 test_that("a combined statistic line names all of its statistics", {
+  ## A-08's claim is unchanged; the vocabulary it is asserted in is not.
+  ##
+  ## A label names SEMANTIC statistics -- a quartile is a quartile however the
+  ## engine spells it -- so `.stats_for_line()` reports those, and reports
+  ## engine names only when a method is supplied to resolve them. Both halves
+  ## are asserted here, so this test now covers strictly more than it did:
+  ## what the label asked for, AND what the method turns that into.
+  cont <- "MTH_SUMMARY_STATISTICS_CONTINUOUS"
+  eng <- function(line) .stats_for_line(line, .STANDARD_METHODS, cont)
+
   ## The measured case: the line the register recorded as leaving 13 rows
   ## blank across two tables while the ARD held their results.
-  expect_equal(.stats_for_line("Median (Q1, Q3)"), c("median", "p25", "p75"))
+  expect_equal(.stats_for_line("Median (Q1, Q3)"), c("median", "q1", "q3"))
+  expect_equal(eng("Median (Q1, Q3)"), c("median", "p25", "p75"))
 
-  ## The other combined forms the map carries. Each is asserted rather than
-  ## assumed: an entry no test names is an entry nobody can rely on, and the
-  ## reversed orders exist because every other pair in the map carries both.
-  expect_equal(.stats_for_line("Median (Q3, Q1)"), c("median", "p75", "p25"))
+  ## The other combined forms. Each is asserted rather than assumed: a form no
+  ## test names is one nobody can rely on, and the reversed orders exist
+  ## because a label's order is what binds its placeholder slots.
+  expect_equal(.stats_for_line("Median (Q3, Q1)"), c("median", "q3", "q1"))
+  expect_equal(eng("Median (Q3, Q1)"), c("median", "p75", "p25"))
   expect_equal(.stats_for_line("Median (Min, Max)"), c("median", "min", "max"))
   expect_equal(.stats_for_line("Mean (Min, Max)"), c("mean", "min", "max"))
 
@@ -136,10 +148,10 @@ test_that("a combined statistic line names all of its statistics", {
     expect_true(all(.stats_for_line(line) %in% known), info = line)
   }
 
-  ## The lines that already worked are untouched, and a label that is not a
-  ## statistic line at all is still read as a level of the parent.
+  ## The lines that already worked are untouched.
   expect_equal(.stats_for_line("Median"), "median")
-  expect_equal(.stats_for_line("Q1, Q3"), c("p25", "p75"))
+  expect_equal(.stats_for_line("Q1, Q3"), c("q1", "q3"))
+  expect_equal(eng("Q1, Q3"), c("p25", "p75"))
   expect_equal(.stats_for_line("Mean (SD)"), c("mean", "sd"))
   expect_equal(.stats_for_line("Min, Max"), c("min", "max"))
   expect_null(.stats_for_line("Female"))
@@ -152,8 +164,11 @@ test_that("statistic lines still round-trip through the renderer's mapping", {
   ## not inverses everywhere and need not be: this map reads what an author
   ## wrote, and an author may put several statistics on one line where
   ## the renderer, laying out its own table, gives each its own.
+  ## `.statline_for()` speaks ENGINE names, so the round trip is asserted on
+  ## the resolved form -- the label read through a method.
+  cont <- "MTH_SUMMARY_STATISTICS_CONTINUOUS"
   for (line in c("Mean (SD)", "Median")) {
-    stats <- .stats_for_line(line)
+    stats <- .stats_for_line(line, .STANDARD_METHODS, cont)
     expect_false(is.null(stats), info = line)
     for (sn in stats) expect_equal(.statline_for(sn), line, info = line)
   }
