@@ -221,12 +221,18 @@ test_that("nothing in this channel reaches an LLM, and no code writes 'reviewed'
   ## can only come from outside, which is what makes review a human act.
   ##
   ## `test_path()` is rooted at tests/testthat, so two levels up is the package
-  ## root when the suite runs from source. Against an INSTALLED package there
-  ## is no R/ directory, and a scan of nothing would pass vacuously -- so that
+  ## root when the suite runs from source. An INSTALLED package still HAS an
+  ## R/ directory -- it holds the lazy-load database, not sources -- so the
+  ## condition is whether .R files are actually there to read, never whether
+  ## the directory exists. A scan of nothing would pass vacuously, so that
   ## case skips rather than pretending to have checked.
   r_dir <- testthat::test_path("..", "..", "R")
-  skip_if_not(dir.exists(r_dir), "package sources not available (installed run)")
-  files <- list.files(r_dir, pattern = "[.]R$", full.names = TRUE)
+  files <- if (dir.exists(r_dir)) {
+    list.files(r_dir, pattern = "[.]R$", full.names = TRUE)
+  } else {
+    character(0)
+  }
+  skip_if(length(files) == 0L, "package sources not available (installed run)")
   expect_gt(length(files), 20L)
   src <- unlist(lapply(files, readLines, warn = FALSE))
   ## Comments are dropped first. The invariant is about executable code, and
