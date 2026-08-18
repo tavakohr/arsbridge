@@ -66,6 +66,16 @@
   OP_Q3     = "p75",
   OP_MIN    = "min",
   OP_MAX    = "max",
+  ## Time-to-event operations. Without entries here these fell through to the
+  ## lower-cased operation NAME, so `OP_CI_LOW` asked the ARD for
+  ## "95% ci lower" -- a display label no engine emits, and one that changes
+  ## the moment somebody relabels the column. The confidence-limit names match
+  ## the ones `.UNEXECUTABLE_METHODS` already reserves for the proportion
+  ## methods, so the package speaks one vocabulary for a confidence limit
+  ## rather than one per method.
+  OP_EVENTS  = "events",
+  OP_CI_LOW  = "conf.low",
+  OP_CI_HIGH = "conf.high",
   ## The reservation operation. Without this entry it fell through to the
   ## lower-cased operation NAME ("manual derivation"), while the ARD stub
   ## carried .MANUAL_STAT_NAME -- so the join missed and a deliberately
