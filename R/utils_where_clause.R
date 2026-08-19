@@ -165,6 +165,72 @@
   ")"
 )
 
+## ---------------------------------------------------------------------------
+## Derivation notes
+## ---------------------------------------------------------------------------
+
+## A shell annotation may state, after a semicolon, how the row's variable is
+## DERIVED rather than how its records are FILTERED:
+##
+##   [ADQX.MEASDUR; = ADQX.ENDDY]
+##
+## Read as a filter, that clause says nothing this grammar can evaluate -- it
+## compares a variable to another variable, and an ARS condition compares a
+## variable to VALUES -- so the row reserved, and (because a filtered row is
+## counted rather than summarised) its whole block was typed as a subject
+## count. A continuous summary then read its own statistic rows as category
+## levels. One misread separator, a block of unfillable cells.
+##
+## What separates a derivation note from a filter is structural, and both
+## halves are load-bearing:
+##
+##   1. the clause has NO left operand -- it opens with the operator, so it
+##      states a relationship rather than restricting a named variable; and
+##   2. its right operand is a QUALIFIED ADaM reference, not a value.
+##
+## Either half alone would be wrong. Without (1), `ADQX.FLAG=Y` -- an ordinary
+## filter -- would be swept in. Without (2), `; >= 65` would be, and that IS a
+## filter: an author writing a threshold after the semicolon means "this
+## variable, restricted", with the left operand understood.
+##
+## Equality only, deliberately. "Is defined as" is what `=` says; `>=` between
+## two variables is a comparison whose intent this package cannot settle, so it
+## keeps today's behaviour and reserves.
+.RE_DERIVATION_NOTE <- paste0(
+  "^\\s*(?:=|==|EQ)\\s*", .ADAM_DS, "\\.", .ADAM_VAR, "\\s*$"
+)
+
+#' Split an annotation into its head and a trailing derivation note.
+#'
+#' Returns `list(head, note)`; `note` is `""` unless the annotation is exactly
+#' a qualified reference, a semicolon, and a derivation clause. Anything else
+#' -- a second condition, prose, more than one semicolon -- is returned
+#' unchanged, so this can only ever remove the one form it recognises.
+#'
+#' Quoting needs no masking here: the head must match the ADaM reference
+#' grammar and the note the pattern above, and neither admits a quote.
+#' @noRd
+.split_derivation_note <- function(ann) {
+  txt <- as.character(ann %||% "")
+  txt <- if (length(txt) == 0L) "" else txt[[1]]
+  if (is.na(txt) || !nzchar(trimws(txt))) return(list(head = "", note = ""))
+
+  parts <- strsplit(txt, ";", fixed = TRUE)[[1]]
+  if (length(parts) != 2L) return(list(head = txt, note = ""))
+  head <- trimws(parts[[1]]); note <- trimws(parts[[2]])
+
+  ref <- paste0("^", .ADAM_DS, "\\.", .ADAM_VAR, "$")
+  if (!grepl(ref, head, perl = TRUE)) return(list(head = txt, note = ""))
+  if (!grepl(.RE_DERIVATION_NOTE, note, perl = TRUE)) return(list(head = txt, note = ""))
+  list(head = head, note = note)
+}
+
+#' The annotation with any derivation note removed.
+#' @noRd
+.annotation_less_derivation_note <- function(ann) {
+  .split_derivation_note(ann)$head
+}
+
 #' Does this text attempt to express a condition?
 #'
 #' Read on MASKED text, so an operator inside a quoted value cannot be mistaken
