@@ -659,3 +659,68 @@
   }
   .STATLINE_PLACEHOLDER_DEFAULT
 }
+
+## ---------------------------------------------------------------------------
+## Observational: what the grammar made of a label (A-18a)
+## ---------------------------------------------------------------------------
+
+## This records what the grammar SAW. It decides nothing.
+##
+## `.parse_stat_label()` answers one question -- does this whole label name
+## statistics -- and answers "no" identically for a label that named none
+## ("Age (years)") and one that was clearly trying and failed
+## ("Response rate, % (95% CI)"). Those are different situations for a reader,
+## and nothing anywhere distinguishes them today.
+##
+## Reporting the difference is safe in a way that ACTING on it would not be: a
+## false "partial" costs a line in a report, where a false binding costs a real
+## number of the wrong statistic. That asymmetry is why this may exist while
+## the S-2 gate still refuses lexical plausibility as evidence for
+## classification. Nothing in this package may branch on this value.
+
+## Built from the alias PHRASES, not their canonical names. The names are the
+## engine's vocabulary ("sd"); the phrases are the authors' ("standard
+## deviation", "25th percentile", "n", "%"), and it is the authors' spellings a
+## label actually contains. Composite keys join them; the `<num>` wildcard
+## forms are dropped because the bare form ("ci") already covers them.
+.STAT_VOCAB_PHRASES <- local({
+  ph <- unique(c(unlist(.STAT_ALIASES, use.names = FALSE),
+                 names(.STAT_COMPOSITES)))
+  ph[nzchar(ph) & !grepl("<num>", ph, fixed = TRUE)]
+})
+
+.STAT_VOCAB_MAX_WORDS <- max(vapply(
+  strsplit(.STAT_VOCAB_PHRASES, " ", fixed = TRUE), length, integer(1)))
+
+#' Does this normalised label contain any phrase the vocabulary knows?
+#'
+#' Word n-grams rather than substrings: a substring test finds "n" inside
+#' "duration" and "se" inside "response", which is exactly the false signal
+#' that would make the record untrustworthy.
+#' @noRd
+.label_touches_stat_vocabulary <- function(norm) {
+  if (!nzchar(norm)) return(FALSE)
+  words <- strsplit(norm, "[^a-z0-9%.]+")[[1]]
+  words <- words[nzchar(words)]
+  if (length(words) == 0L) return(FALSE)
+  for (n in seq_len(min(.STAT_VOCAB_MAX_WORDS, length(words)))) {
+    for (i in seq_len(length(words) - n + 1L)) {
+      if (paste(words[i:(i + n - 1L)], collapse = " ") %in% .STAT_VOCAB_PHRASES) {
+        return(TRUE)
+      }
+    }
+  }
+  FALSE
+}
+
+#' What the statistic-label grammar made of a label: "whole", "partial" or
+#' "none". Observational only -- never consulted by a binding decision.
+#' @noRd
+.label_parse_outcome <- function(label) {
+  raw <- as.character(label %||% "")
+  raw <- if (length(raw) == 0L) "" else raw[[1]]
+  if (is.na(raw) || !nzchar(trimws(raw))) return("none")
+  if (length(.parse_stat_label(raw)) > 0L) return("whole")
+  norm <- .norm_stat_label(raw)
+  if (.label_touches_stat_vocabulary(norm)) "partial" else "none"
+}

@@ -2574,6 +2574,23 @@
                 }
               ]
             }
+          ],
+          "row_provenance": [
+            {
+              "row": 5,
+              "stat_basis": "positional",
+              "label_parse": "none"
+            },
+            {
+              "row": 6,
+              "stat_basis": "positional",
+              "label_parse": "none"
+            },
+            {
+              "row": 7,
+              "stat_basis": "positional",
+              "label_parse": "none"
+            }
           ]
         }
       }
@@ -3237,6 +3254,33 @@
                 }
               ]
             }
+          ],
+          "row_provenance": [
+            {
+              "row": 6,
+              "stat_basis": "label",
+              "label_parse": "whole"
+            },
+            {
+              "row": 7,
+              "stat_basis": "label",
+              "label_parse": "whole"
+            },
+            {
+              "row": 8,
+              "stat_basis": "label",
+              "label_parse": "whole"
+            },
+            {
+              "row": 11,
+              "stat_basis": "level",
+              "label_parse": "none"
+            },
+            {
+              "row": 12,
+              "stat_basis": "level",
+              "label_parse": "none"
+            }
           ]
         }
       }
@@ -3869,6 +3913,33 @@
                   "stat_name": "median"
                 }
               ]
+            }
+          ],
+          "row_provenance": [
+            {
+              "row": 6,
+              "stat_basis": "label",
+              "label_parse": "whole"
+            },
+            {
+              "row": 7,
+              "stat_basis": "label",
+              "label_parse": "whole"
+            },
+            {
+              "row": 8,
+              "stat_basis": "label",
+              "label_parse": "whole"
+            },
+            {
+              "row": 11,
+              "stat_basis": "label",
+              "label_parse": "whole"
+            },
+            {
+              "row": 12,
+              "stat_basis": "label",
+              "label_parse": "whole"
             }
           ]
         }
@@ -4550,6 +4621,33 @@
                 }
               ]
             }
+          ],
+          "row_provenance": [
+            {
+              "row": 5,
+              "stat_basis": "positional",
+              "label_parse": "none"
+            },
+            {
+              "row": 6,
+              "stat_basis": "positional",
+              "label_parse": "none"
+            },
+            {
+              "row": 9,
+              "stat_basis": "level",
+              "label_parse": "none"
+            },
+            {
+              "row": 10,
+              "stat_basis": "level",
+              "label_parse": "none"
+            },
+            {
+              "row": 11,
+              "stat_basis": "level",
+              "label_parse": "none"
+            }
           ]
         }
       }
@@ -5106,6 +5204,23 @@
                   "stat_name": "p"
                 }
               ]
+            }
+          ],
+          "row_provenance": [
+            {
+              "row": 5,
+              "stat_basis": "positional",
+              "label_parse": "none"
+            },
+            {
+              "row": 7,
+              "stat_basis": "positional",
+              "label_parse": "none"
+            },
+            {
+              "row": 8,
+              "stat_basis": "positional",
+              "label_parse": "none"
             }
           ],
           "nested": {
