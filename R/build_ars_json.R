@@ -361,7 +361,12 @@
 #'   unrecognised (caller keeps the section default).
 #' @noRd
 .infer_row_method <- function(row, var_is_categorical = NA) {
-  ann <- as.character(row$annotation %||% "")
+  ## A trailing derivation note ("[ADQX.MEASDUR; = ADQX.ENDDY]") says how the
+  ## variable is DERIVED, not which records to keep. Read as a filter it makes
+  ## a continuous summary into a subject count, and the block's statistic rows
+  ## then read as category levels. The variable's own type decides the method,
+  ## exactly as it does when the author writes no note at all.
+  ann <- .annotation_less_derivation_note(row$annotation)
   if (!nzchar(trimws(ann))) return(NULL)
 
   ## Before any method is chosen: the row may ask for a statistic this package
@@ -681,7 +686,10 @@
 #' context when it carries no dataset prefix of its own).
 #' @noRd
 .subset_from_annotation <- function(ann) {
-  ann <- as.character(ann %||% "")
+  ## The head only: a derivation note is not a filter, and asking the where
+  ## clause grammar to read one produces an unresolved condition that reserves
+  ## a row computing perfectly well.
+  ann <- .annotation_less_derivation_note(ann)
   if (!nzchar(trimws(ann))) return(NULL)
 
   fs <- flat_data_subset(ann)
@@ -1405,6 +1413,26 @@ build_ars_json <- function(sections,
           er$primary_variable <- if (length(pieces) >= 2) pieces[2] else ""
           er$variable_role    <- er$variable_role %||% "ANALYSIS"
         }
+      }
+      ## Recorded for every row that carries one, and deliberately OUTSIDE the
+      ## branch below: whether some other channel already supplied a subset has
+      ## no bearing on the fact that this row states a relationship the
+      ## deterministic reader did not apply as a filter. Reporting it only when
+      ## nothing else had spoken would make the diagnostic depend on an
+      ## unrelated condition, and a reader who meant it as a restriction would
+      ## be told on some rows and not others.
+      deriv_note <- .split_derivation_note(row$annotation)$note
+      if (nzchar(deriv_note)) {
+        diag_add(
+          stage = "build_ars", severity = "INFO", input = INPUT_SHELL,
+          problem = sprintf(
+            "Row '%s' states '%s', read as a derivation note rather than a row filter.",
+            row$label %||% "?", deriv_note),
+          location = row$annotation %||% "",
+          tlf_number = sec$tlf_number,
+          action = paste("The row is summarised by its variable's own type.",
+                         "If this was meant to RESTRICT the rows, state the",
+                         "condition against a value (e.g. 'ADQX.FLAG=Y')."))
       }
       if (is.null(er$data_subset) || length(er$data_subset) == 0) {
         ## A typed supplement row filter (v3) is authoritative and never
