@@ -285,6 +285,15 @@
   if (length(built$unresolved) > 0) {
     fill$unresolved <- built$unresolved
   }
+  ## A-18a. Observational provenance, one entry per bound sheet row.
+  ##
+  ## Contract: this lives inside the OUTPUT's `_meta`, arsbridge's own
+  ## extension area -- not in the CDISC ARS model, not an exported function,
+  ## and read by nothing in this package. It is written only when there is
+  ## something to write, so a section that binds no row is unchanged.
+  if (length(built$provenance) > 0) {
+    fill$row_provenance <- built$provenance
+  }
   fill$nested <- .build_nested_fill(shell_layout)
   categorical <- .build_categorical_fills(section, shell_layout)
   if (length(categorical) > 0) {
@@ -360,6 +369,15 @@
 #'   the row has nothing to fill from.
 #' @noRd
 .fill_row_binding <- function(entry, parent, methods, analyses) {
+  ## A-18a, observational only. Recorded on every path so the record is a
+  ## property of the ROW rather than of the branch that happened to bind it;
+  ## that path-independence is the entire point. Nothing below reads it.
+  ##
+  ## `stat_basis` answers "what decided this row's statistics", which is a
+  ## different axis from the shipped `binding_source` ("who named the tokens":
+  ## the label's grammar, or a reviewed supplement). A `label` basis may be
+  ## either source; a `positional` basis has no token source at all.
+  label_parse <- .label_parse_outcome(entry$label)
   by_id <- function(id) {
     hit <- Filter(function(a) identical(a$id, id), analyses %||% list())
     if (length(hit) == 0) NULL else hit[[1]]
@@ -396,6 +414,8 @@
     ## ("Range", "Median", "n (%)") and must never be parsed as one.
     if (identical(entry$kind, "level")) {
       binding$variable_level <- entry$level %||% NA_character_
+      binding$stat_basis  <- "level"
+      binding$label_parse <- label_parse
       return(binding)
     }
     ## An analysis row whose label names statistics outright ("n (%)") takes
@@ -404,6 +424,12 @@
     ## "Sex, n (%)" carries an unrecognised word and is rejected whole, so in
     ## practice only a bare statistic label reaches this branch.
     req <- request(analysis)
+    ## The one place a refusal has never been recorded: when the grammar reads
+    ## nothing, the method's operations bind IN ORDER and the row looks exactly
+    ## like a title row that meant to do that. Both remain bound as before --
+    ## only the record distinguishes them.
+    binding$stat_basis  <- if (is.null(req)) "positional" else "label"
+    binding$label_parse <- label_parse
     if (!is.null(req)) {
       binding$stat_line <- entry$label
       binding$tokens    <- req$tokens
@@ -460,6 +486,7 @@
     return(list(analysis_id = parent$analysis_id, analysis = analysis,
                 stats = method_stats(analysis),
                 scope_conflict = scope_conflict,
+                stat_basis = "level", label_parse = label_parse,
                 variable_level = entry$label %||% NA_character_))
   }
 
@@ -505,6 +532,7 @@
   if (length(tokens) == 0L) {
     return(list(analysis_id = parent$analysis_id, analysis = analysis,
                 stats = list(), stat_line = entry$label,
+                stat_basis = "label", label_parse = label_parse,
                 unreadable = TRUE, scope_conflict = scope_conflict,
                 available = vapply(method_stats(analysis),
                                    function(s) as.character(s$operation_id %||% "?"),
@@ -521,12 +549,14 @@
                 stats = list(), stat_line = entry$label,
                 tokens = tokens, token_source = token_source,
                 conflict = conflict, scope_conflict = scope_conflict,
+                stat_basis = "label", label_parse = label_parse,
                 unsupported = res$unsupported, available = res$available))
   }
   list(analysis_id = parent$analysis_id, analysis = analysis,
        stats = res$stats, stat_line = entry$label,
        tokens = tokens, token_source = token_source, conflict = conflict,
-       scope_conflict = scope_conflict)
+       scope_conflict = scope_conflict,
+       stat_basis = "label", label_parse = label_parse)
 }
 
 #' One record per body cell of a table sheet.
@@ -577,6 +607,10 @@
   ## Rows where the label and a reviewed supplement each named statistics and
   ## disagreed. Reported once per row, whichever side won.
   conflict_rows <- list(); scope_rows <- list()
+  ## A-18a: one entry per SHEET ROW, because provenance is a property of the
+  ## row and every cell on it shares the same answer. Per-cell would repeat it
+  ## once per column and widen the serialised surface for no information.
+  provenance <- list()
   for (i in seq_len(nrow(grid))) {
     ## A literal is a label, a footnote, or a number the author typed. The
     ## fill writer must leave every one of them exactly as authored.
@@ -598,7 +632,11 @@
           analysis_id = owner$analysis_id,
           analysis    = analysis,
           stats       = .method_operation_slots(methods,
-                                                analysis$methodId %||% "")
+                                                analysis$methodId %||% ""),
+          ## Not the row's own reading: this mock row borrows the owning
+          ## analysis's operations so the fill stage has slots to expand from.
+          stat_basis  = "method_default",
+          label_parse = .label_parse_outcome(owner$label)
         )
       }
     }
@@ -665,6 +703,12 @@
       conflict_rows[[as.character(grid$row[[i]])]] <- c(
         binding$conflict,
         list(row = grid$row[[i]], label = binding$stat_line %||% ""))
+    }
+    if (!is.null(binding$stat_basis)) {
+      provenance[[as.character(grid$row[[i]])]] <- list(
+        row         = grid$row[[i]],
+        stat_basis  = binding$stat_basis,
+        label_parse = binding$label_parse %||% "none")
     }
     ## Keyed by sheet row, so a row spanning many columns is reported once.
     if (!is.null(binding$scope_conflict)) {
@@ -825,7 +869,8 @@
   ## same facts as data, so a caller can work the queue instead of parsing
   ## sentences. `unname()` because the keys were only ever row numbers used
   ## to make the accumulation one-per-row.
-  list(cells = cells, unresolved = unname(refused_rows))
+  list(cells = cells, unresolved = unname(refused_rows),
+       provenance = unname(provenance))
 }
 
 #' The column-axis grouping an analysis reports its results by.

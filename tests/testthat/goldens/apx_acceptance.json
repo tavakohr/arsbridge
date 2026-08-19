@@ -885,6 +885,18 @@
                 }
               ]
             }
+          ],
+          "row_provenance": [
+            {
+              "row": 5,
+              "stat_basis": "positional",
+              "label_parse": "none"
+            },
+            {
+              "row": 6,
+              "stat_basis": "positional",
+              "label_parse": "none"
+            }
           ]
         }
       }
@@ -1166,6 +1178,18 @@
                   "stat_name": "p"
                 }
               ]
+            }
+          ],
+          "row_provenance": [
+            {
+              "row": 5,
+              "stat_basis": "positional",
+              "label_parse": "none"
+            },
+            {
+              "row": 6,
+              "stat_basis": "positional",
+              "label_parse": "none"
             }
           ]
         }
