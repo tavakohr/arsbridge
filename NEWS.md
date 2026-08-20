@@ -39,18 +39,33 @@
   a reservation, not a refusal; when the subset builder can carry a compound
   expression these rows compute, and no annotation has to change.
 
-* **What a filter restricts no longer decides what the line reports.** "The
-  filter is on the row's own variable" and "I could not read the filter" both
-  presented as an empty filter variable, and both selected the subject-count
-  family -- so an unreadable annotation was typed as a count of something
-  nobody could evaluate, under a line displaying two statistics. A filter is now
-  classified as `none`, `on_primary`, `scoping_other`, `mixed_conjunctive` or
-  `unknown`, read from the restriction the row will actually compute under
-  rather than from whether one function managed to flatten it. A restriction
-  that merely mentions the row's variable does not force a count: it counts only
-  when the restriction is the whole statement about the row, or when it pins the
-  variable to a single value, because a variable still free to vary inside the
-  subset is one the line is still summarising.
+* **A filter says which records survive, not which statistic is reported.**
+  "The filter is on the row's own variable" and "I could not read the filter"
+  both presented as an empty filter variable, and both selected the
+  subject-count family -- so an unreadable annotation was typed as a count of
+  something nobody could evaluate, under a line displaying two statistics, and
+  `ADQX.QXVAL WHERE ADQX.QXVAL GT 0` became a subject count under a block asking
+  for Mean/SD. A filter is now classified as `none`, `on_primary`,
+  `scoping_other`, `mixed_conjunctive` or `unknown` -- read from the restriction
+  the row will actually compute under rather than from whether one function
+  managed to flatten it -- and **the role selects no method**. An unreadable
+  restriction contributes nothing at all: the row is reserved on the marker it
+  carries, and whatever method it shows for layout comes from evidence that is
+  independently known.
+
+  One thing a filter can still settle, and it is not a reading of intent: if the
+  surviving records hold a single value of the row's variable, no summary of
+  that variable is possible, so the line can only be counting. That requires an
+  equality the grammar actually READ -- an unresolved clause is evidence about
+  nothing, however it is written. A threshold or a range leaves the variable
+  free to vary among the survivors and therefore settles nothing.
+
+  Consequently three expectations moved, in `test-method_from_intent.R` and
+  `test-derivation_note_annotation.R`: a threshold on a numeric variable now
+  reports that variable's own summary rather than counting subjects. Both files
+  carry the reasoning. What those tests protect is unchanged -- five spellings
+  of one restriction still agree, and a row's label still cannot move the
+  verdict.
 
 * **A variable's type is answered for the dataset that was asked about.** The
   spec lookup fell back to scanning every dataset for a variable of the same

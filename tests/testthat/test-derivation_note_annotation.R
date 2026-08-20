@@ -63,17 +63,43 @@ test_that("a genuine row filter is still a row filter", {
   ##
   ## Every value below was MEASURED on the code before this change, so a
   ## drift in either direction turns this red.
+  ## The METHOD column changed for three rows with the filter-role work, and
+  ## the rule that produced the new values is one sentence: a restriction says
+  ## which records survive, not which statistic is reported about them.
+  ##
+  ## Exactly one thing a filter can say still settles the method, and it is
+  ## not about intent: if the surviving records hold a SINGLE value of the
+  ## row's variable, no summary of that variable is possible, so the line can
+  ## only be counting. Two conditions have to hold for that to be knowable:
+  ##
+  ##   the clause was READ  -- an unresolved clause is evidence about nothing,
+  ##                          so nothing is known about what it pins; and
+  ##   it is an equality    -- a threshold or range leaves the variable free
+  ##                          to vary among the survivors.
+  ##
+  ## Which is why the four rows below differ, and each for one reason:
+  ##
+  ##   "; >= 65"   unresolved -> no evidence -> the variable's type decides
+  ##   "; = 30"    unresolved -> no evidence, EVEN THOUGH it is written as an
+  ##               equality: the grammar never read it, so "it pins" is not
+  ##               something this package knows
+  ##   "EVFL='Y'"  read, equality -> one value survives -> counted
+  ##   "GE 16"     read, threshold -> the variable still varies -> type decides
+  ##
+  ## `unres` is unchanged for every row: what the grammar can READ did not
+  ## move, and the two rows that reserve still reserve. No number changes --
+  ## a reserved row computes nothing either way.
   keeps <- list(
     ## an implied left operand with a VALUE -- "this variable, restricted"
     list(ann = "ADQX.AGEYR; >= 65",        cat = FALSE, unres = TRUE,
-         method = "Subject Count", kind = "filtered_count"),
+         method = "Summary Statistics - Continuous", kind = "continuous"),
     list(ann = "ADQX.MEASDUR; = 30",       cat = FALSE, unres = TRUE,
-         method = "Subject Count", kind = "filtered_count"),
+         method = "Summary Statistics - Continuous", kind = "continuous"),
     ## a condition on the variable itself, no semicolon
     list(ann = "ADQX.EVFL='Y'",            cat = TRUE,  unres = FALSE,
          method = "Subject Count", kind = "filtered_count"),
     list(ann = "ADQX.MEASDUR GE 16",       cat = FALSE, unres = FALSE,
-         method = "Subject Count", kind = "filtered_count"),
+         method = "Summary Statistics - Continuous", kind = "continuous"),
     ## a condition naming ANOTHER variable: scoping, so type decides
     list(ann = "ADQX.TERM; ADQX.EVFL='Y'", cat = TRUE,  unres = FALSE,
          method = "Count and Percentage", kind = "categorical"),

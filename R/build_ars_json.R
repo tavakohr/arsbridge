@@ -402,59 +402,46 @@
     kind <- if (has_percentage_slot) "subject_count_pct" else "subject_count"
     return(list(method = subject_count_method, kind = kind))
   }
-  ## A condition is present. What it RESTRICTS decides whether this row counts
-  ## subjects in a state or summarises its variable within a scope -- and that
-  ## question is answered from the parsed restriction, never from whether this
-  ## function managed to flatten it.
+  ## A condition is present. It says which RECORDS survive; it does not say
+  ## which STATISTIC those records are reported with, and this function no
+  ## longer reads it as if it did.
   ##
-  ## What decides this is that a condition is THERE, not how it is spelled.
-  ## Looking for a quoted equality or the word "where" recognised a character
-  ## level as a restriction but not a numeric threshold on the very same row,
-  ## so a threshold row was summarised instead of counted -- reporting a mean
-  ## of the unrestricted variable into a count slot, which looks like a
-  ## plausible number and is an answer to a question nobody asked.
+  ## What it used to do, and what that cost:
   ##
-  ## The distinction that used to be missing sat one step further in: "the
-  ## filter is on the primary variable" and "I could not read the filter" both
-  ## presented as an empty filter variable, and both took the count branch. So
-  ## an unreadable annotation was typed as a subject count -- a one-operation
-  ## method under a line displaying "xx (xx.x)" -- and a compound filter, which
-  ## flattening cannot represent at all, went the same way.
+  ##   A condition on the row's own variable was read as "count subjects in
+  ##   this state". `ADQX.QXVAL WHERE ADQX.QXVAL GT 0` therefore became a
+  ##   subject count under a block asking for Mean/SD -- the threshold selects
+  ##   observations, and what is reported about them is stated by the shell,
+  ##   on rows this function cannot see.
   ##
-  ##   on_primary         EVERY atom restricts the row's own variable, so the
-  ##                      restriction is the whole statement: count subjects in
-  ##                      that state, within the subset.
-  ##   mixed_conjunctive  some atoms restrict the variable and some only scope.
-  ##                      The role does NOT settle the method -- the variable's
-  ##                      own type does, below.
-  ##   scoping_other      the filter only chooses records; the primary variable
-  ##                      is still summarised by its own type below.
-  ##   unknown            no method may be inferred. The row is reserved by the
-  ##                      caller on the unresolved condition it carries; naming
-  ##                      a method here would put a plausible statistic under a
-  ##                      restriction nobody could read.
+  ##   Worse, "the condition is on my own variable" and "I could not read the
+  ##   condition" both presented as an empty filter variable, so an unreadable
+  ##   annotation took the same branch: a one-operation method under a line
+  ##   displaying "xx (xx.x)", and a second, spurious finding about statistic
+  ##   slots on a row whose only real defect was the filter.
   ##
-  ## Why `mixed_conjunctive` does not count, though it touches the variable:
-  ## the role describes the RESTRICTION, and it is not evidence for which
-  ## statistic the line asks for.
+  ## So the restriction contributes exactly one thing, and it is not a reading
+  ## of intent: if the surviving records hold a SINGLE value of the row's
+  ## variable, no summary of that variable is possible, so the line can only be
+  ## counting. Two conditions must hold for that to be knowable --
   ##
-  ##   ADQX.QXVAL WHERE ADQX.QXPARM='P1' AND ADQX.QXVAL GT 0
+  ##   the clause was READ  an unresolved clause is evidence about nothing, so
+  ##                        nothing is known about what it pins, however it is
+  ##                        written; and
+  ##   it is an equality    a threshold or a range leaves the variable free to
+  ##                        vary among the survivors.
   ##
-  ## touches QXVAL and is still a continuous summary of QXVAL over positive
-  ## records of one parameter -- the Mean/SD the block asks for live on the
-  ## rows BELOW this one, which this function cannot see. Reading "the filter
-  ## mentions my variable" as "therefore count subjects" is the same
-  ## substitution this change removes one step earlier, and it would put a
-  ## subject count where the shell asked for a mean.
+  ## Everything else falls through to the variable's own type. That includes
+  ## `unknown`, deliberately and literally: the row is reserved by the caller
+  ## on the marker it carries, and whatever method it shows for layout comes
+  ## from evidence that is independently known.
   ##
-  ## `on_primary` keeps the count because there the restriction IS the whole
-  ## statement: nothing else was said about which records to read, so the row
-  ## can only be reporting how many subjects are in that state.
-  ##
-  ## The full answer is a constraint over role + block shape + requested
-  ## statistics + exact metadata, and it belongs with the block work. What is
-  ## fixed here is narrower and is the part that produced wrong numbers: an
-  ## unreadable filter no longer selects anything.
+  ## `.filter_role()` classifies what the restriction speaks about -- none,
+  ## on_primary, scoping_other, mixed_conjunctive, unknown. It is evidence, not
+  ## a decision, and is deliberately NOT consulted here: the constraint
+  ## resolution that weighs it against block shape and requested statistics is
+  ## the next piece of work, and until it exists a role must not quietly become
+  ## a method by itself.
   ##
   ## Still guarded by condition evidence, and the guard is load-bearing for a
   ## second reason now: an annotation carrying no condition at all can still
@@ -474,58 +461,25 @@
       primary_ref$variable <- if (length(pieces) >= 2) pieces[[2]] else ""
     }
 
-    ## One reading of one clause, so the role and the pinning test can never
-    ## be answered from two different views of the same restriction.
+    ## The row's EFFECTIVE restriction: the clause it will actually compute
+    ## under, handed in by the caller, or parsed from the annotation for the
+    ## free-standing caller that has only that. Read once, so nothing here can
+    ## answer from a different view of the same restriction than the emitted
+    ## DataSubset was built from.
     where <- if (isTRUE(filter_known)) filter else parse_where_clause(ann)
-    role <- .filter_role(where, dataset = primary_ref$dataset,
-                         variable = primary_ref$variable)
-    ## An unreadable restriction reserves the row -- that is settled before
-    ## this function is reached, and it is what stops a number being computed.
-    ## What is left to decide is what KIND of line the shell is showing, which
-    ## the layout needs whether or not the cells fill.
-    ##
-    ## So `unknown` does not select a method on the strength of being unknown.
-    ## It asks the one question the text can still answer -- is anything OTHER
-    ## than my own variable being restricted? -- and only a "no" keeps the
-    ## count reading. This is what stops "I could not parse it" from meaning
-    ## "count subjects", while keeping a threshold this grammar does not yet
-    ## read (`ADQX.QXNUM >= 16`) reading as the count it plainly is: method
-    ## intent follows from a condition being STATED, not from the parser
-    ## succeeding on it.
-    if (identical(role, "unknown") &&
-          .unreadable_restricts_only_primary(ann, primary_ref$dataset,
-                                             primary_ref$variable)) {
+
+    ## The single-value case, and it is load-bearing rather than legacy: three
+    ## sibling rows each pinned to a different level are three counts. Typing
+    ## them as distributions makes the first a categorical parent and collapses
+    ## its siblings into it as levels of a subset pinned to the first level,
+    ## which shows every other level as empty.
+    if (.filter_pins_primary(where, primary_ref$dataset,
+                             primary_ref$variable)) {
       kind <- if (has_percentage_slot) "filtered_count_pct" else "filtered_count"
       return(list(method = subject_count_method, kind = kind))
     }
-    ## `on_primary`: the restriction is the whole statement about this row.
-    ## `mixed_conjunctive`: only when the restriction PINS the variable to one
-    ## value. Then the line reports one state and can only be a count -- three
-    ## sibling rows each pinned to a different level are three counts, not one
-    ## distribution read three times. When the primary-variable conjuncts merely
-    ## BOUND it (a threshold, a range), the variable still varies inside the
-    ## subset and the line still summarises it, so type decides below.
-    ##
-    ## Read from `where` -- the same clause the role was read from, whether it
-    ## came in as the row's effective filter or was parsed from the annotation
-    ## here. Asking the pinning question of a different object than the role
-    ## question is how the two could disagree about one restriction; and
-    ## `.filter_pins_primary()` answers FALSE for an unresolved clause anyway,
-    ## so the unknown path above keeps its own reading.
-    pins <- .filter_pins_primary(where, primary_ref$dataset,
-                                 primary_ref$variable)
-    if (identical(role, "on_primary") ||
-          (identical(role, "mixed_conjunctive") && pins)) {
-      kind <- if (has_percentage_slot) "filtered_count_pct" else "filtered_count"
-      return(list(method = subject_count_method, kind = kind))
-    }
-    ## Fall through for scoping_other, mixed_conjunctive, and an unreadable
-    ## restriction that names some other variable: in each of them the filter
-    ## does not settle what the line reports, so the variable's own type does.
-    ## The unreadable one lands here rather than returning nothing, so a
-    ## reserved row still carries the method its shape implies -- which is what
-    ## the layout renders, and what stops a second, spurious finding about
-    ## statistic slots on a row whose only real defect is the filter.
+    ## Anything else falls through: the restriction has said all it can, and
+    ## the variable's own type decides what the line reports.
   }
   ## Primary variable type (from the ADaM spec) decides the method.
   if (isTRUE(var_is_categorical)) {

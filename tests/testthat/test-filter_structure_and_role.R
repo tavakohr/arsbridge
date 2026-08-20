@@ -473,35 +473,93 @@ test_that("a restriction touching the row's variable does not force a count", {
 })
 
 
-test_that("an unreadable filter does not select the count family by default", {
+test_that("an unreadable filter contributes no method evidence at all", {
+  ## Literal, and the point of it: an unreadable restriction is evidence about
+  ## nothing. It cannot argue for a count, it cannot argue against one, and no
+  ## reading of its TEXT may stand in for the condition the grammar failed on.
+  ## The reservation the row carries is what stops a number being produced;
+  ## the method it shows is for layout, and comes only from evidence that is
+  ## independently known.
   for (v in list(.fsr_v1, .fsr_v2)) {
-    ## Restricts OTHER variables: the row still reports its own variable's
-    ## distribution, and the reservation -- not the method -- is what stops a
-    ## number being produced.
-    ann <- sprintf("%s.%s (when %s='DIAGNOSTIC' AND %s='Y')",
-                   v$ds, v$txt, v$cat, v$flag)
+    ## Two unreadable annotations differing only in what their text appears to
+    ## restrict -- other variables, then the row's own. Neither difference may
+    ## reach the verdict.
+    other <- sprintf("%s.%s (when %s='DIAGNOSTIC' AND %s='Y')",
+                     v$ds, v$txt, v$cat, v$flag)
+    own   <- sprintf("%s.%s >= 16", v$ds, v$num)
+
+    got_other <- .infer_row_method(list(annotation = other, n_slots = 2L),
+                                   var_is_categorical = TRUE,
+                                   filter = .unresolved_condition(other),
+                                   filter_known = TRUE)
+    expect_identical(got_other$method, "Count and Percentage", info = v$ds)
+
+    ## A threshold this grammar cannot yet read restricts the row's own
+    ## variable and STILL does not make the line a count: it selects
+    ## observations, and what is reported about them is a separate question
+    ## this function has no evidence on. The type answers, and it is numeric.
+    got_own <- .infer_row_method(list(annotation = own, n_slots = 2L),
+                                 var_is_categorical = FALSE,
+                                 filter = .unresolved_condition(own),
+                                 filter_known = TRUE)
+    expect_identical(got_own$method, "Summary Statistics - Continuous",
+                     info = v$ds)
+
+    ## The control that stops both assertions being satisfied by "the filter
+    ## is ignored everywhere": same unreadable filter, categorical variable,
+    ## categorical answer.
+    got_flip <- .infer_row_method(list(annotation = own, n_slots = 2L),
+                                  var_is_categorical = TRUE,
+                                  filter = .unresolved_condition(own),
+                                  filter_known = TRUE)
+    expect_identical(got_flip$method, "Count and Percentage", info = v$ds)
+  }
+})
+
+
+test_that("a threshold on the row's own variable is not a count request", {
+  ## The case that makes "role is not the statistic" concrete, and the one a
+  ## role-driven rule got wrong: EVERY atom restricts the row's own variable,
+  ## and the line is still a continuous summary. The filter chose which
+  ## observations survive; the shell says what to report about them.
+  for (v in list(.fsr_v1, .fsr_v2)) {
+    bounded <- .fsr_cond(v$ds, v$num, "0", "GT")
+    ann <- sprintf("%s.%s WHERE %s.%s GT 0", v$ds, v$num, v$ds, v$num)
+
+    ## The role records what is true of the RESTRICTION -- it really is
+    ## entirely about the row's own variable -- and that must not become a
+    ## statement about the statistic.
+    expect_identical(.filter_role(bounded, v$ds, v$num), "on_primary",
+                     info = v$ds)
     got <- .infer_row_method(list(annotation = ann, n_slots = 2L),
-                             var_is_categorical = TRUE,
-                             filter = .unresolved_condition(ann),
-                             filter_known = TRUE)
-    expect_identical(got$method, "Count and Percentage", info = v$ds)
-
-    ## A threshold this grammar cannot yet read is still a threshold ON the
-    ## row's own variable, and still a count. Method intent follows from a
-    ## condition being STATED, not from the parser succeeding on it.
-    thresh <- sprintf("%s.%s >= 16", v$ds, v$num)
-    got <- .infer_row_method(list(annotation = thresh, n_slots = 2L),
                              var_is_categorical = FALSE,
-                             filter = .unresolved_condition(thresh),
-                             filter_known = TRUE)
-    expect_identical(got$method, "Subject Count and Percentage", info = v$ds)
+                             filter = bounded, filter_known = TRUE)
+    expect_identical(got$method, "Summary Statistics - Continuous",
+                     info = v$ds)
 
-    ## An unreadable restriction naming another variable through a form with
-    ## no comparison operator at all must NOT be mistaken for one about the
-    ## row's own variable -- absence of a recognised operand is not evidence.
-    call_form <- sprintf("%s.%s WHERE is.na(%s)", v$ds, v$txt, v$cat)
-    expect_false(.unreadable_restricts_only_primary(call_form, v$ds, v$txt),
-                 info = v$ds)
+    ## A range is the same case with two atoms, and equally not a count.
+    ranged <- .fsr_and(.fsr_cond(v$ds, v$num, "0", "GE"),
+                       .fsr_cond(v$ds, v$num, "100", "LE"))
+    expect_identical(.filter_role(ranged, v$ds, v$num), "on_primary",
+                     info = v$ds)
+    got_range <- .infer_row_method(
+      list(annotation = sprintf("%s.%s WHERE %s.%s between 0 and 100",
+                                v$ds, v$num, v$ds, v$num), n_slots = 2L),
+      var_is_categorical = FALSE, filter = ranged, filter_known = TRUE)
+    expect_identical(got_range$method, "Summary Statistics - Continuous",
+                     info = v$ds)
+
+    ## What still counts is the one case that is not about intent at all: an
+    ## equality leaves the variable a single value, so there is nothing for a
+    ## summary to be over. Asserted here so the exception's scope stays
+    ## visible beside the rule it is an exception to.
+    pinned <- .fsr_cond(v$ds, v$num, "5")
+    got_pin <- .infer_row_method(
+      list(annotation = sprintf("%s.%s WHERE %s.%s = 5",
+                                v$ds, v$num, v$ds, v$num), n_slots = 2L),
+      var_is_categorical = FALSE, filter = pinned, filter_known = TRUE)
+    expect_identical(got_pin$method, "Subject Count and Percentage",
+                     info = v$ds)
   }
 })
 

@@ -965,69 +965,6 @@ parse_where_clause <- function(expr) {
                dataset, variable)
 }
 
-## Words that look like an ADaM variable name and are not one: this grammar's
-## own comparators and joiners, and the restriction keywords a shell author
-## writes around them. Everything else in upper case is treated as a variable,
-## which is the conservative direction -- see below.
-.RESTRICTION_KEYWORDS <- c(
-  "AND", "OR", "NOT", "IN", "NOTIN", "IS", "NULL", "MISSING",
-  "EQ", "NE", "GT", "GE", "LT", "LE", "BETWEEN", "CONTAINS",
-  "WHEN", "WHERE", "IF", "NA", "TRUE", "FALSE"
-)
-
-#' Does an UNREADABLE restriction speak only about the row's own variable?
-#'
-#' Asked only when the grammar could not parse the filter, and answered from
-#' the text, because that is the only evidence left. It decides nothing about
-#' which records are kept -- the row is reserved either way -- it decides what
-#' kind of line the shell is showing, which the layout still needs.
-#'
-#' `ADQX.QXNUM >= 16` restricts the row's own variable: a threshold this
-#' grammar does not yet read is still a threshold, and the row counts subjects
-#' in that state. `ADQX.QXTRT (when QXCAT='X' AND ...)` restricts OTHER
-#' variables, so the row still reports the distribution of its own.
-#'
-#' TRUE requires POSITIVE evidence, in both halves:
-#'
-#'   1. the text opens with the row's own reference, recognised and removed --
-#'      so we know which part is the restriction, and
-#'   2. what remains names no other variable at all.
-#'
-#' Absence of a recognised comparison is not evidence. This is asked about text
-#' the grammar has already failed on, so the restriction may be written in a
-#' form nothing here matches -- `is.na(QXCAT)`, `QXCAT LIKE 'X'`, `%in%`. Those
-#' name another variable while offering no operand this function would
-#' recognise, and reading "no operands found" as "only my variable" would type
-#' the row as a count of something it never counted. So any unrecognised
-#' upper-case word that is not one of this grammar's keywords is treated as
-#' another variable, and the answer is FALSE.
-#' @noRd
-.unreadable_restricts_only_primary <- function(text, dataset = NULL,
-                                               variable = NULL) {
-  txt <- as.character(text %||% "")
-  if (length(txt) != 1L || is.na(txt) || !nzchar(trimws(txt))) return(FALSE)
-  var <- toupper(as.character(variable %||% ""))
-  ds  <- toupper(as.character(dataset  %||% ""))
-  if (!nzchar(var)) return(FALSE)
-
-  masked <- .mask_literals(txt)
-  if (is.null(masked)) return(FALSE)
-  txt <- masked$text
-
-  ## (1) The row's own reference must open the text, or we cannot say which
-  ## part of it is the restriction.
-  head_re <- paste0("^\\s*(?:", if (nzchar(ds)) paste0(ds, "\\.") else
-                    paste0(.ADAM_DS, "\\."), ")?", var, "\\b")
-  if (!grepl(head_re, txt, perl = TRUE, ignore.case = TRUE)) return(FALSE)
-  rest <- sub(head_re, " ", txt, perl = TRUE, ignore.case = TRUE)
-
-  ## (2) Nothing else in what remains may name a variable.
-  words <- regmatches(rest, gregexpr("[A-Za-z][A-Za-z0-9._]*", rest,
-                                     perl = TRUE))[[1]]
-  words <- toupper(sub("^.*\\.", "", words))
-  words <- setdiff(words, c(.RESTRICTION_KEYWORDS, var))
-  length(words) == 0
-}
 
 #' Flatten a single annotation WHERE clause into the
 #' `{dataset, variable, comparator, value}` shape that
