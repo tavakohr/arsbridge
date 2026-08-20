@@ -549,10 +549,19 @@ test_that("a threshold on the row's own variable is not a count request", {
     expect_identical(got_range$method, "Summary Statistics - Continuous",
                      info = v$ds)
 
-    ## What still counts is the one case that is not about intent at all: an
-    ## equality leaves the variable a single value, so there is nothing for a
-    ## summary to be over. Asserted here so the exception's scope stays
-    ## visible beside the rule it is an exception to.
+    ## What still counts, and what that assertion does and does not mean.
+    ##
+    ## A pinned restriction keeps the count family today. This pins CURRENT
+    ## BEHAVIOUR, not a semantic claim: a shell may filter to a single value
+    ## and then ask for Mean/SD, and the filter would still only be saying
+    ## which observations survive. The reason it counts is structural -- block
+    ## construction decides what a block is from the method its first row was
+    ## given, so classifying pinned siblings as distributions collapses them
+    ## into the first one.
+    ##
+    ## This assertion is therefore EXPECTED TO CHANGE once block shape is
+    ## determined before method selection. When it does, equality alone must no
+    ## longer settle the statistic.
     pinned <- .fsr_cond(v$ds, v$num, "5")
     got_pin <- .infer_row_method(
       list(annotation = sprintf("%s.%s WHERE %s.%s = 5",

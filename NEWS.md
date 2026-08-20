@@ -53,12 +53,17 @@
   carries, and whatever method it shows for layout comes from evidence that is
   independently known.
 
-  One thing a filter can still settle, and it is not a reading of intent: if the
-  surviving records hold a single value of the row's variable, no summary of
-  that variable is possible, so the line can only be counting. That requires an
-  equality the grammar actually READ -- an unresolved clause is evidence about
-  nothing, however it is written. A threshold or a range leaves the variable
-  free to vary among the survivors and therefore settles nothing.
+  One case still lets a restriction select the method, and it is a **temporary
+  structural dependency rather than a semantic rule**: a restriction pinning
+  the row's variable to a single value keeps the subject-count family. Not
+  because equality requests a count -- a shell may filter to one value and then
+  ask for Mean/SD, and the filter would still only be saying which observations
+  survive -- but because block construction downstream reads what a block IS
+  from the method its first row was given, so classifying pinned sibling rows
+  as distributions collapses them into the first. It requires an equality the
+  grammar actually READ; an unresolved clause is evidence about nothing,
+  however it is written. This is to be removed once block shape is determined
+  independently, before method selection.
 
   Consequently three expectations moved, in `test-method_from_intent.R` and
   `test-derivation_note_annotation.R`: a threshold on a numeric variable now

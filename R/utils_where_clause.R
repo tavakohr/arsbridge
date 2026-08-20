@@ -913,25 +913,27 @@ parse_where_clause <- function(expr) {
 #'
 #' A separate question from the role, deliberately. The role says WHICH
 #' variables a restriction speaks about; this says what it does to the row's
-#' own -- and only the second can tell a line that reports a distribution from
-#' a line that reports one state.
+#' own.
 #'
-#'   ADQX.QXSEV='SEVERE' AND ADQX.QXFL='Y'    pinned: one value survives the
-#'                                            filter, so there is nothing left
-#'                                            to distribute over. The line
-#'                                            reports how many.
+#'   ADQX.QXSEV='SEVERE' AND ADQX.QXFL='Y'    pinned: one value of QXSEV
+#'                                            survives the filter.
 #'   ADQX.QXVAL WHERE QXPARM='P1'
 #'              AND ADQX.QXVAL GT 0           bounded: QXVAL still takes many
-#'                                            values inside the subset, so the
-#'                                            line still summarises it.
+#'                                            values inside the subset.
 #'
 #' Only equality pins: `EQ` with a single value, or `IN` with a list of one.
 #' A threshold, a range, an inequality and a presence test all leave the
-#' variable free to vary, and a row whose variable can still vary is not
-#' reporting a single count of it.
+#' variable free to vary.
 #'
 #' Read only under an all-AND tree: under an OR a "pinning" conjunct may sit on
 #' a branch that was not taken, so it pins nothing.
+#'
+#' WHAT THIS IS NOT. It is not evidence that the line reports a count. A shell
+#' may perfectly well filter `AVAL = 30` and then ask for Mean/SD -- the filter
+#' still only says which observations survive, and what is reported about them
+#' is stated by the shell. `.infer_row_method()` currently treats a pinned
+#' restriction as a count anyway, and that is a TEMPORARY dependency of the
+#' block builder rather than a semantic rule; see the comment at its use site.
 #' @noRd
 .filter_pins_primary <- function(where, dataset = NULL, variable = NULL) {
   var <- toupper(as.character(variable %||% ""))

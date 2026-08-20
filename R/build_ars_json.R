@@ -420,10 +420,25 @@
   ##   displaying "xx (xx.x)", and a second, spurious finding about statistic
   ##   slots on a row whose only real defect was the filter.
   ##
-  ## So the restriction contributes exactly one thing, and it is not a reading
-  ## of intent: if the surviving records hold a SINGLE value of the row's
-  ## variable, no summary of that variable is possible, so the line can only be
-  ## counting. Two conditions must hold for that to be knowable --
+  ## One case remains where the restriction still selects the method, and it is
+  ## a TEMPORARY STRUCTURAL DEPENDENCY, not a semantic rule. Read the next
+  ## paragraph before treating it as one.
+  ##
+  ## A restriction that pins the row's variable to a single value keeps the
+  ## subject-count family. That is NOT because equality means "count": a shell
+  ## may filter `AVAL = 30` and then ask for Mean/SD, and the filter would
+  ## still only be saying which observations survive. It is because block
+  ## construction downstream currently decides what a block IS from the method
+  ## its first row was given -- so classifying pinned sibling rows as
+  ## distributions makes the first one a categorical parent and collapses the
+  ## rest into it as levels of a subset pinned to the first level. The
+  ## dependency runs from the block builder, not from the semantics of `=`.
+  ##
+  ## To be REMOVED once block shape is determined independently, before method
+  ## selection: at that point equality alone must no longer be sufficient
+  ## evidence for the requested statistic, and the method must come from
+  ## block/display/statistic evidence plus metadata through the constraint
+  ## resolver. Until then, two conditions must hold for a pinned reading --
   ##
   ##   the clause was READ  an unresolved clause is evidence about nothing, so
   ##                        nothing is known about what it pins, however it is
@@ -468,11 +483,9 @@
     ## DataSubset was built from.
     where <- if (isTRUE(filter_known)) filter else parse_where_clause(ann)
 
-    ## The single-value case, and it is load-bearing rather than legacy: three
-    ## sibling rows each pinned to a different level are three counts. Typing
-    ## them as distributions makes the first a categorical parent and collapses
-    ## its siblings into it as levels of a subset pinned to the first level,
-    ## which shows every other level as empty.
+    ## The single-value case: a compatibility dependency of the block builder,
+    ## scheduled for removal with the block-shape work. See the paragraph above
+    ## for why it is not evidence about the requested statistic.
     if (.filter_pins_primary(where, primary_ref$dataset,
                              primary_ref$variable)) {
       kind <- if (has_percentage_slot) "filtered_count_pct" else "filtered_count"

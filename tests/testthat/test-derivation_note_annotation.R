@@ -67,10 +67,14 @@ test_that("a genuine row filter is still a row filter", {
   ## the rule that produced the new values is one sentence: a restriction says
   ## which records survive, not which statistic is reported about them.
   ##
-  ## Exactly one thing a filter can say still settles the method, and it is
-  ## not about intent: if the surviving records hold a SINGLE value of the
-  ## row's variable, no summary of that variable is possible, so the line can
-  ## only be counting. Two conditions have to hold for that to be knowable:
+  ## Exactly one thing a filter can say still settles the method, and it is a
+  ## TEMPORARY structural dependency rather than a semantic rule: a restriction
+  ## pinning the row's variable to a single value keeps the count family,
+  ## because block construction downstream reads what a block IS from the
+  ## method its first row was given. It is not a claim that `=` requests a
+  ## count -- a shell may pin a value and then ask for Mean/SD. Expect these
+  ## values to change when block shape is settled before method selection.
+  ## Two conditions have to hold for a pinned reading:
   ##
   ##   the clause was READ  -- an unresolved clause is evidence about nothing,
   ##                          so nothing is known about what it pins; and
