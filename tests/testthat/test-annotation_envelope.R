@@ -77,24 +77,28 @@
 test_that("every envelope spelling yields the same head and filter", {
   for (v in list(.ae_v1, .ae_v2)) {
     filter <- sprintf("%s='A' AND %s='Y'", v$cat, v$flag)
+    ## Both keywords in all three styles -- the advertised contract, pinned in
+    ## full rather than sampled.
     spellings <- c(
       sprintf("%s.%s (when %s)", v$head, v$txt, filter),
       sprintf("%s.%s (where %s)", v$head, v$txt, filter),
+      sprintf("%s.%s [when %s]", v$head, v$txt, filter),
       sprintf("%s.%s [where %s]", v$head, v$txt, filter),
+      sprintf("%s.%s when %s", v$head, v$txt, filter),
+      sprintf("%s.%s where %s", v$head, v$txt, filter),
+      ## Case is not part of the contract either way round.
       sprintf("%s.%s WHERE %s", v$head, v$txt, filter),
-      sprintf("%s.%s where %s", v$head, v$txt, filter)
+      sprintf("%s.%s (WHEN %s)", v$head, v$txt, filter)
     )
-    split <- lapply(spellings, .annotation_envelope)
-    ## Scope assertion: five spellings were actually recognised, so a grammar
-    ## change that stopped reading one turns this red rather than leaving a
-    ## list of NULLs that compare equal.
-    expect_equal(length(split), 5L, info = v$head)
-    expect_false(any(vapply(split, is.null, logical(1))), info = v$head)
-    expect_true(all(vapply(split, function(s) identical(s$dataset, v$head),
+    read <- Filter(Negate(is.null), lapply(spellings, .annotation_envelope))
+    ## Scope assertion on what was READ, not on what was offered: counting the
+    ## inputs would be satisfied by eight NULLs.
+    expect_equal(length(read), 8L, info = v$head)
+    expect_true(all(vapply(read, function(s) identical(s$dataset, v$head),
                            logical(1))), info = v$head)
-    expect_true(all(vapply(split, function(s) identical(s$variable, v$txt),
+    expect_true(all(vapply(read, function(s) identical(s$variable, v$txt),
                            logical(1))), info = v$head)
-    expect_true(all(vapply(split, function(s) identical(s$filter, filter),
+    expect_true(all(vapply(read, function(s) identical(s$filter, filter),
                            logical(1))), info = v$head)
   }
 })
@@ -133,6 +137,64 @@ test_that("an envelope's every clause is qualified, not just the first", {
       sprintf("AND(%s.%s EQ A, %s.%s EQ Y, %s.%s EQ Y)",
               v$head, v$cat, v$head, v$flag, v$head, v$occur),
       info = v$head)
+  }
+})
+
+
+test_that("a delimiter inside a value does not close the envelope", {
+  ## Where the envelope CLOSES is structure, and structure is read on masked
+  ## text. A bracket inside a quoted value is part of the value: counted as a
+  ## closer it ends the envelope mid-literal, and the filter that survives is
+  ## whichever fragment happened to come first -- a restriction the author
+  ## never wrote, on a value that no longer exists in the data.
+  for (v in list(.ae_v1, .ae_v2)) {
+    cases <- list(
+      list(ann = sprintf("%s.%s (when %s='A)B' AND %s='Y')",
+                         v$head, v$txt, v$cat, v$flag),
+           value = "A)B"),
+      list(ann = sprintf("%s.%s [where %s='A]B' AND %s='Y']",
+                         v$head, v$txt, v$cat, v$flag),
+           value = "A]B"),
+      ## Openers too -- a value may contain any of them, and each is a
+      ## different way to end the scan in the wrong place.
+      list(ann = sprintf("%s.%s (when %s='(A)[B]' AND %s='Y')",
+                         v$head, v$txt, v$cat, v$flag),
+           value = "(A)[B]")
+    )
+    got <- lapply(cases, function(case) .ae_condition(case$ann, v))
+    ## Scope assertion on what was READ: three values carrying delimiters
+    ## produced conditions, not reservations.
+    expect_equal(sum(!vapply(got, .is_unresolved_condition, logical(1))), 3L,
+                 info = v$head)
+    for (i in seq_along(cases)) {
+      ## Both clauses survive, and the value byte for byte.
+      expect_identical(
+        .ae_shape(got[[i]]),
+        sprintf("AND(%s.%s EQ %s, %s.%s EQ Y)",
+                v$head, v$cat, cases[[i]]$value, v$head, v$flag),
+        info = cases[[i]]$ann)
+    }
+
+    ## The controls, and they are what keep the masking from hiding real
+    ## structure: a comparator's own bracketed list, and a nested group, both
+    ## still counted when the envelope's closer is found.
+    expect_identical(
+      .ae_shape(.ae_condition(
+        sprintf("%s.%s (when %s IN ('A','B'))", v$head, v$txt, v$cat), v)),
+      sprintf("%s.%s IN A|B", v$head, v$cat), info = v$head)
+    expect_identical(
+      .ae_shape(.ae_condition(
+        sprintf("%s.%s (when %s='A' AND (%s='Y' OR %s='Y'))",
+                v$head, v$txt, v$cat, v$flag, v$occur), v)),
+      sprintf("AND(%s.%s EQ A, OR(%s.%s EQ Y, %s.%s EQ Y))",
+              v$head, v$cat, v$head, v$flag, v$head, v$occur),
+      info = v$head)
+
+    ## And a bracket that really does close early -- outside any literal --
+    ## still means this is not one envelope.
+    expect_null(.annotation_envelope(
+      sprintf("%s.%s (when %s='A') AND (%s='Y')",
+              v$head, v$txt, v$cat, v$flag)), info = v$head)
   }
 })
 

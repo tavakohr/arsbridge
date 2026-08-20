@@ -959,6 +959,11 @@
 #'
 #' Only when the opener's match is the LAST character, so `(when A) and (B)`
 #' is not mistaken for one envelope.
+#'
+#' Reads MASKED text. A bracket inside a quoted value is part of the value --
+#' `QXCAT='A)B'` closes nothing -- and counting it here would end the envelope
+#' in the middle of a literal, cutting the filter in half and keeping the
+#' fragment that happened to come first.
 #' @noRd
 .wrapped_inner <- function(txt, open, close) {
   if (nchar(txt) < 2L || substr(txt, 1L, 1L) != open) return(NULL)
@@ -994,14 +999,23 @@
   rest <- trimws(head[[4L]])
   if (!nzchar(rest)) return(NULL)
 
-  inner <- .wrapped_inner(rest, "(", ")") %||%
-    .wrapped_inner(rest, "[", "]") %||% rest
+  ## Where the envelope CLOSES is structure, so it is read on masked text --
+  ## the same separation the Boolean parser makes. Only literals are hidden;
+  ## real brackets, including a comparator's own `IN (...)`, are still there
+  ## to be counted.
+  masked <- .mask_literals(rest)
+  if (is.null(masked)) return(NULL)
+  scan <- masked$text
+
+  inner <- .wrapped_inner(scan, "(", ")") %||%
+    .wrapped_inner(scan, "[", "]") %||% scan
 
   keyed <- regmatches(inner, regexec(.RE_ENVELOPE_KEYWORD, inner,
                                      perl = TRUE))[[1]]
   if (length(keyed) != 2L) return(NULL)
 
-  filter <- trimws(keyed[[2L]])
+  ## The author's own text again, before anything reads it as a condition.
+  filter <- trimws(.unmask_literals(keyed[[2L]], masked))
   if (!nzchar(filter)) return(NULL)
   list(dataset = head[[2L]], variable = head[[3L]], filter = filter)
 }

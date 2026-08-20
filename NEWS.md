@@ -28,6 +28,13 @@
   an envelope whose clauses all name their own dataset asks nothing of the
   spec and reads without one.
 
+  Where the envelope CLOSES is structure too, so the boundary is found on
+  masked text: a bracket inside a quoted value -- `(when CAT='A)B' AND
+  FLAG='Y')` -- is part of the value, and counting it as the closer would end
+  the envelope mid-literal and keep whichever fragment came first. Only
+  literals are hidden; a comparator's own `IN (...)` and a nested group are
+  still counted.
+
   A single-clause envelope now computes. A compound one produces the correctly
   typed condition and still reserves, because the row DataSubset cannot carry
   a compound yet -- reserved for the right reason, and nothing about the
