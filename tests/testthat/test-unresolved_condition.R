@@ -169,13 +169,35 @@ test_that("one unreadable clause makes a whole compound unresolved", {
 })
 
 
-test_that("the real bundled studies reserve nothing", {
+## The one annotation in the bundled shells that this package genuinely cannot
+## read, recorded here rather than counted away.
+##
+## The population is written as a comma-separated pair. This grammar has no
+## comma joiner, and the leaf battery stops at the first condition it
+## recognises -- so until the residue check was added, `ADVS.ANL01FL='Y'`
+## vanished: the emitted event carried the safety flag alone, the string
+## "ANL01FL" appeared nowhere in it, and the figure's population was merged
+## with the plain safety population it was written to differ from.
+##
+## It reserves now. Whether the comma should instead be READ as a conjunction
+## is a grammar question, deliberately not answered here.
+.UC_COMMA_POPULATION <- "(ADSL.SAFFL='Y', ADVS.ANL01FL='Y')"
+
+test_that("the real bundled studies reserve nothing they can read", {
   ## The acceptance half of the over-reservation guard: the generic cases above
   ## say what should happen, and this says it actually did on shells nobody
   ## wrote for this test. Both bundled shells are full of descriptive
   ## annotations of exactly the shape that used to reserve.
+  ##
+  ## The bar is not "no reservations" -- that would be satisfied by going back
+  ## to dropping the condition. It is "no reservation this package could have
+  ## read", which is why the one that remains is named and pinned to its
+  ## annotation rather than allowed for by a count.
   skip_if_not_installed("openxlsx2")
   skip_on_cran()
+
+  expected <- list(annotated_shell.xlsx = character(0),
+                   annotated_shell.docx = .UC_COMMA_POPULATION)
 
   for (shell in c("annotated_shell.xlsx", "annotated_shell.docx")) {
     out <- withr::local_tempdir()
@@ -193,7 +215,13 @@ test_that("the real bundled studies reserve nothing", {
     findings <- result$ars_validation
     unresolved <- findings[grepl("CONDITION_UNRESOLVED", findings$ref), ,
                            drop = FALSE]
-    expect_equal(nrow(unresolved), 0L, info = shell)
-    expect_identical(result$validation_gate$verdict, "DONE", info = shell)
+    want <- expected[[shell]]
+    expect_equal(nrow(unresolved), length(want), info = shell)
+    ## Named, not counted: a DIFFERENT annotation reserving still fails here.
+    expect_identical(sort(as.character(unresolved$detail)), sort(want),
+                     info = shell)
+    expect_identical(result$validation_gate$verdict,
+                     if (length(want) == 0L) "DONE" else "COMPLETED WITH GAPS",
+                     info = shell)
   }
 })

@@ -421,11 +421,110 @@ test_that("a malformed expression reserves rather than parsing a prefix", {
     expect_equal(length(kinds), 8L, info = v$ds)
     expect_true(all(kinds == "unresolved"), info = v$ds)
 
-    ## The documented boundary, asserted so it is a decision rather than an
-    ## oversight: a bracket enclosing NOTHING encloses no operand, so it is a
-    ## note like "(mg)" and the conjunction keeps the operand it does have.
-    ## Unchanged from the flat splitter, which dropped it the same way.
-    expect_identical(.bst_kind(sprintf("%s AND ()", at$a)), "clause",
+    ## Position decides what a bracket is. After a joiner the author has said
+    ## the next thing is an OPERAND, so brackets with nothing between them are
+    ## a missing term, not an aside -- reducing `A AND ()` to `A` removes a
+    ## term the author wrote and leaves the expression looking complete.
+    expect_identical(.parse_boolean(.lex_boolean(
+      sprintf("%s.%s GT 1 AND ()", v$ds, v$num)))$reason,
+      "an empty operand", info = v$ds)
+  }
+})
+
+
+test_that("an operand that leaves a condition unread reserves", {
+  ## Consuming every STRUCTURAL token is not consuming every CONDITION. The
+  ## leaf battery is unanchored and stops at the first form it recognises, so
+  ## `A='Y' B='N'` was read as `A='Y'` and the second condition simply
+  ## disappeared -- the same silent-loss class one level below the tree.
+  for (v in list(.bst_v1, .bst_v2)) {
+    a <- sprintf("%s.%s='Y'", v$ds, v$a)
+    b <- sprintf("%s.%s='N'", v$ds, v$b)
+    c_ <- sprintf("%s.%s='N'", v$ds, v$c)
+
+    lost <- c(
+      sprintf("%s %s", a, b),                       # juxtaposed
+      sprintf("%s ; %s", a, b),                     # punctuation between
+      sprintf("%s unexpected %s", a, b),            # prose between
+      sprintf("%s AND %s %s", a, sprintf("%s.%s='Y'", v$ds, v$b), c_),
+      sprintf("%s AND (%s %s)", a, sprintf("%s.%s='Y'", v$ds, v$b), c_)
+    )
+    kinds <- vapply(lost, .bst_kind, character(1), USE.NAMES = FALSE)
+    ## Scope assertion: five forms were actually read.
+    expect_equal(length(kinds), 5L, info = v$ds)
+    expect_true(all(kinds == "unresolved"), info = v$ds)
+
+    ## The over-reservation counterpart, and it is what keeps this from
+    ## becoming "reserve anything with text after a condition". A descriptive
+    ## suffix follows a condition all the time and states none.
+    kept <- c(
+      sprintf("%s (per protocol)", a),
+      sprintf("%s.%s GT 0 (per protocol)", v$ds, v$num),
+      sprintf("%s (N=XX)", a),
+      sprintf("%s AND %s", a, b)
+    )
+    kept_kinds <- vapply(kept, .bst_kind, character(1), USE.NAMES = FALSE)
+    expect_equal(length(kept_kinds), 4L, info = v$ds)
+    expect_true(all(kept_kinds == "clause"), info = v$ds)
+
+    ## And the value that survived is the one that was written -- "accepted"
+    ## must not mean "accepted after quietly reading something else".
+    expect_identical(.bst_shape(.bst_parse(sprintf("%s (per protocol)", a))),
+                     sprintf("%s.%s EQ Y", v$ds, v$a), info = v$ds)
+  }
+})
+
+
+test_that("a bracket in operand position is an operand, not an aside", {
+  ## `A='Y' (N=XX)` puts the bracket after a condition, where an aside is
+  ## exactly what it is. `A='Y' AND (N=XX)` puts it after a joiner, where the
+  ## author has said the next thing is a term of the restriction -- and a term
+  ## that quietly evaluates to nothing removes itself from the filter.
+  for (v in list(.bst_v1, .bst_v2)) {
+    a <- sprintf("%s.%s='Y'", v$ds, v$a)
+
+    reserved <- c(
+      sprintf("%s AND ()", a),
+      sprintf("%s AND (per protocol)", a),
+      sprintf("%s OR (not recorded)", a),
+      sprintf("(per protocol) AND %s", a)
+    )
+    kinds <- vapply(reserved, .bst_kind, character(1), USE.NAMES = FALSE)
+    expect_equal(length(kinds), 4L, info = v$ds)
+    expect_true(all(kinds == "unresolved"), info = v$ds)
+
+    ## WHY it reserved, not just that it did. An empty operand is diagnosed as
+    ## an empty operand: the author is told a term is missing, rather than
+    ## being sent to look for a condition inside brackets that hold nothing.
+    ## Reading this through the real entry point is what makes the difference
+    ## observable -- the lexer never sees the brackets unless the masker has
+    ## left them alone.
+    diag_reset()
+    suppressWarnings(parse_where_clause(sprintf("%s AND ()", a)))
+    empty <- ars_diagnostics()
+    expect_true(any(grepl("an empty operand", empty$problem, fixed = TRUE)),
+                info = v$ds)
+
+    diag_reset()
+    suppressWarnings(parse_where_clause(sprintf("%s AND (per protocol)", a)))
+    prose <- ars_diagnostics()
+    expect_true(any(grepl("states no condition", prose$problem, fixed = TRUE)),
+                info = v$ds)
+    diag_reset()
+
+    ## Same text, suffix position: still an aside, still accepted.
+    expect_identical(.bst_kind(sprintf("%s (per protocol)", a)), "clause",
+                     info = v$ds)
+    expect_identical(.bst_kind(sprintf("%s (per protocol) AND %s.%s='Y'",
+                                       a, v$ds, v$b)), "clause", info = v$ds)
+
+    ## And prose that joins nothing to a condition is still a sentence. This
+    ## is what separates "an operand vanished" from "these words are not an
+    ## expression at all" -- reserving the latter withholds results that were
+    ## never at risk.
+    expect_identical(.bst_kind("safety population or better"), "absent",
+                     info = v$ds)
+    expect_identical(.bst_kind("(not collected) or (not evaluable)"), "absent",
                      info = v$ds)
   }
 })

@@ -391,6 +391,15 @@
       },
       "order": 2,
       "level": 1
+    },
+    {
+      "id": "AS_SAFETY_POPULATION_ON_TREATMENT_RECORDS_ADSL_SAFFL_Y_ADVS_ANL01FL_Y",
+      "name": "Safety Population; on-treatment records (ADSL.SAFFL='Y', ADVS.ANL01FL='Y')",
+      "label": "Safety Population; on-treatment records (ADSL.SAFFL='Y', ADVS.ANL01FL='Y')",
+      "annotationText": "(ADSL.SAFFL='Y', ADVS.ANL01FL='Y')",
+      "unresolvedCondition": "(ADSL.SAFFL='Y', ADVS.ANL01FL='Y')",
+      "order": 3,
+      "level": 1
     }
   ],
   "dataSubsets": [

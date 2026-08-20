@@ -194,13 +194,24 @@ test_that("the enrichments survive a save and re-read", {
 })
 
 test_that("the supplement adds no blocking finding", {
-  ## Structural validation must be no worse for taking the supplement. The
-  ## deterministic run of this shell is already FAIL-free, so the bar is zero
-  ## -- and the baseline count is asserted too, or a regression that broke
-  ## both would read as "no new failures".
+  ## Structural validation must be no worse for taking the supplement, so the
+  ## claim is that the two counts AGREE -- asserted first, and on its own,
+  ## because that is the property the supplement is responsible for.
+  ##
+  ## The baseline is pinned separately, or a regression that broke both would
+  ## read as "no new failures". It is one, not zero: the bundled shell writes
+  ## a population as a comma-separated pair, which this grammar has no joiner
+  ## for, so it reserves rather than filtering on the first condition alone.
+  ## Named rather than counted, so a different failure still fails here.
   n_fail <- function(d) sum(d$severity == "FAIL")
-  expect_equal(n_fail(.bs_baseline()$diagnostics), 0L)
-  expect_equal(n_fail(.bs_enriched()$diagnostics), 0L)
+  expect_equal(n_fail(.bs_enriched()$diagnostics),
+               n_fail(.bs_baseline()$diagnostics))
+
+  baseline <- .bs_baseline()$diagnostics
+  fails <- baseline[baseline$severity == "FAIL", , drop = FALSE]
+  expect_equal(nrow(fails), 1L)
+  expect_true(all(grepl("(ADSL.SAFFL='Y', ADVS.ANL01FL='Y')", fails$problem,
+                        fixed = TRUE)))
 })
 
 test_that("applying it needs no key, no network and no ellmer", {
