@@ -82,8 +82,18 @@ test_that("a genuine row filter is still a row filter", {
     ## grammar cannot read, so it reserves -- and it must keep reserving.
     ## Treating it as a derivation note would drop a real restriction and
     ## compute the row over every record.
+    ##
+    ## The METHOD here changed with the filter-role work, and deliberately.
+    ## The restriction names STDT and TRTSDT -- neither of them this row's
+    ## variable -- so it scopes the records rather than describing a state of
+    ## TERM, and TERM's own type decides what the line reports. It used to
+    ## count subjects, for no better reason than that the flattener returned
+    ## nothing and "nothing" was read as "the filter is on my own variable".
+    ##
+    ## What has NOT changed is the half that protects the number: `unres`
+    ## stays TRUE, so the row is still reserved and still computes nothing.
     list(ann = "ADQX.TERM; ADQX.STDT = ADQX.TRTSDT", cat = FALSE, unres = TRUE,
-         method = "Subject Count", kind = "filtered_count"))
+         method = "Summary Statistics - Continuous", kind = "continuous"))
   for (k in keeps) {
     expect_equal(.split_derivation_note(k$ann)$note, "", info = k$ann)
     got <- .infer_row_method(list(annotation = k$ann, n_slots = 1L),

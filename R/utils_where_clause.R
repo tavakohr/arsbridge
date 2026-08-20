@@ -359,6 +359,135 @@
   "(", .ADAM_DS, ")\\.(", .ADAM_VAR, ")\\s*\\)"
 )
 
+## ---------------------------------------------------------------------------
+## Structures this grammar cannot represent
+## ---------------------------------------------------------------------------
+
+## Atomic forms that legitimately contain a parenthesis or the word NOT, and
+## so must be taken out of the text before what REMAINS can be read as
+## structure. `IN (...)` carries a value list, `is.na(...)` a call, `not null`
+## a presence test -- none of them groups or negates a sub-expression.
+##
+## Order matters: the negated call form embeds the positive one, so it is
+## removed first, exactly as `.one_condition()` tries it first.
+.RE_NON_STRUCTURAL_PARTS <- c(
+  "(?i)(?:!|\\bnot\\b)\\s*(?:is\\.na|missing)\\s*\\([^()]*\\)",
+  "(?i)\\b(?:is\\.na|missing)\\s*\\([^()]*\\)",
+  "(?i)\\b(?:NOT\\s*IN|NOTIN|IN)\\s*\\([^()]*\\)",
+  "(?i)\\b(?:is\\s+)?not\\s+(?:null|missing)\\b"
+)
+
+#' Remove parentheses that wrap the entire expression, however many deep.
+#'
+#' Only when the opening bracket's match is the LAST character: "(A OR B) AND
+#' C" opens with "(" and ends with "C", and its first bracket closes in the
+#' middle, so nothing is stripped and the group is still seen.
+#' @noRd
+.strip_outer_parens <- function(txt) {
+  repeat {
+    trimmed <- trimws(txt)
+    if (nchar(trimmed) < 2L || substr(trimmed, 1L, 1L) != "(") return(trimmed)
+    chars <- strsplit(trimmed, "", fixed = TRUE)[[1]]
+    depth <- 0L
+    close_at <- NA_integer_
+    for (i in seq_along(chars)) {
+      if (chars[[i]] == "(") depth <- depth + 1L
+      if (chars[[i]] == ")") {
+        depth <- depth - 1L
+        if (depth == 0L) { close_at <- i; break }
+      }
+    }
+    ## Unbalanced, or the opener closes before the end: not a wrapper.
+    if (is.na(close_at) || close_at != length(chars)) return(trimmed)
+    txt <- substr(trimmed, 2L, close_at - 1L)
+  }
+}
+
+#' Name the construct that would be read with the wrong meaning, or `NULL`.
+#'
+#' Read on MASKED text, after `==` normalisation and after BETWEEN's inner
+#' "and" has become `~AND~` -- so a parenthesis, a joiner or the word NOT
+#' inside a quoted value cannot reach this, and a range is not mistaken for a
+#' conjunction.
+#'
+#' Three constructs, and each is refused for the same reason: the flat split
+#' below has no representation for it, so it does not fail on one -- it
+#' succeeds with a different expression.
+#'
+#'   grouping    `A AND (B OR C)` flattens to `AND(A, B, C)`.
+#'   negation    a bare `NOT` is dropped, inverting nothing.
+#'   mixed       `A AND B OR C` takes whichever joiner is tested first for the
+#'               whole expression, so one of the two is silently rewritten.
+#'
+#' A parenthesis is structure-bearing only when what it encloses could change
+#' the reading -- an operator or a joiner. A unit or a note in brackets
+#' ("ADQX.MEASURE (mg)") encloses neither and is left alone, because reserving
+#' a row that states no such construct withholds a result that would have been
+#' correct.
+#'
+#' `!=` is a COMPARATOR, not a negation: the exclamation mark that opens it
+#' belongs to the operator and negates no sub-expression. Reported as
+#' negation it would name the wrong construct, and send the author to remove
+#' something they did not write. (Whether this grammar reads `!=` at all is a
+#' separate question, answered by the clause parser below, which drops it as
+#' unreadable -- the honest reason.)
+#' @noRd
+.unsupported_structure <- function(expr, token_pattern = NULL) {
+  txt <- as.character(expr %||% "")
+  if (length(txt) != 1L || is.na(txt) || !nzchar(trimws(txt))) return(NULL)
+
+  ## What is left once every atomic form is taken out is the structure.
+  residue <- txt
+  for (re in .RE_NON_STRUCTURAL_PARTS) {
+    residue <- gsub(re, " ", residue, perl = TRUE)
+  }
+  ## The BETWEEN marker is this parser's own, not the author's conjunction.
+  residue <- gsub("~AND~", " ", residue, fixed = TRUE)
+
+  ## Parentheses around the WHOLE expression group nothing: there is no second
+  ## operand for them to bind against. "(ADSL.SAFFL='Y')" is how a great many
+  ## shells write an ordinary population, and reserving those would withhold
+  ## every result in every table that uses one.
+  residue <- .strip_outer_parens(residue)
+
+  ## Grouping: a span binds a sub-expression only if it ENCLOSES a joiner.
+  ## That is what makes it capable of changing the reading -- `(B OR C)` inside
+  ## an AND is a different restriction from `B OR C` spread flat across it.
+  ##
+  ## What the span sits next to is irrelevant, and reading it that way was
+  ## wrong: `A AND (B)` and `(A) AND (B)` put a bracket around a single
+  ## condition, which groups nothing and means exactly what it says. Refusing
+  ## those would withhold correct results for a punctuation habit.
+  ##
+  ## `(A AND B) AND C` is refused even though flattening it happens to give the
+  ## same answer, because knowing that requires reasoning about associativity
+  ## that this check does not do. Refusing a representable expression costs a
+  ## reservation; accepting an unrepresentable one costs a wrong number.
+  joiner_re <- "(?i)\\b(?:and|or)\\b|&|\\|"
+  spans <- regmatches(residue,
+                      gregexpr("\\([^()]*\\)", residue, perl = TRUE))[[1]]
+  for (span in spans) {
+    inner <- substr(span, 2L, nchar(span) - 1L)
+    if (grepl(joiner_re, inner, perl = TRUE)) {
+      return("grouped sub-expressions")
+    }
+  }
+
+  ## Negation of anything other than the presence tests removed above. The
+  ## "!" branch excludes "!=", whose "!" is part of a comparator.
+  if (grepl("(?i)\\bnot\\b|!(?!=)", residue, perl = TRUE)) {
+    return("negation")
+  }
+
+  ## Both joiners in one expression: precedence decides the meaning, and this
+  ## grammar has none.
+  has_and <- grepl("(?i)\\s(?:and|&&)\\s|\\s&\\s", residue, perl = TRUE)
+  has_or  <- grepl("(?i)\\s(?:or|\\|\\|)\\s|\\s\\|\\s", residue, perl = TRUE)
+  if (has_and && has_or) return("mixed AND/OR without explicit grouping")
+
+  NULL
+}
+
 #' Build an ARS WhereClause object from an annotation expression.
 #'
 #' Returns NULL if no parseable condition is found (caller should treat as
@@ -435,6 +564,43 @@ parse_where_clause <- function(expr) {
                       .RE_NUMBER, "))\\s+and\\s+"),
                "\\1 ~AND~ ", expr, perl = TRUE)
 
+  ## Constructs whose MEANING this parser cannot carry. Refused before any
+  ## clause is read, because the split below is a flat one: it has no notion of
+  ## precedence, grouping or negation, so it answers such an expression with a
+  ## tree that is valid, executable, and not what the author wrote.
+  ##
+  ## Refusing is not a limitation added here -- it is the limitation that was
+  ## always present, made visible. Until now `A AND (B OR C)` became
+  ## `AND(A, B, C)`, which restricts differently and reports nothing; a
+  ## population written that way emitted an unsatisfiable analysis set. An
+  ## expression this parser cannot represent must reserve, exactly like one it
+  ## cannot read at all -- the two are the same failure to the reader of the
+  ## number.
+  ## Only an expression that ATTEMPTS a condition can be refused for its
+  ## structure. Prose carries English words this check reads as grammar --
+  ## "not applicable", "safety population or better" -- and reserving a row
+  ## whose annotation states no filter withholds a result that was never at
+  ## risk. Same evidence rule the dropped-clause branch below applies, and for
+  ## the same reason.
+  unsupported <- if (grepl(.RE_CONDITION_EVIDENCE, expr, perl = TRUE)) {
+    .unsupported_structure(expr, masked$token_pattern)
+  } else {
+    NULL
+  }
+  if (!is.null(unsupported)) {
+    diag_add(
+      stage = "where_clause", severity = "WARN",
+      problem = sprintf("Condition uses %s, which this grammar cannot represent",
+                        unsupported),
+      location = original,
+      action = paste("Results are reserved rather than computed, because the",
+                     "expression would otherwise be read with a different",
+                     "meaning. Restate it without it, or supply a typed",
+                     "condition through the supplement.")
+    )
+    return(.unresolved_condition(original, original))
+  }
+
   ## Detect logical joiner -- "and"/"&"/"AND" produce AND; "or"/"|"/"OR" → OR.
   ## Reading masked text, so a joiner word inside a value cannot be mistaken
   ## for the joiner between two clauses.
@@ -480,9 +646,40 @@ parse_where_clause <- function(expr) {
   ## Warning about it told the author to fix an annotation the package
   ## understood perfectly.
   is_directive <- function(s) !is.null(.once_per_subject_var(s))
+  ## A clause of a CONJUNCTION (or disjunction) is held to a lower bar than a
+  ## lone annotation, and deliberately.
+  ##
+  ## The qualified-reference requirement above exists for the single-clause
+  ## case, where an annotation is as likely to be a variable pointer with
+  ## descriptive text as it is to be a filter. Inside `A and B` that ambiguity
+  ## is gone: the author joined two things with "and", so both are clauses. A
+  ## clause carrying an operator that this grammar cannot read is therefore a
+  ## dropped condition even when it names its variable without a dataset --
+  ##
+  ##     ADQX.QXTRT WHERE QXCAT='X' AND QXPRESP='Y' AND QXOCCUR='Y'
+  ##
+  ## which is how shells routinely write a filter after the head reference.
+  ## Only the first clause was qualified, the other two matched no pattern,
+  ## and -- carrying no DATASET.VARIABLE -- they were not even counted as
+  ## dropped. The row filtered on one third of what the author wrote, and
+  ## nothing said so.
+  joined <- !is.null(joiner)
   dropped <- character(0)
   for (u in unparsed) {
     if (is_directive(u)) next
+    if (joined && .has_condition_evidence(u)) {
+      dropped <- c(dropped, u)
+      diag_add(
+        stage = "where_clause", severity = "WARN",
+        problem = "A clause of a joined condition could not be read",
+        location = u,
+        action = paste("Results are reserved rather than computed on the",
+                       "clauses that did parse: a conjunction missing a term",
+                       "keeps more records than the author asked for, and a",
+                       "disjunction missing one keeps fewer.")
+      )
+      next
+    }
     if (grepl(paste0(.ADAM_DS, "\\.", .ADAM_VAR), u, perl = TRUE) && is_attempt(u)) {
       dropped <- c(dropped, u)
       diag_add(
@@ -614,6 +811,222 @@ parse_where_clause <- function(expr) {
     return(.cond(m[2], m[3], "EQ", NA_character_))
   }
   NULL
+}
+
+## ---------------------------------------------------------------------------
+## What a row's filter restricts
+## ---------------------------------------------------------------------------
+
+## The five answers to "what does this restriction do to the row's own
+## variable?". They describe the RESTRICTION and nothing else: which statistic
+## the row asks for is a different question, answered from the row's display
+## and the variable's metadata, never from this alone.
+##
+## Keeping them apart is the whole point. The conflation this replaces read
+## "I could not flatten the filter" as "the filter must be on the primary
+## variable", and typed the row as a subject count on the strength of it -- so
+## an unreadable annotation silently became a count of something, and a
+## continuous summary scoped by a parameter became a count of subjects.
+##
+##   none               no restriction stated.
+##   on_primary         every atom restricts the row's own variable.
+##   scoping_other      no atom does; the filter only chooses the records.
+##   mixed_conjunctive  both, joined by AND at every level -- so the atoms on
+##                      the primary variable and the ones that merely scope
+##                      can be separated, and each half means what it says.
+##   unknown            the filter could not be read, or mixes both kinds
+##                      under an OR/NOT where no such separation is valid.
+##                      NEVER selects a method.
+.FILTER_ROLES <- c("none", "on_primary", "scoping_other",
+                   "mixed_conjunctive", "unknown")
+
+#' Every atomic condition in a WhereClause tree, in document order.
+#' @noRd
+.where_atoms <- function(where) {
+  if (is.null(where)) return(list())
+  if (!is.null(where[["condition"]])) return(list(where[["condition"]]))
+  compound <- where[["compoundExpression"]]
+  if (!is.null(compound)) {
+    return(unlist(lapply(compound[["whereClauses"]] %||% list(), .where_atoms),
+                  recursive = FALSE))
+  }
+  ## A bare condition object (no wrapper) -- the shape some callers hold.
+  if (!is.null(where[["variable"]])) return(list(where))
+  list()
+}
+
+#' TRUE when every join in the tree is an AND.
+#'
+#' Only under an all-AND tree may the atoms be considered independently: each
+#' one restricts the result on its own. Under an OR they do not -- the row's
+#' variable may be unrestricted on the branch that was taken -- so an
+#' expression containing one cannot be split into "the part about my variable"
+#' and "the part that scopes".
+#' @noRd
+.where_all_conjunctive <- function(where) {
+  if (is.null(where)) return(TRUE)
+  compound <- where[["compoundExpression"]]
+  if (is.null(compound)) return(TRUE)
+  if (!identical(.as_scalar_char(compound[["logicalOperator"]]) %||% "", "AND")) {
+    return(FALSE)
+  }
+  all(vapply(compound[["whereClauses"]] %||% list(),
+             .where_all_conjunctive, logical(1)))
+}
+
+#' Classify what a filter restricts, relative to the row's own variable.
+#'
+#' @param where The row's EFFECTIVE filter -- the clause that will actually be
+#'   emitted -- or an unresolved-condition object, or `NULL`.
+#' @param dataset,variable The row's primary reference. Both are compared:
+#'   two ADaM datasets may carry a variable of the same name, and in a table
+#'   whose rows come from different domains, matching on the name alone would
+#'   call a filter "on the primary variable" because some other dataset's
+#'   variable is spelled the same.
+#' @return One of `.FILTER_ROLES`.
+#' @noRd
+.filter_role <- function(where, dataset = NULL, variable = NULL) {
+  if (.is_unresolved_condition(where)) return("unknown")
+  atoms <- .where_atoms(where)
+  if (length(atoms) == 0) return("none")
+
+  var <- toupper(as.character(variable %||% ""))
+  ds  <- toupper(as.character(dataset  %||% ""))
+  ## With no primary reference to compare against there is no answer to give,
+  ## and "scoping_other" would be a guess that happens to be the permissive
+  ## one. The row reserves instead.
+  if (!nzchar(var)) return("unknown")
+
+  on_primary <- vapply(atoms, function(a) {
+    a_var <- toupper(.as_scalar_char(a[["variable"]]) %||% "")
+    a_ds  <- toupper(.as_scalar_char(a[["dataset"]])  %||% "")
+    identical(a_var, var) && (!nzchar(ds) || !nzchar(a_ds) || identical(a_ds, ds))
+  }, logical(1))
+
+  if (all(on_primary)) return("on_primary")
+  if (!any(on_primary)) return("scoping_other")
+  if (.where_all_conjunctive(where)) return("mixed_conjunctive")
+  "unknown"
+}
+
+#' Does the restriction hold the row's own variable at ONE value?
+#'
+#' A separate question from the role, deliberately. The role says WHICH
+#' variables a restriction speaks about; this says what it does to the row's
+#' own -- and only the second can tell a line that reports a distribution from
+#' a line that reports one state.
+#'
+#'   ADQX.QXSEV='SEVERE' AND ADQX.QXFL='Y'    pinned: one value survives the
+#'                                            filter, so there is nothing left
+#'                                            to distribute over. The line
+#'                                            reports how many.
+#'   ADQX.QXVAL WHERE QXPARM='P1'
+#'              AND ADQX.QXVAL GT 0           bounded: QXVAL still takes many
+#'                                            values inside the subset, so the
+#'                                            line still summarises it.
+#'
+#' Only equality pins: `EQ` with a single value, or `IN` with a list of one.
+#' A threshold, a range, an inequality and a presence test all leave the
+#' variable free to vary, and a row whose variable can still vary is not
+#' reporting a single count of it.
+#'
+#' Read only under an all-AND tree: under an OR a "pinning" conjunct may sit on
+#' a branch that was not taken, so it pins nothing.
+#' @noRd
+.filter_pins_primary <- function(where, dataset = NULL, variable = NULL) {
+  var <- toupper(as.character(variable %||% ""))
+  ds  <- toupper(as.character(dataset  %||% ""))
+  if (!nzchar(var) || .is_unresolved_condition(where)) return(FALSE)
+  if (!.where_all_conjunctive(where)) return(FALSE)
+
+  atoms <- .where_atoms(where)
+  if (length(atoms) == 0) return(FALSE)
+
+  any(vapply(atoms, function(a) {
+    a_var <- toupper(.as_scalar_char(a[["variable"]]) %||% "")
+    a_ds  <- toupper(.as_scalar_char(a[["dataset"]])  %||% "")
+    if (!identical(a_var, var)) return(FALSE)
+    if (nzchar(ds) && nzchar(a_ds) && !identical(a_ds, ds)) return(FALSE)
+    comparator <- toupper(.as_scalar_char(a[["comparator"]]) %||% "EQ")
+    values <- a[["value"]] %||% list()
+    ## An EQ with no value is the missing-value test, which pins the variable
+    ## to "absent" -- one state, and countable.
+    if (identical(comparator, "EQ")) return(length(values) <= 1L)
+    if (identical(comparator, "IN")) return(length(values) == 1L)
+    FALSE
+  }, logical(1)))
+}
+
+#' The role of the filter an annotation states, without building a subset.
+#' @noRd
+.annotation_filter_role <- function(annotation, dataset = NULL,
+                                    variable = NULL) {
+  .filter_role(parse_where_clause(.annotation_less_derivation_note(annotation)),
+               dataset, variable)
+}
+
+## Words that look like an ADaM variable name and are not one: this grammar's
+## own comparators and joiners, and the restriction keywords a shell author
+## writes around them. Everything else in upper case is treated as a variable,
+## which is the conservative direction -- see below.
+.RESTRICTION_KEYWORDS <- c(
+  "AND", "OR", "NOT", "IN", "NOTIN", "IS", "NULL", "MISSING",
+  "EQ", "NE", "GT", "GE", "LT", "LE", "BETWEEN", "CONTAINS",
+  "WHEN", "WHERE", "IF", "NA", "TRUE", "FALSE"
+)
+
+#' Does an UNREADABLE restriction speak only about the row's own variable?
+#'
+#' Asked only when the grammar could not parse the filter, and answered from
+#' the text, because that is the only evidence left. It decides nothing about
+#' which records are kept -- the row is reserved either way -- it decides what
+#' kind of line the shell is showing, which the layout still needs.
+#'
+#' `ADQX.QXNUM >= 16` restricts the row's own variable: a threshold this
+#' grammar does not yet read is still a threshold, and the row counts subjects
+#' in that state. `ADQX.QXTRT (when QXCAT='X' AND ...)` restricts OTHER
+#' variables, so the row still reports the distribution of its own.
+#'
+#' TRUE requires POSITIVE evidence, in both halves:
+#'
+#'   1. the text opens with the row's own reference, recognised and removed --
+#'      so we know which part is the restriction, and
+#'   2. what remains names no other variable at all.
+#'
+#' Absence of a recognised comparison is not evidence. This is asked about text
+#' the grammar has already failed on, so the restriction may be written in a
+#' form nothing here matches -- `is.na(QXCAT)`, `QXCAT LIKE 'X'`, `%in%`. Those
+#' name another variable while offering no operand this function would
+#' recognise, and reading "no operands found" as "only my variable" would type
+#' the row as a count of something it never counted. So any unrecognised
+#' upper-case word that is not one of this grammar's keywords is treated as
+#' another variable, and the answer is FALSE.
+#' @noRd
+.unreadable_restricts_only_primary <- function(text, dataset = NULL,
+                                               variable = NULL) {
+  txt <- as.character(text %||% "")
+  if (length(txt) != 1L || is.na(txt) || !nzchar(trimws(txt))) return(FALSE)
+  var <- toupper(as.character(variable %||% ""))
+  ds  <- toupper(as.character(dataset  %||% ""))
+  if (!nzchar(var)) return(FALSE)
+
+  masked <- .mask_literals(txt)
+  if (is.null(masked)) return(FALSE)
+  txt <- masked$text
+
+  ## (1) The row's own reference must open the text, or we cannot say which
+  ## part of it is the restriction.
+  head_re <- paste0("^\\s*(?:", if (nzchar(ds)) paste0(ds, "\\.") else
+                    paste0(.ADAM_DS, "\\."), ")?", var, "\\b")
+  if (!grepl(head_re, txt, perl = TRUE, ignore.case = TRUE)) return(FALSE)
+  rest <- sub(head_re, " ", txt, perl = TRUE, ignore.case = TRUE)
+
+  ## (2) Nothing else in what remains may name a variable.
+  words <- regmatches(rest, gregexpr("[A-Za-z][A-Za-z0-9._]*", rest,
+                                     perl = TRUE))[[1]]
+  words <- toupper(sub("^.*\\.", "", words))
+  words <- setdiff(words, c(.RESTRICTION_KEYWORDS, var))
+  length(words) == 0
 }
 
 #' Flatten a single annotation WHERE clause into the
