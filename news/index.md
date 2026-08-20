@@ -2,6 +2,48 @@
 
 ## arsbridge (development version)
 
+- **An annotation’s envelope is split from its head, and a bare variable
+  inside it inherits only what the spec confirms.** A shell names what a
+  row reports and then says which records it reports on –
+  `ADPR.PRTRT (when PRCAT='DIAGNOSTIC TESTING' AND PRPRESP='Y')`. Those
+  are two languages in one string: only `WHERE` was recognised, so
+  `(when ...)` and `[where ...]` left the head as an unplaceable token
+  and reserved a row that was written perfectly clearly.
+
+  Where the form *was* recognised, the context it supplies was applied
+  as a text prefix – the head dataset pasted onto the front of the tail.
+  That qualified only the FIRST clause, because a prefix lands once on a
+  string, so `WHERE A='1' AND B='2' AND C='3'` filtered on one third of
+  what the author wrote; and it ASSUMED the variable lives on that
+  dataset rather than confirming it.
+
+  The envelope is now parsed, and every bare name in it is qualified
+  against the head reference’s dataset **only where the ADaM spec
+  confirms that exact `DATASET.VARIABLE`**. A name both the head and
+  another dataset carry resolves to the head; a name only another
+  dataset carries is unresolved, never borrowed; an explicitly qualified
+  foreign clause does not move the context for the clauses after it; and
+  quoted values and comparator syntax are never rewritten. Inheritance
+  is **all-or-none** – one name that cannot be confirmed reserves the
+  whole filter, because a filter honoured in part restricts by less than
+  was written and says nothing about it. Without a spec in reach nothing
+  is confirmable, which is the same answer as “not there”; an envelope
+  whose clauses all name their own dataset asks nothing of the spec and
+  reads without one.
+
+  Where the envelope CLOSES is structure too, so the boundary is found
+  on masked text: a bracket inside a quoted value –
+  `(when CAT='A)B' AND FLAG='Y')` – is part of the value, and counting
+  it as the closer would end the envelope mid-literal and keep whichever
+  fragment came first. Only literals are hidden; a comparator’s own
+  `IN (...)` and a nested group are still counted.
+
+  A single-clause envelope now computes. A compound one produces the
+  correctly typed condition and still reserves, because the row
+  DataSubset cannot carry a compound yet – reserved for the right
+  reason, and nothing about the annotation has to change when the
+  carrier lands.
+
 - **Boolean structure is parsed as a tree, with precedence.** Brackets
   bind tightest, then `NOT`, then `AND`, then `OR` – the precedence
   every SQL and SAS author already writes to. `A AND (B OR C)` produces
