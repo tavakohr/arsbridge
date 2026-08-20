@@ -354,13 +354,20 @@
 #'   many statistics the row displays).
 #' @param var_is_categorical NA/TRUE/FALSE -- the spec's verdict on the row's
 #'   primary variable (from `.var_is_categorical`).
+#' @param filter The row's EFFECTIVE filter -- the clause that will be emitted
+#'   for it -- as a WhereClause, an unresolved-condition object, or `NULL`.
+#'   Supplied by the caller rather than re-derived here, so the method is
+#'   inferred from the restriction the row will actually compute under. When
+#'   absent it is read from the annotation, which is what the free-standing
+#'   caller has.
 #' @return list(method = standard-catalogue name, kind = layout kind); or
 #'   list(method = NULL, kind = "manual", unsupported = <reason>) when the row
 #'   asks for a statistic no catalogue method computes, which the caller
 #'   reserves rather than substituting for; or NULL when the form is
 #'   unrecognised (caller keeps the section default).
 #' @noRd
-.infer_row_method <- function(row, var_is_categorical = NA) {
+.infer_row_method <- function(row, var_is_categorical = NA,
+                              filter = NULL, filter_known = FALSE) {
   ## A trailing derivation note ("[ADQX.MEASDUR; = ADQX.ENDDY]") says how the
   ## variable is DERIVED, not which records to keep. Read as a filter it makes
   ## a continuous summary into a subject count, and the block's statistic rows
@@ -395,28 +402,97 @@
     kind <- if (has_percentage_slot) "subject_count_pct" else "subject_count"
     return(list(method = subject_count_method, kind = kind))
   }
-  ## A condition is present. One ON the primary variable itself
-  ## ("ADSL.SAFFL='Y'", "ADEX.TRTDUR GE 16") means "count subjects in this
-  ## state" -> subject count within the subset. One on ANOTHER variable
-  ## ("ADEX.AVAL WHERE PARAMCD='DURD'") only scopes the data -- the primary
-  ## variable is still summarised by its own type below.
+  ## A condition is present. It says which RECORDS survive; it does not say
+  ## which STATISTIC those records are reported with, and this function no
+  ## longer reads it as if it did.
   ##
-  ## What decides this is that a condition is THERE, not how it is spelled.
-  ## Looking for a quoted equality or the word "where" recognised a character
-  ## level as a restriction but not a numeric threshold on the very same row,
-  ## so a threshold row was summarised instead of counted -- reporting a mean
-  ## of the unrestricted variable into a count slot, which looks like a
-  ## plausible number and is an answer to a question nobody asked.
+  ## What it used to do, and what that cost:
+  ##
+  ##   A condition on the row's own variable was read as "count subjects in
+  ##   this state". `ADQX.QXVAL WHERE ADQX.QXVAL GT 0` therefore became a
+  ##   subject count under a block asking for Mean/SD -- the threshold selects
+  ##   observations, and what is reported about them is stated by the shell,
+  ##   on rows this function cannot see.
+  ##
+  ##   Worse, "the condition is on my own variable" and "I could not read the
+  ##   condition" both presented as an empty filter variable, so an unreadable
+  ##   annotation took the same branch: a one-operation method under a line
+  ##   displaying "xx (xx.x)", and a second, spurious finding about statistic
+  ##   slots on a row whose only real defect was the filter.
+  ##
+  ## One case remains where the restriction still selects the method, and it is
+  ## a TEMPORARY STRUCTURAL DEPENDENCY, not a semantic rule. Read the next
+  ## paragraph before treating it as one.
+  ##
+  ## A restriction that pins the row's variable to a single value keeps the
+  ## subject-count family. That is NOT because equality means "count": a shell
+  ## may filter `AVAL = 30` and then ask for Mean/SD, and the filter would
+  ## still only be saying which observations survive. It is because block
+  ## construction downstream currently decides what a block IS from the method
+  ## its first row was given -- so classifying pinned sibling rows as
+  ## distributions makes the first one a categorical parent and collapses the
+  ## rest into it as levels of a subset pinned to the first level. The
+  ## dependency runs from the block builder, not from the semantics of `=`.
+  ##
+  ## To be REMOVED once block shape is determined independently, before method
+  ## selection: at that point equality alone must no longer be sufficient
+  ## evidence for the requested statistic, and the method must come from
+  ## block/display/statistic evidence plus metadata through the constraint
+  ## resolver. Until then, two conditions must hold for a pinned reading --
+  ##
+  ##   the clause was READ  an unresolved clause is evidence about nothing, so
+  ##                        nothing is known about what it pins, however it is
+  ##                        written; and
+  ##   it is an equality    a threshold or a range leaves the variable free to
+  ##                        vary among the survivors.
+  ##
+  ## Everything else falls through to the variable's own type. That includes
+  ## `unknown`, deliberately and literally: the row is reserved by the caller
+  ## on the marker it carries, and whatever method it shows for layout comes
+  ## from evidence that is independently known.
+  ##
+  ## `.filter_role()` classifies what the restriction speaks about -- none,
+  ## on_primary, scoping_other, mixed_conjunctive, unknown. It is evidence, not
+  ## a decision, and is deliberately NOT consulted here: the constraint
+  ## resolution that weighs it against block shape and requested statistics is
+  ## the next piece of work, and until it exists a role must not quietly become
+  ## a method by itself.
+  ##
+  ## Still guarded by condition evidence, and the guard is load-bearing for a
+  ## second reason now: an annotation carrying no condition at all can still
+  ## contain a word the structure check reads as negation ("not applicable"),
+  ## and prose that states no filter must not reserve a row that computes.
   if (.has_condition_evidence(ann)) {
-    primary <- extract_annotation_vars(ann)
-    primary <- if (length(primary) > 0) sub("^.*\\.", "", primary[1]) else ""
-    fs <- flat_data_subset(ann)
-    filter_var <- toupper(fs$variable %||% "")
-    if (!nzchar(filter_var) || identical(filter_var, toupper(primary))) {
+    ## The primary reference is read WITH its dataset, and both halves are
+    ## compared: in a table whose rows come from different ADaM domains,
+    ## matching a filter to the primary variable by name alone calls a filter
+    ## "on the primary variable" because some other domain spells a variable
+    ## the same.
+    primary_ref <- list(dataset = "", variable = "")
+    refs <- extract_annotation_vars(ann)
+    if (length(refs) > 0) {
+      pieces <- strsplit(refs[[1]], ".", fixed = TRUE)[[1]]
+      primary_ref$dataset  <- pieces[[1]]
+      primary_ref$variable <- if (length(pieces) >= 2) pieces[[2]] else ""
+    }
+
+    ## The row's EFFECTIVE restriction: the clause it will actually compute
+    ## under, handed in by the caller, or parsed from the annotation for the
+    ## free-standing caller that has only that. Read once, so nothing here can
+    ## answer from a different view of the same restriction than the emitted
+    ## DataSubset was built from.
+    where <- if (isTRUE(filter_known)) filter else parse_where_clause(ann)
+
+    ## The single-value case: a compatibility dependency of the block builder,
+    ## scheduled for removal with the block-shape work. See the paragraph above
+    ## for why it is not evidence about the requested statistic.
+    if (.filter_pins_primary(where, primary_ref$dataset,
+                             primary_ref$variable)) {
       kind <- if (has_percentage_slot) "filtered_count_pct" else "filtered_count"
       return(list(method = subject_count_method, kind = kind))
     }
-    ## fall through: subset on another variable; type decides the method
+    ## Anything else falls through: the restriction has said all it can, and
+    ## the variable's own type decides what the line reports.
   }
   ## Primary variable type (from the ADaM spec) decides the method.
   if (isTRUE(var_is_categorical)) {
@@ -710,7 +786,7 @@
   if (length(p) != 4) {
     unreadable <- parse_where_clause(ann)
     if (.is_unresolved_condition(unreadable)) return(unreadable)
-    return(NULL)
+    return(.stated_filter_unrepresented(ann))
   }
   tail <- trimws(p[4])
   if (!grepl(paste0("^", .ADAM_DS, "\\."), tail, perl = TRUE)) {
@@ -723,7 +799,63 @@
   ## NULL, because an analysis with no DataSubset computes over every record.
   unreadable <- parse_where_clause(tail)
   if (.is_unresolved_condition(unreadable)) return(unreadable)
+  .stated_filter_unrepresented(ann)
+}
+
+#' The restriction a built row will actually compute under.
+#'
+#' One reading of one field set, so the method and the emitted DataSubset can
+#' never disagree about what the row is filtered by. The order mirrors the
+#' precedence the row loop applied when it filled these fields: an unresolved
+#' condition outranks everything (there IS no usable filter), then a typed
+#' compound, then a flat subset.
+#' @noRd
+.row_effective_filter <- function(er) {
+  unresolved <- as.character(er$unresolved_condition %||% "")
+  if (length(unresolved) > 0 && nzchar(unresolved[[1]])) {
+    return(.unresolved_condition(unresolved[[1]]))
+  }
+  compound <- er$data_subset_compound
+  if (!is.null(compound)) return(compound)
+  flat <- er[["data_subset"]]
+  if (!is.null(flat) && length(flat) > 0) return(flat)
   NULL
+}
+
+#' A filter the author stated that this builder cannot turn into a subset.
+#'
+#' Reached when the grammar READ the expression -- it is not unresolved -- but
+#' the subset this function can build cannot hold it. Today that means one
+#' thing: a compound expression, which `flat_data_subset()` answers with `NULL`
+#' because it flattens to a single condition or to nothing.
+#'
+#' `NULL` was the old answer, and `NULL` here means "this annotation states no
+#' filter". So a perfectly readable `A AND B` produced an analysis with no
+#' DataSubset, which computes over every record and reports nothing -- the
+#' silent over-count. The same failure the unresolved marker exists to prevent,
+#' arriving through the one door that marker did not cover.
+#'
+#' So the row reserves instead, carrying the author's own text. It is a
+#' RESERVATION, not a refusal: when the subset builder can carry a compound
+#' expression, these rows compute, and nothing about the annotation has to
+#' change.
+#'
+#' Returns `NULL` -- the honest "no filter stated" -- when the annotation
+#' carries no condition evidence at all.
+#' @noRd
+.stated_filter_unrepresented <- function(ann) {
+  if (!.has_condition_evidence(ann)) return(NULL)
+  diag_add(
+    stage = "build_ars", severity = "WARN",
+    problem = sprintf(
+      "Filter '%s' was read but cannot be carried as a DataSubset", ann),
+    location = ann,
+    action = paste("Results are reserved rather than computed over every",
+                   "record. Supply the clause through the supplement, which",
+                   "carries a compound expression, or state a single",
+                   "condition.")
+  )
+  .unresolved_condition(ann, ann)
 }
 
 #' Build a CDISC ARS v1.0 ReportingEvent list from enriched sections.
@@ -775,12 +907,19 @@ build_ars_json <- function(sections,
     variable <- toupper(sub("^.*\\.", "", variable))
     dataset  <- toupper(dataset %||% "")
     rec <- spec_lookup[[paste0(dataset, ".", variable)]]
-    if (is.null(rec)) {
-      hits <- spec_lookup[vapply(spec_lookup, function(r)
-        identical(toupper(r$variable %||% ""), variable), logical(1))]
-      if (!length(hits)) return(NA)
-      rec <- hits[[1]]
-    }
+    ## Exact DATASET.VARIABLE, or no answer. There used to be a fallback that
+    ## searched every dataset for a variable of the same NAME and took the
+    ## first hit -- which in a table whose rows come from different ADaM
+    ## domains answers a question about one dataset's variable with another
+    ## dataset's metadata. Two domains carrying a same-named variable of
+    ## different type is ordinary, and the verdict decides which METHOD the
+    ## row computes.
+    ##
+    ## NA is not a worse answer than a borrowed one: it means "the spec does
+    ## not describe this variable", which is true, and the caller keeps the
+    ## section default rather than acting on evidence that belongs to another
+    ## dataset. Dataset identity is part of the evidence, not decoration.
+    if (is.null(rec)) return(NA)
     type <- tolower(as.character(rec$type %||% ""))
     cl   <- as.character(rec$codelist %||% "")
     grepl("char|text|string|^c$", type) || (nzchar(cl) && !is.na(cl))
@@ -1191,7 +1330,12 @@ build_ars_json <- function(sections,
       row2         <- list(label = label %||% "", annotation = annotation,
                            has_annot = TRUE)
       cat_verdict2 <- .var_is_categorical(er2$primary_dataset, er2$primary_variable)
-      inferred2    <- .infer_row_method(row2, cat_verdict2)
+      ## Same effective-filter rule as the primary row path: a free-standing
+      ## analysis built from a typed supplement clause is typed from THAT
+      ## clause, not from a re-reading of its display annotation.
+      inferred2    <- .infer_row_method(row2, cat_verdict2,
+                                        filter = .row_effective_filter(er2),
+                                        filter_known = TRUE)
       method2_id   <- mth_obj$id
       ## A statistic this package cannot produce reserves the row, and is
       ## checked before the catalogue: there is no catalogue entry to consult.
@@ -1521,7 +1665,20 @@ build_ars_json <- function(sections,
       ## Annotation-form inference applies to TABLE rows only: a listing
       ## column annotated "ADAE.AEDECOD" is a passthrough column, never a
       ## count analysis.
-      inferred <- if (build_layout) .infer_row_method(row, cat_verdict) else NULL
+      ##
+      ## The EFFECTIVE filter is handed in rather than re-derived from the
+      ## annotation string. By this point the row's restriction has already
+      ## been settled once -- from a typed supplement clause, from the
+      ## annotation, or not at all -- and reading the string a second time can
+      ## reach a different answer than the one the row will compute under. That
+      ## is how a row filtered through the supplement could still be typed from
+      ## a shell annotation the grammar could not read.
+      inferred <- if (build_layout) {
+        .infer_row_method(row, cat_verdict, filter = .row_effective_filter(er),
+                          filter_known = TRUE)
+      } else {
+        NULL
+      }
 
       if (build_layout &&
           !nzchar(er$primary_variable %||% "") &&

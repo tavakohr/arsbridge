@@ -64,15 +64,29 @@ test_that("equivalent conditions select the same method, however spelled", {
                        character(1))
     expect_length(unique(verdicts), 1L)
 
-    ## And they agree with the character contrast -- the form that always
-    ## worked. This is what makes the assertion above mean "counted" rather
-    ## than merely "consistent": five forms agreeing on the WRONG method would
-    ## also be consistent.
+    ## The five agree -- but on WHAT changed with the filter-role work, and
+    ## the change is the point of that work rather than a casualty of it.
+    ##
+    ## These are thresholds on a numeric variable. A threshold says which
+    ## observations survive; it does not say whether the line reports how many
+    ## subjects reached it or the mean of those that did. So the restriction
+    ## no longer selects the method, and the variable's own type does: numeric
+    ## here, hence the continuous summary. What this test protects is
+    ## unchanged and still load-bearing -- five spellings of one restriction,
+    ## two of which this grammar cannot parse, must not diverge.
+    expect_identical(unname(verdicts[[1]]),
+                     "Summary Statistics - Continuous")
+
+    ## The contrast that keeps "consistent" from meaning "insensitive": an
+    ## EQUALITY leaves the variable a single value, so no summary of it is
+    ## possible and the line can only be counting. Same annotation shape, same
+    ## row, different verdict -- and the difference comes from what survives
+    ## the filter, not from how the author spelled it.
     character_form <- .mfi_verdict(
       .mfi_infer(sprintf("%s.%s='LOW'", v$ds, v$cat), categorical = TRUE)
     )
-    expect_identical(unname(verdicts[[1]]), character_form)
     expect_identical(character_form, "Subject Count and Percentage")
+    expect_false(identical(unname(verdicts[[1]]), character_form))
 
     checked <- checked + 1L
   }
@@ -92,7 +106,11 @@ test_that("incidental wording does not change the method", {
   verdicts <- vapply(labels, function(l) .mfi_verdict(.mfi_infer(ann, label = l)),
                      character(1))
   expect_length(unique(verdicts), 1L)
-  expect_identical(unname(verdicts[[1]]), "Subject Count and Percentage")
+  ## Continuous because the annotation is a THRESHOLD on a numeric variable
+  ## and a threshold selects records rather than naming a statistic -- see the
+  ## first test in this file. What is asserted here is narrower and unchanged:
+  ## whatever the verdict is, five labels do not move it.
+  expect_identical(unname(verdicts[[1]]), "Summary Statistics - Continuous")
 
   ## Whitespace and case in the condition itself are equally incidental.
   spellings <- c(

@@ -63,17 +63,47 @@ test_that("a genuine row filter is still a row filter", {
   ##
   ## Every value below was MEASURED on the code before this change, so a
   ## drift in either direction turns this red.
+  ## The METHOD column changed for three rows with the filter-role work, and
+  ## the rule that produced the new values is one sentence: a restriction says
+  ## which records survive, not which statistic is reported about them.
+  ##
+  ## Exactly one thing a filter can say still settles the method, and it is a
+  ## TEMPORARY structural dependency rather than a semantic rule: a restriction
+  ## pinning the row's variable to a single value keeps the count family,
+  ## because block construction downstream reads what a block IS from the
+  ## method its first row was given. It is not a claim that `=` requests a
+  ## count -- a shell may pin a value and then ask for Mean/SD. Expect these
+  ## values to change when block shape is settled before method selection.
+  ## Two conditions have to hold for a pinned reading:
+  ##
+  ##   the clause was READ  -- an unresolved clause is evidence about nothing,
+  ##                          so nothing is known about what it pins; and
+  ##   it is an equality    -- a threshold or range leaves the variable free
+  ##                          to vary among the survivors.
+  ##
+  ## Which is why the four rows below differ, and each for one reason:
+  ##
+  ##   "; >= 65"   unresolved -> no evidence -> the variable's type decides
+  ##   "; = 30"    unresolved -> no evidence, EVEN THOUGH it is written as an
+  ##               equality: the grammar never read it, so "it pins" is not
+  ##               something this package knows
+  ##   "EVFL='Y'"  read, equality -> one value survives -> counted
+  ##   "GE 16"     read, threshold -> the variable still varies -> type decides
+  ##
+  ## `unres` is unchanged for every row: what the grammar can READ did not
+  ## move, and the two rows that reserve still reserve. No number changes --
+  ## a reserved row computes nothing either way.
   keeps <- list(
     ## an implied left operand with a VALUE -- "this variable, restricted"
     list(ann = "ADQX.AGEYR; >= 65",        cat = FALSE, unres = TRUE,
-         method = "Subject Count", kind = "filtered_count"),
+         method = "Summary Statistics - Continuous", kind = "continuous"),
     list(ann = "ADQX.MEASDUR; = 30",       cat = FALSE, unres = TRUE,
-         method = "Subject Count", kind = "filtered_count"),
+         method = "Summary Statistics - Continuous", kind = "continuous"),
     ## a condition on the variable itself, no semicolon
     list(ann = "ADQX.EVFL='Y'",            cat = TRUE,  unres = FALSE,
          method = "Subject Count", kind = "filtered_count"),
     list(ann = "ADQX.MEASDUR GE 16",       cat = FALSE, unres = FALSE,
-         method = "Subject Count", kind = "filtered_count"),
+         method = "Summary Statistics - Continuous", kind = "continuous"),
     ## a condition naming ANOTHER variable: scoping, so type decides
     list(ann = "ADQX.TERM; ADQX.EVFL='Y'", cat = TRUE,  unres = FALSE,
          method = "Count and Percentage", kind = "categorical"),
@@ -82,8 +112,18 @@ test_that("a genuine row filter is still a row filter", {
     ## grammar cannot read, so it reserves -- and it must keep reserving.
     ## Treating it as a derivation note would drop a real restriction and
     ## compute the row over every record.
+    ##
+    ## The METHOD here changed with the filter-role work, and deliberately.
+    ## The restriction names STDT and TRTSDT -- neither of them this row's
+    ## variable -- so it scopes the records rather than describing a state of
+    ## TERM, and TERM's own type decides what the line reports. It used to
+    ## count subjects, for no better reason than that the flattener returned
+    ## nothing and "nothing" was read as "the filter is on my own variable".
+    ##
+    ## What has NOT changed is the half that protects the number: `unres`
+    ## stays TRUE, so the row is still reserved and still computes nothing.
     list(ann = "ADQX.TERM; ADQX.STDT = ADQX.TRTSDT", cat = FALSE, unres = TRUE,
-         method = "Subject Count", kind = "filtered_count"))
+         method = "Summary Statistics - Continuous", kind = "continuous"))
   for (k in keeps) {
     expect_equal(.split_derivation_note(k$ann)$note, "", info = k$ann)
     got <- .infer_row_method(list(annotation = k$ann, n_slots = 1L),

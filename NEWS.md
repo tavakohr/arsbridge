@@ -1,5 +1,85 @@
 # arsbridge (development version)
 
+* **A restriction this grammar cannot represent is refused, not approximated.**
+  The clause splitter is flat: it finds one joiner and splits on it. So an
+  expression carrying grouping, negation, or both joiners was never *refused* --
+  it was answered with a different expression that is valid, executable, and
+  restricts other records. `A AND (B OR C)` and `(A OR B) AND C` both became
+  `AND(A, B, C)`, which asks for something the author did not, and which is
+  satisfied by no record at all when the two disjuncts exclude each other. This
+  reached the emitted event through every path that parses a condition from
+  text, and the most costly was the population: a shell writing
+  `ADSL.SAFFL='Y' AND (ADSL.COHORT='A' OR ADSL.COHORT='B')` emitted an analysis
+  set no subject belongs to -- one variable required to equal two values at
+  once -- and every percentage under it divided by the wrong N, with nothing on
+  the page to say so.
+
+  Such an expression now reserves, exactly as one that cannot be read at all
+  does -- to the reader of the number the two are the same failure. The refusal
+  is narrow: parentheses that wrap a whole expression or hold a single
+  condition, `IN (...)`, `is.na(...)`, `not missing`, a `BETWEEN`'s inner "and",
+  a comparator spelled with `!`, and prose carrying an English "not" are all
+  left alone, because withholding a correct result is its own wrong answer.
+
+* **A clause of a joined restriction is no longer dropped in silence.** Inside
+  `A and B` the author has already said both are clauses, so a clause carrying
+  an operator this grammar cannot read is a dropped condition even when it names
+  its variable without a dataset -- which is how shells routinely write a filter
+  after the head reference (`ADQX.QXTRT WHERE QXCAT='X' AND QXPRESP='Y'`). Only
+  the first clause was qualified; the others matched no pattern, carried no
+  `DATASET.VARIABLE`, and so were never even counted as dropped. The row
+  filtered on one clause of three and reported nothing.
+
+* **A filter that was read but cannot be carried reserves instead of vanishing.**
+  A row's subset holds a single condition, so a compound one flattened to
+  `NULL` -- and `NULL` already meant "this annotation states no filter". A
+  perfectly readable `A AND B` therefore produced an analysis with no
+  `DataSubset`: it computed over every record in the dataset and looked
+  finished. It now carries the author's text and withholds the result. This is
+  a reservation, not a refusal; when the subset builder can carry a compound
+  expression these rows compute, and no annotation has to change.
+
+* **A filter says which records survive, not which statistic is reported.**
+  "The filter is on the row's own variable" and "I could not read the filter"
+  both presented as an empty filter variable, and both selected the
+  subject-count family -- so an unreadable annotation was typed as a count of
+  something nobody could evaluate, under a line displaying two statistics, and
+  `ADQX.QXVAL WHERE ADQX.QXVAL GT 0` became a subject count under a block asking
+  for Mean/SD. A filter is now classified as `none`, `on_primary`,
+  `scoping_other`, `mixed_conjunctive` or `unknown` -- read from the restriction
+  the row will actually compute under rather than from whether one function
+  managed to flatten it -- and **the role selects no method**. An unreadable
+  restriction contributes nothing at all: the row is reserved on the marker it
+  carries, and whatever method it shows for layout comes from evidence that is
+  independently known.
+
+  One case still lets a restriction select the method, and it is a **temporary
+  structural dependency rather than a semantic rule**: a restriction pinning
+  the row's variable to a single value keeps the subject-count family. Not
+  because equality requests a count -- a shell may filter to one value and then
+  ask for Mean/SD, and the filter would still only be saying which observations
+  survive -- but because block construction downstream reads what a block IS
+  from the method its first row was given, so classifying pinned sibling rows
+  as distributions collapses them into the first. It requires an equality the
+  grammar actually READ; an unresolved clause is evidence about nothing,
+  however it is written. This is to be removed once block shape is determined
+  independently, before method selection.
+
+  Consequently three expectations moved, in `test-method_from_intent.R` and
+  `test-derivation_note_annotation.R`: a threshold on a numeric variable now
+  reports that variable's own summary rather than counting subjects. Both files
+  carry the reasoning. What those tests protect is unchanged -- five spellings
+  of one restriction still agree, and a row's label still cannot move the
+  verdict.
+
+* **A variable's type is answered for the dataset that was asked about.** The
+  spec lookup fell back to scanning every dataset for a variable of the same
+  name and taking the first hit. In a table whose rows come from different ADaM
+  domains that answers a question about one dataset's variable with another
+  dataset's metadata -- and the answer decides the row's method. Dataset
+  identity is part of the evidence; an undescribed variable now yields no
+  verdict rather than a borrowed one.
+
 * **A row keeps its own enrichment: a display label may assist a match, never
   outrank identity.** Two rows of one table may legitimately carry the same
   visible text while describing different data -- a level label belongs to more
