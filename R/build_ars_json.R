@@ -756,48 +756,51 @@
   roles
 }
 
-#' Subset filter from an annotation string, tolerating the
-#' "DATASET.VAR WHERE OTHERVAR='v'" form that flat_data_subset() cannot
-#' parse (the WHERE tail is parsed with the head reference's dataset as
-#' context when it carries no dataset prefix of its own).
+#' Subset filter from an annotation string, reading the head-plus-envelope
+#' forms `DATASET.VAR WHERE ...`, `DATASET.VAR (when ...)` and
+#' `DATASET.VAR [where ...]` that `flat_data_subset()` cannot parse.
+#'
+#' The envelope's bare variables are qualified against the head reference's
+#' dataset only where `resolves` confirms them; see `.annotation_condition()`.
+#'
+#' @param resolves `function(dataset, variable)` answering whether that exact
+#'   pair exists in the study's ADaM spec. Without one nothing is provable and
+#'   an envelope carrying bare names reserves -- the safe direction, since the
+#'   alternative is filtering on a variable that may not exist.
 #' @noRd
-.subset_from_annotation <- function(ann) {
+.subset_from_annotation <- function(ann, resolves = NULL) {
   ## The head only: a derivation note is not a filter, and asking the where
   ## clause grammar to read one produces an unresolved condition that reserves
   ## a row computing perfectly well.
   ann <- .annotation_less_derivation_note(ann)
   if (!nzchar(trimws(ann))) return(NULL)
 
-  fs <- flat_data_subset(ann)
-  if (!is.null(fs)) return(fs)
-  p <- regmatches(ann, regexec(
-    paste0("^\\s*(", .ADAM_DS, ")\\.(", .ADAM_VAR, ")\\s+(?i:where)\\s+(.+)$"),
-    ann, perl = TRUE))[[1]]
-
-  ## The unresolved check runs LAST, on whichever text is actually the
-  ## condition -- never on the whole annotation up front.
+  ## The envelope is asked about FIRST, on whichever text is actually the
+  ## condition -- never the whole annotation up front.
   ##
-  ## "DATASET.VAR where <condition>" is a supported form whose condition is the
-  ## tail, and the whole string is not a clause this grammar reads. Asking
-  ## about the whole string first therefore calls a perfectly good annotation
-  ## unreadable and reserves a row that computes correctly, which is the
-  ## over-reservation failure: withholding results nobody needed withheld is
-  ## its own kind of wrong answer.
-  if (length(p) != 4) {
-    unreadable <- parse_where_clause(ann)
-    if (.is_unresolved_condition(unreadable)) return(unreadable)
+  ## `DATASET.VAR (when <condition>)` is a supported form whose condition is
+  ## the envelope, and the whole string is not a clause this grammar reads.
+  ## Asking about the whole string first calls a perfectly good annotation
+  ## unreadable and reserves a row that computes correctly -- withholding
+  ## results nobody needed withheld is its own kind of wrong answer.
+  if (!is.null(.annotation_envelope(ann))) {
+    where <- .annotation_condition(ann, resolves)
+    if (.is_unresolved_condition(where)) return(where)
+    if (is.null(where)) return(NULL)
+    flat <- .where_flat(where)
+    if (!is.null(flat)) return(flat)
+    ## A compound this builder cannot carry yet. Reserved, never dropped --
+    ## carrying it is the next change, and nothing about the annotation has to
+    ## alter when it lands.
     return(.stated_filter_unrepresented(ann))
   }
-  tail <- trimws(p[4])
-  if (!grepl(paste0("^", .ADAM_DS, "\\."), tail, perl = TRUE)) {
-    tail <- paste0(p[2], ".", tail)
-  }
-  subset <- flat_data_subset(tail)
-  if (!is.null(subset)) return(subset)
+
+  fs <- flat_data_subset(ann)
+  if (!is.null(fs)) return(fs)
 
   ## A stated filter that could not be read. Returned as unresolved rather than
   ## NULL, because an analysis with no DataSubset computes over every record.
-  unreadable <- parse_where_clause(tail)
+  unreadable <- parse_where_clause(ann)
   if (.is_unresolved_condition(unreadable)) return(unreadable)
   .stated_filter_unrepresented(ann)
 }
@@ -993,6 +996,12 @@ build_ars_json <- function(sections,
   ## dataset must not satisfy "ADSL.WEIGHT" (that would mask a genuine gap).
   .spec_keys_up <- toupper(names(spec_lookup %||% list()))
   .ref_present <- function(ref) toupper(ref) %in% .spec_keys_up
+  ## The same question, asked the way the envelope reader needs it: does this
+  ## exact dataset carry this exact variable? A bare name inside a filter
+  ## inherits the head reference's dataset only when the answer is yes.
+  .spec_resolves <- function(dataset, variable) {
+    .ref_present(paste0(dataset, ".", variable))
+  }
 
   analysis_sets    <- list(); seen_as  <- character()
   data_subsets     <- list(); seen_ds  <- character()
@@ -1299,7 +1308,7 @@ build_ars_json <- function(sections,
           er2$data_subset <- flat
         }
       } else {
-        subset2 <- .subset_from_annotation(annotation)
+        subset2 <- .subset_from_annotation(annotation, .spec_resolves)
         if (.is_unresolved_condition(subset2)) {
           er2$unresolved_condition <- .unresolved_condition_text(subset2)
         } else {
@@ -1590,7 +1599,7 @@ build_ars_json <- function(sections,
             er$data_subset <- flat
           }
         } else {
-          subset <- .subset_from_annotation(row$annotation)
+          subset <- .subset_from_annotation(row$annotation, .spec_resolves)
           if (.is_unresolved_condition(subset)) {
             ## The row states a filter that could not be read. It gets NO data
             ## subset -- there is nothing valid to give it -- and carries the
