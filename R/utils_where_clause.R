@@ -893,6 +893,207 @@
        parsed_any = state$parsed_any, negation = state$negation)
 }
 
+
+## ---------------------------------------------------------------------------
+## The annotation envelope
+## ---------------------------------------------------------------------------
+##
+## A shell names what a row reports, and then says which records it reports on:
+##
+##     ADPR.PRTRT (when PRCAT='DIAGNOSTIC TESTING' AND PRPRESP='Y')
+##     ADQX.QXTRT WHERE QXCAT='X'
+##     ADQX.QXTRT [where QXCAT='X']
+##
+## Those are two languages in one string. The head NAMES a variable; the
+## envelope STATES conditions. Read as a single expression the head is an
+## unplaceable token and the whole annotation reserves -- a row written
+## perfectly clearly, withheld.
+##
+## What the envelope also supplies is CONTEXT: inside it the author writes
+## bare variable names, because the dataset is the head's. That inheritance is
+## the dangerous half, and it is why this is not a text substitution.
+##
+##   A bare name is qualified only when the ADaM spec confirms that exact
+##   DATASET.VARIABLE exists. Otherwise the filter is unresolved.
+##
+## Assuming instead of confirming is how a filter comes to name a variable the
+## study does not have -- and a filter on a variable that is not there is not
+## a filter at all, it is an unrestricted count wearing a restriction's text.
+## The rule is ALL-OR-NONE for the same reason a dropped clause is: honouring
+## the conditions that happen to be provable filters on less than the author
+## wrote, and says nothing.
+##
+## The context is the HEAD's dataset throughout, and does not move. An
+## explicitly qualified clause names its own dataset and changes nothing for
+## the clauses after it -- reading `ADXX.FOO='1' AND BAR='2'` as though BAR
+## were ADXX's would silently re-point a condition at a dataset the author
+## never wrote.
+
+## Keywords that open an envelope. Deliberately just these two: `WHERE` was
+## already supported, `when` is what real shells write, and every further
+## spelling is a widening this file does not need.
+.RE_ENVELOPE_KEYWORD <- "^\\s*(?i:when|where)\\s+(.+)$"
+
+## Names that are grammar, not variables. Without this, the `NOT` of `NOT IN`
+## reads as a bare operand sitting before a comparator.
+.ENVELOPE_RESERVED <- c("AND", "OR", "NOT", "IS", "IN", "NOTIN", "EQ", "NE",
+                        "GT", "GE", "LT", "LE", "BETWEEN", "CONTAINS",
+                        "NULL", "MISSING", "NA")
+
+## A bare name is an operand when a comparator follows it, or when it is the
+## argument of a presence-test call. Group 1 is the name in every pattern.
+.RE_BARE_OPERAND <- c(
+  ## symbol comparators
+  "(?<![.\\w])([A-Z][A-Z0-9]{0,7})\\s*(?==|!=|<>|<=|>=|<|>)",
+  ## word comparators
+  paste0("(?i)(?<![.\\w])([A-Z][A-Z0-9]{0,7})\\s+",
+         "(?=(?:EQ|NE|GT|GE|LT|LE|NOT\\s+IN|NOTIN|IN|BETWEEN|CONTAINS)\\b)"),
+  ## presence tests
+  paste0("(?i)(?<![.\\w])([A-Z][A-Z0-9]{0,7})\\s+",
+         "(?=(?:IS\\s+)?(?:NOT\\s+)?(?:NULL|MISSING)\\b)"),
+  ## call-form presence tests
+  "(?i)(?:is\\.na|missing)\\s*\\(\\s*([A-Z][A-Z0-9]{0,7})\\s*\\)"
+)
+
+#' The inner text of a span wrapped in one balanced bracket pair, or `NULL`.
+#'
+#' Only when the opener's match is the LAST character, so `(when A) and (B)`
+#' is not mistaken for one envelope.
+#' @noRd
+.wrapped_inner <- function(txt, open, close) {
+  if (nchar(txt) < 2L || substr(txt, 1L, 1L) != open) return(NULL)
+  chars <- strsplit(txt, "", fixed = TRUE)[[1]]
+  depth <- 0L
+  for (i in seq_along(chars)) {
+    if (chars[[i]] == open) depth <- depth + 1L
+    else if (chars[[i]] == close) {
+      depth <- depth - 1L
+      if (depth == 0L) {
+        if (i != length(chars)) return(NULL)
+        return(substr(txt, 2L, i - 1L))
+      }
+    }
+  }
+  NULL
+}
+
+#' Split an annotation into its head reference and its filter text.
+#'
+#' @return `list(dataset, variable, filter)`, or `NULL` when the annotation is
+#'   not head-plus-envelope -- which is the ordinary case and not a failure.
+#' @noRd
+.annotation_envelope <- function(ann) {
+  txt <- trimws(as.character(ann %||% "")[1])
+  if (!nzchar(txt) || is.na(txt)) return(NULL)
+
+  head <- regmatches(txt, regexec(
+    paste0("^(", .ADAM_DS, ")\\.(", .ADAM_VAR, ")\\s*(.*)$"), txt,
+    perl = TRUE))[[1]]
+  if (length(head) != 4L) return(NULL)
+
+  rest <- trimws(head[[4L]])
+  if (!nzchar(rest)) return(NULL)
+
+  inner <- .wrapped_inner(rest, "(", ")") %||%
+    .wrapped_inner(rest, "[", "]") %||% rest
+
+  keyed <- regmatches(inner, regexec(.RE_ENVELOPE_KEYWORD, inner,
+                                     perl = TRUE))[[1]]
+  if (length(keyed) != 2L) return(NULL)
+
+  filter <- trimws(keyed[[2L]])
+  if (!nzchar(filter)) return(NULL)
+  list(dataset = head[[2L]], variable = head[[3L]], filter = filter)
+}
+
+#' Qualify every bare variable in a filter against one dataset.
+#'
+#' @param resolves `function(dataset, variable)` answering whether that exact
+#'   pair exists in the study's ADaM spec.
+#' @return The filter with each bare operand written `DATASET.VARIABLE`, or
+#'   `NULL` when any one of them cannot be confirmed -- all-or-none, because a
+#'   filter honoured in part restricts by less than was written.
+#' @noRd
+.qualify_bare_operands <- function(filter, dataset, resolves) {
+  ## Values are masked throughout: a bare name inside a quoted literal is part
+  ## of the value, and rewriting it would change what the filter selects.
+  masked <- .mask_literals(filter)
+  if (is.null(masked)) return(NULL)
+  txt <- masked$text
+
+  found <- list()
+  for (re in .RE_BARE_OPERAND) {
+    at <- gregexpr(re, txt, perl = TRUE)[[1L]]
+    if (at[[1L]] < 0L) next
+    starts <- attr(at, "capture.start")[, 1L]
+    lens   <- attr(at, "capture.length")[, 1L]
+    for (i in seq_along(starts)) {
+      name <- substr(txt, starts[[i]], starts[[i]] + lens[[i]] - 1L)
+      if (toupper(name) %in% .ENVELOPE_RESERVED) next
+      found[[length(found) + 1L]] <- list(start = starts[[i]], name = name)
+    }
+  }
+  ## An envelope whose clauses all name their own dataset asks nothing of the
+  ## spec: there is no inheritance to confirm, so it needs no predicate.
+  if (length(found) == 0L) return(filter)
+
+  ## Every bare name must be confirmed before ANY is rewritten. Without a
+  ## predicate nothing is confirmable, and the safe answer is the same as a
+  ## failed confirmation.
+  if (!is.function(resolves)) return(NULL)
+  for (hit in found) {
+    if (!isTRUE(resolves(dataset, hit$name))) return(NULL)
+  }
+
+  ## Right to left, so an earlier rewrite cannot move a later position.
+  order_desc <- order(vapply(found, function(h) h$start, numeric(1)),
+                      decreasing = TRUE)
+  for (i in order_desc) {
+    at <- found[[i]]$start
+    txt <- paste0(substr(txt, 1L, at - 1L), dataset, ".",
+                  substr(txt, at, nchar(txt)))
+  }
+  .unmask_literals(txt, masked)
+}
+
+#' The condition an annotation states, with its envelope read and its bare
+#' operands qualified against the head dataset.
+#'
+#' @return `NULL` when the annotation states no condition, a WhereClause when
+#'   it states one this grammar can read, or an unresolved-condition object.
+#'   The unresolved object carries the AUTHOR's text, never the rewritten
+#'   form -- a finding has to quote what was written.
+#' @noRd
+.annotation_condition <- function(ann, resolves = NULL) {
+  env <- .annotation_envelope(ann)
+  if (is.null(env)) return(parse_where_clause(ann))
+
+  qualified <- .qualify_bare_operands(env$filter, env$dataset, resolves)
+  if (is.null(qualified)) {
+    diag_add(
+      stage = "where_clause", severity = "WARN",
+      problem = paste("A filter's bare variable could not be confirmed on",
+                      "the dataset its annotation names"),
+      location = as.character(ann)[1],
+      action = paste("Results are reserved rather than computed. A bare name",
+                     "inherits the head reference's dataset only when the",
+                     "ADaM spec confirms that exact DATASET.VARIABLE; a",
+                     "filter naming a variable the study does not have is",
+                     "not a filter. Qualify the variable, or supply a typed",
+                     "condition through the supplement.")
+    )
+    return(.unresolved_condition(as.character(ann)[1], env$filter))
+  }
+
+  where <- parse_where_clause(qualified)
+  if (.is_unresolved_condition(where)) {
+    ## Re-stated in the author's own words: the rewritten text is this
+    ## package's working form and was never on the page.
+    return(.unresolved_condition(as.character(ann)[1], env$filter))
+  }
+  where
+}
+
 #' Build an ARS WhereClause object from an annotation expression.
 #'
 #' Returns NULL if no parseable condition is found (caller should treat as
