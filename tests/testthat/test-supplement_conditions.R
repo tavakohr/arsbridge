@@ -287,6 +287,56 @@ test_that(".where_to_annotation joins a compound with and/or words", {
   expect_match(.where_to_annotation(and), " and ")
 })
 
+test_that(".where_to_annotation brackets an operand that binds differently", {
+  ## The display string is what a diagnostic, a provenance note and a row's
+  ## `annotation` field show. Written flat, `AND(A, OR(B, C))` becomes
+  ## "A and B or C" -- and AND binds tighter than OR, so what the reader (and
+  ## anything that reads the string back) gets is `OR(AND(A, B), C)`: a
+  ## different restriction, shown as though it were the one that was typed.
+  cond <- function(variable, value) {
+    list(condition = list(dataset = "ADQX", variable = variable,
+                          comparator = "EQ", value = list(value)))
+  }
+  compound <- function(op, ...) {
+    list(compoundExpression = list(logicalOperator = op,
+                                   whereClauses = list(...)))
+  }
+
+  or_in_and <- .supp_where(compound(
+    "AND", cond("QXAFL", "Y"),
+    compound("OR", cond("QXBFL", "Y"), cond("QXCFL", "Y"))))$where
+  and_in_or <- .supp_where(compound(
+    "OR", cond("QXAFL", "Y"),
+    compound("AND", cond("QXBFL", "Y"), cond("QXCFL", "Y"))))$where
+
+  expect_identical(.where_to_annotation(or_in_and),
+                   "ADQX.QXAFL='Y' and (ADQX.QXBFL='Y' or ADQX.QXCFL='Y')")
+  expect_identical(.where_to_annotation(and_in_or),
+                   "ADQX.QXAFL='Y' or (ADQX.QXBFL='Y' and ADQX.QXCFL='Y')")
+
+  ## Serialization consistency, and that is all it is: the renderer and the
+  ## parser agree with each other. It says nothing about what a shell author
+  ## meant -- only the shell text can answer that.
+  for (typed in list(or_in_and, and_in_or)) {
+    expect_equal(parse_where_clause(.where_to_annotation(typed)), typed)
+  }
+
+  ## Same-operator nesting is associative, so it needs no brackets and gets
+  ## none -- otherwise every range, stored as an AND of GE and LE, would pick
+  ## up punctuation it does not need.
+  and_in_and <- .supp_where(compound(
+    "AND", compound("AND", cond("QXAFL", "Y"), cond("QXBFL", "Y")),
+    cond("QXCFL", "Y")))$where
+  rendered <- .where_to_annotation(and_in_and)
+  expect_false(grepl("(", rendered, fixed = TRUE))
+  ## And it still restricts identically, which is the property that licenses
+  ## dropping the brackets.
+  df <- data.frame(QXAFL = c("Y", "Y", "N"), QXBFL = c("Y", "N", "Y"),
+                   QXCFL = c("Y", "Y", "Y"), stringsAsFactors = FALSE)
+  expect_identical(.eval_where_clause(df, parse_where_clause(rendered)),
+                   .eval_where_clause(df, and_in_and))
+})
+
 ## --- .method_name_from_id --------------------------------------------------
 
 test_that(".method_name_from_id reverses the catalogue and returns NULL otherwise", {

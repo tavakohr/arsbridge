@@ -326,19 +326,38 @@
 
 #' Canonical DISPLAY string for a where-clause (diagnostics, provenance, the
 #' row `annotation` field). NEVER re-parsed as a filter -- the typed clause is
-#' authoritative. The grammar it emits is a subset of what parse_where_clause()
-#' accepts, so a round-trip is lossless for the canonical arity of each
-#' comparator (locked by a property test).
+#' authoritative.
+#'
+#' The grammar it emits is a subset of what `parse_where_clause()` accepts, and
+#' a property test locks the two in step. That test is a SERIALIZATION
+#' CONSISTENCY check: it proves this renderer and that parser agree with each
+#' other. It says nothing about whether either matches what a shell author
+#' meant -- only the shell text can answer that.
+#'
+#' A nested operand is bracketed when its operator DIFFERS from the one
+#' outside it, because there the flat string states a different restriction:
+#' `AND(A, OR(B, C))` written flat is "A and B or C", and AND binds tighter
+#' than OR, so it reads as `OR(AND(A, B), C)`. Same-operator nesting is
+#' associative -- `AND(AND(A, B), C)` and `AND(A, B, C)` restrict identically
+#' -- so it is left unbracketed rather than adding punctuation to every range,
+#' which is stored as an AND of GE and LE.
 #' @noRd
-.where_to_annotation <- function(where) {
+.where_to_annotation <- function(where, parent_op = NULL) {
   if (is.null(where)) return("")
   if (!is.null(where[["compoundExpression"]])) {
     ce  <- where[["compoundExpression"]]
     op  <- toupper(.as_scalar_char(ce[["logicalOperator"]]) %||% "AND")
     sep <- if (op == "OR") " or " else " and "
-    parts <- vapply(ce[["whereClauses"]], .where_to_annotation, character(1))
+    parts <- vapply(ce[["whereClauses"]], .where_to_annotation, character(1),
+                    parent_op = op)
     parts <- parts[nzchar(parts)]
-    return(paste(parts, collapse = sep))
+    if (length(parts) == 0) return("")
+    text <- paste(parts, collapse = sep)
+    ## One operand binds the same way whatever surrounds it.
+    if (length(parts) > 1L && !is.null(parent_op) && !identical(op, parent_op)) {
+      return(paste0("(", text, ")"))
+    }
+    return(text)
   }
   cond <- where[["condition"]] %||% where
   ds <- .as_scalar_char(cond[["dataset"]])

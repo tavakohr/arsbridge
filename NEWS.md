@@ -1,5 +1,52 @@
 # arsbridge (development version)
 
+* **Boolean structure is parsed as a tree, with precedence.** Brackets bind
+  tightest, then `NOT`, then `AND`, then `OR` -- the precedence every SQL and
+  SAS author already writes to. `A AND (B OR C)` produces `AND(A, OR(B, C))`,
+  `(A OR B) AND C` produces `AND(OR(A, B), C)`, and `A OR B AND C` produces
+  `OR(A, AND(B, C))`. The population that motivated the previous release's
+  refusal -- `ADSL.SAFFL='Y' AND (ADSL.COHORT='A' OR ADSL.COHORT='B')` -- is
+  now carried as the nested condition it states, instead of being reserved for
+  its structure. The nested tree reaches the analysis set, the column grouping,
+  the row subset and the restriction plan, so what is executed and what is
+  emitted are the same restriction.
+
+  An accepted expression must consume the WHOLE token stream. Trailing text, a
+  dangling operator, an unmatched bracket or an operator with nothing to bind
+  refuses and reserves -- a tree built from part of the input is the same class
+  of wrong answer as a flat split, because it looks finished. Where the parser
+  cannot prove a complete parse, the reservation behaviour introduced in the
+  previous release is unchanged.
+
+  Three separations keep the structural reading off the atoms: quoted literals
+  are masked before any structure is read, so `RACE='BLACK OR AFRICAN AMERICAN'`
+  carries no joiner; atomic forms that own a bracket or the word `NOT` --
+  `IN (...)`, `NOT IN (...)`, `is.na(...)`, `not missing`, a `BETWEEN`'s inner
+  "and" -- are masked too; and a bracketed note that encloses no operand
+  (`(mg)`, `(N=XX)`, `(per protocol)`) groups nothing and is left alone. The
+  leaf grammar is unchanged.
+
+* **Negation is recognised at its own precedence and reserves.** ARS has a
+  `NOT`, but nothing downstream executes one: the evaluator and the predicate
+  emitter both answer an unrecognised operator with "keep every row", so an
+  emitted `NOT` would be a filter that silently does nothing. For a condition
+  on another dataset it is worse -- negating row-wise and then projecting to
+  subjects ("has a record that is not X") is a different set from negating the
+  projection ("has no record that is X"), and the expression does not say which
+  was meant. A `NOT` that governs a real condition therefore reserves, with a
+  message naming the construct. A `NOT` that governs no condition -- "not
+  applicable" -- negates nothing and states no filter, as before.
+
+* **A displayed condition brackets an operand that binds differently.**
+  `.where_to_annotation()` rendered a nested compound flat, so a typed
+  `AND(A, OR(B, C))` was shown as `A and B or C` -- which states a different
+  restriction, because `AND` binds tighter. The display string now brackets a
+  nested operand whose operator differs from the one outside it. Same-operator
+  nesting is associative and is left unbracketed, so a range (stored as an
+  `AND` of `GE` and `LE`) picks up no punctuation it does not need. The
+  round-trip property test is a serialization consistency check between this
+  renderer and the parser; it makes no claim about the author's intent.
+
 * **A restriction this grammar cannot represent is refused, not approximated.**
   The clause splitter is flat: it finds one joiner and splits on it. So an
   expression carrying grouping, negation, or both joiners was never *refused* --
