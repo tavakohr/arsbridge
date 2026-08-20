@@ -174,6 +174,14 @@ test_that("the real bundled studies reserve nothing", {
   ## say what should happen, and this says it actually did on shells nobody
   ## wrote for this test. Both bundled shells are full of descriptive
   ## annotations of exactly the shape that used to reserve.
+  ##
+  ## Zero is the bar, and it is EARNED rather than assumed. One of these
+  ## shells writes its population as `(ADSL.SAFFL='Y', ADVS.ANL01FL='Y')` --
+  ## a comma-separated list of two complete conditions. Until that was read
+  ## as a conjunction the second condition silently vanished; reserving it
+  ## was the honest answer, and reading it is the correct one. Anything this
+  ## package cannot read must still reserve, which is what makes zero here a
+  ## claim rather than a setting.
   skip_if_not_installed("openxlsx2")
   skip_on_cran()
 

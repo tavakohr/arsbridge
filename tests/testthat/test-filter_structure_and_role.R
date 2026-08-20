@@ -110,38 +110,62 @@ test_that("an expression whose Boolean structure cannot be carried reserves", {
     b <- sprintf("%s.%s='Y'", v$ds, v$flag)
     c_ <- sprintf("%s.%s='Y'", v$ds, v$occur)
 
-    ## Each of these has a MEANING this grammar has no shape for. The flat
-    ## split answers every one of them with `AND(a, b, c)`, which is a
-    ## different restriction -- and for the third, one no record satisfies.
+    ## What is STILL unrepresentable now that grouping and precedence are
+    ## parsed: a negation, which nothing downstream executes, and a token
+    ## stream the parser cannot finish. Each has a meaning this grammar has no
+    ## shape for, so each reserves rather than being answered with a different
+    ## expression. (The grouped and mixed-joiner forms this list used to hold
+    ## are now carried; test-boolean_structure.R proves what they mean.)
     unrepresentable <- c(
-      sprintf("%s AND (%s OR %s)", a, b, c_),
-      sprintf("(%s OR %s) AND %s", a, b, c_),
-      sprintf("(%s AND %s) OR %s", a, b, c_),
-      sprintf("%s OR %s AND %s", a, b, c_),
       sprintf("NOT (%s OR %s)", a, b),
-      sprintf("%s AND NOT %s", a, b)
+      sprintf("%s AND NOT %s", a, b),
+      sprintf("%s AND (%s OR %s", a, b, c_),
+      sprintf("%s OR", a),
+      sprintf("%s AND (%s) %s", a, b, c_)
     )
 
     kinds <- vapply(unrepresentable, .fsr_kind, character(1), USE.NAMES = FALSE)
-    ## Scope assertion: six forms were actually read, so a grammar change that
-    ## stopped recognising them turns this red instead of vacuously green.
-    expect_equal(length(kinds), 6L, info = v$ds)
+    ## Scope assertion: five forms were actually read, so a grammar change
+    ## that stopped recognising them turns this red instead of vacuously
+    ## green.
+    expect_equal(length(kinds), 5L, info = v$ds)
     expect_true(all(kinds == "unresolved"), info = v$ds)
+
+    ## The counterpart, and it is what keeps this from drifting back into
+    ## "refuse anything with a bracket": the grouped form is CARRIED, with the
+    ## disjunction still its own node rather than flattened into the AND.
+    grouped <- suppressWarnings(parse_where_clause(
+      sprintf("%s AND (%s OR %s)", a, b, c_)))
+    expect_false(.is_unresolved_condition(grouped), info = v$ds)
+    expect_identical(grouped$compoundExpression$logicalOperator, "AND",
+                     info = v$ds)
+    expect_length(grouped$compoundExpression$whereClauses, 2L)
+    expect_identical(
+      grouped$compoundExpression$whereClauses[[2]]$compoundExpression$logicalOperator,
+      "OR", info = v$ds)
   }
 })
 
 
-test_that("a refused structure names the construct, not a parse failure", {
+test_that("a refusal names the construct, not a parse failure", {
   v <- .fsr_v1
-  expr <- sprintf("%s.%s='A' AND (%s.%s='Y' OR %s.%s='Y')",
-                  v$ds, v$cat, v$ds, v$flag, v$ds, v$occur)
-  expect_identical(.unsupported_structure(expr), "grouped sub-expressions")
-  expect_identical(
-    .unsupported_structure(sprintf("NOT %s.%s='A'", v$ds, v$cat)), "negation")
-  expect_identical(
-    .unsupported_structure(sprintf("%s.%s='A' OR %s.%s='Y' AND %s.%s='Y'",
-                                   v$ds, v$cat, v$ds, v$flag, v$ds, v$occur)),
-    "mixed AND/OR without explicit grouping")
+  ## The author is shown what stopped the read, so they can restate the
+  ## condition instead of guessing at a generic failure.
+  reason <- function(expr) .parse_boolean(.lex_boolean(expr))$reason
+  atom <- sprintf("%s.%s GT 1", v$ds, v$num)
+
+  expect_identical(reason(sprintf("%s AND (%s", atom, atom)),
+                   "an unclosed parenthesis")
+  expect_identical(reason(sprintf("%s OR", atom)),
+                   "an operator with nothing after it")
+
+  ## Negation is different in kind: the stream parses cleanly and the refusal
+  ## comes from the BUILDER, because the construct is well-formed and
+  ## unexecutable rather than unreadable.
+  expect_identical(.parse_boolean(.lex_boolean(sprintf("NOT %s", atom)))$kind,
+                   "not")
+  expect_identical(.fsr_kind(sprintf("NOT %s.%s='A'", v$ds, v$cat)),
+                   "unresolved")
 })
 
 
@@ -219,7 +243,8 @@ test_that("prose and comparators are not read as structure", {
   ## "!=" is a comparator; its "!" negates no sub-expression. The structure
   ## check must not claim otherwise -- whether or not the clause parser can
   ## read the comparator is a separate question with its own answer.
-  expect_null(.unsupported_structure(sprintf("%s.%s != 5", v$ds, v$num)))
+  expect_null(
+    .parse_boolean(.lex_boolean(sprintf("%s.%s != 5", v$ds, v$num)))$reason)
 })
 
 
@@ -229,8 +254,10 @@ test_that("prose and comparators are not read as structure", {
 
 test_that("an unrepresentable population reserves the analyses that use it", {
   for (v in list(.fsr_v1, .fsr_v2)) {
-    pop <- sprintf("ADSL.SAFFL='Y' AND (%s.%s='A' OR %s.%s='B')",
-                   v$ds, v$cat, v$ds, v$cat)
+    ## A negation: well-formed, and unexecutable here. (The grouped
+    ## population that used to stand in this place is now parsed -- see
+    ## test-boolean_structure.R, which asserts the tree it produces.)
+    pop <- sprintf("ADSL.SAFFL='Y' AND NOT %s.%s='A'", v$ds, v$cat)
     sec <- .fsr_section(
       v, list(.fsr_row("Assessment", sprintf("%s.%s", v$ds, v$txt))),
       population = pop)
@@ -273,10 +300,11 @@ test_that("an unrepresentable column level reserves through its grouping", {
       annotations = c(
         sprintf("%s.%s='A'", v$ds, v$cat),
         sprintf("%s.%s='B'", v$ds, v$cat),
-        ## Grouping inside a column header: the level cannot be represented,
-        ## so the column must not silently become an unrestricted one.
-        sprintf("%s.%s='A' AND (%s.%s='Y' OR %s.%s='Y')",
-                v$ds, v$cat, v$ds, v$flag, v$ds, v$occur))))
+        ## A negation inside a column header: the level cannot be
+        ## represented, so the column must not silently become an
+        ## unrestricted one.
+        sprintf("%s.%s='A' AND NOT %s.%s='Y'",
+                v$ds, v$cat, v$ds, v$flag))))
   out <- suppressWarnings(.resolve_table_column_groups(sec))
   out$by_variable <- v$cat
   out$by_variable_dataset <- v$ds

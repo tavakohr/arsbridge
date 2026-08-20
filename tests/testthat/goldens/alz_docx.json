@@ -391,6 +391,38 @@
       },
       "order": 2,
       "level": 1
+    },
+    {
+      "id": "AS_SAFETY_POPULATION_ON_TREATMENT_RECORDS_ADSL_SAFFL_Y_ADVS_ANL01FL_Y",
+      "name": "Safety Population; on-treatment records (ADSL.SAFFL='Y', ADVS.ANL01FL='Y')",
+      "label": "Safety Population; on-treatment records (ADSL.SAFFL='Y', ADVS.ANL01FL='Y')",
+      "compoundExpression": {
+        "logicalOperator": "AND",
+        "whereClauses": [
+          {
+            "condition": {
+              "dataset": "ADSL",
+              "variable": "SAFFL",
+              "comparator": "EQ",
+              "value": [
+                "Y"
+              ]
+            }
+          },
+          {
+            "condition": {
+              "dataset": "ADVS",
+              "variable": "ANL01FL",
+              "comparator": "EQ",
+              "value": [
+                "Y"
+              ]
+            }
+          }
+        ]
+      },
+      "order": 3,
+      "level": 1
     }
   ],
   "dataSubsets": [

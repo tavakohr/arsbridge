@@ -360,8 +360,43 @@
 )
 
 ## ---------------------------------------------------------------------------
-## Structures this grammar cannot represent
+## Boolean structure
 ## ---------------------------------------------------------------------------
+##
+## An annotation's Boolean structure is a language of its own, sitting on top
+## of the atomic conditions. Reading it with a flat split -- find one joiner,
+## cut on it -- does not fail on an expression it cannot represent. It answers
+## with a DIFFERENT expression that is valid, executable, and restricts other
+## records: `A AND (B OR C)` became `AND(A, B, C)`, and a population written
+## that way emitted an analysis set no subject satisfies.
+##
+## So the structure is parsed, with the precedence every SQL and SAS author
+## already writes to:
+##
+##   parentheses   bind tightest
+##   NOT           binds tighter than AND
+##   AND           binds tighter than OR
+##
+## and the parse must CONSUME THE WHOLE TOKEN STREAM. A tree built from part
+## of the input is the same class of wrong answer as a flat split: it looks
+## finished. Anything left over -- trailing structure, a dangling operator, an
+## unmatched bracket -- refuses, and the expression reserves exactly as one
+## that could not be read at all.
+##
+## Three separations make this safe, and each is load-bearing:
+##
+##   1. QUOTED VALUES are already masked when the structure is read (see the
+##      masking block at the top of this file), so `RACE='BLACK OR AFRICAN
+##      AMERICAN'` carries no joiner and `NOTE='(see appendix)'` no bracket.
+##   2. ATOMIC FORMS that own a bracket or the word NOT -- `IN (...)`,
+##      `is.na(...)`, `not missing` -- are masked too, so their internal
+##      syntax is never read as structure.
+##   3. NOTES IN BRACKETS group nothing. `(mg)`, `(N=XX)`, `(per protocol)`
+##      enclose no operand, and refusing an expression over a punctuation
+##      habit withholds a result that would have been correct.
+##
+## The leaf parser is unchanged: `.one_condition()` still reads every atomic
+## form, and this layer only decides which spans of text are atoms.
 
 ## Atomic forms that legitimately contain a parenthesis or the word NOT, and
 ## so must be taken out of the text before what REMAINS can be read as
@@ -377,13 +412,285 @@
   "(?i)\\b(?:is\\s+)?not\\s+(?:null|missing)\\b"
 )
 
-#' Remove parentheses that wrap the entire expression, however many deep.
+## The logical operators, and only where they are operators.
+##
+## The word forms are fenced off from "." and "~" as well as from word
+## characters. "." keeps a variable spelled `ADQX.NOT` from opening a
+## negation; "~" keeps this parser's own BETWEEN marker, `~AND~`, from being
+## read as the conjunction it was introduced to hide.
+##
+## The symbol forms require surrounding whitespace, which is the discipline
+## the flat splitter already used. `A|B` inside an unquoted label is not a
+## disjunction, and reading it as one would tear a value in half.
+##
+## `!` opens a negation only when it is not the head of `!=`: that "!" belongs
+## to a comparator and negates no sub-expression.
+.RE_BOOL_OPERATOR <- paste0(
+  "(?<![.~\\w])(?:AND|OR|NOT)(?![.~\\w])",
+  "|(?<=\\s)(?:&&|\\|\\||&|\\|)(?=\\s)",
+  "|!(?!=)"
+)
+## Everything the structural lexer recognises. Brackets included; anything
+## else is atom text.
+.RE_BOOL_TOKEN <- paste0("(?i)\\(|\\)|", .RE_BOOL_OPERATOR)
+
+## Where a bracket would have to be an OPERAND rather than an aside: at the
+## start of the expression, straight after an opening bracket, or straight
+## after a logical operator. The symbol operators keep the whitespace
+## requirement they are lexed with.
+.RE_OPERAND_SLOT <- paste0(
+  "(?i)(?:\\(|(?<![.~\\w])(?:AND|OR|NOT)|(?<=\\s)(?:&&|\\|\\||&|\\|)|!)",
+  "\\s*$")
+
+#' Hide the spans that are not Boolean structure.
 #'
-#' Only when the opening bracket's match is the LAST character: "(A OR B) AND
-#' C" opens with "(" and ends with "C", and its first bracket closes in the
-#' middle, so nothing is stripped and the group is still seen.
+#' Two kinds, masked in this order because the first owns brackets the second
+#' would otherwise inspect:
+#'
+#'   the atomic forms of `.RE_NON_STRUCTURAL_PARTS`, and
+#'   bracketed spans that enclose neither an operator nor a qualified
+#'   reference -- a unit, a planned-N, an aside.
+#'
+#' Bracketed spans are taken innermost first and re-scanned, so a note inside
+#' a real group is removed without the group being disturbed.
+#'
+#' POSITION DECIDES whether such a span is an aside at all. `A='Y' (N=XX)`
+#' puts the bracket after a condition, where an aside is exactly what it is.
+#' `A='Y' AND (N=XX)` puts it after a joiner, where the author has said the
+#' next thing is an OPERAND -- and an operand that quietly evaluates to
+#' nothing removes a term the author wrote. `A AND ()` is the same failure
+#' with the span empty. In operand position the bracket therefore stays
+#' structural, and the parser answers for it.
+#'
+#' @param operand_context `FALSE` when the text is not an expression at all
+#'   but the leftover around a recognised leaf, where there are no operand
+#'   slots and every such bracket is an aside.
+#' @return `list(text, spans, open, close, token_pattern)`, or `NULL` when no
+#'   free delimiter pair exists -- which the caller must treat as "this
+#'   expression cannot be analysed safely", never as "it has no structure".
 #' @noRd
-.strip_outer_parens <- function(txt) {
+.mask_non_structural <- function(txt, operand_context = TRUE) {
+  used <- strsplit(txt, "", fixed = TRUE)[[1]]
+  free <- setdiff(.MASK_CANDIDATES, used)
+  if (length(free) < 2L) return(NULL)
+  open  <- free[[1L]]
+  close <- free[[2L]]
+
+  spans <- character(0)
+  hide <- function(text, start, stop) {
+    spans[[length(spans) + 1L]] <<- substr(text, start, stop)
+    paste0(substr(text, 1L, start - 1L),
+           open, length(spans), close,
+           substr(text, stop + 1L, nchar(text)))
+  }
+
+  for (re in .RE_NON_STRUCTURAL_PARTS) {
+    repeat {
+      at <- regexpr(re, txt, perl = TRUE)
+      if (at[[1L]] < 0L) break
+      txt <- hide(txt, at[[1L]], at[[1L]] + attr(at, "match.length") - 1L)
+    }
+  }
+
+  operator_re <- paste0("(?i)", .RE_BOOL_OPERATOR)
+  reference_re <- paste0(.ADAM_DS, "\\.", .ADAM_VAR)
+  repeat {
+    at <- gregexpr("\\([^()]*\\)", txt, perl = TRUE)[[1L]]
+    if (at[[1L]] < 0L) break
+    lens <- attr(at, "match.length")
+    hidden <- FALSE
+    for (i in seq_along(at)) {
+      start <- at[[i]]
+      stop  <- start + lens[[i]] - 1L
+      inner <- substr(txt, start + 1L, stop - 1L)
+      ## A bracket is structure-bearing when it could hold an operand: an
+      ## operator to bind, a reference that could be one, or a position where
+      ## the author already said an operand goes.
+      if (grepl(operator_re, inner, perl = TRUE)) next
+      if (grepl(reference_re, inner, perl = TRUE)) next
+      if (operand_context && .in_operand_slot(txt, start)) next
+      txt <- hide(txt, start, stop)
+      hidden <- TRUE
+      break
+    }
+    if (!hidden) break
+  }
+
+  list(text = txt, spans = spans, open = open, close = close,
+       token_pattern = paste0(open, "\\d+", close))
+}
+
+#' Is the span opening at `start` sitting where an operand is required?
+#' @noRd
+.in_operand_slot <- function(txt, start) {
+  before <- substr(txt, 1L, start - 1L)
+  if (!nzchar(trimws(before))) return(TRUE)
+  grepl(.RE_OPERAND_SLOT, before, perl = TRUE)
+}
+
+#' Put the non-structural spans back, exactly as they were written.
+#'
+#' Highest token first: a bracketed note masked later may contain a token
+#' masked earlier, never the other way round, so descending order restores
+#' the nesting in one pass.
+#' @noRd
+.unmask_non_structural <- function(text, masked) {
+  spans <- masked$spans %||% character(0)
+  if (length(spans) == 0 || !length(text)) return(text)
+  for (i in rev(seq_along(spans))) {
+    token <- paste0(masked$open, i, masked$close)
+    text <- gsub(token, spans[[i]], text, fixed = TRUE)
+  }
+  text
+}
+
+#' Split masked text into structural tokens and the atom text between them.
+#'
+#' @return A list of `list(type, text)`, `type` one of "atom", "and", "or",
+#'   "not", "lparen", "rparen".
+#' @noRd
+.lex_boolean <- function(txt) {
+  tokens <- list()
+  add <- function(type, text) tokens[[length(tokens) + 1L]] <<- list(type = type, text = text)
+  add_atom <- function(text) {
+    text <- trimws(text)
+    if (nzchar(text)) add("atom", text)
+  }
+
+  at <- gregexpr(.RE_BOOL_TOKEN, txt, perl = TRUE)[[1L]]
+  pos <- 1L
+  if (at[[1L]] > 0L) {
+    lens <- attr(at, "match.length")
+    for (i in seq_along(at)) {
+      start <- at[[i]]
+      stop  <- start + lens[[i]] - 1L
+      add_atom(substr(txt, pos, start - 1L))
+      lexeme <- substr(txt, start, stop)
+      type <- switch(
+        toupper(lexeme),
+        "(" = "lparen", ")" = "rparen",
+        "AND" = "and", "&&" = "and", "&" = "and",
+        "OR" = "or", "||" = "or", "|" = "or",
+        "not")
+      add(type, lexeme)
+      pos <- stop + 1L
+    }
+  }
+  add_atom(substr(txt, pos, nchar(txt)))
+  tokens
+}
+
+#' Parse a structural token stream into a Boolean syntax tree.
+#'
+#' Recursive descent, one function per precedence level, lowest first. Same
+#' operator at the same level collects into one n-ary node, so `A AND B AND C`
+#' is a single three-child AND rather than a nest -- which is the shape ARS
+#' writes and the shape the flat splitter produced for the expressions it
+#' could handle.
+#'
+#' @return `list(kind = "atom"|"not"|"and"|"or", ...)`, or
+#'   `list(kind = "error", reason = )` naming what stopped the parse. Every
+#'   error is a REFUSAL, never a partial tree.
+#' @noRd
+.parse_boolean <- function(tokens) {
+  i <- 1L
+  refuse <- function(reason) list(kind = "error", reason = reason)
+  peek <- function() if (i <= length(tokens)) tokens[[i]][["type"]] else "eof"
+  take <- function() i <<- i + 1L
+
+  primary <- function() {
+    what <- peek()
+    if (identical(what, "atom")) {
+      node <- list(kind = "atom", text = tokens[[i]][["text"]])
+      take()
+      return(node)
+    }
+    if (identical(what, "lparen")) {
+      take()
+      ## Brackets with nothing between them sit exactly where an operand is
+      ## required. Reading them as an aside would drop a term the author
+      ## wrote and leave the expression looking complete.
+      if (identical(peek(), "rparen")) return(refuse("an empty operand"))
+      inner <- disjunction()
+      if (identical(inner$kind, "error")) return(inner)
+      if (!identical(peek(), "rparen")) return(refuse("an unclosed parenthesis"))
+      take()
+      return(inner)
+    }
+    if (identical(what, "eof")) return(refuse("an operator with nothing after it"))
+    if (identical(what, "rparen")) return(refuse("a parenthesis that closes nothing"))
+    refuse("an operator with no condition before it")
+  }
+
+  negation <- function() {
+    if (!identical(peek(), "not")) return(primary())
+    take()
+    child <- negation()
+    if (identical(child$kind, "error")) return(child)
+    list(kind = "not", child = child)
+  }
+
+  ## One level per precedence rung. `level()` collects operands separated by
+  ## `op`, each parsed by the rung that binds tighter, so `A OR B AND C` puts
+  ## the AND underneath the OR without either rung knowing about the other.
+  level <- function(op, tighter) {
+    first <- tighter()
+    if (identical(first$kind, "error")) return(first)
+    operands <- list(first)
+    while (identical(peek(), op)) {
+      take()
+      nxt <- tighter()
+      if (identical(nxt$kind, "error")) return(nxt)
+      operands[[length(operands) + 1L]] <- nxt
+    }
+    if (length(operands) == 1L) return(first)
+    list(kind = op, children = operands)
+  }
+
+  conjunction <- function() level("and", negation)
+  disjunction <- function() level("or", conjunction)
+
+  tree <- disjunction()
+  if (identical(tree$kind, "error")) return(tree)
+  ## The whole stream, or nothing. A tree covering a prefix of the input is a
+  ## different restriction from the one that was written, and it looks
+  ## finished.
+  if (i <= length(tokens)) return(refuse("text this grammar cannot place"))
+  tree
+}
+
+## Commas: an annotation shorthand, and deliberately nothing more.
+##
+## Shells write a population as a list -- `(ADSL.SAFFL='Y', ADVS.ANL01FL='Y')`
+## -- and mean every item of it. This grammar has no comma operator, so the
+## leaf battery read the first item and the rest disappeared: a real study
+## emitted that population as the safety flag alone, with the second condition
+## absent from the reporting event entirely.
+##
+## The rule that fixes it is narrow ON PURPOSE. A comma is NOT a Boolean
+## synonym for AND. It is read only when the WHOLE operand is a list of two or
+## more independently complete atomic conditions -- each one read to its end,
+## none leaving residue -- and only when the expression states no Boolean
+## operator of its own. Anywhere else the comma is refused rather than
+## interpreted, because `A, B OR C` would require deciding how a comma binds
+## against OR, and this grammar has no answer to give.
+##
+## The negative side is the point of the rule, not an afterthought:
+##
+##   VAR IN ('A','B')        the list belongs to the comparator
+##   VAR='A,B'               the comma is inside a value
+##   A='Y' (N=10, planned)   the comma is inside an aside
+##   A='Y', prose            not every item is a condition -> reserves
+##   A='Y', B                a bare reference is not a condition -> reserves
+##   A='Y',                  an empty item is a missing one -> reserves
+##   A='Y', B='N' OR C='Y'   a Boolean operator is present -> reserves
+
+#' Remove parentheses that wrap the whole span, however many deep.
+#'
+#' Only when the opening bracket's match is the LAST character, so
+#' `(A), (B)` -- whose first bracket closes in the middle -- is left alone.
+#' @noRd
+.strip_wrapping_parens <- function(txt) {
   repeat {
     trimmed <- trimws(txt)
     if (nchar(trimmed) < 2L || substr(trimmed, 1L, 1L) != "(") return(trimmed)
@@ -397,95 +704,193 @@
         if (depth == 0L) { close_at <- i; break }
       }
     }
-    ## Unbalanced, or the opener closes before the end: not a wrapper.
     if (is.na(close_at) || close_at != length(chars)) return(trimmed)
     txt <- substr(trimmed, 2L, close_at - 1L)
   }
 }
 
-#' Name the construct that would be read with the wrong meaning, or `NULL`.
+#' The items of a comma-separated operand, or `NULL` when it is not one.
 #'
-#' Read on MASKED text, after `==` normalisation and after BETWEEN's inner
-#' "and" has become `~AND~` -- so a parenthesis, a joiner or the word NOT
-#' inside a quoted value cannot reach this, and a range is not mistaken for a
-#' conjunction.
+#' Split on the masked text, so a comma inside a value, inside a comparator's
+#' own list, or inside an aside is not a separator. Only commas at bracket
+#' depth zero divide the list.
 #'
-#' Three constructs, and each is refused for the same reason: the flat split
-#' below has no representation for it, so it does not fail on one -- it
-#' succeeds with a different expression.
-#'
-#'   grouping    `A AND (B OR C)` flattens to `AND(A, B, C)`.
-#'   negation    a bare `NOT` is dropped, inverting nothing.
-#'   mixed       `A AND B OR C` takes whichever joiner is tested first for the
-#'               whole expression, so one of the two is silently rewritten.
-#'
-#' A parenthesis is structure-bearing only when what it encloses could change
-#' the reading -- an operator or a joiner. A unit or a note in brackets
-#' ("ADQX.MEASURE (mg)") encloses neither and is left alone, because reserving
-#' a row that states no such construct withholds a result that would have been
-#' correct.
-#'
-#' `!=` is a COMPARATOR, not a negation: the exclamation mark that opens it
-#' belongs to the operator and negates no sub-expression. Reported as
-#' negation it would name the wrong construct, and send the author to remove
-#' something they did not write. (Whether this grammar reads `!=` at all is a
-#' separate question, answered by the clause parser below, which drops it as
-#' unreadable -- the honest reason.)
+#' EMPTY ITEMS ARE KEPT. `A='Y',` and `A='Y',, B='N'` name a place where an
+#' item goes and put nothing in it, which is the same missing operand as
+#' `A AND ()`. Dropping them here would let the list read as though the
+#' author had written only the items that survived.
 #' @noRd
-.unsupported_structure <- function(expr, token_pattern = NULL) {
-  txt <- as.character(expr %||% "")
-  if (length(txt) != 1L || is.na(txt) || !nzchar(trimws(txt))) return(NULL)
+.comma_items <- function(part) {
+  masked <- .mask_literals(part)
+  if (is.null(masked)) return(NULL)
+  hidden <- .mask_non_structural(masked$text, operand_context = FALSE)
+  if (is.null(hidden)) return(NULL)
 
-  ## What is left once every atomic form is taken out is the structure.
-  residue <- txt
-  for (re in .RE_NON_STRUCTURAL_PARTS) {
-    residue <- gsub(re, " ", residue, perl = TRUE)
+  txt <- .strip_wrapping_parens(hidden$text)
+  chars <- strsplit(txt, "", fixed = TRUE)[[1]]
+  depth <- 0L
+  cuts <- integer(0)
+  for (i in seq_along(chars)) {
+    ch <- chars[[i]]
+    if (ch == "(") depth <- depth + 1L
+    else if (ch == ")") depth <- depth - 1L
+    else if (ch == "," && depth == 0L) cuts <- c(cuts, i)
   }
-  ## The BETWEEN marker is this parser's own, not the author's conjunction.
-  residue <- gsub("~AND~", " ", residue, fixed = TRUE)
+  if (length(cuts) == 0L) return(NULL)
 
-  ## Parentheses around the WHOLE expression group nothing: there is no second
-  ## operand for them to bind against. "(ADSL.SAFFL='Y')" is how a great many
-  ## shells write an ordinary population, and reserving those would withhold
-  ## every result in every table that uses one.
-  residue <- .strip_outer_parens(residue)
+  starts <- c(1L, cuts + 1L)
+  stops  <- c(cuts - 1L, length(chars))
+  items <- trimws(substring(txt, starts, stops))
+  .unmask_literals(.unmask_non_structural(items, hidden), masked)
+}
 
-  ## Grouping: a span binds a sub-expression only if it ENCLOSES a joiner.
-  ## That is what makes it capable of changing the reading -- `(B OR C)` inside
-  ## an AND is a different restriction from `B OR C` spread flat across it.
-  ##
-  ## What the span sits next to is irrelevant, and reading it that way was
-  ## wrong: `A AND (B)` and `(A) AND (B)` put a bracket around a single
-  ## condition, which groups nothing and means exactly what it says. Refusing
-  ## those would withhold correct results for a punctuation habit.
-  ##
-  ## `(A AND B) AND C` is refused even though flattening it happens to give the
-  ## same answer, because knowing that requires reasoning about associativity
-  ## that this check does not do. Refusing a representable expression costs a
-  ## reservation; accepting an unrepresentable one costs a wrong number.
-  joiner_re <- "(?i)\\b(?:and|or)\\b|&|\\|"
-  spans <- regmatches(residue,
-                      gregexpr("\\([^()]*\\)", residue, perl = TRUE))[[1]]
-  for (span in spans) {
-    inner <- substr(span, 2L, nchar(span) - 1L)
-    if (grepl(joiner_re, inner, perl = TRUE)) {
-      return("grouped sub-expressions")
+#' Read one atomic operand, and refuse it when it leaves a condition behind.
+#'
+#' Consuming every STRUCTURAL token is not the same as consuming every
+#' CONDITION. The leaf battery is unanchored and stops at the first form it
+#' recognises, so `A='Y' B='N'` is read as `A='Y'` and the second condition
+#' simply disappears -- the silent-loss class this parser exists to remove,
+#' one level below the Boolean tree.
+#'
+#' So the invariant has two halves: the structure is fully consumed, AND each
+#' operand leaves no unaccounted condition-bearing residue.
+#'
+#' What is NOT residue is as important. A descriptive suffix follows a
+#' condition all the time and states none -- `AVAL GT 0 (per protocol)`,
+#' `SAFFL='Y' (N=XX)` -- so the leftover is put through the same note masking
+#' the expression itself gets before it is asked whether it carries an
+#' operator. Withholding a correct result is its own wrong answer.
+#'
+#' @return `list(condition, residue)`. Exactly one is non-NULL, or both are
+#'   NULL when the text states no condition at all.
+#' @noRd
+.read_atom <- function(part, commas = FALSE) {
+  if (isTRUE(commas)) {
+    items <- .comma_items(part)
+    if (length(items) >= 2L) {
+      reads <- lapply(items, .read_leaf)
+      complete <- !vapply(reads, function(r) is.null(r$condition), logical(1))
+      if (all(complete)) {
+        return(list(condition = list(compoundExpression = list(
+          logicalOperator = "AND",
+          whereClauses    = lapply(reads, `[[`, "condition"))),
+          residue = NULL))
+      }
+      ## Some items are conditions and some are not -- prose, a bare
+      ## reference, or nothing at all. The author wrote a list; honouring the
+      ## half of it this grammar can read would filter on less than was asked
+      ## for, and say nothing.
+      if (any(complete)) return(list(condition = NULL, residue = part))
+      ## No item is a condition, so this is not a list of conditions at all --
+      ## fall through and let the ordinary reading answer. Prose containing a
+      ## comma states no filter and must not reserve.
     }
   }
+  .read_leaf(part)
+}
 
-  ## Negation of anything other than the presence tests removed above. The
-  ## "!" branch excludes "!=", whose "!" is part of a comparator.
-  if (grepl("(?i)\\bnot\\b|!(?!=)", residue, perl = TRUE)) {
-    return("negation")
+#' One operand, read by the leaf grammar alone.
+#' @noRd
+.read_leaf <- function(part) {
+  report <- new.env(parent = emptyenv())
+  cond <- .one_condition(part, report = report)
+  if (is.null(cond)) return(list(condition = NULL, residue = NULL))
+  residue <- .unread_residue(part, report$span)
+  if (nzchar(residue)) return(list(condition = NULL, residue = residue))
+  list(condition = cond, residue = NULL)
+}
+
+#' The part of an atom the recognised leaf did not read, when it states a
+#' condition of its own. `""` otherwise.
+#' @noRd
+.unread_residue <- function(part, span) {
+  if (is.null(span) || length(span) != 2L) return("")
+  rest <- trimws(paste(substr(part, 1L, span[[1L]] - 1L),
+                       substr(part, span[[2L]] + 1L, nchar(part))))
+  if (!nzchar(rest)) return("")
+
+  ## Read exactly as the expression is read: values masked so an operator
+  ## inside one is not counted, and asides masked so a note is not. There are
+  ## no operand slots in a leftover, so every note-shaped bracket here IS a
+  ## note.
+  masked <- .mask_literals(rest)
+  ## No free delimiter pair means no honest answer from the text, and the safe
+  ## direction is to treat it as residue -- the caller reserves.
+  if (is.null(masked)) return(rest)
+  hidden <- .mask_non_structural(masked$text, operand_context = FALSE)
+  text <- if (is.null(hidden)) masked$text else hidden$text
+
+  if (!grepl(.RE_CONDITION_EVIDENCE, text, perl = TRUE)) return("")
+  rest
+}
+
+#' Turn a Boolean syntax tree into an ARS WhereClause.
+#'
+#' Atoms are handed to `.one_condition()` with their literals and masked
+#' spans restored, so the leaf grammar sees exactly the text the author wrote.
+#'
+#' NEGATION IS NOT BUILT. ARS has a NOT operator, but nothing downstream of
+#' here executes one: the evaluator and the predicate emitter both answer an
+#' unrecognised operator with "keep every row", so an emitted NOT would be a
+#' filter that silently does nothing -- the precise failure this parser
+#' exists to remove. Worse for a foreign dataset, where negating row-wise and
+#' then projecting to subjects ("has a record that is not X") is a different
+#' set from negating the projection ("has no record that is X"), and the
+#' expression does not say which was meant. So a NOT that governs a real
+#' condition is reported and the expression reserves.
+#'
+#' @return `list(where, dropped, unread, parsed_any, negation)`. `where` is
+#'   NULL when nothing in the tree stated a condition; `dropped` holds the
+#'   operands the leaf grammar read no condition from, `unread` the operands
+#'   whose text stated more than the leaf grammar consumed, and `parsed_any`
+#'   says whether any operand yielded a condition at all -- which is what
+#'   separates an expression of conditions from a sentence.
+#' @noRd
+.where_from_boolean <- function(tree, restore) {
+  state <- new.env(parent = emptyenv())
+  state$dropped <- character(0)
+  state$unread <- character(0)
+  state$parsed_any <- FALSE
+  state$negation <- FALSE
+
+  build <- function(node) {
+    if (identical(node$kind, "atom")) {
+      part <- restore(node$text)
+      read <- .read_atom(part)
+      if (!is.null(read$residue)) {
+        state$unread <- c(state$unread, part)
+        return(NULL)
+      }
+      if (is.null(read$condition)) {
+        state$dropped <- c(state$dropped, part)
+        return(NULL)
+      }
+      state$parsed_any <- TRUE
+      return(read$condition)
+    }
+    if (identical(node$kind, "not")) {
+      ## A NOT over text that states no condition negates nothing: "not
+      ## applicable" is prose, and reserving it would withhold a result that
+      ## was never at risk.
+      inner <- build(node$child)
+      if (is.null(inner)) return(NULL)
+      state$negation <- TRUE
+      return(NULL)
+    }
+    kids <- Filter(Negate(is.null), lapply(node$children, build))
+    if (length(kids) == 0L) return(NULL)
+    ## ARS wants at least two clauses in a compound; one surviving operand is
+    ## the operand itself.
+    if (length(kids) == 1L) return(kids[[1L]])
+    list(compoundExpression = list(
+      logicalOperator = if (identical(node$kind, "and")) "AND" else "OR",
+      whereClauses    = kids
+    ))
   }
 
-  ## Both joiners in one expression: precedence decides the meaning, and this
-  ## grammar has none.
-  has_and <- grepl("(?i)\\s(?:and|&&)\\s|\\s&\\s", residue, perl = TRUE)
-  has_or  <- grepl("(?i)\\s(?:or|\\|\\|)\\s|\\s\\|\\s", residue, perl = TRUE)
-  if (has_and && has_or) return("mixed AND/OR without explicit grouping")
-
-  NULL
+  where <- build(tree)
+  list(where = where, dropped = state$dropped, unread = state$unread,
+       parsed_any = state$parsed_any, negation = state$negation)
 }
 
 #' Build an ARS WhereClause object from an annotation expression.
@@ -564,66 +969,113 @@ parse_where_clause <- function(expr) {
                       .RE_NUMBER, "))\\s+and\\s+"),
                "\\1 ~AND~ ", expr, perl = TRUE)
 
-  ## Constructs whose MEANING this parser cannot carry. Refused before any
-  ## clause is read, because the split below is a flat one: it has no notion of
-  ## precedence, grouping or negation, so it answers such an expression with a
-  ## tree that is valid, executable, and not what the author wrote.
-  ##
-  ## Refusing is not a limitation added here -- it is the limitation that was
-  ## always present, made visible. Until now `A AND (B OR C)` became
-  ## `AND(A, B, C)`, which restricts differently and reports nothing; a
-  ## population written that way emitted an unsatisfiable analysis set. An
-  ## expression this parser cannot represent must reserve, exactly like one it
-  ## cannot read at all -- the two are the same failure to the reader of the
-  ## number.
-  ## Only an expression that ATTEMPTS a condition can be refused for its
-  ## structure. Prose carries English words this check reads as grammar --
-  ## "not applicable", "safety population or better" -- and reserving a row
-  ## whose annotation states no filter withholds a result that was never at
-  ## risk. Same evidence rule the dropped-clause branch below applies, and for
-  ## the same reason.
-  unsupported <- if (grepl(.RE_CONDITION_EVIDENCE, expr, perl = TRUE)) {
-    .unsupported_structure(expr, masked$token_pattern)
-  } else {
-    NULL
-  }
-  if (!is.null(unsupported)) {
+  ## The Boolean structure of the expression, PARSED. Everything the parser
+  ## must not read as structure -- an atomic form that owns a bracket, a note
+  ## in brackets -- is hidden first; see `.mask_non_structural()`.
+  structural <- .mask_non_structural(expr)
+  if (is.null(structural)) {
     diag_add(
       stage = "where_clause", severity = "WARN",
-      problem = sprintf("Condition uses %s, which this grammar cannot represent",
-                        unsupported),
+      problem = "Condition structure could not be separated from its text",
       location = original,
-      action = paste("Results are reserved rather than computed, because the",
-                     "expression would otherwise be read with a different",
-                     "meaning. Restate it without it, or supply a typed",
-                     "condition through the supplement.")
+      action = paste("Results reserved -- the annotation uses private-use",
+                     "characters this parser reserves for internal markers.",
+                     "Remove them and re-run.")
     )
-    return(.unresolved_condition(original, original))
+    return(.unresolved_condition(original))
   }
 
-  ## Detect logical joiner -- "and"/"&"/"AND" produce AND; "or"/"|"/"OR" → OR.
-  ## Reading masked text, so a joiner word inside a value cannot be mistaken
-  ## for the joiner between two clauses.
-  joiner <- NULL
-  if (grepl("\\s+(?i:and|&&|and)\\s+|\\s&\\s", expr, perl = TRUE)) joiner <- "AND"
-  if (is.null(joiner) &&
-      grepl("\\s+(?i:or|\\|\\|)\\s+|\\s\\|\\s", expr, perl = TRUE))  joiner <- "OR"
+  ## Any span of the doubly-masked text, back to what the author wrote. The
+  ## leaf grammar and every diagnostic see the real thing, never a token.
+  restore <- function(text) {
+    .unmask_literals(.unmask_non_structural(text, structural), masked)
+  }
 
-  ## Split into atomic clauses on the joiner, if any.
-  parts <- if (!is.null(joiner)) {
-    strsplit(expr, "\\s+(?i:and|or)\\s+", perl = TRUE)[[1]]
+  tokens <- .lex_boolean(structural$text)
+  joined <- any(vapply(tokens,
+                       function(tok) tok[["type"]] %in% c("and", "or", "not"),
+                       logical(1)))
+
+  where <- NULL
+  unparsed <- character(0)
+  ## Operands whose text stated more than the leaf grammar read. These always
+  ## reserve: by construction the leftover carries an operator.
+  unread <- character(0)
+  ## Did anything in this expression parse into a condition? An operand that
+  ## states none means two different things depending on the answer. In
+  ## "safety population or better" nothing did, so the words are a sentence
+  ## and reserving them would withhold a result that was never at risk. In
+  ## "A='Y' AND (per protocol)" one operand did, so the author was joining
+  ## conditions -- and the operand that states none is a term that vanished.
+  parsed_any <- FALSE
+
+  if (!joined) {
+    ## No operator anywhere, so there is no structure to parse and the whole
+    ## expression is one clause. Brackets alone cannot group: with nothing to
+    ## bind against, "(ADSL.SAFFL='Y')" and "ADQX.QXVAL GT 0 (per protocol)"
+    ## mean exactly what they say, and sending them through the tree parser
+    ## would refuse a punctuation habit and withhold correct results.
+    part <- trimws(restore(structural$text))
+    if (nzchar(part)) {
+      ## The only place a comma list is read: the expression states no
+      ## Boolean operator, so combining the items as one AND cannot be
+      ## deciding how a comma binds against an AND or an OR that is also
+      ## present. Where one IS present, the comma reserves.
+      read <- .read_atom(part, commas = TRUE)
+      where <- read$condition
+      parsed_any <- !is.null(read$condition)
+      if (!is.null(read$residue)) {
+        unread <- part
+      } else if (is.null(read$condition)) {
+        unparsed <- part
+      }
+    }
   } else {
-    expr
-  }
-  ## Literals restored before any clause is interpreted or reported: from here
-  ## on the text is the author's own again, so `.one_condition()` sees real
-  ## values and a dropped-condition diagnostic quotes what they actually wrote.
-  parts <- .unmask_literals(trimws(parts), masked)
-  parts <- parts[nzchar(parts)]
+    tree <- .parse_boolean(tokens)
+    if (identical(tree$kind, "error")) {
+      ## Only an expression that ATTEMPTS a condition is refused for its
+      ## structure. Prose carries English words this parser reads as
+      ## operators -- "not applicable", "safety population or better" -- and
+      ## reserving a row whose annotation states no filter withholds a result
+      ## that was never at risk. Same evidence rule the dropped-clause branch
+      ## below applies, and for the same reason.
+      if (!grepl(.RE_CONDITION_EVIDENCE, expr, perl = TRUE)) return(NULL)
+      diag_add(
+        stage = "where_clause", severity = "WARN",
+        problem = sprintf(
+          "Condition has %s, so its Boolean structure could not be read",
+          tree$reason),
+        location = original,
+        action = paste("Results are reserved rather than computed: a tree",
+                       "built from part of the expression restricts by",
+                       "something the author did not write. Restate the",
+                       "condition, or supply a typed condition through the",
+                       "supplement.")
+      )
+      return(.unresolved_condition(original, original))
+    }
 
-  conditions <- lapply(parts, .one_condition)
-  unparsed   <- parts[vapply(conditions, is.null, logical(1))]
-  conditions <- Filter(Negate(is.null), conditions)
+    built <- .where_from_boolean(tree, restore)
+    if (isTRUE(built$negation)) {
+      diag_add(
+        stage = "where_clause", severity = "WARN",
+        problem = "Condition uses negation, which this grammar cannot represent",
+        location = original,
+        action = paste("Results are reserved rather than computed. Nothing",
+                       "downstream executes a NOT, and for a condition on",
+                       "another dataset the expression does not say whether",
+                       "the negation applies to the record or to the",
+                       "subject. Restate it with a negative comparator",
+                       "(NE, NOT IN, not missing), or supply a typed",
+                       "condition through the supplement.")
+      )
+      return(.unresolved_condition(original, original))
+    }
+    where <- built$where
+    unparsed <- built$dropped
+    unread <- built$unread
+    parsed_any <- isTRUE(built$parsed_any)
+  }
 
   ## Anything that survived boilerplate-stripping but didn't parse into a
   ## condition is silently weaker filtering downstream -- record it. Skip
@@ -646,8 +1098,8 @@ parse_where_clause <- function(expr) {
   ## Warning about it told the author to fix an annotation the package
   ## understood perfectly.
   is_directive <- function(s) !is.null(.once_per_subject_var(s))
-  ## A clause of a CONJUNCTION (or disjunction) is held to a lower bar than a
-  ## lone annotation, and deliberately.
+  ## An operand of a joined expression is held to a lower bar than a lone
+  ## annotation, and deliberately.
   ##
   ## The qualified-reference requirement above exists for the single-clause
   ## case, where an annotation is as likely to be a variable pointer with
@@ -663,7 +1115,27 @@ parse_where_clause <- function(expr) {
   ## and -- carrying no DATASET.VARIABLE -- they were not even counted as
   ## dropped. The row filtered on one third of what the author wrote, and
   ## nothing said so.
-  joined <- !is.null(joiner)
+  ## Text that reserves whatever the evidence test would say about it. The
+  ## evidence test asks "does this look like a filter?", which is the right
+  ## question for a lone annotation and the wrong one for an operand: the
+  ## author already answered it by writing a joiner.
+  reserve_regardless <- character(0)
+
+  for (u in unread) {
+    reserve_regardless <- c(reserve_regardless, u)
+    diag_add(
+      stage = "where_clause", severity = "WARN",
+      problem = "A condition was read, and text stating another was left over",
+      location = u,
+      action = paste("Results are reserved rather than computed on the part",
+                     "that was read: the remaining text states a condition",
+                     "this grammar did not apply, so the filter would be",
+                     "weaker than the annotation asks for. Join the",
+                     "conditions with AND/OR, or supply a typed condition",
+                     "through the supplement.")
+    )
+  }
+
   dropped <- character(0)
   for (u in unparsed) {
     if (is_directive(u)) next
@@ -677,6 +1149,20 @@ parse_where_clause <- function(expr) {
                        "clauses that did parse: a conjunction missing a term",
                        "keeps more records than the author asked for, and a",
                        "disjunction missing one keeps fewer.")
+      )
+      next
+    }
+    if (joined && parsed_any) {
+      ## An operand of an expression whose other operands ARE conditions.
+      reserve_regardless <- c(reserve_regardless, u)
+      diag_add(
+        stage = "where_clause", severity = "WARN",
+        problem = "An operand of a joined condition states no condition",
+        location = u,
+        action = paste("Results are reserved rather than computed. The",
+                       "joiner says this text is a term of the restriction,",
+                       "and a term that evaluates to nothing removes itself",
+                       "from the filter without saying so.")
       )
       next
     }
@@ -713,34 +1199,48 @@ parse_where_clause <- function(expr) {
   ## "ADQX.MEASURE (unit ADQX.UNIT)" follows a reference and states no filter.
   ## Withholding a correct result is its own wrong answer, so only text
   ## carrying an actual operator reserves.
-  unreadable <- Filter(.has_condition_evidence, dropped)
+  unreadable <- c(Filter(.has_condition_evidence, dropped), reserve_regardless)
   if (length(unreadable) > 0) {
     return(.unresolved_condition(original, unreadable))
   }
 
-  if (length(conditions) == 0) return(NULL)
-  if (length(conditions) == 1) return(conditions[[1]])
+  where
+}
 
-  list(
-    compoundExpression = list(
-      logicalOperator = joiner %||% "AND",
-      whereClauses    = conditions
-    )
-  )
+#' One leaf pattern against an atom, recording the span it consumed.
+#'
+#' The battery in `.one_condition()` is unanchored and returns on the first
+#' recognised form. That is deliberate -- it is what lets a condition sit
+#' inside descriptive text -- but it means the match alone does not say
+#' whether the WHOLE operand was read. The span is what makes the remainder
+#' answerable. Anchoring every pattern instead would change what each one
+#' accepts; recording where it matched changes nothing about the reading.
+#' @noRd
+.leaf_match <- function(re, part, report = NULL, ignore.case = FALSE) {
+  at <- regexec(re, part, perl = TRUE, ignore.case = ignore.case)[[1]]
+  if (at[[1L]] < 0L) return(character(0))
+  if (!is.null(report)) {
+    report$span <- c(at[[1L]], at[[1L]] + attr(at, "match.length")[[1L]] - 1L)
+  }
+  regmatches(part, list(at))[[1L]]
 }
 
 #' Parse one atomic clause into an ARS WhereClauseCondition object (or, for
 #' BETWEEN, a compoundExpression of GE + LE). Branch order matters: more
 #' specific forms before less specific ones.
+#'
+#' @param report An environment, or `NULL`. When supplied, `report$span`
+#'   receives the character positions the recognised form occupied.
 #' @noRd
-.one_condition <- function(part) {
+.one_condition <- function(part, report = NULL) {
+  if (!is.null(report)) report$span <- NULL
   ## Either quote character, and only when the two ends match -- so a value
   ## that legitimately contains the other quote ("O'Brien") survives intact.
   strip_q <- function(x) sub("^(['\"])(.*)\\1$", "\\2", x)
 
   ## Range: DATASET.VARIABLE between lo ~AND~ hi -> (GE lo) AND (LE hi).
   ## ARS v1.0 has no BETWEEN comparator, so emit the conformant compound.
-  m <- regmatches(part, regexec(.RE_BETWEEN, part, perl = TRUE))[[1]]
+  m <- .leaf_match(.RE_BETWEEN, part, report)
   if (length(m) == 5) {
     return(list(
       compoundExpression = list(
@@ -753,7 +1253,7 @@ parse_where_clause <- function(expr) {
     ))
   }
   ## Multi-value list: DATASET.VARIABLE IN ('a','b') / NOT IN ('a','b')
-  m <- regmatches(part, regexec(.RE_CONDITION_IN_LIST, part, perl = TRUE))[[1]]
+  m <- .leaf_match(.RE_CONDITION_IN_LIST, part, report)
   if (length(m) == 5) {
     comp <- if (grepl("NOT", toupper(m[4]))) "NOTIN" else "IN"
     vals <- regmatches(m[5], gregexpr(.RE_IN_ITEM, m[5], perl = TRUE))[[1]]
@@ -761,27 +1261,27 @@ parse_where_clause <- function(expr) {
     return(.cond_multi(m[2], m[3], comp, vals))
   }
   ## ARS-style: DATASET.VARIABLE EQ 'value'
-  m <- regmatches(part, regexec(.RE_CONDITION_ARS, part, perl = TRUE))[[1]]
+  m <- .leaf_match(.RE_CONDITION_ARS, part, report)
   if (length(m) == 5) {
     return(.cond(m[2], m[3], m[4], strip_q(m[5])))
   }
   ## Unquoted numeric: DATASET.VARIABLE GE 65
-  m <- regmatches(part, regexec(.RE_CONDITION_NUM, part, perl = TRUE))[[1]]
+  m <- .leaf_match(.RE_CONDITION_NUM, part, report)
   if (length(m) == 5) {
     return(.cond(m[2], m[3], m[4], m[5]))
   }
   ## Equality: DATASET.VARIABLE='value'
-  m <- regmatches(part, regexec(.RE_CONDITION_EQ, part, perl = TRUE))[[1]]
+  m <- .leaf_match(.RE_CONDITION_EQ, part, report)
   if (length(m) == 4) {
     return(.cond(m[2], m[3], "EQ", strip_q(m[4])))
   }
   ## Unquoted numeric equality: DATASET.VARIABLE=1
-  m <- regmatches(part, regexec(.RE_CONDITION_EQ_NUM, part, perl = TRUE))[[1]]
+  m <- .leaf_match(.RE_CONDITION_EQ_NUM, part, report)
   if (length(m) == 4) {
     return(.cond(m[2], m[3], "EQ", m[4]))
   }
   ## Substring: DATASET.VARIABLE contains 'text' (arsbridge extension).
-  m <- regmatches(part, regexec(.RE_CONTAINS, part, perl = TRUE))[[1]]
+  m <- .leaf_match(.RE_CONTAINS, part, report)
   if (length(m) == 4) {
     diag_add(
       stage = "where_clause", severity = "INFO",
@@ -793,20 +1293,20 @@ parse_where_clause <- function(expr) {
   }
   ## Call-form missing checks: "!is.na(...)" / "not missing(...)" BEFORE the
   ## positive "is.na(...)" / "missing(...)" (the negated form embeds it).
-  m <- regmatches(part, regexec(.RE_ISNA_NEG, part, ignore.case = TRUE, perl = TRUE))[[1]]
+  m <- .leaf_match(.RE_ISNA_NEG, part, report, ignore.case = TRUE)
   if (length(m) == 3) {
     return(.cond(m[2], m[3], "NE", NA_character_))
   }
-  m <- regmatches(part, regexec(.RE_ISNA_POS, part, ignore.case = TRUE, perl = TRUE))[[1]]
+  m <- .leaf_match(.RE_ISNA_POS, part, report, ignore.case = TRUE)
   if (length(m) == 3) {
     return(.cond(m[2], m[3], "EQ", NA_character_))
   }
   ## Null checks: "not null/missing" BEFORE the positive form.
-  m <- regmatches(part, regexec(.RE_NULL_CHECK, part, ignore.case = TRUE, perl = TRUE))[[1]]
+  m <- .leaf_match(.RE_NULL_CHECK, part, report, ignore.case = TRUE)
   if (length(m) == 3) {
     return(.cond(m[2], m[3], "NE", NA_character_))
   }
-  m <- regmatches(part, regexec(.RE_IS_NULL, part, ignore.case = TRUE, perl = TRUE))[[1]]
+  m <- .leaf_match(.RE_IS_NULL, part, report, ignore.case = TRUE)
   if (length(m) == 3) {
     return(.cond(m[2], m[3], "EQ", NA_character_))
   }
