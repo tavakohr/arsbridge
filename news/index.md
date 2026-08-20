@@ -2,28 +2,129 @@
 
 ## arsbridge (development version)
 
-- **A restriction this grammar cannot represent is refused, not
-  approximated.** The clause splitter is flat: it finds one joiner and
-  splits on it. So an expression carrying grouping, negation, or both
-  joiners was never *refused* – it was answered with a different
-  expression that is valid, executable, and restricts other records.
-  `A AND (B OR C)` and `(A OR B) AND C` both became `AND(A, B, C)`,
-  which asks for something the author did not, and which is satisfied by
-  no record at all when the two disjuncts exclude each other. This
-  reached the emitted event through every path that parses a condition
-  from text, and the most costly was the population: a shell writing
-  `ADSL.SAFFL='Y' AND (ADSL.COHORT='A' OR ADSL.COHORT='B')` emitted an
-  analysis set no subject belongs to – one variable required to equal
-  two values at once – and every percentage under it divided by the
-  wrong N, with nothing on the page to say so.
+- **Boolean structure is parsed as a tree, with precedence.** Brackets
+  bind tightest, then `NOT`, then `AND`, then `OR` – the precedence
+  every SQL and SAS author already writes to. `A AND (B OR C)` produces
+  `AND(A, OR(B, C))`, `(A OR B) AND C` produces `AND(OR(A, B), C)`, and
+  `A OR B AND C` produces `OR(A, AND(B, C))`. The population that
+  motivated the previous release’s refusal –
+  `ADSL.SAFFL='Y' AND (ADSL.COHORT='A' OR ADSL.COHORT='B')` – is now
+  carried as the nested condition it states, instead of being reserved
+  for its structure. The nested tree reaches the analysis set, the
+  column grouping, the row subset and the restriction plan, so what is
+  executed and what is emitted are the same restriction.
 
-  Such an expression now reserves, exactly as one that cannot be read at
-  all does – to the reader of the number the two are the same failure.
-  The refusal is narrow: parentheses that wrap a whole expression or
-  hold a single condition, `IN (...)`, `is.na(...)`, `not missing`, a
-  `BETWEEN`’s inner “and”, a comparator spelled with `!`, and prose
-  carrying an English “not” are all left alone, because withholding a
-  correct result is its own wrong answer.
+  An accepted expression must consume the WHOLE token stream. Trailing
+  text, a dangling operator, an unmatched bracket or an operator with
+  nothing to bind refuses and reserves – a tree built from part of the
+  input is the same class of wrong answer as a flat split, because it
+  looks finished. Where the parser cannot prove a complete parse, the
+  reservation behaviour introduced in the previous release is unchanged.
+
+  Three separations keep the structural reading off the atoms: quoted
+  literals are masked before any structure is read, so
+  `RACE='BLACK OR AFRICAN AMERICAN'` carries no joiner; atomic forms
+  that own a bracket or the word `NOT` – `IN (...)`, `NOT IN (...)`,
+  `is.na(...)`, `not missing`, a `BETWEEN`’s inner “and” – are masked
+  too; and a bracketed note that encloses no operand (`(mg)`, `(N=XX)`,
+  `(per protocol)`) groups nothing and is left alone. The leaf grammar
+  is unchanged.
+
+- **An operand must be fully read, not merely started.** Consuming every
+  structural token is not the same as consuming every condition: the
+  leaf battery is unanchored and stops at the first form it recognises,
+  so `A='Y' B='N'` was read as `A='Y'` and the second condition simply
+  disappeared. Each operand is now checked for condition-bearing residue
+  – the text the recognised leaf did not consume – and an operand that
+  leaves any reserves. Descriptive suffixes are unaffected: the leftover
+  is put through the same note masking the expression itself gets before
+  it is asked whether it carries an operator, so
+  `AVAL GT 0 (per protocol)` and `SAFFL='Y' (N=XX)` still compute.
+
+  This found a live defect in a real shell, fixed by the comma rule
+  below: a population written `(ADSL.SAFFL='Y', ADVS.ANL01FL='Y')` was
+  emitted as the safety flag alone. The second condition appeared
+  nowhere in the reporting event – the string “ANL01FL” occurred zero
+  times in it – and the figure’s population was merged with the plain
+  safety population it was written to differ from.
+
+- **A comma between complete conditions is read as a conjunction.**
+  Shells write a population as a list and mean every item of it, so
+  `(ADSL.SAFFL='Y', ADVS.ANL01FL='Y')` now produces
+  `AND(SAFFL, ANL01FL)`.
+
+  This is annotation shorthand, not a claim that a comma is a Boolean
+  operator, and the rule is narrow on purpose: it applies only when the
+  WHOLE operand is a list of two or more independently complete atomic
+  conditions, each read to its end with no residue, and only when the
+  expression states no Boolean operator of its own.
+  `A='Y', B='N' OR C='Y'` reserves rather than deciding how a comma
+  binds against `OR`. So does a list with an item that is not a
+  condition – prose, a bare reference, or nothing at all (`A='Y',`).
+  Commas that belong to something else are untouched: `IN ('A','B')`
+  keeps its value list, `VAR='A,B'` keeps its value, and
+  `A='Y' (N=10, planned)` keeps its aside. Prose containing a comma
+  states no filter and still reserves nothing – the rule may only ever
+  rescue text that would otherwise be refused.
+
+- **A bracket in operand position is an operand.** `A='Y' (N=XX)` puts
+  the bracket after a condition, where an aside is exactly what it is.
+  `A='Y' AND (N=XX)` puts it after a joiner, where the author has said
+  the next thing is a term of the restriction – and a term that quietly
+  evaluates to nothing removes itself from the filter. `A AND ()` is the
+  same failure with the span empty, and is now diagnosed as an empty
+  operand rather than reduced to `A`. More generally, once any operand
+  of an expression has parsed into a condition, an operand that states
+  none reserves: the joiner is the author saying these are terms. Where
+  nothing parsed, the words are a sentence – “safety population or
+  better” states no filter and still reserves nothing.
+
+- **Negation is recognised at its own precedence and reserves.** ARS has
+  a `NOT`, but nothing downstream executes one: the evaluator and the
+  predicate emitter both answer an unrecognised operator with “keep
+  every row”, so an emitted `NOT` would be a filter that silently does
+  nothing. For a condition on another dataset it is worse – negating
+  row-wise and then projecting to subjects (“has a record that is not
+  X”) is a different set from negating the projection (“has no record
+  that is X”), and the expression does not say which was meant. A `NOT`
+  that governs a real condition therefore reserves, with a message
+  naming the construct. A `NOT` that governs no condition – “not
+  applicable” – negates nothing and states no filter, as before.
+
+- **A displayed condition brackets an operand that binds differently.**
+  `.where_to_annotation()` rendered a nested compound flat, so a typed
+  `AND(A, OR(B, C))` was shown as `A and B or C` – which states a
+  different restriction, because `AND` binds tighter. The display string
+  now brackets a nested operand whose operator differs from the one
+  outside it. Same-operator nesting is associative and is left
+  unbracketed, so a range (stored as an `AND` of `GE` and `LE`) picks up
+  no punctuation it does not need. The round-trip property test is a
+  serialization consistency check between this renderer and the parser;
+  it makes no claim about the author’s intent.
+
+- **A restriction this grammar cannot represent is refused, not
+  approximated.** The flat clause splitter answered an expression it
+  could not hold with a DIFFERENT expression that is valid, executable
+  and restricts other records: `A AND (B OR C)` and `(A OR B) AND C`
+  both became `AND(A, B, C)`, which asks for something the author did
+  not, and which is satisfied by no record at all when the two disjuncts
+  exclude each other. This reached the emitted event through every path
+  that parses a condition from text, and the most costly was the
+  population – an analysis set no subject belongs to, with every
+  percentage under it divided by the wrong N and nothing on the page to
+  say so.
+
+  The refusal that replaced it is what the tree parser above was then
+  built on, and those two expressions now *parse*; what remains refused
+  is what still has no representation – a negation, and any expression
+  this grammar cannot read to the end. The line it draws is narrow in
+  both directions: an unreadable restriction reserves rather than
+  computing, because to the reader of the number an unrepresentable
+  filter and an unreadable one are the same failure; and parentheses
+  that wrap a whole expression or hold a single condition, `IN (...)`,
+  `is.na(...)`, `not missing`, a `BETWEEN`’s inner “and”, a comparator
+  spelled with `!`, and prose carrying an English “not” are all left
+  alone, because withholding a correct result is its own wrong answer.
 
 - **A clause of a joined restriction is no longer dropped in silence.**
   Inside `A and B` the author has already said both are clauses, so a
