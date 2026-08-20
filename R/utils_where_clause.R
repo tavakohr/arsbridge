@@ -659,6 +659,91 @@
   tree
 }
 
+## Commas: an annotation shorthand, and deliberately nothing more.
+##
+## Shells write a population as a list -- `(ADSL.SAFFL='Y', ADVS.ANL01FL='Y')`
+## -- and mean every item of it. This grammar has no comma operator, so the
+## leaf battery read the first item and the rest disappeared: a real study
+## emitted that population as the safety flag alone, with the second condition
+## absent from the reporting event entirely.
+##
+## The rule that fixes it is narrow ON PURPOSE. A comma is NOT a Boolean
+## synonym for AND. It is read only when the WHOLE operand is a list of two or
+## more independently complete atomic conditions -- each one read to its end,
+## none leaving residue -- and only when the expression states no Boolean
+## operator of its own. Anywhere else the comma is refused rather than
+## interpreted, because `A, B OR C` would require deciding how a comma binds
+## against OR, and this grammar has no answer to give.
+##
+## The negative side is the point of the rule, not an afterthought:
+##
+##   VAR IN ('A','B')        the list belongs to the comparator
+##   VAR='A,B'               the comma is inside a value
+##   A='Y' (N=10, planned)   the comma is inside an aside
+##   A='Y', prose            not every item is a condition -> reserves
+##   A='Y', B                a bare reference is not a condition -> reserves
+##   A='Y',                  an empty item is a missing one -> reserves
+##   A='Y', B='N' OR C='Y'   a Boolean operator is present -> reserves
+
+#' Remove parentheses that wrap the whole span, however many deep.
+#'
+#' Only when the opening bracket's match is the LAST character, so
+#' `(A), (B)` -- whose first bracket closes in the middle -- is left alone.
+#' @noRd
+.strip_wrapping_parens <- function(txt) {
+  repeat {
+    trimmed <- trimws(txt)
+    if (nchar(trimmed) < 2L || substr(trimmed, 1L, 1L) != "(") return(trimmed)
+    chars <- strsplit(trimmed, "", fixed = TRUE)[[1]]
+    depth <- 0L
+    close_at <- NA_integer_
+    for (i in seq_along(chars)) {
+      if (chars[[i]] == "(") depth <- depth + 1L
+      if (chars[[i]] == ")") {
+        depth <- depth - 1L
+        if (depth == 0L) { close_at <- i; break }
+      }
+    }
+    if (is.na(close_at) || close_at != length(chars)) return(trimmed)
+    txt <- substr(trimmed, 2L, close_at - 1L)
+  }
+}
+
+#' The items of a comma-separated operand, or `NULL` when it is not one.
+#'
+#' Split on the masked text, so a comma inside a value, inside a comparator's
+#' own list, or inside an aside is not a separator. Only commas at bracket
+#' depth zero divide the list.
+#'
+#' EMPTY ITEMS ARE KEPT. `A='Y',` and `A='Y',, B='N'` name a place where an
+#' item goes and put nothing in it, which is the same missing operand as
+#' `A AND ()`. Dropping them here would let the list read as though the
+#' author had written only the items that survived.
+#' @noRd
+.comma_items <- function(part) {
+  masked <- .mask_literals(part)
+  if (is.null(masked)) return(NULL)
+  hidden <- .mask_non_structural(masked$text, operand_context = FALSE)
+  if (is.null(hidden)) return(NULL)
+
+  txt <- .strip_wrapping_parens(hidden$text)
+  chars <- strsplit(txt, "", fixed = TRUE)[[1]]
+  depth <- 0L
+  cuts <- integer(0)
+  for (i in seq_along(chars)) {
+    ch <- chars[[i]]
+    if (ch == "(") depth <- depth + 1L
+    else if (ch == ")") depth <- depth - 1L
+    else if (ch == "," && depth == 0L) cuts <- c(cuts, i)
+  }
+  if (length(cuts) == 0L) return(NULL)
+
+  starts <- c(1L, cuts + 1L)
+  stops  <- c(cuts - 1L, length(chars))
+  items <- trimws(substring(txt, starts, stops))
+  .unmask_literals(.unmask_non_structural(items, hidden), masked)
+}
+
 #' Read one atomic operand, and refuse it when it leaves a condition behind.
 #'
 #' Consuming every STRUCTURAL token is not the same as consuming every
@@ -679,7 +764,34 @@
 #' @return `list(condition, residue)`. Exactly one is non-NULL, or both are
 #'   NULL when the text states no condition at all.
 #' @noRd
-.read_atom <- function(part) {
+.read_atom <- function(part, commas = FALSE) {
+  if (isTRUE(commas)) {
+    items <- .comma_items(part)
+    if (length(items) >= 2L) {
+      reads <- lapply(items, .read_leaf)
+      complete <- !vapply(reads, function(r) is.null(r$condition), logical(1))
+      if (all(complete)) {
+        return(list(condition = list(compoundExpression = list(
+          logicalOperator = "AND",
+          whereClauses    = lapply(reads, `[[`, "condition"))),
+          residue = NULL))
+      }
+      ## Some items are conditions and some are not -- prose, a bare
+      ## reference, or nothing at all. The author wrote a list; honouring the
+      ## half of it this grammar can read would filter on less than was asked
+      ## for, and say nothing.
+      if (any(complete)) return(list(condition = NULL, residue = part))
+      ## No item is a condition, so this is not a list of conditions at all --
+      ## fall through and let the ordinary reading answer. Prose containing a
+      ## comma states no filter and must not reserve.
+    }
+  }
+  .read_leaf(part)
+}
+
+#' One operand, read by the leaf grammar alone.
+#' @noRd
+.read_leaf <- function(part) {
   report <- new.env(parent = emptyenv())
   cond <- .one_condition(part, report = report)
   if (is.null(cond)) return(list(condition = NULL, residue = NULL))
@@ -905,7 +1017,11 @@ parse_where_clause <- function(expr) {
     ## would refuse a punctuation habit and withhold correct results.
     part <- trimws(restore(structural$text))
     if (nzchar(part)) {
-      read <- .read_atom(part)
+      ## The only place a comma list is read: the expression states no
+      ## Boolean operator, so combining the items as one AND cannot be
+      ## deciding how a comma binds against an AND or an OR that is also
+      ## present. Where one IS present, the comma reserves.
+      read <- .read_atom(part, commas = TRUE)
       where <- read$condition
       parsed_any <- !is.null(read$condition)
       if (!is.null(read$residue)) {

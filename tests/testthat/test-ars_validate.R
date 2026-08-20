@@ -422,15 +422,7 @@ test_that("the ADaM spec overlay flags datasets and variables it cannot find", {
   model <- ars_to_model(ars_path)
 
   clean <- validate_ars_model(model, spec = spec)
-  ## One GAP, and it is the bundled shell's own comma-separated population --
-  ## `(ADSL.SAFFL='Y', ADVS.ANL01FL='Y')`, which this grammar has no joiner
-  ## for. It is named rather than counted, so a DIFFERENT gap appearing here
-  ## still fails, and so that "clean validates clean" cannot be restored by
-  ## going back to reading only the first condition.
-  gaps <- clean[clean$severity == "GAP", , drop = FALSE]
-  expect_equal(nrow(gaps), 1L)
-  expect_identical(as.character(gaps$ref), "ANALYSIS_SET_CONDITION_UNRESOLVED")
-  expect_identical(as.character(gaps$detail), "(ADSL.SAFFL='Y', ADVS.ANL01FL='Y')")
+  expect_equal(sum(clean$severity == "GAP"), 0)
 
   model$analyses$dataset[1]  <- "ADNOPE"
   model$analyses$variable[2] <- "NOSUCHVAR"

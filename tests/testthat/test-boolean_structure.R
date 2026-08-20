@@ -400,6 +400,93 @@ test_that("a bracketed note groups nothing", {
 
 
 ## ---------------------------------------------------------------------------
+## C2. A comma list is annotation shorthand, and only that
+## ---------------------------------------------------------------------------
+
+test_that("a list of complete conditions is read as one conjunction", {
+  ## Shells write a population as a list and mean every item of it. This
+  ## grammar has no comma operator, so the leaf battery read the first item
+  ## and the rest disappeared -- which is how a real study emitted a
+  ## two-condition population as one condition, with the second absent from
+  ## the reporting event entirely.
+  for (v in list(.bst_v1, .bst_v2)) {
+    q <- function(var, value) sprintf("%s.%s EQ %s", v$ds, var, value)
+    two <- sprintf("%s.%s='Y', %s.%s='N'", v$ds, v$a, v$ds, v$b)
+    three <- sprintf("%s.%s='Y', %s.%s='N', %s.%s='Y'",
+                     v$ds, v$a, v$ds, v$b, v$ds, v$c)
+
+    ## With and without the brackets shells usually put round such a list.
+    expect_identical(.bst_shape(.bst_parse(two)),
+                     sprintf("AND(%s, %s)", q(v$a, "Y"), q(v$b, "N")),
+                     info = v$ds)
+    expect_identical(.bst_shape(.bst_parse(sprintf("(%s)", two))),
+                     sprintf("AND(%s, %s)", q(v$a, "Y"), q(v$b, "N")),
+                     info = v$ds)
+    expect_identical(
+      .bst_shape(.bst_parse(three)),
+      sprintf("AND(%s, %s, %s)", q(v$a, "Y"), q(v$b, "N"), q(v$c, "Y")),
+      info = v$ds)
+    expect_identical(
+      .bst_shape(.bst_parse(sprintf("(%s)", three))),
+      sprintf("AND(%s, %s, %s)", q(v$a, "Y"), q(v$b, "N"), q(v$c, "Y")),
+      info = v$ds)
+
+    ## One n-ary AND, not a nest -- and it MEANS the conjunction, checked on
+    ## data rather than asserted. Reading only the first item would keep the
+    ## second and third rows too.
+    df <- data.frame(USUBJID = sprintf("S%02d", 1:4), stringsAsFactors = FALSE)
+    df[[v$a]] <- c("Y", "Y", "N", "Y")
+    df[[v$b]] <- c("N", "Y", "N", "N")
+    df[[v$c]] <- c("Y", "Y", "Y", "N")
+    expect_identical(.eval_where_clause(df, .bst_parse(three)),
+                     c(TRUE, FALSE, FALSE, FALSE), info = v$ds)
+  }
+})
+
+
+test_that("a comma is not a Boolean operator", {
+  ## The negative side is the point of the rule. Everywhere the whole operand
+  ## is not a list of complete conditions, the comma is refused rather than
+  ## interpreted.
+  for (v in list(.bst_v1, .bst_v2)) {
+    a <- sprintf("%s.%s='Y'", v$ds, v$a)
+    b <- sprintf("%s.%s='N'", v$ds, v$b)
+    c_ <- sprintf("%s.%s='Y'", v$ds, v$c)
+
+    reserved <- c(
+      sprintf("%s, prose", a),                    # an item that is not one
+      sprintf("%s, %s.%s", a, v$ds, v$b),         # a bare reference
+      sprintf("%s,", a),                          # an empty item
+      sprintf("%s,, %s", a, b),                   # an empty item between two
+      sprintf("%s, %s OR %s", a, b, c_),          # comma against OR
+      sprintf("%s AND %s, %s", a, b, c_)          # comma against AND
+    )
+    kinds <- vapply(reserved, .bst_kind, character(1), USE.NAMES = FALSE)
+    ## Scope assertion: six forms were actually put to the parser.
+    expect_equal(length(kinds), 6L, info = v$ds)
+    expect_true(all(kinds == "unresolved"), info = v$ds)
+
+    ## Commas that belong to something else are untouched: to a comparator's
+    ## own value list, to a value, to an aside.
+    expect_identical(
+      .bst_shape(.bst_parse(sprintf("%s.%s IN ('A','B')", v$ds, v$cat))),
+      sprintf("%s.%s IN A|B", v$ds, v$cat), info = v$ds)
+    expect_identical(
+      .bst_shape(.bst_parse(sprintf("%s.%s='A,B'", v$ds, v$cat))),
+      sprintf("%s.%s EQ A,B", v$ds, v$cat), info = v$ds)
+    expect_identical(
+      .bst_shape(.bst_parse(sprintf("%s (N=10, planned)", a))),
+      sprintf("%s.%s EQ Y", v$ds, v$a), info = v$ds)
+
+    ## And prose carrying a comma states no filter, so it reserves nothing --
+    ## the rule may only ever rescue text that would otherwise be refused.
+    expect_identical(.bst_kind(sprintf("count of %s.USUBJID, unique", v$ds)),
+                     "absent", info = v$ds)
+  }
+})
+
+
+## ---------------------------------------------------------------------------
 ## D. An accepted expression consumes the whole token stream
 ## ---------------------------------------------------------------------------
 

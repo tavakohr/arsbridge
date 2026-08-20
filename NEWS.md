@@ -37,13 +37,29 @@
   whether it carries an operator, so `AVAL GT 0 (per protocol)` and
   `SAFFL='Y' (N=XX)` still compute.
 
-  This found a live defect in a real shell. A population written as a
-  comma-separated pair, `(ADSL.SAFFL='Y', ADVS.ANL01FL='Y')`, was emitted as
-  the safety flag alone: the second condition appeared nowhere in the
-  reporting event, and the figure's population was merged with the plain
-  safety population it was written to differ from. It reserves now. Whether a
-  comma should instead be READ as a conjunction is a grammar question this
-  release does not answer.
+  This found a live defect in a real shell, fixed by the comma rule below: a
+  population written `(ADSL.SAFFL='Y', ADVS.ANL01FL='Y')` was emitted as the
+  safety flag alone. The second condition appeared nowhere in the reporting
+  event -- the string "ANL01FL" occurred zero times in it -- and the figure's
+  population was merged with the plain safety population it was written to
+  differ from.
+
+* **A comma between complete conditions is read as a conjunction.** Shells
+  write a population as a list and mean every item of it, so
+  `(ADSL.SAFFL='Y', ADVS.ANL01FL='Y')` now produces `AND(SAFFL, ANL01FL)`.
+
+  This is annotation shorthand, not a claim that a comma is a Boolean
+  operator, and the rule is narrow on purpose: it applies only when the WHOLE
+  operand is a list of two or more independently complete atomic conditions,
+  each read to its end with no residue, and only when the expression states no
+  Boolean operator of its own. `A='Y', B='N' OR C='Y'` reserves rather than
+  deciding how a comma binds against `OR`. So does a list with an item that is
+  not a condition -- prose, a bare reference, or nothing at all
+  (`A='Y',`). Commas that belong to something else are untouched:
+  `IN ('A','B')` keeps its value list, `VAR='A,B'` keeps its value, and
+  `A='Y' (N=10, planned)` keeps its aside. Prose containing a comma states no
+  filter and still reserves nothing -- the rule may only ever rescue text that
+  would otherwise be refused.
 
 * **A bracket in operand position is an operand.** `A='Y' (N=XX)` puts the
   bracket after a condition, where an aside is exactly what it is. `A='Y' AND
