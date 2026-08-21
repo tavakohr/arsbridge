@@ -361,7 +361,7 @@
 #'   absent it is read from the annotation, which is what the free-standing
 #'   caller has.
 #' @return list(method = standard-catalogue name, kind = layout kind); or
-#'   list(method = NULL, kind = "manual", unsupported = <reason>) when the row
+#'   list(method = NULL, kind = NA, unsupported = <reason>) when the row
 #'   asks for a statistic no catalogue method computes, which the caller
 #'   reserves rather than substituting for; or NULL when the form is
 #'   unrecognised (caller keeps the section default).
@@ -382,7 +382,10 @@
   ## answer to the question the author asked.
   unsupported <- .unsupported_row_intent(row)
   if (!is.null(unsupported)) {
-    return(list(method = NULL, kind = "manual", unsupported = unsupported))
+    ## No shape is claimed: the row asks for something unreadable, so how
+    ## many lines it takes is exactly what is not known. The caller records
+    ## the STATUS from `unsupported`.
+    return(list(method = NULL, kind = NA_character_, unsupported = unsupported))
   }
 
   ## The placeholder shape decides whether a subject-count row also declares a
@@ -399,8 +402,11 @@
   ## Count expression or a bare USUBJID reference -> distinct subject count.
   if (grepl("(?i)\\bcount\\s+of\\b|(?i)\\bunique\\s+USUBJID\\b", ann, perl = TRUE) ||
       grepl(paste0("\\b", .ADAM_DS, "\\.USUBJID\\b"), ann, perl = TRUE)) {
-    kind <- if (has_percentage_slot) "subject_count_pct" else "subject_count"
-    return(list(method = subject_count_method, kind = kind))
+    ## One row either way -- the percentage slot changes what the cell
+    ## SHOWS, never how many rows the shell draws.
+    form <- if (has_percentage_slot) "subject_count_pct" else "subject_count"
+    return(list(method = subject_count_method, kind = "scalar_row",
+                stat_form = form))
   }
   ## A condition is present. It says which RECORDS survive; it does not say
   ## which STATISTIC those records are reported with, and this function no
@@ -488,18 +494,19 @@
     ## for why it is not evidence about the requested statistic.
     if (.filter_pins_primary(where, primary_ref$dataset,
                              primary_ref$variable)) {
-      kind <- if (has_percentage_slot) "filtered_count_pct" else "filtered_count"
-      return(list(method = subject_count_method, kind = kind))
+      form <- if (has_percentage_slot) "filtered_count_pct" else "filtered_count"
+      return(list(method = subject_count_method, kind = "scalar_row",
+                  stat_form = form))
     }
     ## Anything else falls through: the restriction has said all it can, and
     ## the variable's own type decides what the line reports.
   }
   ## Primary variable type (from the ADaM spec) decides the method.
   if (isTRUE(var_is_categorical)) {
-    return(list(method = "Count and Percentage", kind = "categorical"))
+    return(list(method = "Count and Percentage", kind = "categorical_block"))
   }
   if (identical(var_is_categorical, FALSE)) {
-    return(list(method = "Summary Statistics - Continuous", kind = "continuous"))
+    return(list(method = "Summary Statistics - Continuous", kind = "stat_block"))
   }
   NULL
 }
@@ -1513,7 +1520,10 @@ build_ars_json <- function(sections,
       shell_layout[[length(shell_layout) + 1L]] <<- .with_sheet_row(list(
         order = length(shell_layout) + 1L,
         label = label %||% "", indent = indent,
-        analysis_id = an2$id, kind = "supplement_added"), row2)
+        analysis_id = an2$id, kind = "scalar_row",
+        ## Where the row came from, not how it expands: its rendering
+        ## contract is the one-line branch, exactly as before.
+        provenance = .LAYOUT_PROV_SUPPLEMENT), row2)
       invisible(an2$id)
     }
 
@@ -1538,7 +1548,7 @@ build_ars_json <- function(sections,
         label_entry <- .with_sheet_row(list(
           order = length(shell_layout) + 1L,
           label = row$label %||% "", indent = indent,
-          analysis_id = NA_character_, kind = "label"), row)
+          analysis_id = NA_character_, kind = "label_row"), row)
         ## A REVIEWED supplement may say what a statistic row means when the
         ## label grammar could not read it. Carried on the layout entry
         ## because that is the only record of this row the fill stage sees.
@@ -1748,7 +1758,7 @@ build_ars_json <- function(sections,
         shell_layout[[length(shell_layout) + 1L]] <- .with_sheet_row(list(
           order = length(shell_layout) + 1L,
           label = row$label %||% "", indent = indent,
-          analysis_id = cat_parent$aid, kind = "level", level = lv_display,
+          analysis_id = cat_parent$aid, kind = "level_row", level = lv_display,
           level_code = lv), row)
         diag_add(
           stage = "build_ars", severity = "INFO",
@@ -1765,7 +1775,9 @@ build_ars_json <- function(sections,
       )
 
       row_method_id <- mth_obj$id
-      row_kind      <- "row"
+      row_shape     <- "scalar_row"
+      row_status    <- NA_character_
+      row_stat_form <- NA_character_
       cat_verdict   <- .var_is_categorical(er$primary_dataset,
                                            er$primary_variable)
       ## Annotation-form inference applies to TABLE rows only: a listing
@@ -1796,7 +1808,8 @@ build_ars_json <- function(sections,
         er$primary_dataset  <- "ADSL"
         er$primary_variable <- "USUBJID"
         row_method_id <- "MTH_UNSUPPORTED_ANALYSIS"
-        row_kind      <- "manual"
+        row_shape     <- NA_character_
+        row_status    <- .LAYOUT_STATUS_MANUAL
         if (!"MTH_UNSUPPORTED_ANALYSIS" %in% seen_mth) {
           methods[[length(methods) + 1L]] <- .build_unsupported_method(sec)
           seen_mth <- c(seen_mth, "MTH_UNSUPPORTED_ANALYSIS")
@@ -1814,7 +1827,8 @@ build_ars_json <- function(sections,
         ## cell yields a number that formats, renders, and answers a question
         ## the author did not ask.
         row_method_id <- "MTH_UNSUPPORTED_ANALYSIS"
-        row_kind      <- "manual"
+        row_shape     <- NA_character_
+        row_status    <- .LAYOUT_STATUS_MANUAL
         if (!"MTH_UNSUPPORTED_ANALYSIS" %in% seen_mth) {
           methods[[length(methods) + 1L]] <- .build_unsupported_method(
             list(unsupported_reason = .UNSUPPORTED_ROW_REASON))
@@ -1830,7 +1844,8 @@ build_ars_json <- function(sections,
       } else if (!is.null(inferred)) {
         ## Deterministic method from the annotation form -- overrides the
         ## section-level (LLM) method for this row.
-        row_kind <- inferred$kind
+        row_shape <- inferred$kind
+        row_stat_form <- as.character(inferred$stat_form %||% NA_character_)
         cand <- .STANDARD_METHODS[[inferred$method]]
         if (!is.null(cand)) {
           if (!cand$id %in% seen_mth) {
@@ -1929,7 +1944,7 @@ build_ars_json <- function(sections,
             .with_op_self_rels(.STANDARD_METHODS[["AE Frequency Count"]])
           seen_mth <- c(seen_mth, row_method_id)
         }
-        row_kind <- nested_role
+        row_shape <- nested_role
         if (identical(nested_role, "nested_child") &&
               !is.null(nested_parent_ctx)) {
           ## Through the same registrar as the column axes: a data-driven row
@@ -1997,16 +2012,24 @@ build_ars_json <- function(sections,
       analyses[[length(analyses) + 1L]] <- an_obj
       analysis_ids <- c(analysis_ids, an_obj$id)
       note_value_decode(er$primary_dataset, er$primary_variable, row_method_id)
-      layout_kind <- if (identical(row_method_id, "MTH_COUNT_AND_PERCENTAGE") &&
-                           identical(row_kind, "row")) "categorical"
-                     else if (identical(row_method_id, "MTH_SUMMARY_STATISTICS_CONTINUOUS") &&
-                                identical(row_kind, "row")) "continuous"
-                     else row_kind
-      layout_entry <- .with_sheet_row(list(
-        order = length(shell_layout) + 1L,
-        label = row$label %||% "", indent = indent,
-        analysis_id = an_obj$id,
-        kind = layout_kind), row)
+      ## STILL derived from the method, unchanged from before: this PR moves
+      ## the vocabulary, not the evidence. Deciding shape from structure
+      ## instead is the next change, and nothing downstream has to move again
+      ## when it lands -- the values below are already the structural ones.
+      layout_shape <- if (identical(row_method_id, "MTH_COUNT_AND_PERCENTAGE") &&
+                            identical(row_shape, "scalar_row")) "categorical_block"
+                      else if (identical(row_method_id, "MTH_SUMMARY_STATISTICS_CONTINUOUS") &&
+                                 identical(row_shape, "scalar_row")) "stat_block"
+                      else row_shape
+      layout_entry <- .with_sheet_row(c(
+        list(order = length(shell_layout) + 1L,
+             label = row$label %||% "", indent = indent,
+             analysis_id = an_obj$id,
+             kind = layout_shape),
+        ## Only when there is something to say. A field carrying NA is not a
+        ## smaller answer than an absent one -- it is the same answer written
+        ## twice, and it puts `"status": null` on every ordinary row.
+        .layout_notes(status = row_status, stat_form = row_stat_form)), row)
       if (identical(nested_role, "nested_child") &&
             !is.null(nested_parent_ctx)) {
         layout_entry$parent_order <- nested_parent_ctx$order
@@ -2018,7 +2041,7 @@ build_ars_json <- function(sections,
       ## level -- a token row routed to any other method keeps its analysis
       ## un-flagged.
       if (identical(nested_role, "self_template") &&
-            identical(layout_kind, "categorical")) {
+            identical(layout_shape, "categorical_block")) {
         layout_entry$self_template <- TRUE
         own_row <- suppressWarnings(as.integer(row$sheet_row %||%
                                                  NA_integer_))
@@ -2039,7 +2062,7 @@ build_ars_json <- function(sections,
       ## block below may expand). Without one, nested blocks default to
       ## descending frequency and categorical blocks to codelist order.
       if (identical(nested_role, "nested_parent") ||
-            identical(layout_kind, "categorical")) {
+            identical(layout_shape, "categorical_block")) {
         sort_clause <- .nested_sort_clause(row$annotation)
         if (!is.null(sort_clause)) {
           if (is.na(sort_clause$basis)) {
@@ -2079,7 +2102,7 @@ build_ars_json <- function(sections,
       }
       ## This analysis becomes (or clears) the candidate parent for authored
       ## level rows that follow.
-      cat_parent <- if (identical(layout_kind, "categorical") &&
+      cat_parent <- if (identical(layout_shape, "categorical_block") &&
                           nzchar(er$primary_variable %||% "")) {
         list(var = toupper(er$primary_variable),
              ds  = toupper(er$primary_dataset %||% ""),

@@ -2707,7 +2707,8 @@
             "label": "Subjects enrolled",
             "indent": 0,
             "analysis_id": "AN_T_14_1_1_001",
-            "kind": "subject_count",
+            "kind": "scalar_row",
+            "stat_form": "subject_count",
             "n_slots": 1
           },
           {
@@ -2715,7 +2716,8 @@
             "label": "Screen failures",
             "indent": 0,
             "analysis_id": "AN_T_14_1_1_002",
-            "kind": "filtered_count",
+            "kind": "scalar_row",
+            "stat_form": "filtered_count",
             "n_slots": 1
           },
           {
@@ -2723,7 +2725,8 @@
             "label": "Randomized / treated (Safety)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_1_003",
-            "kind": "filtered_count",
+            "kind": "scalar_row",
+            "stat_form": "filtered_count",
             "n_slots": 1
           },
           {
@@ -2731,7 +2734,8 @@
             "label": "Completed study",
             "indent": 0,
             "analysis_id": "AN_T_14_1_1_004",
-            "kind": "filtered_count",
+            "kind": "scalar_row",
+            "stat_form": "filtered_count",
             "n_slots": 1
           },
           {
@@ -2739,7 +2743,8 @@
             "label": "Discontinued study",
             "indent": 0,
             "analysis_id": "AN_T_14_1_1_005",
-            "kind": "filtered_count",
+            "kind": "scalar_row",
+            "stat_form": "filtered_count",
             "n_slots": 1
           },
           {
@@ -2747,7 +2752,7 @@
             "label": "(End-of-study status)",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label",
+            "kind": "label_row",
             "n_slots": 1
           }
         ]
@@ -2814,7 +2819,7 @@
             "label": "Age (years) - Mean (SD)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_001",
-            "kind": "continuous",
+            "kind": "stat_block",
             "n_slots": 1
           },
           {
@@ -2822,7 +2827,7 @@
             "label": "Min, Max",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label",
+            "kind": "label_row",
             "n_slots": 1
           },
           {
@@ -2830,7 +2835,7 @@
             "label": "Age group, n (%)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_002",
-            "kind": "categorical",
+            "kind": "categorical_block",
             "n_slots": 1
           },
           {
@@ -2838,7 +2843,7 @@
             "label": "Sex, n (%) - Female",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_003",
-            "kind": "categorical",
+            "kind": "categorical_block",
             "n_slots": 1
           },
           {
@@ -2846,7 +2851,7 @@
             "label": "Male",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label",
+            "kind": "label_row",
             "n_slots": 1
           },
           {
@@ -2854,7 +2859,7 @@
             "label": "Race, n (%)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_004",
-            "kind": "categorical",
+            "kind": "categorical_block",
             "n_slots": 1
           },
           {
@@ -2862,7 +2867,7 @@
             "label": "Ethnicity, n (%)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_005",
-            "kind": "categorical",
+            "kind": "categorical_block",
             "n_slots": 1
           }
         ]
@@ -2926,7 +2931,7 @@
             "label": "Duration of exposure (days)",
             "indent": 0,
             "analysis_id": "AN_T_14_2_1_001",
-            "kind": "continuous",
+            "kind": "stat_block",
             "n_slots": 1
           },
           {
@@ -2934,7 +2939,7 @@
             "label": "Mean (SD)",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label",
+            "kind": "label_row",
             "n_slots": 1
           },
           {
@@ -2942,7 +2947,7 @@
             "label": "Median",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label",
+            "kind": "label_row",
             "n_slots": 1
           },
           {
@@ -2950,7 +2955,7 @@
             "label": "Min, Max",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label",
+            "kind": "label_row",
             "n_slots": 1
           },
           {
@@ -2958,7 +2963,7 @@
             "label": "Total exposure (subject-days)",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label",
+            "kind": "label_row",
             "n_slots": 1
           },
           {
@@ -2966,7 +2971,7 @@
             "label": "Average daily dose",
             "indent": 0,
             "analysis_id": "AN_T_14_2_1_002",
-            "kind": "continuous",
+            "kind": "stat_block",
             "n_slots": 1
           }
         ]
@@ -3041,7 +3046,8 @@
             "label": "Any TEAE",
             "indent": 0,
             "analysis_id": "AN_T_14_3_1_001",
-            "kind": "filtered_count_pct",
+            "kind": "scalar_row",
+            "stat_form": "filtered_count_pct",
             "n_slots": 2
           },
           {
@@ -3049,7 +3055,7 @@
             "label": "Serious TEAE",
             "indent": 0,
             "analysis_id": "AN_T_14_3_1_002",
-            "kind": "categorical",
+            "kind": "categorical_block",
             "n_slots": 2
           },
           {
@@ -3057,7 +3063,7 @@
             "label": "TEAE leading to discontinuation",
             "indent": 0,
             "analysis_id": "AN_T_14_3_1_003",
-            "kind": "categorical",
+            "kind": "categorical_block",
             "n_slots": 2
           },
           {
@@ -3065,7 +3071,7 @@
             "label": "TEAE by maximum severity - Mild",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label",
+            "kind": "label_row",
             "n_slots": 2
           },
           {
@@ -3073,7 +3079,7 @@
             "label": "Moderate",
             "indent": 0,
             "analysis_id": "AN_T_14_3_1_004",
-            "kind": "categorical",
+            "kind": "categorical_block",
             "n_slots": 2
           },
           {
@@ -3081,7 +3087,7 @@
             "label": "Severe",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label",
+            "kind": "label_row",
             "n_slots": 2
           },
           {
@@ -3089,7 +3095,7 @@
             "label": "TEAE related to study drug",
             "indent": 0,
             "analysis_id": "AN_T_14_3_1_005",
-            "kind": "categorical",
+            "kind": "categorical_block",
             "n_slots": 2
           }
         ]
@@ -3161,7 +3167,7 @@
             "label": "Subjects with any TEAE",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label",
+            "kind": "label_row",
             "n_slots": 2
           },
           {

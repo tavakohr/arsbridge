@@ -84,7 +84,7 @@ test_that("clicking a section-header row sets shell_row but not selected", {
   index <- match("T_14_1_1", model$outputs$id)
   model$outputs$raw[[index]][["_meta"]][["shell_layout"]] <- c(
     list(list(order = 0L, label = "Disposition", indent = 0L,
-              analysis_id = NULL, kind = "label")),
+              analysis_id = NULL, kind = "label_row")),
     model$outputs$raw[[index]][["_meta"]][["shell_layout"]]
   )
   state <- .shell_flows_state(model = model)

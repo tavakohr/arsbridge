@@ -47,7 +47,7 @@ test_that("a derivation note is not read as a condition", {
     got <- .infer_row_method(list(annotation = ann, n_slots = 1L),
                              var_is_categorical = FALSE)
     expect_equal(got$method, "Summary Statistics - Continuous", info = v$ds)
-    expect_equal(got$kind, "continuous", info = v$ds)
+    expect_equal(got$kind, "stat_block", info = v$ds)
   }
 })
 
@@ -96,17 +96,17 @@ test_that("a genuine row filter is still a row filter", {
   keeps <- list(
     ## an implied left operand with a VALUE -- "this variable, restricted"
     list(ann = "ADQX.AGEYR; >= 65",        cat = FALSE, unres = TRUE,
-         method = "Summary Statistics - Continuous", kind = "continuous"),
+         method = "Summary Statistics - Continuous", kind = "stat_block"),
     list(ann = "ADQX.MEASDUR; = 30",       cat = FALSE, unres = TRUE,
-         method = "Summary Statistics - Continuous", kind = "continuous"),
+         method = "Summary Statistics - Continuous", kind = "stat_block"),
     ## a condition on the variable itself, no semicolon
     list(ann = "ADQX.EVFL='Y'",            cat = TRUE,  unres = FALSE,
-         method = "Subject Count", kind = "filtered_count"),
+         method = "Subject Count", kind = "scalar_row", stat_form = "filtered_count"),
     list(ann = "ADQX.MEASDUR GE 16",       cat = FALSE, unres = FALSE,
-         method = "Summary Statistics - Continuous", kind = "continuous"),
+         method = "Summary Statistics - Continuous", kind = "stat_block"),
     ## a condition naming ANOTHER variable: scoping, so type decides
     list(ann = "ADQX.TERM; ADQX.EVFL='Y'", cat = TRUE,  unres = FALSE,
-         method = "Count and Percentage", kind = "categorical"),
+         method = "Count and Percentage", kind = "categorical_block"),
     ## Two variables compared, but WITH a left operand. This is the case the
     ## "no left operand" half of the rule exists for: it is a restriction the
     ## grammar cannot read, so it reserves -- and it must keep reserving.
@@ -123,7 +123,7 @@ test_that("a genuine row filter is still a row filter", {
     ## What has NOT changed is the half that protects the number: `unres`
     ## stays TRUE, so the row is still reserved and still computes nothing.
     list(ann = "ADQX.TERM; ADQX.STDT = ADQX.TRTSDT", cat = FALSE, unres = TRUE,
-         method = "Summary Statistics - Continuous", kind = "continuous"))
+         method = "Summary Statistics - Continuous", kind = "stat_block"))
   for (k in keeps) {
     expect_equal(.split_derivation_note(k$ann)$note, "", info = k$ann)
     got <- .infer_row_method(list(annotation = k$ann, n_slots = 1L),

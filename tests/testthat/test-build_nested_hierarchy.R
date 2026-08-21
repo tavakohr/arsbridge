@@ -160,7 +160,10 @@ test_that("the shell layout records the linked pair and drops the repeats", {
 
   expect_length(layout, 3)
   kinds <- vapply(layout, function(e) e$kind, character(1))
-  expect_equal(kinds, c("filtered_count", "nested_parent", "nested_child"))
+  expect_equal(kinds, c("scalar_row", "nested_parent", "nested_child"))
+  ## The count FORM the first row used to carry in `kind` -- still asserted,
+  ## in the field that now answers that question.
+  expect_equal(layout[[1]]$stat_form, "filtered_count")
 
   parent <- layout[[2]]
   child  <- layout[[3]]
@@ -230,9 +233,13 @@ test_that("a conflict secondary inherits the distinct-subject method", {
   re <- build_ars_json(list(sec), study_id = "S-NEST")
 
   layout <- re$outputs[[1]][["_meta"]][["shell_layout"]]
-  kinds <- vapply(layout, function(e) e$kind, character(1))
-  supp_at <- which(kinds == "supplement_added")
+  ## A supplement row is found by PROVENANCE now -- its shape is `scalar_row`
+  ## like any other one-line row, which is the point of the separation.
+  provs <- vapply(layout, function(e) e$provenance %||% NA_character_,
+                  character(1))
+  supp_at <- which(!is.na(provs) & provs == "supplement_added")
   expect_length(supp_at, 1)
+  expect_equal(layout[[supp_at]]$kind, "scalar_row")
 
   supp_id <- layout[[supp_at]]$analysis_id
   supp <- Filter(function(a) identical(a$id, supp_id), re$analyses)[[1]]
@@ -584,8 +591,8 @@ test_that("bare numbered repeats never become literal label rows", {
   ## Three rows only: the any-history count (a filter on its own variable,
   ## so a subject count within that subset) and the nested pair. The five
   ## bare repeats contributed nothing.
-  expect_equal(kinds, c("filtered_count", "nested_parent", "nested_child"))
-  expect_false(any(grepl("#", labels[kinds == "label"])))
+  expect_equal(kinds, c("scalar_row", "nested_parent", "nested_child"))
+  expect_false(any(grepl("#", labels[kinds == "label_row"])))
   ## The rows that carry the analyses are the annotated ones.
   expect_equal(labels[2], "SOC#1")
   expect_equal(labels[3], "PT#1")
@@ -632,7 +639,7 @@ test_that("collapsed mocks become the block's expansion template", {
   layout <- re$outputs[[1]][["_meta"]][["shell_layout"]]
   expect_length(layout, 1)
   entry <- layout[[1]]
-  expect_equal(entry$kind, "categorical")
+  expect_equal(entry$kind, "categorical_block")
   ## The mock rows' sheet rows (the trailing "..." included) ride on the
   ## parent entry, so the fill step knows which rows the expanded levels
   ## replace.

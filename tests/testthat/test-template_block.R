@@ -88,7 +88,7 @@ test_that("a categorical mock block survives as an expansion template", {
                    layout)
   expect_length(parent, 1)
   parent <- parent[[1]]
-  expect_equal(parent$kind, "categorical")
+  expect_equal(parent$kind, "categorical_block")
   expect_equal(as.integer(unlist(parent$template_rows)), 6:8)
 
   ## The block's placeholder cells in mapped columns are BOUND to the
@@ -178,7 +178,7 @@ test_that("a lone mock under a plain header becomes a self-template block", {
 
   layout <- re$outputs[[1]][["_meta"]][["shell_layout"]]
   entry <- layout[[length(layout)]]
-  expect_equal(entry$kind, "categorical")
+  expect_equal(entry$kind, "categorical_block")
   expect_true(isTRUE(entry$self_template))
   expect_equal(as.integer(unlist(entry$template_rows)), 6L)
 

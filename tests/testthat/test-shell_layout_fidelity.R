@@ -131,10 +131,15 @@ test_that("build_ars_json persists the authored layout and emits one analysis pe
 
   expect_length(sl, 6)
   expect_identical(vapply(sl, function(e) e$order, integer(1)), 1:6)
+  ## Five one-line rows and an authored label line. The count FORMS the first
+  ## five used to encode in `kind` are asserted separately, so this keeps both
+  ## claims the old single vector made rather than only the structural half.
   expect_identical(
     vapply(sl, function(e) e$kind, character(1)),
-    c("subject_count", "filtered_count", "filtered_count",
-      "filtered_count", "filtered_count", "label"))
+    c(rep("scalar_row", 5), "label_row"))
+  expect_identical(
+    vapply(sl, function(e) e$stat_form %||% NA_character_, character(1)),
+    c("subject_count", rep("filtered_count", 4), NA_character_))
   ## every non-label authored row has an analysis; the label row has none
   aids <- vapply(sl, function(e) e$analysis_id %||% NA_character_, character(1))
   expect_identical(is.na(aids), c(rep(FALSE, 5), TRUE))
@@ -217,7 +222,9 @@ test_that(".tfrmt_prep_ard_layout keeps authored rows in order and blanks missin
     label = c("Subjects enrolled", "Screen failures", "Header row", "Age (years)"),
     indent = 0L,
     analysis_id = c("AN1", "AN2", NA, "AN3"),
-    kind = c("subject_count", "filtered_count", "label", "continuous"),
+    kind = c("scalar_row", "scalar_row", "label_row", "stat_block"),
+    stat_form = c("subject_count", "filtered_count", NA, NA),
+    status = NA_character_, provenance = NA_character_,
     stringsAsFactors = FALSE)
   ard <- data.frame(
     output_id      = "OUT",
@@ -267,8 +274,10 @@ test_that("a multi-level supplement_added row expands instead of colliding", {
     label = c("Any TEAE", "Any TEAE", "<System Organ Class>", ""),
     indent = 0L,
     analysis_id = c("AN_SHELL", "AN_SUP_SCALAR", "AN_SUP_DIST", NA),
-    kind = c("filtered_count", "supplement_added", "supplement_added",
-             "label"),
+    kind = c("scalar_row", "scalar_row", "scalar_row", "label_row"),
+    stat_form = c("filtered_count", NA, NA, NA),
+    status = NA_character_,
+    provenance = c(NA, "supplement_added", "supplement_added", NA),
     stringsAsFactors = FALSE)
   ard <- data.frame(
     output_id      = "OUT",
@@ -319,7 +328,7 @@ test_that("a broken analysis's p never blocks the others' percent rescale", {
     label = c("Sex, n (%)", "Race, n (%)"),
     indent = 0L,
     analysis_id = c("AN_OK", "AN_BAD"),
-    kind = "categorical",
+    kind = "categorical_block",
     stringsAsFactors = FALSE)
   ard <- data.frame(
     output_id      = "OUT",
@@ -408,7 +417,7 @@ test_that("continuous stat lines fill authored sub-rows instead of duplicating t
               "Min, Max", "Average daily dose"),
     indent = 0L,
     analysis_id = c("AN1", NA, NA, NA, "AN2"),
-    kind = c("continuous", "label", "label", "label", "continuous"),
+    kind = c("stat_block", "label_row", "label_row", "label_row", "stat_block"),
     stringsAsFactors = FALSE)
   ard <- data.frame(
     output_id    = "OUT",
@@ -477,7 +486,7 @@ test_that("authored level rows of a categorical block become level slots, not du
 
   expect_length(o$referencedAnalysisIds, 1)   # only the parent
   expect_identical(vapply(sl, function(e) e$kind, character(1)),
-                   c("categorical", "level", "level"))
+                   c("categorical_block", "level_row", "level_row"))
   parent_aid <- sl[[1]]$analysis_id
   expect_identical(sl[[2]]$analysis_id, parent_aid)
   expect_identical(sl[[2]]$level, "FEMALE")
@@ -623,7 +632,7 @@ test_that("decoded level slots fill from the decoded computed pool", {
     build_ars_json(list(sec), spec_lookup = lookup, codelists = codelists)))
   o  <- re$outputs[[1]]
   sl <- o$`_meta`$shell_layout
-  expect_identical(sl[[2]]$kind, "level")
+  expect_identical(sl[[2]]$kind, "level_row")
   expect_identical(sl[[2]]$level, "DEATH")
 
   ## Renderer fill: the ARD pool carries decoded labels (factor levels).

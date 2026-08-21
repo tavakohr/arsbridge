@@ -49,13 +49,13 @@ CONT <- "MTH_SUMMARY_STATISTICS_CONTINUOUS"
 
 .s3_cells <- function(scope = "", tokens = c("q1", "q3"), method_id = CONT) {
   entry <- list(order = 2L, label = "Interquartile spread", indent = 0L,
-                analysis_id = NA_character_, kind = "label", sheet_row = 6L,
+                analysis_id = NA_character_, kind = "label_row", sheet_row = 6L,
                 stat_tokens = tokens, stat_tokens_source = "supplement",
                 stat_tokens_override = FALSE)
   if (nzchar(scope)) entry$stat_expected_scope <- scope
   layout <- list(
     list(order = 1L, label = "Measure [ADQX.MEAS]", indent = 0L,
-         analysis_id = "AN_1", kind = "label", sheet_row = 5L),
+         analysis_id = "AN_1", kind = "label_row", sheet_row = 5L),
     entry)
   grid <- data.frame(row = c(6L, 6L), col = c(2L, 3L), ref = c("B6", "C6"),
                      kind = "placeholder", n_slots = 1L,

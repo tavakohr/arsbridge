@@ -1,5 +1,35 @@
 # arsbridge (development version)
 
+* **The shell layout's `kind` field now answers one question instead of
+  four.** It held four vocabularies at once: how a row expands
+  (`categorical`, `continuous`, `row`, `level`, `label`, `nested_*`), which
+  statistic a one-line row's cell shows (`subject_count`,
+  `subject_count_pct`, `filtered_count`, `filtered_count_pct`), where the row
+  came from (`supplement_added`), and why it carried no analysis (`manual`).
+  Because they shared a field, code asking any one of them had to know the
+  whole set -- and since the field was derived from the row's METHOD, a
+  filter that changed the method could change what the renderer believed the
+  row's STRUCTURE was.
+
+  `kind` is now structural only, from a closed set: `categorical_block`,
+  `stat_block`, `scalar_row`, `nested_parent`, `nested_child`, `level_row`,
+  `label_row`, or `NA` where the structure was not proved -- which is a real
+  answer and never a synonym for "one row". The other three questions moved
+  to `stat_form`, `provenance` and `status`, each with its own closed
+  vocabulary, and a field with nothing to say is omitted rather than written
+  as null.
+
+  Nothing about how a study renders changed: the same rows, in the same
+  order, with the same labels, placeholders and markers. Two renderer
+  behaviours that used to be read off the shape are now explicit, LOCAL
+  rendering rules that never write back into the canonical metadata -- a
+  reserved row still owns its block, and an orphaned nested child still
+  expands under its authored label while remaining a `nested_child`.
+
+  This is preparation: block shape is still derived from the method, exactly
+  as before. Deciding it from structural evidence instead is the next change,
+  and the values downstream code reads are already the structural ones.
+
 * **A restriction the grammar can READ, the row can now CARRY.** A row's
   annotation could state a filter that parsed perfectly -- two conditions
   joined, a range, an envelope naming three -- and the builder still had one
