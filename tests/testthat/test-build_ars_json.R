@@ -844,10 +844,15 @@ test_that("compound AND leaves under a categorical parent become level rows, not
 
   expect_equal(vapply(lay, function(e) e$kind, character(1)),
                c("categorical", "level", "level", "level"))
-  ## Every leaf renders from the single parent analysis.
-  parent_id <- lay[[1]]$analysis_id
+  ## Every leaf renders from the single parent analysis. Guarded so a
+  ## regression that changes the layout SHAPE fails on the line above rather
+  ## than erroring out here before the rest of the claim is checked.
+  parent_id <- if (length(lay) > 0) lay[[1]]$analysis_id else NA_character_
   for (e in lay[-1]) expect_identical(e$analysis_id, parent_id)
-  expect_equal(vapply(lay[-1], function(e) e$level, character(1)),
+  ## `%||%` guards a layout entry that carries no level at all: a regression
+  ## of that shape must fail on the comparison, not error inside vapply().
+  expect_equal(vapply(lay[-1], function(e) e$level %||% NA_character_,
+                      character(1)),
                c("MILD", "MODERATE", "SEVERE"))
 
   ## Exactly ONE analysis -- the parent's; the leaves added none.
@@ -898,10 +903,20 @@ test_that("a conflicting proposal with a typed compound clause builds a filtered
   expect_equal(vapply(lay, function(e) e$kind, character(1))[2],
                "supplement_added")
   ## The secondary's subset is the compound, carried as a compoundExpression.
-  sec_an <- re$analyses[[2]]
-  ds <- Filter(function(d) identical(d$id, sec_an$dataSubsetId), re$dataSubsets)
+  ## Guarded: a regression that builds only ONE analysis fails on the length
+  ## expectation above, and should not then error before this claim is made.
+  sec_id <- if (length(re$analyses) >= 2) {
+    re$analyses[[2]]$dataSubsetId
+  } else {
+    NA_character_
+  }
+  ds <- Filter(function(d) identical(d$id, sec_id), re$dataSubsets)
   expect_length(ds, 1)
-  expect_false(is.null(ds[[1]]$compoundExpression))
+  ## Guarded: when no matching subset exists the length expectation above is
+  ## the failure, and this claim should be compared as FALSE rather than
+  ## erroring on an out-of-bounds index.
+  has_compound <- length(ds) == 1 && !is.null(ds[[1]]$compoundExpression)
+  expect_true(has_compound)
 })
 
 test_that("a free-standing supplement row with a typed compound clause keeps its filter", {
@@ -920,12 +935,13 @@ test_that("a free-standing supplement row with a typed compound clause keeps its
   expect_false(is.null(re$dataSubsets[[1]]$compoundExpression))
 })
 
-test_that("a declared-but-unparseable filter on an extra analysis raises a WARN", {
+test_that("a compound filter on an extra analysis is carried, not dropped", {
   diag_reset()
   sec <- .cmp_section()
-  ## No typed clause at all: only the compound annotation STRING, which
-  ## .subset_from_annotation() cannot parse -- the analysis computes
-  ## unfiltered, and the guard must surface that in the diagnostics.
+  ## No typed clause at all: only the compound annotation STRING. It used to
+  ## reach no DataSubset -- the analysis computed unfiltered and a WARN said
+  ## so -- and it is now carried as a compoundExpression subset, which is the
+  ## answer the WARN was standing in for.
   sec$stub_rows <- list(list(
     label = "Serious TEAE", annotation = "ADAE.AESER='Y'", has_annot = TRUE,
     raw_text = "Serious TEAE",
@@ -934,7 +950,27 @@ test_that("a declared-but-unparseable filter on an extra analysis raises a WARN"
   ))
   re <- build_ars_json(list(sec), spec_lookup = .cmp_lookup())
 
+  ## Nothing was dropped and nothing was reserved: both conditions are on the
+  ## emitted subset.
+  extra <- Filter(function(a) nzchar(a$dataSubsetId %||% ""),
+                  re$analyses %||% list())
+  expect_gte(length(extra), 1L)
+  ids <- vapply(extra, function(a) a$dataSubsetId, character(1))
+  compound <- Filter(function(d) d$id %in% ids && !is.null(d$compoundExpression),
+                     re$dataSubsets %||% list())
+  expect_length(compound, 1L)
+  ## Guarded so a regression that emits NO compound subset FAILS here rather
+  ## than erroring out of the test before the rest of the claim is checked.
+  atoms <- if (length(compound) == 1L) {
+    .where_atoms(.group_where(compound[[1]]))
+  } else {
+    list()
+  }
+  expect_identical(
+    sort(vapply(atoms, function(a) a$variable, character(1))),
+    c("AESER", "TRTEMFL"))
+
   d <- ars_diagnostics()
-  expect_true(any(d$severity == "WARN" &
-                    grepl("could not be parsed into a DataSubset", d$problem)))
+  expect_false(any(d$severity == "WARN" &
+                     grepl("could not be parsed into a DataSubset", d$problem)))
 })

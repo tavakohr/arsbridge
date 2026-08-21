@@ -1,5 +1,36 @@
 # arsbridge (development version)
 
+* **A restriction the grammar can READ, the row can now CARRY.** A row's
+  annotation could state a filter that parsed perfectly -- two conditions
+  joined, a range, an envelope naming three -- and the builder still had one
+  place to put it: a FLAT subset, one dataset, one variable, one comparator,
+  one value. Anything larger did not fit, so the row reserved. The reservation
+  was honest, but it withheld results nobody needed withheld: the clause was
+  understood, and the carrier for it already existed -- the supplement path had
+  been riding on `data_subset_compound` all along.
+
+  There is now one reading of the annotation, shared by both row builders,
+  with three outcomes: reserve, carry as a compound, or the flat shape the
+  builder has always consumed. Reading is unchanged; this is about where the
+  answer goes.
+
+  Two limits stay exactly where they were, because accepting a tree shape is
+  not the same as being able to execute it. A mixed-dataset compound is
+  carried, and the restriction PLAN decides whether it runs -- a shape whose
+  row coherence cannot be recovered still blocks, with its reason recorded,
+  rather than being filtered by a guess. And `NOT`, or anything only partly
+  readable, still reserves.
+
+  A restriction that arrives by annotation and by supplement now converges on
+  one DataSubset rather than two: subsets de-duplicate on what they filter, so
+  provenance no longer mints a second definition of the same population.
+
+  The reservation for an authored rule this version cannot carry out is now
+  asked once, of the annotation alone, before the filter's source is decided.
+  It therefore holds whether the filter is flat, compound, supplied by a
+  supplement, or absent altogether -- a supplement is authoritative about
+  which records survive, not evidence that a rule about the absent ones was
+  implemented.
 * **An authored instruction no restriction can carry out now reserves the
   row.** An annotation can say two things at once -- a filter, and a rule for
   records the filter does not select:

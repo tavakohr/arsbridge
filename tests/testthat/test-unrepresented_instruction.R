@@ -116,6 +116,24 @@ test_that("A5: the reservation names the instruction, not just the filter", {
   }
 })
 
+test_that("A6: it reserves when the annotation states NO readable filter at all", {
+  ## Whether the annotation also states a restriction this reader can hold has
+  ## no bearing on whether it states a rule this version cannot carry out. A
+  ## gate asked only where a filter was found is one an annotation walks past
+  ## by stating none -- and that row then computes over EVERY record, which is
+  ## further from the authored population than any wrong subset would be.
+  for (v in .ui_vocabs) {
+    bare <- sprintf("%s.%s", v$ds, v$num)
+    ann  <- sprintf("%s (a subject with no follow-up record is a failure)", bare)
+
+    ## The control carries the claim: the same reference without the aside
+    ## states no restriction and computes, so it is the INSTRUCTION that
+    ## reserves this row and not the bare reference.
+    expect_equal(.ui_state(bare), "none")
+    expect_equal(.ui_state(ann), "RESERVED")
+  }
+})
+
 # ---- B: a description of the row is not an instruction ---------------------
 
 test_that("B1: descriptive asides still compute", {
