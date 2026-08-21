@@ -271,6 +271,30 @@ test_that("B3: an envelope naming a variable the spec does not carry reserves wh
   }
 })
 
+test_that("B4: a compound is NOT carried when the annotation also states a rule the filter cannot implement", {
+  ## The carrier must not route around the reservation. `.row_restriction()` is
+  ## the one reading both row builders share, and the instruction check lives
+  ## there rather than in the flat wrapper alone -- otherwise the row builders
+  ## would carry a compound whose annotation says something no filter can do.
+  ##
+  ## Without this, the filter computes over a different population than the one
+  ## written and nothing on the analysis says so: exactly the failure that
+  ## reserving exists to prevent.
+  for (v in .cds_vocabs) {
+    ann <- sprintf(
+      "%s.%s='Y' AND %s.%s='C1' (a subject with no %s record is a failure)",
+      v$ds, v$flag, v$ds, v$cat, v$ds)
+
+    ## The filter itself reads perfectly -- that is the whole point.
+    plain <- .cds_carry(sprintf("%s.%s='Y' AND %s.%s='C1'",
+                                v$ds, v$flag, v$ds, v$cat), v)
+    expect_equal(plain$kind, "compound")
+
+    ## With the instruction attached, it reserves instead of being carried.
+    expect_equal(.cds_carry(ann, v)$kind, "unresolved")
+  }
+})
+
 # ---- C: one restriction, whatever brought it -------------------------------
 
 .cds_lookup <- function(v) {
@@ -323,6 +347,20 @@ test_that("B3: an envelope naming a variable the spec does not carry reserves wh
       list(condition = list(dataset = v$ds, variable = v$cat,
                             comparator = "EQ", value = list("C1"))))))
 }
+
+test_that("B5: and no compound DataSubset reaches the built ARS for such a row", {
+  ## The row-level claim above, followed through to the emitted file: a
+  ## reservation that still minted a subset would be a reservation in name
+  ## only.
+  for (v in .cds_vocabs) {
+    ann <- sprintf(
+      "%s.%s (when %s='C1' AND %s='Y') (a subject with no %s record is a failure)",
+      v$ds, v$num, v$cat, v$presp, v$ds)
+    re  <- build_ars_json(list(.cds_section(v, "T-1", ann)),
+                          spec_lookup = .cds_lookup(v))
+    expect_length(.cds_compound_subsets(re), 0L)
+  }
+})
 
 test_that("C1: an annotation compound reaches the built ARS as a compound DataSubset", {
   for (v in .cds_vocabs) {

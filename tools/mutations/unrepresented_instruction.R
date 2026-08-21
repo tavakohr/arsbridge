@@ -56,20 +56,25 @@ mutations <- list(
        from = "  masked <- .mask_literals(ann)\n  if (is.null(masked)) return(\"\")\n  hidden <- .mask_non_structural(masked$text, operand_context = TRUE)",
        to   = "  masked <- .mask_literals(ann)\n  if (is.null(masked)) return(\"\")\n  hidden <- .mask_non_structural(ann, operand_context = TRUE)"),
 
-  ## The flat path stops consulting the rule: the exact A-19 shape with a
-  ## single condition computes again.
-  list(id = "M-flatgap", file = "R/build_ars_json.R",
-       from = "  fs <- flat_data_subset(ann)\n  if (!is.null(fs)) {\n    if (nzchar(instruction)) {",
-       to   = "  fs <- flat_data_subset(ann)\n  if (!is.null(fs)) {\n    if (FALSE) {"),
+  ## THE row-facing gate: the one reading both row builders share. Removing it
+  ## is the A-19 regression itself -- a compound carrying an unimplemented
+  ## instruction reaches the DataSubset and computes.
+  list(id = "M-rowgap", file = "R/build_ars_json.R",
+       from = "  if (!is.null(where)) {\n    instruction <- .unrepresented_instruction(stated)\n    if (nzchar(instruction)) {\n      return(list(unresolved =",
+       to   = "  if (FALSE) {\n    instruction <- .unrepresented_instruction(stated)\n    if (nzchar(instruction)) {\n      return(list(unresolved ="),
 
-  ## The envelope path stops consulting it.
-  list(id = "M-envgap", file = "R/build_ars_json.R",
-       from = "    if (is.null(where)) return(NULL)\n    if (nzchar(instruction)) {",
-       to   = "    if (is.null(where)) return(NULL)\n    if (FALSE) {")
+  ## The flat compatibility wrapper stops consulting it, so callers whose
+  ## contract is the flat shape lose the reservation.
+  list(id = "M-flatgap", file = "R/build_ars_json.R",
+       from = "  if (!is.null(where)) {\n    instruction <- .unrepresented_instruction(stated)\n    if (nzchar(instruction)) {\n      return(.stated_instruction_unrepresented(stated, instruction))",
+       to   = "  if (FALSE) {\n    instruction <- .unrepresented_instruction(stated)\n    if (nzchar(instruction)) {\n      return(.stated_instruction_unrepresented(stated, instruction))")
 )
 
 test_files <- c(
   "tests/testthat/test-unrepresented_instruction.R",
+  ## The row-facing gate lives in `.row_restriction()`, which only the carrier
+  ## tests exercise -- without this file M-rowgap reports as undetected.
+  "tests/testthat/test-compound_data_subset.R",
   "tests/testthat/test-residue_meaning.R",
   "tests/testthat/test-derivation_note_annotation.R",
   "tests/testthat/test-build_ars_json.R"
