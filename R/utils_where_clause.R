@@ -196,6 +196,105 @@
 ## follow a condition without unmaking it.
 .RE_RESIDUE_SCOPING_PREFIX <- paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR, "\\b")
 
+## Data that is NOT THERE, as a construction rather than as a stray negative.
+##
+## This is the clause that makes the test structural instead of a
+## co-occurrence. A negating word can attach to anything -- "(records are not
+## shown separately)" negates the SHOWING, "(no record-level adjustment is
+## applied)" negates the ADJUSTMENT -- and neither says a record is absent.
+## What the invariant needs is the absence itself: `with no`, `without`,
+## `has no`, `missing`, `absent`. Those are the ways a shell says a unit has
+## no data, and a unit with no data is precisely what a filter cannot reach.
+##
+## General-language and domain vocabulary, deliberately -- no study's dataset,
+## variable or label appears here, and none may.
+.RE_ABSENT_OBSERVATION <- paste0(
+  "(?i)\\b(?:with\\s+no\\b|without\\b|ha(?:s|ve|d)\\s+no\\b",
+  "|having\\s+no\\b|missing\\b|absent\\b|not\\s+present\\b)"
+)
+
+## The unit of observation, in the words shells actually use for it. What the
+## absence above has to be an absence OF, so that "(without adjustment)" --
+## absent, but of no record -- is not mistaken for a rule about the data.
+##
+## General-language and domain vocabulary, deliberately -- no study's dataset,
+## variable or label appears here, and none may.
+.RE_OBSERVATION_UNIT <- paste0(
+  "(?i)\\b(?:subject|subjects|patient|patients",
+  "|record|records|observation|observations|visit|visits)\\b"
+)
+
+## The aside ASSIGNS those records a treatment, rather than merely mentioning
+## them. This is the clause that separates a rule from a remark: "(except
+## visit 1)" names records and says nothing about what becomes of them, while
+## "(a subject with no visit record is a non-responder)" says what they count
+## as. Only the second is something a computation would have to carry out.
+##
+## A BARE COPULA IS NOT ENOUGH. "(missing visits are displayed separately)" is
+## an absence, of an observation, in a sentence containing `are` -- every
+## simpler test passes -- and it instructs no computation whatever. It says
+## where the rows appear, not what they count as.
+##
+## Kept behind the absence and unit tests, so these very ordinary words can
+## never flag an aside on their own.
+
+## What is DONE to the records: an outcome the analysis would have to compute.
+.RE_TREATMENT_VERB <- paste0(
+  "(?i)\\b(?:count|counts|counted|impute|imputed|treat|treated|assign",
+  "|assigned|consider|considered|classif(?:y|ied)|set|carried",
+  "|exclude|excluded|include|included|replace|replaced|derive|derived)\\b"
+)
+
+## Where the records APPEAR. Says nothing about their value, so a copula
+## alongside one of these -- with no state assigned -- describes the display
+## rather than instructing a computation.
+.RE_PRESENTATION_VERB <- paste0(
+  "(?i)\\b(?:display|displayed|list|listed|listing|show|shown",
+  "|present|presented|report|reported|print|printed|render|rendered",
+  "|label|labelled|labeled|footnote|footnoted)\\b"
+)
+
+## What `as ...` introduces when it is display furniture rather than a state.
+## "displayed as separate ROWS" places them; "reported as NON-RESPONDERS"
+## values them.
+.RE_PRESENTATION_NOUN <- paste0(
+  "(?i)\\b(?:row|rows|column|columns|line|lines|listing|listings",
+  "|footnote|footnotes|entry|entries|page|pages|section|sections)\\b"
+)
+
+.RE_COPULA <- "(?i)\\b(?:is|are|was|were|be|been|become|becomes)\\b"
+
+#' Does this aside give the absent records a computed state?
+#'
+#' Three ways in, and the ORDER is the substance of the rule:
+#'
+#'   a TREATMENT VERB -- counted, imputed, excluded -- says outright what is
+#'     done to them.
+#'   `as <state>` -- says what they are treated AS, whatever verb carries it,
+#'     so "reported as non-responders" qualifies even though `reported` is a
+#'     presentation verb. Tested BEFORE presentation for exactly that reason.
+#'     Excluded when what follows `as` is display furniture: "displayed as
+#'     separate rows" places the records, it does not value them.
+#'   a COPULA, but only where the sentence is not doing presentation work.
+#'     "is a non-responder" assigns a state; "are displayed separately" says
+#'     where rows appear and assigns nothing.
+#' @noRd
+.aside_assigns_state <- function(span) {
+  if (grepl(.RE_TREATMENT_VERB, span, perl = TRUE)) return(TRUE)
+
+  at <- regexpr("(?i)\\bas\\s+", span, perl = TRUE)
+  if (at[[1L]] > 0L) {
+    after <- substr(span, at[[1L]] + attr(at, "match.length"), nchar(span))
+    if (nzchar(trimws(after)) &&
+        !grepl(.RE_PRESENTATION_NOUN, after, perl = TRUE)) {
+      return(TRUE)
+    }
+  }
+
+  if (!grepl(.RE_COPULA, span, perl = TRUE)) return(FALSE)
+  !grepl(.RE_PRESENTATION_VERB, span, perl = TRUE)
+}
+
 ## ---------------------------------------------------------------------------
 ## Derivation notes
 ## ---------------------------------------------------------------------------
@@ -549,6 +648,71 @@
 
   list(text = txt, spans = spans, open = open, close = close,
        token_pattern = paste0(open, "\\d+", close))
+}
+
+#' An authored instruction that no restriction can carry out.
+#'
+#' A filter says which records SURVIVE. So an aside that speaks about the
+#' records a filter EXCLUDES is, by construction, stating something no filter
+#' can implement -- those records are not there to be acted on. "a subject with
+#' no <visit> record is a non-responder" is a rule about absent records, and a
+#' `WHERE` clause has no way to say it.
+#'
+#' THREE things must hold, and none is sufficient alone. Each one exists
+#' because dropping it lets an ordinary aside reserve a row that computes
+#' perfectly well -- the failure direction that looks safe and is not.
+#'
+#'   NEGATION -- a negation is never decorative; it changes who is counted.
+#'     The same reasoning as `.RE_RESIDUE_NEGATION` in an operand. Without it,
+#'     every aside reserves.
+#'   THE UNIT OF OBSERVATION -- a subject, a record, a visit. This is what
+#'     makes the sentence a claim about the DATA rather than the display.
+#'     Without it, `(no units)` and `(except per protocol)` reserve.
+#'   AN ASSIGNMENT -- the aside says what becomes of those records. Without it,
+#'     `(except visit 1)` reserves: it names records and says nothing about
+#'     what they count as, so there is no computation to be missing.
+#'
+#' Together they read as one sentence: *records that are NOT there ARE treated
+#' as something*. `(a subject with no <visit> record is a non-responder)` says
+#' all three; every descriptive aside in the corpus says at most two.
+#'
+#' Deliberately NOT flagged, because these describe the row rather than
+#' instructing a computation: a unit, a planned N, a protocol reference, a
+#' variable that supplies a label, a comparator inside a quoted value. Literals
+#' are masked before the spans are examined, so a category legitimately called
+#' `'Not Reported'` -- or an age band written `'Adult (18-65)'` -- is a value
+#' and never an aside at all.
+#'
+#' KNOWN LIMIT, recorded rather than papered over: an unrepresented instruction
+#' phrased without a negation ("values are imputed from baseline") is not
+#' detected here. This closes the case where the instruction concerns records
+#' the filter cannot reach, which is the one that turns a filter into a wrong
+#' number rather than an incomplete one.
+#'
+#' @return The aside's text as the author wrote it, or `""` when every aside
+#'   is descriptive.
+#' @noRd
+.unrepresented_instruction <- function(ann) {
+  ann <- as.character(ann %||% "")[1]
+  if (is.na(ann) || !nzchar(trimws(ann))) return("")
+
+  masked <- .mask_literals(ann)
+  if (is.null(masked)) return("")
+  hidden <- .mask_non_structural(masked$text, operand_context = TRUE)
+  if (is.null(hidden)) return("")
+
+  ## `spans` is exactly what the masker set aside as a note. A bracket holding
+  ## an operator or a qualified reference never reaches here -- the masker
+  ## keeps those as structure -- so this asks only about text already judged
+  ## to contribute nothing to the filter.
+  for (span in hidden$spans %||% character(0)) {
+    if (grepl(.RE_ABSENT_OBSERVATION, span, perl = TRUE) &&
+        grepl(.RE_OBSERVATION_UNIT, span, perl = TRUE) &&
+        .aside_assigns_state(span)) {
+      return(trimws(.unmask_literals(span, masked)))
+    }
+  }
+  ""
 }
 
 #' Is the span opening at `start` sitting where an operand is required?
