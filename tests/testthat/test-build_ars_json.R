@@ -844,10 +844,15 @@ test_that("compound AND leaves under a categorical parent become level rows, not
 
   expect_equal(vapply(lay, function(e) e$kind, character(1)),
                c("categorical", "level", "level", "level"))
-  ## Every leaf renders from the single parent analysis.
-  parent_id <- lay[[1]]$analysis_id
+  ## Every leaf renders from the single parent analysis. Guarded so a
+  ## regression that changes the layout SHAPE fails on the line above rather
+  ## than erroring out here before the rest of the claim is checked.
+  parent_id <- if (length(lay) > 0) lay[[1]]$analysis_id else NA_character_
   for (e in lay[-1]) expect_identical(e$analysis_id, parent_id)
-  expect_equal(vapply(lay[-1], function(e) e$level, character(1)),
+  ## `%||%` guards a layout entry that carries no level at all: a regression
+  ## of that shape must fail on the comparison, not error inside vapply().
+  expect_equal(vapply(lay[-1], function(e) e$level %||% NA_character_,
+                      character(1)),
                c("MILD", "MODERATE", "SEVERE"))
 
   ## Exactly ONE analysis -- the parent's; the leaves added none.
@@ -898,10 +903,20 @@ test_that("a conflicting proposal with a typed compound clause builds a filtered
   expect_equal(vapply(lay, function(e) e$kind, character(1))[2],
                "supplement_added")
   ## The secondary's subset is the compound, carried as a compoundExpression.
-  sec_an <- re$analyses[[2]]
-  ds <- Filter(function(d) identical(d$id, sec_an$dataSubsetId), re$dataSubsets)
+  ## Guarded: a regression that builds only ONE analysis fails on the length
+  ## expectation above, and should not then error before this claim is made.
+  sec_id <- if (length(re$analyses) >= 2) {
+    re$analyses[[2]]$dataSubsetId
+  } else {
+    NA_character_
+  }
+  ds <- Filter(function(d) identical(d$id, sec_id), re$dataSubsets)
   expect_length(ds, 1)
-  expect_false(is.null(ds[[1]]$compoundExpression))
+  ## Guarded: when no matching subset exists the length expectation above is
+  ## the failure, and this claim should be compared as FALSE rather than
+  ## erroring on an out-of-bounds index.
+  has_compound <- length(ds) == 1 && !is.null(ds[[1]]$compoundExpression)
+  expect_true(has_compound)
 })
 
 test_that("a free-standing supplement row with a typed compound clause keeps its filter", {

@@ -25,19 +25,19 @@ mutations <- list(
   ## An unreadable restriction stops reserving and the row computes over every
   ## record -- the reservation marker's whole purpose.
   list(id = "M4-unreserve", file = "R/build_ars_json.R",
-       from = "  if (.is_unresolved_condition(where)) return(list(unresolved = where))",
-       to   = "  if (.is_unresolved_condition(where)) return(list())"),
+       from = "  if (!supplied && .is_unresolved_condition(where)) {\n    return(list(unresolved = where))",
+       to   = "  if (FALSE) {\n    return(list(unresolved = where))"),
 
   ## The row builder ignores the compound the reader handed it.
   list(id = "M5-norouting", file = "R/build_ars_json.R",
-       from = "          } else if (!is.null(carry$compound)) {\n            er$data_subset_compound <- carry$compound\n          } else if (!is.null(carry$flat)) {",
-       to   = "          } else if (FALSE) {\n            er$data_subset_compound <- carry$compound\n          } else if (!is.null(carry$flat)) {"),
+       from = "        } else if (!is.null(carry$compound)) {\n          er$data_subset_compound <- carry$compound",
+       to   = "        } else if (FALSE) {\n          er$data_subset_compound <- carry$compound"),
 
   ## Supplement precedence inverted: an authoritative typed clause is
   ## overwritten by one read from annotation text.
   list(id = "M6-precedence", file = "R/build_ars_json.R",
-       from = "        if (!is.null(row$supplement_where)) {\n          flat <- .where_flat(row$supplement_where)",
-       to   = "        if (FALSE) {\n          flat <- .where_flat(row$supplement_where)"),
+       from = "  if (supplied) {\n    flat <- .where_flat(supplement)",
+       to   = "  if (FALSE) {\n    flat <- .where_flat(supplement)"),
 
   ## The subset builder drops the carrier, so nothing reaches the ARS.
   list(id = "M7-noemit", file = "R/build_ars_json.R",

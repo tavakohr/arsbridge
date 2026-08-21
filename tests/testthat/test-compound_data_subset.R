@@ -362,6 +362,75 @@ test_that("B5: and no compound DataSubset reaches the built ARS for such a row",
   }
 })
 
+test_that("C0a: a clean supplement clause is routed unchanged, annotation unread", {
+  ## Precedence control. The annotation states a DIFFERENT filter; the typed
+  ## supplement must win, and the annotation's own filter must not be read at
+  ## all -- reading it could only produce a second answer to a settled
+  ## question.
+  for (v in .cds_vocabs) {
+    supp <- .cds_supp_and(v)
+    got  <- .row_restriction(
+      sprintf("%s.%s='C1' AND %s.%s='Y'", v$ds, v$cat, v$ds, v$occur),
+      .cds_resolves(v), supplement = supp)
+    expect_equal(names(got)[[1]], "compound")
+    expect_equal(.cds_shape(got$compound),
+                 sprintf("AND(%s, %s)",
+                         .cds_atom(v$ds, v$presp, "EQ", "Y"),
+                         .cds_atom(v$ds, v$cat, "EQ", "C1")))
+
+    ## A flat supplement routes flat, likewise unchanged.
+    flat_supp <- list(condition = list(dataset = v$ds, variable = v$presp,
+                                       comparator = "EQ", value = list("Y")))
+    got_flat <- .row_restriction(sprintf("%s.%s='C1'", v$ds, v$cat),
+                                 .cds_resolves(v), supplement = flat_supp)
+    expect_equal(names(got_flat)[[1]], "flat")
+    expect_equal(got_flat$flat$variable, v$presp)
+  }
+})
+
+test_that("C0b: an unrepresented instruction reserves even under an authoritative supplement", {
+  ## A supplement is authoritative about WHICH RECORDS survive. It is not
+  ## evidence that a rule about records no filter can reach was implemented,
+  ## and no WhereClause could express one -- so the reservation stands
+  ## whatever supplied the filter.
+  for (v in .cds_vocabs) {
+    ann <- sprintf("%s.%s='Y' (a subject with no %s record is a failure)",
+                   v$ds, v$flag, v$ds)
+    for (supp in list(.cds_supp_and(v),
+                      list(condition = list(dataset = v$ds, variable = v$presp,
+                                            comparator = "EQ",
+                                            value = list("Y"))))) {
+      got <- .row_restriction(ann, .cds_resolves(v), supplement = supp)
+      expect_equal(names(got)[[1]], "unresolved")
+    }
+  }
+})
+
+test_that("C0c: and such a row emits no DataSubset at all", {
+  ## The row-level claim followed through to the file: a reservation that
+  ## still minted a subset -- from the supplement -- would be a reservation in
+  ## name only, and the analysis would compute under it.
+  for (v in .cds_vocabs) {
+    ann <- sprintf("%s.%s='Y' (a subject with no %s record is a failure)",
+                   v$ds, v$flag, v$ds)
+    re  <- build_ars_json(
+      list(.cds_section(v, "T-1", ann, supp = .cds_supp_and(v))),
+      spec_lookup = .cds_lookup(v))
+
+    ## No compound subset was minted from the supplement ...
+    expect_length(.cds_compound_subsets(re), 0L)
+
+    ## ... and the ROW's analysis points at no subset at all, carrying the
+    ## reservation instead. Asserted on the analysis rather than on the event's
+    ## subset list, because the event always carries a standing "all records"
+    ## subset that has nothing to do with this row.
+    expect_length(re$analyses, 1L)
+    an <- re$analyses[[1]]
+    expect_equal(as.character(an$dataSubsetId), "")
+    expect_true(nzchar(as.character(an$unresolvedCondition %||% "")))
+  }
+})
+
 test_that("C1: an annotation compound reaches the built ARS as a compound DataSubset", {
   for (v in .cds_vocabs) {
     ann <- sprintf("%s.%s (when %s='C1' AND %s='Y')",

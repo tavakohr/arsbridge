@@ -60,8 +60,17 @@ mutations <- list(
   ## is the A-19 regression itself -- a compound carrying an unimplemented
   ## instruction reaches the DataSubset and computes.
   list(id = "M-rowgap", file = "R/build_ars_json.R",
-       from = "  if (!is.null(where)) {\n    instruction <- .unrepresented_instruction(stated)\n    if (nzchar(instruction)) {\n      return(list(unresolved =",
-       to   = "  if (FALSE) {\n    instruction <- .unrepresented_instruction(stated)\n    if (nzchar(instruction)) {\n      return(list(unresolved ="),
+       from = "  if (supplied || !is.null(where)) {\n    instruction <- .unrepresented_instruction(stated)",
+       to   = "  if (FALSE) {\n    instruction <- .unrepresented_instruction(stated)"),
+
+  ## The supplement path bypasses the gate again, the way both row builders
+  ## did before the rebase: an authoritative typed clause is routed straight
+  ## to the DataSubset and the annotation is never asked about its
+  ## instruction. A row with an unimplemented rule then computes, under a
+  ## filter correct about records and silent about the rule.
+  list(id = "M-suppgap", file = "R/build_ars_json.R",
+       from = "  if (supplied || !is.null(where)) {\n    instruction <- .unrepresented_instruction(stated)",
+       to   = "  if (!supplied && !is.null(where)) {\n    instruction <- .unrepresented_instruction(stated)"),
 
   ## The flat compatibility wrapper stops consulting it, so callers whose
   ## contract is the flat shape lose the reservation.

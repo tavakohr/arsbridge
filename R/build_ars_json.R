@@ -800,21 +800,39 @@
 #' An empty list means the annotation states no restriction, which is the
 #' ordinary case for most rows.
 #' @noRd
-.row_restriction <- function(ann, resolves = NULL) {
+.row_restriction <- function(ann, resolves = NULL, supplement = NULL) {
   stated <- .annotation_less_derivation_note(ann)
-  where  <- .annotation_where(ann, resolves)
-  if (.is_unresolved_condition(where)) return(list(unresolved = where))
+
+  ## A typed supplement clause is AUTHORITATIVE about the filter and is never
+  ## re-parsed from the annotation string. So the annotation's own filter is
+  ## not read at all when one is supplied -- reading it could only produce a
+  ## second answer to a question already settled.
+  supplied <- !is.null(supplement)
+  where <- if (supplied) NULL else .annotation_where(ann, resolves)
+  if (!supplied && .is_unresolved_condition(where)) {
+    return(list(unresolved = where))
+  }
 
   ## A readable filter is not enough when the author also stated a rule about
-  ## records the filter excludes. Checked before the shape is decided, because
-  ## the answer does not depend on the shape -- and checked HERE, in the one
-  ## reading both row builders share, so the carrier cannot route around it.
-  if (!is.null(where)) {
+  ## records the filter excludes -- and WHERE THE FILTER CAME FROM does not
+  ## change that. A supplement is authoritative about which records survive;
+  ## it is not evidence that an instruction about ABSENT records was
+  ## implemented, and no WhereClause could express one. So the gate is asked
+  ## of the annotation whatever supplies the filter, in the one reading both
+  ## row builders share, and neither the carrier nor the supplement path can
+  ## route around it.
+  if (supplied || !is.null(where)) {
     instruction <- .unrepresented_instruction(stated)
     if (nzchar(instruction)) {
       return(list(unresolved =
         .stated_instruction_unrepresented(stated, instruction)))
     }
+  }
+
+  if (supplied) {
+    flat <- .where_flat(supplement)
+    if (is.null(flat)) return(list(compound = supplement))
+    return(list(flat = flat))
   }
 
   if (is.null(where)) {
@@ -1386,25 +1404,13 @@ build_ars_json <- function(sections,
       ## primary row path applies. A compound expression rides as
       ## data_subset_compound, which .build_data_subset() already emits as a
       ## compoundExpression DataSubset (RC-2 of the render-fidelity handoff).
-      if (!is.null(where)) {
-        flat <- .where_flat(where)
-        if (is.null(flat)) {
-          er2$data_subset_compound <- where
-        } else {
-          er2$data_subset <- flat
-        }
-      } else {
-        ## Reached only when there is no supplement clause, so an
-        ## authoritative typed condition is never overwritten by one read
-        ## from text.
-        carry2 <- .row_restriction(annotation, .spec_resolves)
-        if (!is.null(carry2$unresolved)) {
-          er2$unresolved_condition <- .unresolved_condition_text(carry2$unresolved)
-        } else if (!is.null(carry2$compound)) {
-          er2$data_subset_compound <- carry2$compound
-        } else if (!is.null(carry2$flat)) {
-          er2$data_subset <- carry2$flat
-        }
+      carry2 <- .row_restriction(annotation, .spec_resolves, supplement = where)
+      if (!is.null(carry2$unresolved)) {
+        er2$unresolved_condition <- .unresolved_condition_text(carry2$unresolved)
+      } else if (!is.null(carry2$compound)) {
+        er2$data_subset_compound <- carry2$compound
+      } else if (!is.null(carry2$flat)) {
+        er2$data_subset <- carry2$flat
       }
       if (!nzchar(er2$primary_variable %||% "")) return(invisible(NULL))
       idx2    <- length(analysis_ids) + 1L
@@ -1679,34 +1685,27 @@ build_ars_json <- function(sections,
                          "condition against a value (e.g. 'ADQX.FLAG=Y')."))
       }
       if (is.null(er$data_subset) || length(er$data_subset) == 0) {
-        ## A typed supplement row filter (v3) is authoritative and never
-        ## re-parsed from a string: a single condition flattens to the subset
-        ## shape, a compound expression is carried as-is for .build_data_subset.
-        if (!is.null(row$supplement_where)) {
-          flat <- .where_flat(row$supplement_where)
-          if (is.null(flat)) {
-            er$data_subset_compound <- row$supplement_where
-          } else {
-            er$data_subset <- flat
-          }
-        } else {
-          ## Reached only when there is no supplement clause, so an
-          ## authoritative typed condition is never overwritten by one read
-          ## from text.
-          carry <- .row_restriction(row$annotation, .spec_resolves)
-          if (!is.null(carry$unresolved)) {
-            ## The row states a filter that could not be read. It gets NO data
-            ## subset -- there is nothing valid to give it -- and carries the
-            ## marker instead, which `.build_analysis()` writes onto the
-            ## Analysis and `.check_unresolved_condition()` turns into a GAP,
-            ## so the reservation map withholds this analysis rather than
-            ## letting it compute over every record.
-            er$unresolved_condition <- .unresolved_condition_text(carry$unresolved)
-          } else if (!is.null(carry$compound)) {
-            er$data_subset_compound <- carry$compound
-          } else if (!is.null(carry$flat)) {
-            er$data_subset <- carry$flat
-          }
+        ## ONE reading, whatever supplies the filter. A typed supplement row
+        ## filter (v3) is authoritative and never re-parsed from a string, and
+        ## `.row_restriction()` routes it -- but it asks the annotation about
+        ## an unrepresented instruction either way, because a filter being
+        ## authoritative says nothing about a rule concerning records no
+        ## filter can reach.
+        carry <- .row_restriction(row$annotation, .spec_resolves,
+                                  supplement = row$supplement_where)
+        if (!is.null(carry$unresolved)) {
+          ## The row states a filter that could not be read, or a rule this
+          ## version cannot carry out. It gets NO data subset -- there is
+          ## nothing valid to give it -- and carries the marker instead, which
+          ## `.build_analysis()` writes onto the Analysis and
+          ## `.check_unresolved_condition()` turns into a GAP, so the
+          ## reservation map withholds this analysis rather than letting it
+          ## compute over every record.
+          er$unresolved_condition <- .unresolved_condition_text(carry$unresolved)
+        } else if (!is.null(carry$compound)) {
+          er$data_subset_compound <- carry$compound
+        } else if (!is.null(carry$flat)) {
+          er$data_subset <- carry$flat
         }
       }
 
