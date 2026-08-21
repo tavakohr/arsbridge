@@ -19,12 +19,14 @@
 ## executing. A known-incomplete reading must not become executable merely
 ## because transport improved.
 ##
-## THE INVARIANT, and why it is negation rather than a list of instruction
-## words: a filter says which records SURVIVE, so an aside that speaks about
-## the records it EXCLUDES is stating something no filter can implement --
-## those records are not there to be acted on. A negating word is what marks
-## that, and a negation is never decorative, because it changes who is counted.
-## Same reasoning as the residue rule, one masking path over.
+## THE INVARIANT: a filter says which records SURVIVE, so an aside that speaks
+## about the records it EXCLUDES is stating something no filter can implement
+## -- those records are not there to be acted on.
+##
+## Three clauses establish that, and clause one is a CONSTRUCTION rather than a
+## stray negative, because a negative attaches to whatever follows it: "(records
+## are not shown separately)" negates the showing. Only `with no`, `without`,
+## `missing` and their kin establish that an OBSERVATION is absent (B2d).
 ##
 ## What must go on computing: a unit, a planned N, a protocol reference, a
 ## variable that supplies a label. Those describe the row; they do not instruct
@@ -167,8 +169,7 @@ test_that("B2b: a negated aside about the DISPLAY still computes", {
                     "(except per protocol)", "(never re-derived)",
                     "(no imputation)", "(no adjustment is applied)",
                     "(percentages are not shown)")) {
-      expect_true(grepl(.RE_RESIDUE_NEGATION, aside, perl = TRUE))
-      expect_false(grepl(.RE_OBSERVATION_UNIT, aside, perl = TRUE))
+      expect_false(grepl(.RE_ABSENT_OBSERVATION, aside, perl = TRUE))
       ann <- sprintf("%s.%s='Y' %s", v$ds, v$flag, aside)
       expect_equal(.unrepresented_instruction(ann), "")
     }
@@ -177,9 +178,26 @@ test_that("B2b: a negated aside about the DISPLAY still computes", {
     ## computation to be missing. These are the cases the third clause exists
     ## for; without it they would reserve rows that compute correctly.
     for (aside in c("(except visit 1)", "(no record-level adjustment)")) {
-      expect_true(grepl(.RE_RESIDUE_NEGATION, aside, perl = TRUE))
       expect_true(grepl(.RE_OBSERVATION_UNIT, aside, perl = TRUE))
       expect_false(grepl(.RE_INSTRUCTION_ASSIGNS, aside, perl = TRUE))
+      ann <- sprintf("%s.%s='Y' %s", v$ds, v$flag, aside)
+      expect_equal(.unrepresented_instruction(ann), "")
+      expect_equal(.ui_state(ann), "subset")
+    }
+  }
+})
+
+test_that("B2b2: absence of something that is not an observation still computes", {
+  ## Absence AND assignment, but absent of WHAT? Nothing the analysis observes.
+  ## The unit clause is the only thing standing between this and a needless
+  ## reservation, which is what makes it load-bearing rather than decorative.
+  for (v in .ui_vocabs) {
+    for (aside in c("(without adjustment the totals are unchanged)",
+                    "(missing footnotes are added at QC)")) {
+      expect_true(grepl(.RE_ABSENT_OBSERVATION, aside, perl = TRUE))
+      expect_true(grepl(.RE_INSTRUCTION_ASSIGNS, aside, perl = TRUE))
+      expect_false(grepl(.RE_OBSERVATION_UNIT, aside, perl = TRUE))
+
       ann <- sprintf("%s.%s='Y' %s", v$ds, v$flag, aside)
       expect_equal(.unrepresented_instruction(ann), "")
       expect_equal(.ui_state(ann), "subset")
@@ -192,6 +210,12 @@ test_that("B2c: naming records is not enough -- the aside must assign them somet
   ## name records; only the second says what becomes of them, and only the
   ## second is therefore a computation this version cannot carry out.
   for (v in .ui_vocabs) {
+    ## Two quiet cases: one names records without absence, one states absence
+    ## without assigning anything. Both lack a computation to be missing.
+    for (q in c("(except visit 1)", "(subjects with no visit)")) {
+      expect_equal(.unrepresented_instruction(
+        sprintf("%s.%s='Y' %s", v$ds, v$flag, q)), "")
+    }
     quiet <- sprintf("%s.%s='Y' (except visit 1)", v$ds, v$flag)
     loud  <- sprintf("%s.%s='Y' (records with no visit 1 are counted as failures)",
                      v$ds, v$flag)
@@ -200,6 +224,68 @@ test_that("B2c: naming records is not enough -- the aside must assign them somet
                  "(records with no visit 1 are counted as failures)")
     expect_equal(.ui_state(quiet), "subset")
     expect_equal(.ui_state(loud), "RESERVED")
+  }
+})
+
+test_that("B2d: a negative that attaches to the COMPUTATION, not to the data", {
+  ## The control that co-occurrence alone cannot pass. Each of these is
+  ## negated, names the unit of observation, AND carries an assignment word --
+  ## all three of the loose tests -- yet none says a record is ABSENT. The
+  ## negative attaches to the showing, the displaying, the adjusting.
+  ##
+  ## This is why clause one is a construction (`with no`, `without`, `missing`)
+  ## rather than a stray negative: only a construction establishes that the
+  ## thing not there is the OBSERVATION.
+  for (v in .ui_vocabs) {
+    for (aside in c("(no record-level adjustment is applied)",
+                    "(records are not shown separately)",
+                    "(subject counts are not displayed)")) {
+      expect_true(grepl(.RE_RESIDUE_NEGATION, aside, perl = TRUE))
+      expect_true(grepl(.RE_OBSERVATION_UNIT, aside, perl = TRUE))
+      expect_true(grepl(.RE_INSTRUCTION_ASSIGNS, aside, perl = TRUE))
+      ## ... and yet:
+      expect_false(grepl(.RE_ABSENT_OBSERVATION, aside, perl = TRUE))
+
+      ann <- sprintf("%s.%s='Y' %s", v$ds, v$flag, aside)
+      expect_equal(.unrepresented_instruction(ann), "")
+    }
+  }
+})
+
+test_that("B2d-row: and the row computes, where nothing else stands in the way", {
+  ## Splitting the row-level claim from the rule-level one above, because two
+  ## of those asides contain the word `not` -- which is a Boolean OPERATOR
+  ## here, so the masker keeps the bracket as structure and the annotation
+  ## reserves as unreadable. That is pre-existing behaviour on `main`, nothing
+  ## to do with this rule, and asserting "computes" for them would be
+  ## asserting something false.
+  ##
+  ## So the row-level claim is made on asides whose negating word is not an
+  ## operator, where a reservation could only have come from this rule.
+  for (v in .ui_vocabs) {
+    for (aside in c("(no record-level adjustment is applied)",
+                    "(no subject-level rounding is applied)",
+                    "(excluding visit 1, counts are shown)")) {
+      expect_true(grepl(.RE_RESIDUE_NEGATION, aside, perl = TRUE))
+      expect_true(grepl(.RE_OBSERVATION_UNIT, aside, perl = TRUE))
+      expect_true(grepl(.RE_INSTRUCTION_ASSIGNS, aside, perl = TRUE))
+      expect_false(grepl(.RE_ABSENT_OBSERVATION, aside, perl = TRUE))
+
+      ann <- sprintf("%s.%s='Y' %s", v$ds, v$flag, aside)
+      expect_equal(.unrepresented_instruction(ann), "")
+      expect_equal(.ui_state(ann), "subset")
+    }
+  }
+})
+
+test_that("B2e: absence stated as `missing` reserves, like `with no`", {
+  ## The construction is what matters, not the word `no`.
+  for (v in .ui_vocabs) {
+    ann <- sprintf("%s.%s='Y' (subjects with missing data are non-responders)",
+                   v$ds, v$flag)
+    expect_equal(.unrepresented_instruction(ann),
+                 "(subjects with missing data are non-responders)")
+    expect_equal(.ui_state(ann), "RESERVED")
   }
 })
 

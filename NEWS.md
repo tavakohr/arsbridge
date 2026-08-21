@@ -18,19 +18,24 @@
   EXCLUDES is stating something no `WHERE` clause can implement -- those
   records are not there to be acted on.
 
-  **Three** things must hold, and none is enough alone -- each one exists
-  because dropping it reserves a row that computes perfectly well:
+  **Three** things must hold, and none is enough alone -- each exists because
+  dropping it reserves a row that computes perfectly well:
 
-  * a **negating word**, since a negation is never decorative;
-  * a reference to the **unit of observation** -- a subject, a record, a visit
-    -- since that makes it a claim about the data rather than the display;
+  * **absent data**, as a construction: `with no`, `without`, `has no`,
+    `missing`, `absent`. Not merely a negating word somewhere -- a negative
+    attaches to whatever follows it, so `(records are not shown separately)`
+    negates the *showing* and `(no record-level adjustment is applied)` negates
+    the *adjustment*. Neither says a record is absent;
+  * the **unit of observation** -- a subject, a record, a visit -- which is
+    what the absence must be an absence *of*;
   * an **assignment**, saying what becomes of those records.
 
-  Together they read as one sentence: *records that are NOT there ARE treated
-  as something*. So `(no units)`, `(except per protocol)` and `(except visit
-  1)` all go on computing -- the last names records but assigns them nothing,
-  so there is no computation to be missing -- while `(a subject with no visit
-  record is a non-responder)` reserves.
+  Together they read as one sentence: *a unit whose data is NOT THERE IS
+  treated as something*. So `(no units)`, `(except per protocol)`, `(except
+  visit 1)`, `(records are not shown separately)` and `(without adjustment the
+  totals are unchanged)` all go on computing, while `(a subject with no visit
+  record is a non-responder)` -- and `(subjects with missing data are
+  non-responders)` -- reserve.
 
   A unit, a planned N, a protocol reference, a variable that supplies a label
   all still compute: they describe the row rather than instructing a

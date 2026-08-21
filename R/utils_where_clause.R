@@ -196,11 +196,26 @@
 ## follow a condition without unmaking it.
 .RE_RESIDUE_SCOPING_PREFIX <- paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR, "\\b")
 
-## The unit of observation, in the words shells actually use for it. Paired
-## with the negation vocabulary above to tell a rule about the DATA from a
-## remark about the DISPLAY: "(no units)" is negated and says nothing about
-## which records count; "(a subject with no visit record is a failure)" is
-## negated and says exactly that.
+## Data that is NOT THERE, as a construction rather than as a stray negative.
+##
+## This is the clause that makes the test structural instead of a
+## co-occurrence. A negating word can attach to anything -- "(records are not
+## shown separately)" negates the SHOWING, "(no record-level adjustment is
+## applied)" negates the ADJUSTMENT -- and neither says a record is absent.
+## What the invariant needs is the absence itself: `with no`, `without`,
+## `has no`, `missing`, `absent`. Those are the ways a shell says a unit has
+## no data, and a unit with no data is precisely what a filter cannot reach.
+##
+## General-language and domain vocabulary, deliberately -- no study's dataset,
+## variable or label appears here, and none may.
+.RE_ABSENT_OBSERVATION <- paste0(
+  "(?i)\\b(?:with\\s+no\\b|without\\b|ha(?:s|ve|d)\\s+no\\b",
+  "|having\\s+no\\b|missing\\b|absent\\b|not\\s+present\\b)"
+)
+
+## The unit of observation, in the words shells actually use for it. What the
+## absence above has to be an absence OF, so that "(without adjustment)" --
+## absent, but of no record -- is not mistaken for a rule about the data.
 ##
 ## General-language and domain vocabulary, deliberately -- no study's dataset,
 ## variable or label appears here, and none may.
@@ -634,7 +649,7 @@
   ## keeps those as structure -- so this asks only about text already judged
   ## to contribute nothing to the filter.
   for (span in hidden$spans %||% character(0)) {
-    if (grepl(.RE_RESIDUE_NEGATION, span, perl = TRUE) &&
+    if (grepl(.RE_ABSENT_OBSERVATION, span, perl = TRUE) &&
         grepl(.RE_OBSERVATION_UNIT, span, perl = TRUE) &&
         grepl(.RE_INSTRUCTION_ASSIGNS, span, perl = TRUE)) {
       return(trimws(.unmask_literals(span, masked)))
