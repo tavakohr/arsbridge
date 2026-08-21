@@ -756,76 +756,109 @@
   roles
 }
 
-#' Subset filter from an annotation string, reading the head-plus-envelope
-#' forms `DATASET.VAR WHERE ...`, `DATASET.VAR (when ...)` and
-#' `DATASET.VAR [where ...]` that `flat_data_subset()` cannot parse.
+#' The restriction an annotation states, as a typed WhereClause.
 #'
-#' The envelope's bare variables are qualified against the head reference's
-#' dataset only where `resolves` confirms them; see `.annotation_condition()`.
+#' The row-facing reader. It strips the derivation note -- a note is not a
+#' filter, and asking the where-clause grammar to read one reserves a row that
+#' computes perfectly well -- and hands back what `.annotation_condition()`
+#' makes of the rest: the envelope forms `DATASET.VAR WHERE ...`,
+#' `DATASET.VAR (when ...)` and `DATASET.VAR [where ...]`, and every other
+#' annotation through the ordinary where-clause grammar.
 #'
 #' @param resolves `function(dataset, variable)` answering whether that exact
 #'   pair exists in the study's ADaM spec. Without one nothing is provable and
 #'   an envelope carrying bare names reserves -- the safe direction, since the
 #'   alternative is filtering on a variable that may not exist.
+#' @return `NULL` when the annotation states no restriction, an
+#'   unresolved-condition object when it states one that cannot be read, or a
+#'   WhereClause -- flat or compound.
 #' @noRd
-.subset_from_annotation <- function(ann, resolves = NULL) {
-  ## The head only: a derivation note is not a filter, and asking the where
-  ## clause grammar to read one produces an unresolved condition that reserves
-  ## a row computing perfectly well.
+.annotation_where <- function(ann, resolves = NULL) {
   ann <- .annotation_less_derivation_note(ann)
   if (!nzchar(trimws(ann))) return(NULL)
+  .annotation_condition(ann, resolves)
+}
 
-  ## Asked BEFORE the filter is read, because the answer does not depend on
-  ## which shape the filter turns out to be: an instruction about excluded
-  ## records is unrepresentable whether the filter is flat, compound or
-  ## absent. Reserving here keeps the check in one place as the carrier
-  ## changes what the readable shapes can do.
-  instruction <- .unrepresented_instruction(ann)
+#' How a row should carry the restriction its annotation states.
+#'
+#' One reading, used by both row builders, so the primary row and a nested
+#' child can never disagree about what an annotation restricts.
+#'
+#' Three outcomes, and the third is the one that is easy to lose:
+#'
+#'   `unresolved`  the annotation states a restriction that cannot be read, OR
+#'                 states one the grammar read as nothing at all. Both reserve.
+#'                 An analysis with no DataSubset computes over every record,
+#'                 so "I found no condition in text that plainly carries one"
+#'                 must never present as "there is no condition".
+#'   `compound`    a WhereClause the flat shape cannot hold; rides on
+#'                 `data_subset_compound`, the carrier the supplement path
+#'                 already uses and `.build_data_subset()` already emits.
+#'   `flat`        a single condition, in the shape the builder has always
+#'                 consumed.
+#'
+#' An empty list means the annotation states no restriction, which is the
+#' ordinary case for most rows.
+#' @noRd
+.row_restriction <- function(ann, resolves = NULL) {
+  stated <- .annotation_less_derivation_note(ann)
+  where  <- .annotation_where(ann, resolves)
+  if (.is_unresolved_condition(where)) return(list(unresolved = where))
 
-  ## The envelope is asked about FIRST, on whichever text is actually the
-  ## condition -- never the whole annotation up front.
-  ##
-  ## `DATASET.VAR (when <condition>)` is a supported form whose condition is
-  ## the envelope, and the whole string is not a clause this grammar reads.
-  ## Asking about the whole string first calls a perfectly good annotation
-  ## unreadable and reserves a row that computes correctly -- withholding
-  ## results nobody needed withheld is its own kind of wrong answer.
-  if (!is.null(.annotation_envelope(ann))) {
-    where <- .annotation_condition(ann, resolves)
-    if (.is_unresolved_condition(where)) return(where)
-    if (is.null(where)) return(NULL)
+  ## A readable filter is not enough when the author also stated a rule about
+  ## records the filter excludes. Checked before the shape is decided, because
+  ## the answer does not depend on the shape -- and checked HERE, in the one
+  ## reading both row builders share, so the carrier cannot route around it.
+  if (!is.null(where)) {
+    instruction <- .unrepresented_instruction(stated)
     if (nzchar(instruction)) {
-      return(.stated_instruction_unrepresented(ann, instruction))
+      return(list(unresolved =
+        .stated_instruction_unrepresented(stated, instruction)))
     }
-    flat <- .where_flat(where)
-    if (!is.null(flat)) return(flat)
-    ## A compound this builder cannot carry yet. Reserved, never dropped --
-    ## carrying it is the next change, and nothing about the annotation has to
-    ## alter when it lands.
-    return(.stated_filter_unrepresented(ann))
   }
 
-  fs <- flat_data_subset(ann)
-  if (!is.null(fs)) {
+  if (is.null(where)) {
+    gap <- .stated_filter_unrepresented(stated)
+    if (.is_unresolved_condition(gap)) return(list(unresolved = gap))
+    return(list())
+  }
+
+  flat <- .where_flat(where)
+  if (is.null(flat)) return(list(compound = where))
+  list(flat = flat)
+}
+
+#' The same restriction in the FLAT `{dataset, variable, comparator, value}`
+#' shape, for callers whose contract is that shape.
+#'
+#' Kept deliberately rather than widened: the flat shape is what several
+#' callers and their tests consume, and changing what it returns would change
+#' what they mean. The row builders use `.annotation_where()` instead and route
+#' a compound to `data_subset_compound`, the carrier the supplement path
+#' already uses.
+#'
+#' A compound therefore still reserves HERE -- not because it cannot be
+#' carried, but because this return contract has nowhere to put it. So does an
+#' annotation that states a restriction this grammar read as nothing at all:
+#' `.stated_filter_unrepresented()` answers `NULL` for text carrying no
+#' condition evidence and reserves for text that does, which is the same
+#' answer this function gave before the typed reader existed.
+#' @noRd
+.subset_from_annotation <- function(ann, resolves = NULL) {
+  stated <- .annotation_less_derivation_note(ann)
+  where  <- .annotation_where(ann, resolves)
+  if (.is_unresolved_condition(where)) return(where)
+
+  if (!is.null(where)) {
+    instruction <- .unrepresented_instruction(stated)
     if (nzchar(instruction)) {
-      return(.stated_instruction_unrepresented(ann, instruction))
+      return(.stated_instruction_unrepresented(stated, instruction))
     }
-    return(fs)
   }
 
-  ## A stated filter that could not be read. Returned as unresolved rather than
-  ## NULL, because an analysis with no DataSubset computes over every record.
-  unreadable <- parse_where_clause(ann)
-  if (.is_unresolved_condition(unreadable)) return(unreadable)
-
-  ## Read, but not as a flat subset -- a compound. It reserves either way
-  ## today, so this changes no outcome; it makes the RECORDED REASON the true
-  ## one, and it is the branch a carrier turns into a computed result, so the
-  ## gate has to be here before that happens rather than added afterwards.
-  if (nzchar(instruction)) {
-    return(.stated_instruction_unrepresented(ann, instruction))
-  }
-  .stated_filter_unrepresented(ann)
+  flat <- .where_flat(where)
+  if (!is.null(flat)) return(flat)
+  .stated_filter_unrepresented(stated)
 }
 
 #' A restriction the grammar read, alongside an authored instruction it cannot
@@ -1361,11 +1394,16 @@ build_ars_json <- function(sections,
           er2$data_subset <- flat
         }
       } else {
-        subset2 <- .subset_from_annotation(annotation, .spec_resolves)
-        if (.is_unresolved_condition(subset2)) {
-          er2$unresolved_condition <- .unresolved_condition_text(subset2)
-        } else {
-          er2$data_subset <- subset2
+        ## Reached only when there is no supplement clause, so an
+        ## authoritative typed condition is never overwritten by one read
+        ## from text.
+        carry2 <- .row_restriction(annotation, .spec_resolves)
+        if (!is.null(carry2$unresolved)) {
+          er2$unresolved_condition <- .unresolved_condition_text(carry2$unresolved)
+        } else if (!is.null(carry2$compound)) {
+          er2$data_subset_compound <- carry2$compound
+        } else if (!is.null(carry2$flat)) {
+          er2$data_subset <- carry2$flat
         }
       }
       if (!nzchar(er2$primary_variable %||% "")) return(invisible(NULL))
@@ -1652,17 +1690,22 @@ build_ars_json <- function(sections,
             er$data_subset <- flat
           }
         } else {
-          subset <- .subset_from_annotation(row$annotation, .spec_resolves)
-          if (.is_unresolved_condition(subset)) {
+          ## Reached only when there is no supplement clause, so an
+          ## authoritative typed condition is never overwritten by one read
+          ## from text.
+          carry <- .row_restriction(row$annotation, .spec_resolves)
+          if (!is.null(carry$unresolved)) {
             ## The row states a filter that could not be read. It gets NO data
             ## subset -- there is nothing valid to give it -- and carries the
             ## marker instead, which `.build_analysis()` writes onto the
             ## Analysis and `.check_unresolved_condition()` turns into a GAP,
             ## so the reservation map withholds this analysis rather than
             ## letting it compute over every record.
-            er$unresolved_condition <- .unresolved_condition_text(subset)
-          } else {
-            er$data_subset <- subset
+            er$unresolved_condition <- .unresolved_condition_text(carry$unresolved)
+          } else if (!is.null(carry$compound)) {
+            er$data_subset_compound <- carry$compound
+          } else if (!is.null(carry$flat)) {
+            er$data_subset <- carry$flat
           }
         }
       }

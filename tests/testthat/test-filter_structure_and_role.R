@@ -381,9 +381,24 @@ test_that("a clause of a joined restriction is never dropped in silence", {
     re <- suppressWarnings(build_ars_json(list(sec),
                                           spec_lookup = .fsr_lookup(v)))
     an <- re$analyses[[1]]
-    ## Reserved, and specifically NOT filtered on the one clause that parsed.
-    expect_true(nzchar(an$unresolvedCondition %||% ""), info = v$ds)
-    expect_false(nzchar(an$dataSubsetId %||% ""), info = v$ds)
+    ## CARRIED, and specifically not filtered on the one clause that parsed.
+    ## Reserving was the honest answer only while all three could not be
+    ## carried; now the envelope qualifies every clause and the compound rides
+    ## as a DataSubset, so the stronger outcome is the one to assert.
+    expect_false(nzchar(an$unresolvedCondition %||% ""), info = v$ds)
+    expect_true(nzchar(an$dataSubsetId %||% ""), info = v$ds)
+
+    ds <- Filter(function(d) identical(d$id, an$dataSubsetId),
+                 re$dataSubsets %||% list())
+    expect_length(ds, 1L)
+    ## All three conditions, on the head's dataset -- the count is the point:
+    ## the defect this test exists for was a filter of three becoming one.
+    atoms <- .where_atoms(if (length(ds) == 1L) .group_where(ds[[1]]) else NULL)
+    expect_length(atoms, 3L)
+    expect_identical(
+      vapply(atoms, function(a) paste0(a$dataset, ".", a$variable),
+             character(1)),
+      paste0(v$ds, ".", c(v$cat, v$flag, v$occur)), info = v$ds)
 
     ## The control, and it is what keeps this from being "reserve everything":
     ## the same form with a single clause is unambiguous and still computes.

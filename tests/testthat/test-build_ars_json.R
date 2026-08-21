@@ -920,12 +920,13 @@ test_that("a free-standing supplement row with a typed compound clause keeps its
   expect_false(is.null(re$dataSubsets[[1]]$compoundExpression))
 })
 
-test_that("a declared-but-unparseable filter on an extra analysis raises a WARN", {
+test_that("a compound filter on an extra analysis is carried, not dropped", {
   diag_reset()
   sec <- .cmp_section()
-  ## No typed clause at all: only the compound annotation STRING, which
-  ## .subset_from_annotation() cannot parse -- the analysis computes
-  ## unfiltered, and the guard must surface that in the diagnostics.
+  ## No typed clause at all: only the compound annotation STRING. It used to
+  ## reach no DataSubset -- the analysis computed unfiltered and a WARN said
+  ## so -- and it is now carried as a compoundExpression subset, which is the
+  ## answer the WARN was standing in for.
   sec$stub_rows <- list(list(
     label = "Serious TEAE", annotation = "ADAE.AESER='Y'", has_annot = TRUE,
     raw_text = "Serious TEAE",
@@ -934,7 +935,27 @@ test_that("a declared-but-unparseable filter on an extra analysis raises a WARN"
   ))
   re <- build_ars_json(list(sec), spec_lookup = .cmp_lookup())
 
+  ## Nothing was dropped and nothing was reserved: both conditions are on the
+  ## emitted subset.
+  extra <- Filter(function(a) nzchar(a$dataSubsetId %||% ""),
+                  re$analyses %||% list())
+  expect_gte(length(extra), 1L)
+  ids <- vapply(extra, function(a) a$dataSubsetId, character(1))
+  compound <- Filter(function(d) d$id %in% ids && !is.null(d$compoundExpression),
+                     re$dataSubsets %||% list())
+  expect_length(compound, 1L)
+  ## Guarded so a regression that emits NO compound subset FAILS here rather
+  ## than erroring out of the test before the rest of the claim is checked.
+  atoms <- if (length(compound) == 1L) {
+    .where_atoms(.group_where(compound[[1]]))
+  } else {
+    list()
+  }
+  expect_identical(
+    sort(vapply(atoms, function(a) a$variable, character(1))),
+    c("AESER", "TRTEMFL"))
+
   d <- ars_diagnostics()
-  expect_true(any(d$severity == "WARN" &
-                    grepl("could not be parsed into a DataSubset", d$problem)))
+  expect_false(any(d$severity == "WARN" &
+                     grepl("could not be parsed into a DataSubset", d$problem)))
 })
