@@ -2,6 +2,67 @@
 
 ## arsbridge (development version)
 
+- **An authored instruction no restriction can carry out now reserves
+  the row.** An annotation can say two things at once – a filter, and a
+  rule for records the filter does not select:
+
+  ``` R
+  ADEFF.ANL01FL='Y' and ADEFF.AVAL=1
+    (a subject with no Week 16 record is a non-responder)
+  ```
+
+  The bracket is masked as an aside, which is right as far as the FILTER
+  goes: it states no condition. The filter is then read, correct about
+  which records qualify and silent about the rule. Computing it alone
+  reports a responder rate over a smaller denominator than the one asked
+  for, and nothing on the analysis says so.
+
+  The reason is structural rather than a list of instruction words: a
+  filter says which records SURVIVE, so an aside that speaks about the
+  records it EXCLUDES is stating something no `WHERE` clause can
+  implement – those records are not there to be acted on.
+
+  **Three** things must hold, and none is enough alone – each exists
+  because dropping it reserves a row that computes perfectly well:
+
+  - **absent data**, as a construction: `with no`, `without`, `has no`,
+    `missing`, `absent`. Not merely a negating word somewhere – a
+    negative attaches to whatever follows it, so
+    `(records are not shown separately)` negates the *showing* and
+    `(no record-level adjustment is applied)` negates the *adjustment*.
+    Neither says a record is absent;
+  - the **unit of observation** – a subject, a record, a visit – which
+    is what the absence must be an absence *of*;
+  - an **assignment** of a computed state, saying what becomes of those
+    records. A bare copula is not enough:
+    `(missing visits are displayed separately)` states an absence, of an
+    observation, in a sentence containing `are`, and instructs no
+    computation — it says where the rows appear, not what they count as.
+    A treatment verb qualifies outright; `as <state>` qualifies whatever
+    verb carries it, so `(… are reported as non-responders)` reserves
+    while `(… are displayed as separate rows)` does not.
+
+  Together they read as one sentence: *a unit whose data is NOT THERE IS
+  treated as something*. So `(no units)`, `(except per protocol)`,
+  `(except visit 1)`, `(records are not shown separately)`,
+  `(without adjustment the totals are unchanged)`,
+  `(missing visits are displayed separately)` and
+  `(missing records are listed separately)` all go on computing, while
+  `(a subject with no visit record is a non-responder)`,
+  `(subjects with missing data are non-responders)` and
+  `(… are reported as non-responders)` reserve.
+
+  A unit, a planned N, a protocol reference, a variable that supplies a
+  label all still compute: they describe the row rather than instructing
+  a computation. Literals are masked first, so a category called
+  `'Not Reported'`, or one written `'Cohort (no baseline)'`, is a value.
+
+  Known limit, recorded rather than papered over: an unrepresented
+  instruction phrased without a negation (“values are imputed from
+  baseline”) is not yet detected. This closes the case where the
+  instruction concerns records the filter cannot reach – the one that
+  turns a filter into a wrong number rather than an incomplete one.
+
 - **Leftover text that changes what a restriction MEANS no longer
   disappears.** The where-clause grammar finds a condition inside an
   operand and then asks one question about whatever text is left over:
