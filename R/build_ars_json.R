@@ -833,9 +833,9 @@
 #'
 #' Kept deliberately rather than widened: the flat shape is what several
 #' callers and their tests consume, and changing what it returns would change
-#' what they mean. The row builders use `.annotation_where()` instead and route
-#' a compound to `data_subset_compound`, the carrier the supplement path
-#' already uses.
+#' what they mean. The row builders use `.row_restriction()` instead, which
+#' routes a compound to `data_subset_compound` -- the carrier the supplement
+#' path already uses.
 #'
 #' A compound therefore still reserves HERE -- not because it cannot be
 #' carried, but because this return contract has nowhere to put it. So does an
