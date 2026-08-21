@@ -230,13 +230,70 @@
 ## "(a subject with no visit record is a non-responder)" says what they count
 ## as. Only the second is something a computation would have to carry out.
 ##
-## Kept behind the negation and unit tests, so these very ordinary words can
+## A BARE COPULA IS NOT ENOUGH. "(missing visits are displayed separately)" is
+## an absence, of an observation, in a sentence containing `are` -- every
+## simpler test passes -- and it instructs no computation whatever. It says
+## where the rows appear, not what they count as.
+##
+## Kept behind the absence and unit tests, so these very ordinary words can
 ## never flag an aside on their own.
-.RE_INSTRUCTION_ASSIGNS <- paste0(
-  "(?i)\\b(?:is|are|was|were|count|counts|counted|treat|treated|impute",
-  "|imputed|assign|assigned|consider|considered|classif(?:y|ied)",
-  "|set|carried|excluded|included)\\b"
+
+## What is DONE to the records: an outcome the analysis would have to compute.
+.RE_TREATMENT_VERB <- paste0(
+  "(?i)\\b(?:count|counts|counted|impute|imputed|treat|treated|assign",
+  "|assigned|consider|considered|classif(?:y|ied)|set|carried",
+  "|exclude|excluded|include|included|replace|replaced|derive|derived)\\b"
 )
+
+## Where the records APPEAR. Says nothing about their value, so a copula
+## alongside one of these -- with no state assigned -- describes the display
+## rather than instructing a computation.
+.RE_PRESENTATION_VERB <- paste0(
+  "(?i)\\b(?:display|displayed|list|listed|listing|show|shown",
+  "|present|presented|report|reported|print|printed|render|rendered",
+  "|label|labelled|labeled|footnote|footnoted)\\b"
+)
+
+## What `as ...` introduces when it is display furniture rather than a state.
+## "displayed as separate ROWS" places them; "reported as NON-RESPONDERS"
+## values them.
+.RE_PRESENTATION_NOUN <- paste0(
+  "(?i)\\b(?:row|rows|column|columns|line|lines|listing|listings",
+  "|footnote|footnotes|entry|entries|page|pages|section|sections)\\b"
+)
+
+.RE_COPULA <- "(?i)\\b(?:is|are|was|were|be|been|become|becomes)\\b"
+
+#' Does this aside give the absent records a computed state?
+#'
+#' Three ways in, and the ORDER is the substance of the rule:
+#'
+#'   a TREATMENT VERB -- counted, imputed, excluded -- says outright what is
+#'     done to them.
+#'   `as <state>` -- says what they are treated AS, whatever verb carries it,
+#'     so "reported as non-responders" qualifies even though `reported` is a
+#'     presentation verb. Tested BEFORE presentation for exactly that reason.
+#'     Excluded when what follows `as` is display furniture: "displayed as
+#'     separate rows" places the records, it does not value them.
+#'   a COPULA, but only where the sentence is not doing presentation work.
+#'     "is a non-responder" assigns a state; "are displayed separately" says
+#'     where rows appear and assigns nothing.
+#' @noRd
+.aside_assigns_state <- function(span) {
+  if (grepl(.RE_TREATMENT_VERB, span, perl = TRUE)) return(TRUE)
+
+  at <- regexpr("(?i)\\bas\\s+", span, perl = TRUE)
+  if (at[[1L]] > 0L) {
+    after <- substr(span, at[[1L]] + attr(at, "match.length"), nchar(span))
+    if (nzchar(trimws(after)) &&
+        !grepl(.RE_PRESENTATION_NOUN, after, perl = TRUE)) {
+      return(TRUE)
+    }
+  }
+
+  if (!grepl(.RE_COPULA, span, perl = TRUE)) return(FALSE)
+  !grepl(.RE_PRESENTATION_VERB, span, perl = TRUE)
+}
 
 ## ---------------------------------------------------------------------------
 ## Derivation notes
@@ -651,7 +708,7 @@
   for (span in hidden$spans %||% character(0)) {
     if (grepl(.RE_ABSENT_OBSERVATION, span, perl = TRUE) &&
         grepl(.RE_OBSERVATION_UNIT, span, perl = TRUE) &&
-        grepl(.RE_INSTRUCTION_ASSIGNS, span, perl = TRUE)) {
+        .aside_assigns_state(span)) {
       return(trimws(.unmask_literals(span, masked)))
     }
   }

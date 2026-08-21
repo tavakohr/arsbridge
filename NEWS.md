@@ -28,14 +28,21 @@
     the *adjustment*. Neither says a record is absent;
   * the **unit of observation** -- a subject, a record, a visit -- which is
     what the absence must be an absence *of*;
-  * an **assignment**, saying what becomes of those records.
+  * an **assignment** of a computed state, saying what becomes of those
+    records. A bare copula is not enough: `(missing visits are displayed
+    separately)` states an absence, of an observation, in a sentence containing
+    `are`, and instructs no computation — it says where the rows appear, not
+    what they count as. A treatment verb qualifies outright; `as <state>`
+    qualifies whatever verb carries it, so `(… are reported as non-responders)`
+    reserves while `(… are displayed as separate rows)` does not.
 
   Together they read as one sentence: *a unit whose data is NOT THERE IS
   treated as something*. So `(no units)`, `(except per protocol)`, `(except
-  visit 1)`, `(records are not shown separately)` and `(without adjustment the
-  totals are unchanged)` all go on computing, while `(a subject with no visit
-  record is a non-responder)` -- and `(subjects with missing data are
-  non-responders)` -- reserve.
+  visit 1)`, `(records are not shown separately)`, `(without adjustment the
+  totals are unchanged)`, `(missing visits are displayed separately)` and
+  `(missing records are listed separately)` all go on computing, while `(a
+  subject with no visit record is a non-responder)`, `(subjects with missing
+  data are non-responders)` and `(… are reported as non-responders)` reserve.
 
   A unit, a planned N, a protocol reference, a variable that supplies a label
   all still compute: they describe the row rather than instructing a

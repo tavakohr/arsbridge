@@ -179,7 +179,7 @@ test_that("B2b: a negated aside about the DISPLAY still computes", {
     ## for; without it they would reserve rows that compute correctly.
     for (aside in c("(except visit 1)", "(no record-level adjustment)")) {
       expect_true(grepl(.RE_OBSERVATION_UNIT, aside, perl = TRUE))
-      expect_false(grepl(.RE_INSTRUCTION_ASSIGNS, aside, perl = TRUE))
+      expect_false(.aside_assigns_state(aside))
       ann <- sprintf("%s.%s='Y' %s", v$ds, v$flag, aside)
       expect_equal(.unrepresented_instruction(ann), "")
       expect_equal(.ui_state(ann), "subset")
@@ -195,7 +195,7 @@ test_that("B2b2: absence of something that is not an observation still computes"
     for (aside in c("(without adjustment the totals are unchanged)",
                     "(missing footnotes are added at QC)")) {
       expect_true(grepl(.RE_ABSENT_OBSERVATION, aside, perl = TRUE))
-      expect_true(grepl(.RE_INSTRUCTION_ASSIGNS, aside, perl = TRUE))
+      expect_true(.aside_assigns_state(aside))
       expect_false(grepl(.RE_OBSERVATION_UNIT, aside, perl = TRUE))
 
       ann <- sprintf("%s.%s='Y' %s", v$ds, v$flag, aside)
@@ -242,13 +242,19 @@ test_that("B2d: a negative that attaches to the COMPUTATION, not to the data", {
                     "(subject counts are not displayed)")) {
       expect_true(grepl(.RE_RESIDUE_NEGATION, aside, perl = TRUE))
       expect_true(grepl(.RE_OBSERVATION_UNIT, aside, perl = TRUE))
-      expect_true(grepl(.RE_INSTRUCTION_ASSIGNS, aside, perl = TRUE))
-      ## ... and yet:
+      ## ... and yet no absence of an observation is stated:
       expect_false(grepl(.RE_ABSENT_OBSERVATION, aside, perl = TRUE))
 
       ann <- sprintf("%s.%s='Y' %s", v$ds, v$flag, aside)
       expect_equal(.unrepresented_instruction(ann), "")
     }
+
+    ## Non-vacuity: at least one of them DOES satisfy the assignment clause,
+    ## so the absence clause is demonstrably what turns it away. (The other
+    ## two are now also caught by the presentation rule in B2f -- belt and
+    ## braces, and worth knowing which belt is holding.)
+    expect_true(.aside_assigns_state("(no record-level adjustment is applied)"))
+    expect_false(.aside_assigns_state("(records are not shown separately)"))
   }
 })
 
@@ -268,13 +274,52 @@ test_that("B2d-row: and the row computes, where nothing else stands in the way",
                     "(excluding visit 1, counts are shown)")) {
       expect_true(grepl(.RE_RESIDUE_NEGATION, aside, perl = TRUE))
       expect_true(grepl(.RE_OBSERVATION_UNIT, aside, perl = TRUE))
-      expect_true(grepl(.RE_INSTRUCTION_ASSIGNS, aside, perl = TRUE))
+      expect_true(.aside_assigns_state(aside))
       expect_false(grepl(.RE_ABSENT_OBSERVATION, aside, perl = TRUE))
 
       ann <- sprintf("%s.%s='Y' %s", v$ds, v$flag, aside)
       expect_equal(.unrepresented_instruction(ann), "")
       expect_equal(.ui_state(ann), "subset")
     }
+  }
+})
+
+test_that("B2f: display language is not an assignment, however copular", {
+  ## The control a bare copula cannot pass. Each of these states an absence, of
+  ## an observation, in a sentence containing `are` -- so every clause except
+  ## the assignment one is satisfied -- and each says only WHERE the records
+  ## appear. Nothing is computed differently because of them.
+  for (v in .ui_vocabs) {
+    for (aside in c("(missing visits are displayed separately)",
+                    "(missing records are listed separately)",
+                    "(missing visits are displayed as separate rows)",
+                    "(records with no baseline are shown in a footnote)")) {
+      expect_true(grepl(.RE_ABSENT_OBSERVATION, aside, perl = TRUE))
+      expect_true(grepl(.RE_OBSERVATION_UNIT, aside, perl = TRUE))
+      expect_true(grepl(.RE_COPULA, aside, perl = TRUE))
+      ## ... and yet no state is assigned:
+      expect_false(.aside_assigns_state(aside))
+
+      ann <- sprintf("%s.%s='Y' %s", v$ds, v$flag, aside)
+      expect_equal(.unrepresented_instruction(ann), "")
+      expect_equal(.ui_state(ann), "subset")
+    }
+  }
+})
+
+test_that("B2g: `as <state>` assigns, even carried by a presentation verb", {
+  ## The other side of B2f, and the reason the `as` test runs BEFORE the
+  ## presentation test. "reported as non-responders" values the records; the
+  ## verb that carries it is beside the point.
+  for (v in .ui_vocabs) {
+    ann <- sprintf(
+      "%s.%s='Y' (subjects with missing data are reported as non-responders)",
+      v$ds, v$flag)
+    expect_true(.aside_assigns_state(
+      "(subjects with missing data are reported as non-responders)"))
+    expect_equal(.unrepresented_instruction(ann),
+                 "(subjects with missing data are reported as non-responders)")
+    expect_equal(.ui_state(ann), "RESERVED")
   }
 })
 
