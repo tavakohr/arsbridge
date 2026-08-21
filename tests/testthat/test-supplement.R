@@ -807,8 +807,8 @@ test_that("compound AND leaf rows merge as level rows and every declared filter 
   ## analysis -- authored label kept, no analysis of their own.
   leaves <- Filter(function(e) lab_of(e) %in% c("Headache", "Nausea"), lay)
   expect_length(leaves, 2)
-  expect_true(all(vapply(leaves, kind_of, character(1)) == "level"))
-  parent <- Filter(function(e) identical(kind_of(e), "categorical"), lay)[[1]]
+  expect_true(all(vapply(leaves, kind_of, character(1)) == "level_row"))
+  parent <- Filter(function(e) identical(kind_of(e), "categorical_block"), lay)[[1]]
   for (e in leaves) expect_identical(e$analysis_id, parent$analysis_id)
   expect_setequal(vapply(leaves, function(e) e$level, character(1)),
                   c("HEADACHE", "NAUSEA"))
@@ -828,7 +828,7 @@ test_that("compound AND leaf rows merge as level rows and every declared filter 
 
   ## The conflict secondary and the free-standing row both ride compound
   ## DataSubsets (this is the path that used to emit dataSubsetId = "").
-  extra <- Filter(function(e) identical(kind_of(e), "supplement_added"), lay)
+  extra <- Filter(function(e) identical(e$provenance, "supplement_added"), lay)
   expect_setequal(vapply(extra, lab_of, character(1)),
                   c("Any TEAE", "Dizziness"))
   ds_by_id <- setNames(ars$dataSubsets,

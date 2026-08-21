@@ -235,7 +235,7 @@ test_that("a blank header above real cells is still a result column", {
   )
   meta <- list()
   if (layout) {
-    meta$shell_layout <- list(list(order = 1L, label = "Item", kind = "row"))
+    meta$shell_layout <- list(list(order = 1L, label = "Item", kind = "scalar_row"))
   }
   if (!is.null(cell_cols)) {
     meta$shell_fill <- list(

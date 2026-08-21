@@ -665,7 +665,8 @@
             "label": "Subjects treated",
             "indent": 0,
             "analysis_id": "AN_T_14_1_1_001",
-            "kind": "filtered_count",
+            "kind": "scalar_row",
+            "stat_form": "filtered_count",
             "sheet_row": 5,
             "n_slots": 1
           },
@@ -674,7 +675,8 @@
             "label": "Discontinued study",
             "indent": 0,
             "analysis_id": "AN_T_14_1_1_002",
-            "kind": "filtered_count_pct",
+            "kind": "scalar_row",
+            "stat_form": "filtered_count_pct",
             "sheet_row": 6,
             "n_slots": 2
           }
@@ -959,7 +961,8 @@
             "label": "Subjects treated",
             "indent": 0,
             "analysis_id": "AN_T_14_4_1_001",
-            "kind": "filtered_count",
+            "kind": "scalar_row",
+            "stat_form": "filtered_count",
             "sheet_row": 5,
             "n_slots": 1
           },
@@ -968,7 +971,8 @@
             "label": "Discontinued study",
             "indent": 0,
             "analysis_id": "AN_T_14_4_1_002",
-            "kind": "filtered_count_pct",
+            "kind": "scalar_row",
+            "stat_form": "filtered_count_pct",
             "sheet_row": 6,
             "n_slots": 2
           }

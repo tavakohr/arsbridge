@@ -15,31 +15,43 @@
                           "MTH_SUBJECT_COUNT_PCT")
 
 ## What a body cell shows before real numbers exist -- the same placeholder
-## conventions the authored shell document uses. `kind` is the row's own kind
-## from the layout; `owner_kind` is the kind of the analysis row the line
-## belongs to (NA for section headers and spacers that belong to nothing).
+## conventions the authored shell document uses.
+##
+## Three separate questions, which used to be one: `shape` is how the row
+## expands, `stat_form` is which statistic a scalar row's cell will show, and
+## `status` is why a row carries no usable analysis. `owner_*` are the same
+## three for the analysis row this line belongs to (NA for section headers and
+## spacers that belong to nothing).
 #' @noRd
-.shell_placeholder <- function(kind, label, method_id = NA_character_,
-                               owner_kind = NA_character_) {
-  if (kind %in% c("subject_count", "filtered_count")) return("xxx")
-  ## The same count, in a shell that also shows what share of the arm it is.
-  if (kind %in% c("subject_count_pct", "filtered_count_pct")) {
-    return("xx (xx.x%)")
+.shell_placeholder <- function(shape, label, method_id = NA_character_,
+                               owner_shape = NA_character_,
+                               stat_form = NA_character_,
+                               status = NA_character_,
+                               owner_status = NA_character_) {
+  if (!is.na(stat_form)) {
+    if (stat_form %in% c("subject_count", "filtered_count")) return("xxx")
+    ## The same count, in a shell that also shows what share of the arm it is.
+    if (stat_form %in% c("subject_count_pct", "filtered_count_pct")) {
+      return("xx (xx.x%)")
+    }
   }
 
   ## Parent header lines print their label in the stub and nothing in the
-  ## body; their numbers live on the sub-rows beneath them.
-  if (kind %in% c("continuous", "categorical")) return("")
+  ## body; their numbers live on the sub-rows beneath them. Asked of the
+  ## SHAPE alone: a reserved row has no proved shape and prints its marker
+  ## below instead.
+  if (!is.na(shape) && shape %in% c("stat_block", "categorical_block")) return("")
 
   ## An authored category slot is filled from its categorical parent.
-  if (identical(kind, "level")) return("xx (xx.x%)")
+  if (identical(shape, "level_row")) return("xx (xx.x%)")
 
-  if (identical(kind, "manual")) return(.MANUAL_MARKER)
+  if (identical(status, .LAYOUT_STATUS_MANUAL)) return(.MANUAL_MARKER)
 
-  if (identical(kind, "label")) {
-    if (is.na(owner_kind)) return("")
-    if (identical(owner_kind, "categorical")) return("xx (xx.x%)")
-    if (identical(owner_kind, "manual")) return(.MANUAL_MARKER)
+  if (identical(shape, "label_row")) {
+    if (is.na(owner_shape) && is.na(owner_status)) return("")
+    if (identical(owner_shape, "categorical_block")) return("xx (xx.x%)")
+    if (identical(owner_status, .LAYOUT_STATUS_MANUAL)) return(.MANUAL_MARKER)
+    if (is.na(owner_shape)) return("")
 
     ## A stat line under a continuous parent. The shape follows the
     ## STATISTICS the label names, not its exact spelling -- this used to be
@@ -198,7 +210,10 @@
       label       = labels,
       indent      = rep(0L, length(refs)),
       analysis_id = as.character(refs),
-      kind        = rep("row", length(refs)),
+      kind        = rep("scalar_row", length(refs)),
+      status      = rep(NA_character_, length(refs)),
+      provenance  = rep(NA_character_, length(refs)),
+      stat_form   = rep(NA_character_, length(refs)),
       level       = rep(NA_character_, length(refs)),
       stringsAsFactors = FALSE
     )
@@ -207,30 +222,39 @@
   n <- nrow(layout)
   owner <- layout$analysis_id
   owner_kind <- rep(NA_character_, n)
+  owner_status <- rep(NA_character_, n)
   block_owner <- NA_character_
   block_kind <- NA_character_
+  block_status <- NA_character_
   for (i in seq_len(n)) {
     if (!is.na(layout$analysis_id[i])) {
       block_owner <- layout$analysis_id[i]
       block_kind <- layout$kind[i]
+      block_status <- layout$status[i]
       owner_kind[i] <- layout$kind[i]
-    } else if (identical(layout$kind[i], "label") &&
-                 block_kind %in% c("categorical", "continuous", "manual")) {
+      owner_status[i] <- layout$status[i]
+    } else if (identical(layout$kind[i], "label_row") &&
+                 .layout_owns_block(block_kind, block_status)) {
       owner[i] <- block_owner
       owner_kind[i] <- block_kind
+      owner_status[i] <- block_status
     } else {
       ## A section header or spacer of its own; it also ends the block, since
       ## the renderer never hands it to the analysis above.
       block_owner <- NA_character_
       block_kind <- NA_character_
+      block_status <- NA_character_
     }
   }
   layout$owner_analysis_id <- owner
   layout$owner_kind <- owner_kind
+  layout$owner_status <- owner_status
   layout$method_id <- model$analyses$methodId[match(owner, model$analyses$id)]
   layout$placeholder <- vapply(seq_len(n), function(i) {
     .shell_placeholder(layout$kind[i], layout$label[i],
-                       layout$method_id[i], layout$owner_kind[i])
+                       layout$method_id[i], layout$owner_kind[i],
+                       layout$stat_form[i], layout$status[i],
+                       layout$owner_status[i])
   }, character(1))
 
   header <- .shell_header_rows(output_raw)
@@ -365,7 +389,7 @@
         style = sprintf("padding-left: %dpx;",
                         8L + row$indent %/% 4L * 24L),
         row$label,
-        if (identical(row$kind, "supplement_added")) {
+        if (identical(row$provenance, .LAYOUT_PROV_SUPPLEMENT)) {
           shiny::span(class = "badge text-bg-info ms-2", "supplement")
         },
         if (row$kind %in% c("nested_parent", "nested_child")) {

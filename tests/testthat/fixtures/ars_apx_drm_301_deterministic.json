@@ -3537,98 +3537,103 @@
             "label": "Randomized",
             "indent": 0,
             "analysis_id": "AN_T_14_1_1_001",
-            "kind": "filtered_count"
+            "kind": "scalar_row",
+            "stat_form": "filtered_count"
           },
           {
             "order": 2,
             "label": "Received ≥ 1 dose of study drug",
             "indent": 0,
             "analysis_id": "AN_T_14_1_1_002",
-            "kind": "filtered_count"
+            "kind": "scalar_row",
+            "stat_form": "filtered_count"
           },
           {
             "order": 3,
             "label": "Completed Week 16 (placebo-controlled period)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_1_003",
-            "kind": "filtered_count"
+            "kind": "scalar_row",
+            "stat_form": "filtered_count"
           },
           {
             "order": 4,
             "label": "Completed Week 52",
             "indent": 0,
             "analysis_id": "AN_T_14_1_1_004",
-            "kind": "filtered_count"
+            "kind": "scalar_row",
+            "stat_form": "filtered_count"
           },
           {
             "order": 5,
             "label": "Completed Week 140",
             "indent": 0,
             "analysis_id": "AN_T_14_1_1_005",
-            "kind": "filtered_count"
+            "kind": "scalar_row",
+            "stat_form": "filtered_count"
           },
           {
             "order": 6,
             "label": "Discontinued Study Drug Through Week 140",
             "indent": 0,
             "analysis_id": "AN_T_14_1_1_006",
-            "kind": "categorical"
+            "kind": "categorical_block"
           },
           {
             "order": 7,
             "label": "Adverse event",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 8,
             "label": "Lack of efficacy",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 9,
             "label": "Withdrawal by subject",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 10,
             "label": "Lost to follow-up",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 11,
             "label": "Pregnancy",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 12,
             "label": "Protocol deviation",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 13,
             "label": "Investigator decision",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 14,
             "label": "Other",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           }
         ]
       }
@@ -3715,532 +3720,532 @@
             "label": "Age (years)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_001",
-            "kind": "continuous"
+            "kind": "stat_block"
           },
           {
             "order": 2,
             "label": "n",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 3,
             "label": "Mean (SD)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 4,
             "label": "Median (Q1, Q3)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 5,
             "label": "Min, Max",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 6,
             "label": "Age Group, n (%)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_002",
-            "kind": "categorical"
+            "kind": "categorical_block"
           },
           {
             "order": 7,
             "label": "Adolescent (12-17 years)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 8,
             "label": "Adult (≥ 18 years)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 9,
             "label": "Sex, n (%)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_003",
-            "kind": "categorical"
+            "kind": "categorical_block"
           },
           {
             "order": 10,
             "label": "Male",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 11,
             "label": "Female",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 12,
             "label": "Race, n (%)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_004",
-            "kind": "categorical"
+            "kind": "categorical_block"
           },
           {
             "order": 13,
             "label": "White",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 14,
             "label": "Black or African American",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 15,
             "label": "Asian",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 16,
             "label": "American Indian or Alaska Native",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 17,
             "label": "Native Hawaiian or Other Pacific Islander",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 18,
             "label": "Multiple",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 19,
             "label": "Not Reported / Unknown",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 20,
             "label": "Ethnicity, n (%)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_005",
-            "kind": "categorical"
+            "kind": "categorical_block"
           },
           {
             "order": 21,
             "label": "Hispanic or Latino",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 22,
             "label": "Not Hispanic or Latino",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 23,
             "label": "Not Reported / Unknown",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 24,
             "label": "Geographic Region, n (%)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_006",
-            "kind": "categorical"
+            "kind": "categorical_block"
           },
           {
             "order": 25,
             "label": "North America",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 26,
             "label": "Europe",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 27,
             "label": "Asia-Pacific",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 28,
             "label": "Latin America",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 29,
             "label": "Body Weight (kg)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_007",
-            "kind": "continuous"
+            "kind": "stat_block"
           },
           {
             "order": 30,
             "label": "n",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 31,
             "label": "Mean (SD)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 32,
             "label": "Median (Q1, Q3)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 33,
             "label": "Min, Max",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 34,
             "label": "Body Mass Index (kg/m²)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_008",
-            "kind": "continuous"
+            "kind": "stat_block"
           },
           {
             "order": 35,
             "label": "Mean (SD)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 36,
             "label": "Median (Q1, Q3)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 37,
             "label": "Baseline EASI Total Score (range 0-72)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_009",
-            "kind": "continuous"
+            "kind": "stat_block"
           },
           {
             "order": 38,
             "label": "n",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 39,
             "label": "Mean (SD)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 40,
             "label": "Median (Q1, Q3)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 41,
             "label": "Min, Max",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 42,
             "label": "Baseline EASI Severity Category, n (%)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_010",
-            "kind": "categorical"
+            "kind": "categorical_block"
           },
           {
             "order": 43,
             "label": "Moderate (16 ≤ EASI < 21)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 44,
             "label": "Severe (EASI ≥ 21)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 45,
             "label": "Baseline vIGA-AD, n (%)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_011",
-            "kind": "categorical"
+            "kind": "categorical_block"
           },
           {
             "order": 46,
             "label": "3 - Moderate",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 47,
             "label": "4 - Severe",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 48,
             "label": "Baseline % BSA Affected by AD",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_012",
-            "kind": "continuous"
+            "kind": "stat_block"
           },
           {
             "order": 49,
             "label": "Mean (SD)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 50,
             "label": "Median (Q1, Q3)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 51,
             "label": "Baseline WP-NRS Score (range 0-10)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_013",
-            "kind": "continuous"
+            "kind": "stat_block"
           },
           {
             "order": 52,
             "label": "n",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 53,
             "label": "Mean (SD)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 54,
             "label": "Median (Q1, Q3)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 55,
             "label": "Baseline POEM Total Score (range 0-28)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_014",
-            "kind": "continuous"
+            "kind": "stat_block"
           },
           {
             "order": 56,
             "label": "Mean (SD)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 57,
             "label": "Median (Q1, Q3)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 58,
             "label": "Baseline DLQI / CDLQI Total Score",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_015",
-            "kind": "continuous"
+            "kind": "stat_block"
           },
           {
             "order": 59,
             "label": "Mean (SD)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 60,
             "label": "Median (Q1, Q3)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 61,
             "label": "Duration of Atopic Dermatitis (years)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_016",
-            "kind": "continuous"
+            "kind": "stat_block"
           },
           {
             "order": 62,
             "label": "Mean (SD)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 63,
             "label": "Median (Q1, Q3)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 64,
             "label": "Atopic Comorbidities, n (%)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_017",
-            "kind": "categorical"
+            "kind": "categorical_block"
           },
           {
             "order": 65,
             "label": "Asthma",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 66,
             "label": "Allergic rhinitis",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 67,
             "label": "Food allergy",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 68,
             "label": "Allergic conjunctivitis",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 69,
             "label": "Any of the above",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 70,
             "label": "Prior Systemic Therapy for AD, n (%)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_2_018",
-            "kind": "categorical"
+            "kind": "categorical_block"
           },
           {
             "order": 71,
             "label": "Cyclosporine",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 72,
             "label": "Methotrexate",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 73,
             "label": "Systemic corticosteroids",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 74,
             "label": "Phototherapy",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 75,
             "label": "Biologic (e.g., dupilumab)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 76,
             "label": "Any prior systemic therapy",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           }
         ]
       }
@@ -4310,182 +4315,183 @@
             "label": "Subjects with ≥ 1 concomitant medication",
             "indent": 0,
             "analysis_id": "AN_T_14_1_3_001",
-            "kind": "filtered_count"
+            "kind": "scalar_row",
+            "stat_form": "filtered_count"
           },
           {
             "order": 2,
             "label": "Antihistamines for systemic use (R06A)",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 3,
             "label": "Cetirizine",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 4,
             "label": "Loratadine",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 5,
             "label": "Fexofenadine",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 6,
             "label": "Hydroxyzine",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 7,
             "label": "Corticosteroids, dermatological (D07A)",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 8,
             "label": "Mometasone furoate",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 9,
             "label": "Triamcinolone acetonide",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 10,
             "label": "Hydrocortisone",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 11,
             "label": "Topical calcineurin inhibitors (D11AH)",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 12,
             "label": "Tacrolimus (topical)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 13,
             "label": "Pimecrolimus",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 14,
             "label": "Emollients & protectives (D02)",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 15,
             "label": "Other emollient preparations",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 16,
             "label": "Antibacterials for systemic use (J01)",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 17,
             "label": "Cephalexin",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 18,
             "label": "Doxycycline",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 19,
             "label": "Antivirals (J05A)",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 20,
             "label": "Acyclovir",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 21,
             "label": "Valacyclovir",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 22,
             "label": "Drugs for acid related disorders (A02)",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 23,
             "label": "Omeprazole",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 24,
             "label": "Analgesics (N02)",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 25,
             "label": "Paracetamol/Acetaminophen",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 26,
             "label": "Ibuprofen",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           }
         ]
       }
@@ -4555,35 +4561,36 @@
             "label": "Subjects with ≥ 1 TCS or TCI use during study",
             "indent": 0,
             "analysis_id": "AN_T_14_1_4_001",
-            "kind": "filtered_count"
+            "kind": "scalar_row",
+            "stat_form": "filtered_count"
           },
           {
             "order": 2,
             "label": "Used TCS only",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 3,
             "label": "Used TCI only",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 4,
             "label": "Used both TCS and TCI",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 5,
             "label": "Did not receive any topical therapy",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           }
         ]
       }
@@ -4658,161 +4665,161 @@
             "label": "Duration of Exposure (years)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_5_001",
-            "kind": "continuous"
+            "kind": "stat_block"
           },
           {
             "order": 2,
             "label": "n",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 3,
             "label": "Mean (SD)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 4,
             "label": "Median (Q1, Q3)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 5,
             "label": "Min, Max",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 6,
             "label": "Total Patient-Years of Exposure",
             "indent": 0,
             "analysis_id": "AN_T_14_1_5_002",
-            "kind": "continuous"
+            "kind": "stat_block"
           },
           {
             "order": 7,
             "label": "Patient-years (PY)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 8,
             "label": "Categorical Duration of Exposure, n (%)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_5_003",
-            "kind": "categorical"
+            "kind": "categorical_block"
           },
           {
             "order": 9,
             "label": "< 16 weeks",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 10,
             "label": "≥ 16 weeks",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 11,
             "label": "≥ 52 weeks",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 12,
             "label": "≥ 104 weeks",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 13,
             "label": "≥ 140 weeks",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 14,
             "label": "Cumulative Dose (mg)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_5_004",
-            "kind": "continuous"
+            "kind": "stat_block"
           },
           {
             "order": 15,
             "label": "Mean (SD)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 16,
             "label": "Median (Q1, Q3)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 17,
             "label": "Dose Intensity (% of planned)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_5_005",
-            "kind": "continuous"
+            "kind": "stat_block"
           },
           {
             "order": 18,
             "label": "Mean (SD)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 19,
             "label": "Median (Q1, Q3)",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 20,
             "label": "Subjects with ≥ 1 Dose Interruption, n (%)",
             "indent": 0,
             "analysis_id": "AN_T_14_1_5_006",
-            "kind": "categorical"
+            "kind": "categorical_block"
           },
           {
             "order": 21,
             "label": "Any dose interruption",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 22,
             "label": "Due to adverse event",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 23,
             "label": "Due to other reason",
             "indent": 4,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           }
         ]
       }
@@ -4993,210 +5000,215 @@
             "label": "EASI 75 (≥ 75% improvement from baseline in EASI)",
             "indent": 0,
             "analysis_id": "AN_T_14_2_2_001",
-            "kind": "filtered_count"
+            "kind": "scalar_row",
+            "stat_form": "filtered_count"
           },
           {
             "order": 2,
             "label": "EASI 75 (≥ 75% improvement from baseline in EASI)",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 3,
             "label": "",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 4,
             "label": "",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 5,
             "label": "",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 6,
             "label": "",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 7,
             "label": "EASI 90 (≥ 90% improvement from baseline in EASI)",
             "indent": 0,
             "analysis_id": "AN_T_14_2_2_002",
-            "kind": "filtered_count"
+            "kind": "scalar_row",
+            "stat_form": "filtered_count"
           },
           {
             "order": 8,
             "label": "EASI 90 (≥ 90% improvement from baseline in EASI)",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 9,
             "label": "",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 10,
             "label": "",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 11,
             "label": "",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 12,
             "label": "",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 13,
             "label": "EASI 100 (100% improvement from baseline in EASI)",
             "indent": 0,
             "analysis_id": "AN_T_14_2_2_003",
-            "kind": "filtered_count"
+            "kind": "scalar_row",
+            "stat_form": "filtered_count"
           },
           {
             "order": 14,
             "label": "EASI 100 (100% improvement from baseline in EASI)",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 15,
             "label": "",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 16,
             "label": "",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 17,
             "label": "",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 18,
             "label": "",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 19,
             "label": "EASI ≤ 3 (AHEAD optimal target for skin clearance)",
             "indent": 0,
             "analysis_id": "AN_T_14_2_2_004",
-            "kind": "filtered_count"
+            "kind": "scalar_row",
+            "stat_form": "filtered_count"
           },
           {
             "order": 20,
             "label": "EASI ≤ 3 (AHEAD optimal target for skin clearance)",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 21,
             "label": "",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 22,
             "label": "",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 23,
             "label": "",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 24,
             "label": "",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 25,
             "label": "EASI ≤ 7 (AHEAD moderate target for skin clearance)",
             "indent": 0,
             "analysis_id": "AN_T_14_2_2_005",
-            "kind": "filtered_count"
+            "kind": "scalar_row",
+            "stat_form": "filtered_count"
           },
           {
             "order": 26,
             "label": "EASI ≤ 7 (AHEAD moderate target for skin clearance)",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 27,
             "label": "",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 28,
             "label": "",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 29,
             "label": "",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 30,
             "label": "",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           }
         ]
       }
@@ -5270,49 +5282,53 @@
             "label": "Any TEAE",
             "indent": 0,
             "analysis_id": "AN_T_14_3_1_001",
-            "kind": "categorical"
+            "kind": "categorical_block"
           },
           {
             "order": 2,
             "label": "Any Serious TEAE",
             "indent": 0,
             "analysis_id": "AN_T_14_3_1_002",
-            "kind": "filtered_count"
+            "kind": "scalar_row",
+            "stat_form": "filtered_count"
           },
           {
             "order": 3,
             "label": "Any Severe TEAE",
             "indent": 0,
             "analysis_id": "AN_T_14_3_1_003",
-            "kind": "filtered_count"
+            "kind": "scalar_row",
+            "stat_form": "filtered_count"
           },
           {
             "order": 4,
             "label": "TEAE possibly related to study drug",
             "indent": 0,
             "analysis_id": "AN_T_14_3_1_004",
-            "kind": "categorical"
+            "kind": "categorical_block"
           },
           {
             "order": 5,
             "label": "TEAE leading to study drug discontinuation",
             "indent": 0,
             "analysis_id": "AN_T_14_3_1_005",
-            "kind": "filtered_count"
+            "kind": "scalar_row",
+            "stat_form": "filtered_count"
           },
           {
             "order": 6,
             "label": "TEAE leading to dose modification",
             "indent": 0,
             "analysis_id": "AN_T_14_3_1_006",
-            "kind": "categorical"
+            "kind": "categorical_block"
           },
           {
             "order": 7,
             "label": "Deaths",
             "indent": 0,
             "analysis_id": "AN_T_14_3_1_007",
-            "kind": "filtered_count"
+            "kind": "scalar_row",
+            "stat_form": "filtered_count"
           }
         ]
       }
@@ -5377,105 +5393,105 @@
             "label": "COVID-19",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 2,
             "label": "Nasopharyngitis",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 3,
             "label": "Acne",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 4,
             "label": "Upper respiratory tract infection",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 5,
             "label": "Worsening of atopic dermatitis",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 6,
             "label": "Blood creatine phosphokinase increased",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 7,
             "label": "Oral herpes",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 8,
             "label": "Headache",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 9,
             "label": "Folliculitis",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 10,
             "label": "Influenza",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 11,
             "label": "Sinusitis",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 12,
             "label": "Bronchitis",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 13,
             "label": "Urinary tract infection",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 14,
             "label": "Diarrhoea",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           },
           {
             "order": 15,
             "label": "Back pain",
             "indent": 0,
             "analysis_id": null,
-            "kind": "label"
+            "kind": "label_row"
           }
         ]
       }

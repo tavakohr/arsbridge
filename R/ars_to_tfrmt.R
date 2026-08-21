@@ -98,7 +98,35 @@ extract_footnotes <- function(out_obj) {
       v <- e[["analysis_id"]]
       if (is.null(v) || length(v) == 0 || is.na(v[[1]])) NA_character_ else as.character(v[[1]])
     }, character(1)),
-    kind        = vapply(sl, function(e) as.character(e[["kind"]] %||% "row"), character(1)),
+    ## The entry's STRUCTURAL shape. `NA` is a real answer -- the structure
+    ## was not proved -- and must survive the round trip: a NA shape is
+    ## written as null, so defaulting a missing value to any real shape would
+    ## quietly convert "unknown" into "one row" on reload.
+    kind        = vapply(sl, function(e) {
+      v <- e[["kind"]]
+      if (is.null(v) || length(v) == 0 || is.na(v[[1]])) NA_character_
+      else as.character(v[[1]])
+    }, character(1)),
+    ## Why the entry carries no usable analysis (`manual`), and where it came
+    ## from (`supplement_added`). Neither is a shape; both are read on their
+    ## own terms.
+    status      = vapply(sl, function(e) {
+      v <- e[["status"]]
+      if (is.null(v) || length(v) == 0 || is.na(v[[1]])) NA_character_
+      else as.character(v[[1]])
+    }, character(1)),
+    provenance  = vapply(sl, function(e) {
+      v <- e[["provenance"]]
+      if (is.null(v) || length(v) == 0 || is.na(v[[1]])) NA_character_
+      else as.character(v[[1]])
+    }, character(1)),
+    ## Which statistic a scalar row's cell will show. Read only by the shell
+    ## placeholder; it says nothing about how the row expands.
+    stat_form   = vapply(sl, function(e) {
+      v <- e[["stat_form"]]
+      if (is.null(v) || length(v) == 0 || is.na(v[[1]])) NA_character_
+      else as.character(v[[1]])
+    }, character(1)),
     n_slots     = vapply(sl, function(e) {
       v <- e[["n_slots"]]
       if (is.null(v) || length(v) == 0 || is.na(v[[1]])) NA_integer_
@@ -779,7 +807,7 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
     ## label ("Subjects with any TEAE" twice); give it its own group
     ## identity -- the group column is noprint, so nothing changes on
     ## screen, but the two rows can never collide into one pivot cell.
-    if (identical(le$kind, "supplement_added")) {
+    if (identical(le$provenance, .LAYOUT_PROV_SUPPLEMENT)) {
       le$label_grp <- sprintf(".arsbridge_supp_%03d", le$order)
     }
 
@@ -878,9 +906,19 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
       next
     }
 
-    ## An orphaned nested child (its parent row is gone): fall back to the
-    ## flat categorical expansion under the authored label.
-    if (identical(le$kind, "nested_child")) le$kind <- "categorical"
+    ## How THIS RENDERER will draw the row. It starts as the canonical shape
+    ## and may differ from it below; the entry's own `kind` is never
+    ## overwritten, because a drawing decision taken here is not evidence
+    ## about the authored structure and must not travel back out as if it
+    ## were.
+    ##
+    ## First such decision: an orphaned nested child (its parent row is gone)
+    ## draws as the flat categorical expansion under its authored label. Its
+    ## canonical shape stays `nested_child` -- that is still what the shell
+    ## authored, and whether anything else can be proved about it is a
+    ## question for structural inference, not for the renderer.
+    render_shape <- le$kind
+    if (identical(le$kind, "nested_child")) render_shape <- "categorical_block"
 
     dat <- if (!is.na(le$analysis_id)) {
       flat[!is.na(flat$analysis_id) & flat$analysis_id == le$analysis_id, ,
@@ -901,12 +939,16 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
     ## it like a categorical block under its authored label instead; the
     ## duplication against the primary block stays visible for the reviewer
     ## to resolve, but every cell holds one value.
-    if (identical(le$kind, "supplement_added")) {
+    ## Second local decision, and data-driven rather than structural: what
+    ## the row turns out to have computed decides how it must be drawn, so it
+    ## cannot be canonical shape -- the same authored row with single-level
+    ## data draws as one line.
+    if (identical(le$provenance, .LAYOUT_PROV_SUPPLEMENT)) {
       dat_levels <- unique(dat$variable_level[!is.na(dat$variable_level)])
-      if (length(dat_levels) > 1) le$kind <- "categorical"
+      if (length(dat_levels) > 1) render_shape <- "categorical_block"
     }
 
-    if (!le$kind %in% c("categorical", "continuous", "manual")) {
+    if (!.layout_owns_block(render_shape, le$status)) {
       ## Scalar row (subject / filtered count): one line, authored label.
       rows[[length(rows) + 1L]] <- data.frame(
         grp = le$label_grp, lbl = le$label, colv = dat$colv,
@@ -924,14 +966,14 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
       rows[[length(rows) + 1L]] <- blank_row(le, ord)
     }
 
-    ## Authored LEVEL slots (kind "level" entries following this categorical
+    ## Authored LEVEL slots (kind "level_row" entries following this categorical
     ## parent, option A): each takes its authored label and position, filled
     ## from the parent's computed levels; matched levels leave the parent's
     ## own expansion so nothing renders twice.
-    if (identical(le$kind, "categorical")) {
+    if (identical(render_shape, "categorical_block")) {
       slots <- integer(0)
       j <- i + 1L
-      while (j <= nrow(layout) && identical(layout$kind[j], "level") &&
+      while (j <= nrow(layout) && identical(layout$kind[j], "level_row") &&
                identical(layout$analysis_id[j], le$analysis_id)) {
         slots <- c(slots, j)
         j <- j + 1L
@@ -969,7 +1011,7 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
       }
     }
 
-    sub_lbl <- if (identical(le$kind, "categorical")) {
+    sub_lbl <- if (identical(render_shape, "categorical_block")) {
       ifelse(is.na(dat$variable_level) | !nzchar(dat$variable_level),
              "Total", dat$variable_level)
     } else {
@@ -984,7 +1026,7 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
     trail <- integer(0)
     j <- i + 1L
     while (j <= nrow(layout) &&
-             identical(layout$kind[j], "label") && !consumed[j]) {
+             identical(layout$kind[j], "label_row") && !consumed[j]) {
       trail <- c(trail, j)
       j <- j + 1L
     }
@@ -1014,7 +1056,7 @@ build_col_levels <- function(out_obj, ard_out, col_var, restrict = FALSE,
         ## Category levels display the AUTHORED text ("Female", "White");
         ## continuous stat lines keep their exact statline label, which the
         ## body-plan structures key on ("Mean (SD)").
-        if (identical(le$kind, "categorical")) {
+        if (identical(render_shape, "categorical_block")) {
           sub_lbl_map[[u]] <- layout$label[jj]
         }
       }

@@ -128,3 +128,79 @@
 .UNRESOLVED_UNREADABLE  <- "unreadable"
 .UNRESOLVED_UNSUPPORTED <- "unsupported"
 .UNRESOLVED_REASONS     <- c(.UNRESOLVED_UNREADABLE, .UNRESOLVED_UNSUPPORTED)
+
+## ---------------------------------------------------------------------------
+## The shell layout's STRUCTURAL vocabulary.
+##
+## One question only: how does this authored row turn into displayed rows?
+## Not what is calculated in them, not where the row came from, not whether
+## arsbridge could resolve it. Those are separate fields (`status`,
+## `provenance`) because they answer separate questions, and a single field
+## answering three of them is how a filter came to decide block structure.
+##
+##   categorical_block  one analysis expands into data-driven level rows
+##   stat_block         one analysis expands into statistic rows
+##   scalar_row         one analysis renders as one row
+##   nested_parent      opens a child block
+##   nested_child       expands within its parent
+##   level_row          an authored slot for one level of the block above it
+##   label_row          an authored line carrying no analysis
+##
+## `NA_character_` is a real answer and means the structure was not proved.
+## It is never a synonym for `scalar_row`: "I could not tell" and "it is one
+## row" lead to different work.
+##
+## Deliberately NOT shapes:
+##   * `self_template` is a property OF a categorical block (its own mock row
+##     opens it), carried as a boolean field on the same entry;
+##   * `level_repeat` / `nested_repeat` are control-flow decisions upstream --
+##     those rows produce no layout entry at all, so they can have no shape.
+.LAYOUT_SHAPES <- c("categorical_block", "stat_block", "scalar_row",
+                    "nested_parent", "nested_child", "level_row", "label_row")
+
+## Where a layout entry came from, when that is worth recording. Provenance
+## changes how a row is LABELLED and grouped, never how it expands.
+.LAYOUT_PROV_SUPPLEMENT <- "supplement_added"
+
+## What a scalar row's cell SHOWS before real numbers exist. Not a shape --
+## every one of these renders as exactly one row, and they differ only in the
+## statistic the cell will hold. They lived in the shape field because the
+## placeholder needed them, which is how "one row showing a count" and "a
+## block expanding into levels" ended up as sibling values of one vocabulary.
+.LAYOUT_STAT_FORMS <- c("subject_count", "subject_count_pct",
+                        "filtered_count", "filtered_count_pct")
+
+## Why a layout entry carries no usable analysis. A status, not a shape: a
+## reserved row's structure is unknown, not "one row".
+.LAYOUT_STATUS_MANUAL <- "manual"
+
+## Does this entry own a block -- that is, do displayed rows BELOW it belong
+## to it rather than standing on their own?
+##
+## Structural shapes answer this from their own definition. `status` is the
+## exception and is deliberately narrow: a `manual` row has NO proved shape,
+## and every renderer has always treated it as block-owning. Preserving that
+## is a RENDERING COMPATIBILITY FALLBACK, not evidence that the row expands --
+## nothing may read it as structural proof, and when the shape of a reserved
+## row can be established this argument goes away without the renderers
+## changing.
+#' @noRd
+.layout_owns_block <- function(shape, status = NULL) {
+  shape  <- as.character(shape  %||% NA_character_)[1]
+  status <- as.character(status %||% NA_character_)[1]
+  if (!is.na(status) && identical(status, .LAYOUT_STATUS_MANUAL)) return(TRUE)
+  !is.na(shape) && shape %in% c("categorical_block", "stat_block")
+}
+
+## The layout entry's optional metadata, keeping only the fields that carry an
+## answer. `NA` and "absent" mean the same thing here -- nothing to say -- so
+## emitting both spellings would put `"status": null` on every ordinary row
+## and invite readers to treat the two as different.
+#' @noRd
+.layout_notes <- function(...) {
+  notes <- list(...)
+  keep <- vapply(notes, function(v) {
+    length(v) == 1L && !is.na(v)
+  }, logical(1))
+  notes[keep]
+}

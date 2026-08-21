@@ -335,7 +335,7 @@ test_that("under a per-category parent a child row is a level, whatever it reads
 test_that("a builder-typed level row never consults the grammar", {
   ## Its label is a codelist VALUE that the builder already resolved.
   b <- .fill_row_binding(
-    entry = list(label = "Range", analysis_id = "AN_1", kind = "level",
+    entry = list(label = "Range", analysis_id = "AN_1", kind = "level_row",
                  level = "Range"),
     parent = NULL, methods = .STANDARD_METHODS,
     analyses = list(list(id = "AN_1", methodId = CATG)))

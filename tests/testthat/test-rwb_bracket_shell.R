@@ -171,9 +171,9 @@ test_that("the RWB fixture builds into an ARS with subject-count semantics", {
   labels <- vapply(re$outputs[[1]][["_meta"]][["shell_layout"]],
                    function(e) e$label, character(1))
   expect_true("Subjects completed" %in% labels)
-  kinds <- vapply(re$outputs[[1]][["_meta"]][["shell_layout"]],
-                  function(e) e$kind, character(1))
-  expect_true(any(kinds == "subject_count_pct"))
+  forms <- vapply(re$outputs[[1]][["_meta"]][["shell_layout"]],
+                  function(e) e$stat_form %||% NA_character_, character(1))
+  expect_true(any(!is.na(forms) & forms == "subject_count_pct"))
 })
 
 

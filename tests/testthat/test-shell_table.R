@@ -23,9 +23,10 @@ test_that("every authored row appears, in order, with its indentation", {
 
   ## The five disposition counts, the categorical parent, and its eight
   ## authored reason rows -- the rows the old details panel could not show.
-  expect_equal(data$rows$kind[1:5], rep("filtered_count", 5))
-  expect_equal(data$rows$kind[6], "categorical")
-  expect_equal(data$rows$kind[7:14], rep("label", 8))
+  expect_equal(data$rows$kind[1:5], rep("scalar_row", 5))
+  expect_equal(data$rows$stat_form[1:5], rep("filtered_count", 5))
+  expect_equal(data$rows$kind[6], "categorical_block")
+  expect_equal(data$rows$kind[7:14], rep("label_row", 8))
   expect_equal(data$rows$label[7], "Adverse event")
   expect_equal(data$rows$indent[6], 0L)
   expect_equal(data$rows$indent[7:14], rep(4L, 8))
@@ -37,12 +38,12 @@ test_that("owner fill-down mirrors the renderer's block-consumption rule", {
 
   ## An analysis-bearing row owns itself.
   expect_equal(data$rows$owner_analysis_id[1], "AN_T_14_1_1_001")
-  expect_equal(data$rows$owner_kind[1], "filtered_count")
+  expect_equal(data$rows$owner_kind[1], "scalar_row")
 
   ## Label rows trail their categorical parent.
   expect_equal(data$rows$owner_analysis_id[7:14],
                rep("AN_T_14_1_1_006", 8))
-  expect_equal(data$rows$owner_kind[7:14], rep("categorical", 8))
+  expect_equal(data$rows$owner_kind[7:14], rep("categorical_block", 8))
 
   ## The method joins in through the owner.
   expect_equal(data$rows$method_id[7],
@@ -56,13 +57,13 @@ test_that("a label row after a scalar count belongs to nothing", {
   raw <- .shell_raw(model, "T_14_1_1")
   raw[["_meta"]][["shell_layout"]] <- list(
     list(order = 1L, label = "Randomized", indent = 0L,
-         analysis_id = "AN_X_1", kind = "filtered_count"),
+         analysis_id = "AN_X_1", kind = "scalar_row", stat_form = "filtered_count"),
     list(order = 2L, label = "A section note", indent = 4L,
-         analysis_id = NULL, kind = "label"),
+         analysis_id = NULL, kind = "label_row"),
     list(order = 3L, label = "Sex, n (%)", indent = 0L,
-         analysis_id = "AN_X_2", kind = "categorical"),
+         analysis_id = "AN_X_2", kind = "categorical_block"),
     list(order = 4L, label = "Male", indent = 4L,
-         analysis_id = NULL, kind = "label")
+         analysis_id = NULL, kind = "label_row")
   )
 
   data <- .shell_table_data(raw, model)
@@ -94,30 +95,45 @@ test_that("placeholders read like the authored shell document", {
   expect_equal(disposition$rows$placeholder[1], "xxx")
 })
 
-test_that(".shell_placeholder covers the kinds no fixture row exercises", {
-  expect_equal(.shell_placeholder("subject_count", "Subjects"), "xxx")
-  expect_equal(.shell_placeholder("subject_count_pct", "Subjects"),
+test_that(".shell_placeholder covers the cases no fixture row exercises", {
+  ## Each case names the three questions separately -- shape, statistic form,
+  ## status -- and every expected value below is the one this function
+  ## returned before they were separated.
+  expect_equal(.shell_placeholder("scalar_row", "Subjects",
+                                  stat_form = "subject_count"), "xxx")
+  expect_equal(.shell_placeholder("scalar_row", "Subjects",
+                                  stat_form = "subject_count_pct"),
                "xx (xx.x%)")
-  expect_equal(.shell_placeholder("level", "Female"), "xx (xx.x%)")
-  expect_equal(.shell_placeholder("manual", "Derived"), .MANUAL_MARKER)
-  expect_equal(.shell_placeholder("label", "Pending", owner_kind = "manual"),
+  expect_equal(.shell_placeholder("level_row", "Female"), "xx (xx.x%)")
+  expect_equal(.shell_placeholder(NA_character_, "Derived",
+                                  status = .LAYOUT_STATUS_MANUAL),
                .MANUAL_MARKER)
-  expect_equal(.shell_placeholder("label", "CV (%)", owner_kind = "continuous"),
+  expect_equal(.shell_placeholder("label_row", "Pending",
+                                  owner_status = .LAYOUT_STATUS_MANUAL),
+               .MANUAL_MARKER)
+  expect_equal(.shell_placeholder("label_row", "CV (%)",
+                                  owner_shape = "stat_block"),
                "xx.x")
+  ## A supplement-added row is a scalar row; its provenance never reaches the
+  ## placeholder, so the METHOD is what shapes the cell.
   expect_equal(
-    .shell_placeholder("supplement_added", "Extra",
+    .shell_placeholder("scalar_row", "Extra",
                        method_id = "MTH_COUNT_AND_PERCENTAGE"),
     "xx (xx.x%)"
   )
   expect_equal(
-    .shell_placeholder("row", "Line", method_id = "MTH_SUBJECT_COUNT"),
+    .shell_placeholder("scalar_row", "Line", method_id = "MTH_SUBJECT_COUNT"),
     "xxx"
   )
   expect_equal(
-    .shell_placeholder("row", "Line",
+    .shell_placeholder("scalar_row", "Line",
                        method_id = "MTH_SUMMARY_STATISTICS_CONTINUOUS"),
     "xx.x"
   )
+  ## A block header prints nothing in the body -- asked of the SHAPE, so a
+  ## reserved row (no proved shape) does not accidentally qualify.
+  expect_equal(.shell_placeholder("stat_block", "Age (years)"), "")
+  expect_equal(.shell_placeholder("categorical_block", "Sex"), "")
 })
 
 test_that("the population line resolves the output's analysis sets", {
@@ -148,7 +164,7 @@ test_that("an output without a layout synthesizes one row per reference", {
   )
   expect_equal(nrow(data$rows), length(refs))
   expect_equal(data$rows$analysis_id, refs)
-  expect_equal(data$rows$kind, rep("row", length(refs)))
+  expect_equal(data$rows$kind, rep("scalar_row", length(refs)))
   expect_equal(data$rows$owner_analysis_id, refs)
 
   ## Labels resolve through the analyses pool.

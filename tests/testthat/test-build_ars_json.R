@@ -631,7 +631,7 @@ test_that("authored level slots are stamped with the decoded label", {
   re  <- build_ars_json(list(.cl_section()), spec_lookup = .cl_lookup(),
                         codelists = .cl_codelists())
   lay <- re$outputs[[1]]$`_meta`$shell_layout
-  lvl <- Filter(function(e) identical(e$kind, "level"), lay)
+  lvl <- Filter(function(e) identical(e$kind, "level_row"), lay)
   expect_length(lvl, 1)
   expect_equal(lvl[[1]]$level, "DEATH")
   expect_equal(lvl[[1]]$level_code, "1")
@@ -724,7 +724,7 @@ test_that("an oversized codelist still decodes, it just does not expand", {
 
   ## The authored level slot shows the decode, as it does under the cap.
   lay <- re$outputs[[1]]$`_meta`$shell_layout
-  lvl <- Filter(function(e) identical(e$kind, "level"), lay)
+  lvl <- Filter(function(e) identical(e$kind, "level_row"), lay)
   expect_equal(lvl[[1]]$level, "Reason 1")
   expect_equal(lvl[[1]]$level_code, "1")
 
@@ -843,7 +843,7 @@ test_that("compound AND leaves under a categorical parent become level rows, not
   lay <- re$outputs[[1]]$`_meta`$shell_layout
 
   expect_equal(vapply(lay, function(e) e$kind, character(1)),
-               c("categorical", "level", "level", "level"))
+               c("categorical_block", "level_row", "level_row", "level_row"))
   ## Every leaf renders from the single parent analysis. Guarded so a
   ## regression that changes the layout SHAPE fails on the line above rather
   ## than erroring out here before the rest of the claim is checked.
@@ -900,8 +900,13 @@ test_that("a conflicting proposal with a typed compound clause builds a filtered
                          function(a) nzchar(a$dataSubsetId %||% ""),
                          logical(1))))
   lay <- re$outputs[[1]]$`_meta`$shell_layout
-  expect_equal(vapply(lay, function(e) e$kind, character(1))[2],
-               "supplement_added")
+  ## A supplement-added row is a one-line row like any other; that it CAME
+  ## from the supplement is recorded as provenance, and both halves of the old
+  ## single claim are asserted.
+  expect_equal(vapply(lay, function(e) e$kind, character(1))[2], "scalar_row")
+  expect_equal(
+    vapply(lay, function(e) e$provenance %||% NA_character_, character(1))[2],
+    "supplement_added")
   ## The secondary's subset is the compound, carried as a compoundExpression.
   ## Guarded: a regression that builds only ONE analysis fails on the length
   ## expectation above, and should not then error before this claim is made.

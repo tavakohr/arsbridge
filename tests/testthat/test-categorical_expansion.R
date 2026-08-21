@@ -100,9 +100,9 @@ test_that("a self-template block flags its layout entry and records its rows", {
 
   layout <- re$outputs[[1]][["_meta"]][["shell_layout"]]
   expect_length(layout, 2)
-  expect_equal(layout[[1]]$kind, "label")
+  expect_equal(layout[[1]]$kind, "label_row")
   entry <- layout[[2]]
-  expect_equal(entry$kind, "categorical")
+  expect_equal(entry$kind, "categorical_block")
   expect_true(isTRUE(entry$self_template))
   ## The block owns the whole run: the annotated mock's own row first, the
   ## bare repeats and the trailing "..." behind it.
@@ -121,7 +121,7 @@ test_that("an authored sort clause on a categorical block rides the layout entry
   re <- build_ars_json(list(sec), study_id = "S-SO")
   layout <- re$outputs[[1]][["_meta"]][["shell_layout"]]
   entry <- layout[[1]]
-  expect_equal(entry$kind, "categorical")
+  expect_equal(entry$kind, "categorical_block")
   expect_equal(entry$sort, "alphabetical")
 })
 
@@ -147,12 +147,12 @@ test_that(".build_categorical_fills plans one block per template entry", {
   sec <- list(tlf_number = "T-CF", sheet_name = "Table X")
   shell_layout <- list(
     list(order = 1L, label = "Header", analysis_id = NA_character_,
-         kind = "label", sheet_row = 5L),
+         kind = "label_row", sheet_row = 5L),
     list(order = 2L, label = "Reasons, n (%)", analysis_id = "AN_T_CF_001",
-         kind = "categorical", sheet_row = 5L,
+         kind = "categorical_block", sheet_row = 5L,
          template_rows = c(6L, 7L, 8L), sort = "alphabetical"),
     list(order = 3L, label = "<Term #1>", analysis_id = "AN_T_CF_002",
-         kind = "categorical", sheet_row = 12L,
+         kind = "categorical_block", sheet_row = 12L,
          template_rows = c(12L, 13L), self_template = TRUE)
   )
   blocks <- .build_categorical_fills(sec, shell_layout)
@@ -171,7 +171,7 @@ test_that("a non-contiguous template block is skipped with a WARN", {
   sec <- list(tlf_number = "T-CG", sheet_name = "Table Y")
   shell_layout <- list(
     list(order = 1L, label = "Reasons, n (%)", analysis_id = "AN_T_CG_001",
-         kind = "categorical", sheet_row = 5L, template_rows = c(6L, 9L))
+         kind = "categorical_block", sheet_row = 5L, template_rows = c(6L, 9L))
   )
   blocks <- .build_categorical_fills(sec, shell_layout)
   expect_length(blocks, 0)
@@ -183,9 +183,9 @@ test_that("entries without template rows plan nothing", {
   sec <- list(tlf_number = "T-CH", sheet_name = "Table Z")
   shell_layout <- list(
     list(order = 1L, label = "Sex, n (%)", analysis_id = "AN_T_CH_001",
-         kind = "categorical", sheet_row = 5L),
+         kind = "categorical_block", sheet_row = 5L),
     list(order = 2L, label = "Female", analysis_id = "AN_T_CH_001",
-         kind = "level", level = "F", sheet_row = 6L)
+         kind = "level_row", level = "F", sheet_row = 6L)
   )
   expect_length(.build_categorical_fills(sec, shell_layout), 0)
 })
@@ -204,7 +204,7 @@ test_that("a self-template block renders levels without the mock header line", {
     build_ars_json(list(sec), study_id = "S-RD")))
   o <- re$outputs[[1]]
   layout <- .shell_layout(o)
-  aid <- layout$analysis_id[layout$kind == "categorical"][1]
+  aid <- layout$analysis_id[layout$kind == "categorical_block"][1]
 
   ard <- data.frame(
     output_id = o$id, analysis_id = aid,

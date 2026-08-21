@@ -18,7 +18,7 @@
 CONT <- "MTH_SUMMARY_STATISTICS_CONTINUOUS"
 CAT  <- "MTH_COUNT_AND_PERCENTAGE"
 
-.bp_bind <- function(label, method_id = CONT, own = TRUE, kind = "label") {
+.bp_bind <- function(label, method_id = CONT, own = TRUE, kind = "label_row") {
   .fill_row_binding(
     entry = list(label = label, sheet_row = 6L, kind = kind,
                  analysis_id = if (own) "AN_1" else NA_character_),

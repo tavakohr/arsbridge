@@ -412,7 +412,7 @@
     ## A level row recorded as such by the builder already knows its value,
     ## and its label is a CODELIST VALUE -- which may read as a statistic
     ## ("Range", "Median", "n (%)") and must never be parsed as one.
-    if (identical(entry$kind, "level")) {
+    if (identical(entry$kind, "level_row")) {
       binding$variable_level <- entry$level %||% NA_character_
       binding$stat_basis  <- "level"
       binding$label_parse <- label_parse
@@ -573,7 +573,7 @@
   parent <- NULL
   for (entry in entries) {
     if (!is.na(entry$analysis_id %||% NA_character_) &&
-        !identical(entry$kind, "level")) {
+        !identical(entry$kind, "level_row")) {
       parent <- list(analysis_id = entry$analysis_id, label = entry$label)
     }
     bindings[[as.character(entry$sheet_row)]] <-
