@@ -362,6 +362,38 @@ test_that("B5: and no compound DataSubset reaches the built ARS for such a row",
   }
 })
 
+test_that("B6: an annotation stating the rule and NO readable filter still reserves", {
+  ## The gate must not be reachable only THROUGH a filter. An annotation can
+  ## state a rule this version cannot carry out while stating no restriction
+  ## the grammar reads at all -- and that is the case where computing anyway
+  ## is furthest from what was asked for, because the row then computes over
+  ## every record rather than over a merely-wrong subset of them.
+  ##
+  ## Pinned separately from B4/B5 because a gate written inside "did we find a
+  ## filter?" satisfies both of those -- they supply one -- and still lets this
+  ## row through.
+  for (v in .cds_vocabs) {
+    bare <- sprintf("%s.%s", v$ds, v$num)
+    ann  <- sprintf("%s (a subject with no %s record is a failure)",
+                    bare, v$ds)
+
+    ## The control is what makes the claim about the INSTRUCTION rather than
+    ## about the bare reference: the same reference without the aside states
+    ## no restriction, and computes.
+    expect_equal(.cds_carry(bare, v)$kind, "none")
+    expect_equal(.cds_carry(ann, v)$kind, "unresolved")
+
+    ## And followed through to the file, as in C0c: no subset on the row's
+    ## analysis, the reservation carried instead.
+    re <- build_ars_json(list(.cds_section(v, "T-1", ann)),
+                         spec_lookup = .cds_lookup(v))
+    expect_length(re$analyses, 1L)
+    an <- re$analyses[[1]]
+    expect_equal(as.character(an$dataSubsetId), "")
+    expect_true(nzchar(as.character(an$unresolvedCondition %||% "")))
+  }
+})
+
 test_that("C0a: a clean supplement clause is routed unchanged, annotation unread", {
   ## Precedence control. The annotation states a DIFFERENT filter; the typed
   ## supplement must win, and the annotation's own filter must not be read at

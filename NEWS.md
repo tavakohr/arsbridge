@@ -24,6 +24,13 @@
   A restriction that arrives by annotation and by supplement now converges on
   one DataSubset rather than two: subsets de-duplicate on what they filter, so
   provenance no longer mints a second definition of the same population.
+
+  The reservation for an authored rule this version cannot carry out is now
+  asked once, of the annotation alone, before the filter's source is decided.
+  It therefore holds whether the filter is flat, compound, supplied by a
+  supplement, or absent altogether -- a supplement is authoritative about
+  which records survive, not evidence that a rule about the absent ones was
+  implemented.
 * **An authored instruction no restriction can carry out now reserves the
   row.** An annotation can say two things at once -- a filter, and a rule for
   records the filter does not select:

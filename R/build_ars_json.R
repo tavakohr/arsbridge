@@ -803,37 +803,36 @@
 .row_restriction <- function(ann, resolves = NULL, supplement = NULL) {
   stated <- .annotation_less_derivation_note(ann)
 
+  ## Asked FIRST, of the annotation alone, BEFORE the filter's source is even
+  ## decided -- because the answer does not depend on it. A rule about records
+  ## the row leaves out is unrepresentable whether the filter is flat,
+  ## compound, supplied by a supplement, or absent altogether; the annotation
+  ## states the rule either way, and no WhereClause expresses one. A
+  ## supplement is authoritative about WHICH RECORDS SURVIVE; it is not
+  ## evidence that a rule about the absent ones was implemented.
+  ##
+  ## Asking here rather than inside a branch is the whole point: a gate that
+  ## runs only where a filter was found is a gate an annotation can walk past
+  ## by stating no filter, which is exactly the case where computing over
+  ## every record is furthest from what the author asked for.
+  instruction <- .unrepresented_instruction(stated)
+  if (nzchar(instruction)) {
+    return(list(unresolved =
+      .stated_instruction_unrepresented(stated, instruction)))
+  }
+
   ## A typed supplement clause is AUTHORITATIVE about the filter and is never
   ## re-parsed from the annotation string. So the annotation's own filter is
   ## not read at all when one is supplied -- reading it could only produce a
   ## second answer to a question already settled.
-  supplied <- !is.null(supplement)
-  where <- if (supplied) NULL else .annotation_where(ann, resolves)
-  if (!supplied && .is_unresolved_condition(where)) {
-    return(list(unresolved = where))
-  }
-
-  ## A readable filter is not enough when the author also stated a rule about
-  ## records the filter excludes -- and WHERE THE FILTER CAME FROM does not
-  ## change that. A supplement is authoritative about which records survive;
-  ## it is not evidence that an instruction about ABSENT records was
-  ## implemented, and no WhereClause could express one. So the gate is asked
-  ## of the annotation whatever supplies the filter, in the one reading both
-  ## row builders share, and neither the carrier nor the supplement path can
-  ## route around it.
-  if (supplied || !is.null(where)) {
-    instruction <- .unrepresented_instruction(stated)
-    if (nzchar(instruction)) {
-      return(list(unresolved =
-        .stated_instruction_unrepresented(stated, instruction)))
-    }
-  }
-
-  if (supplied) {
+  if (!is.null(supplement)) {
     flat <- .where_flat(supplement)
     if (is.null(flat)) return(list(compound = supplement))
     return(list(flat = flat))
   }
+
+  where <- .annotation_where(ann, resolves)
+  if (.is_unresolved_condition(where)) return(list(unresolved = where))
 
   if (is.null(where)) {
     gap <- .stated_filter_unrepresented(stated)
@@ -864,15 +863,18 @@
 #' @noRd
 .subset_from_annotation <- function(ann, resolves = NULL) {
   stated <- .annotation_less_derivation_note(ann)
-  where  <- .annotation_where(ann, resolves)
-  if (.is_unresolved_condition(where)) return(where)
 
-  if (!is.null(where)) {
-    instruction <- .unrepresented_instruction(stated)
-    if (nzchar(instruction)) {
-      return(.stated_instruction_unrepresented(stated, instruction))
-    }
+  ## Asked first and unconditionally, for the reason given on
+  ## `.row_restriction()`: whether the annotation states a filter this reader
+  ## can hold has no bearing on whether it states a rule this version cannot
+  ## carry out. Both callers gate in the same place so they cannot drift.
+  instruction <- .unrepresented_instruction(stated)
+  if (nzchar(instruction)) {
+    return(.stated_instruction_unrepresented(stated, instruction))
   }
+
+  where <- .annotation_where(ann, resolves)
+  if (.is_unresolved_condition(where)) return(where)
 
   flat <- .where_flat(where)
   if (!is.null(flat)) return(flat)

@@ -23,10 +23,14 @@ mutations <- list(
        to   = "  if (is.null(flat)) return(list(compound = where$compoundExpression$whereClauses[[1]]))"),
 
   ## An unreadable restriction stops reserving and the row computes over every
-  ## record -- the reservation marker's whole purpose.
+  ## record -- the reservation marker's whole purpose. The guard itself is
+  ## kept and its ANSWER is changed, so the mutant reaches the row builder as
+  ## an ordinary "no restriction stated" instead of dying in `.where_flat()`
+  ## on an unresolved object: a mutant that errors proves nothing about
+  ## behaviour, and this is the behaviour the marker exists to prevent.
   list(id = "M4-unreserve", file = "R/build_ars_json.R",
-       from = "  if (!supplied && .is_unresolved_condition(where)) {\n    return(list(unresolved = where))",
-       to   = "  if (FALSE) {\n    return(list(unresolved = where))"),
+       from = "  if (.is_unresolved_condition(where)) return(list(unresolved = where))",
+       to   = "  if (.is_unresolved_condition(where)) return(list())"),
 
   ## The row builder ignores the compound the reader handed it.
   list(id = "M5-norouting", file = "R/build_ars_json.R",
@@ -34,10 +38,13 @@ mutations <- list(
        to   = "        } else if (FALSE) {\n          er$data_subset_compound <- carry$compound"),
 
   ## Supplement precedence inverted: an authoritative typed clause is
-  ## overwritten by one read from annotation text.
+  ## overwritten by one read from annotation text. Written as a precedence
+  ## change rather than as a removal -- the supplement is still routed where
+  ## the annotation is silent, and loses to it where both speak, which is
+  ## precisely the inversion and not merely the absence of the branch.
   list(id = "M6-precedence", file = "R/build_ars_json.R",
-       from = "  if (supplied) {\n    flat <- .where_flat(supplement)",
-       to   = "  if (FALSE) {\n    flat <- .where_flat(supplement)"),
+       from = "  if (!is.null(supplement)) {\n    flat <- .where_flat(supplement)",
+       to   = "  if (!is.null(supplement) &&\n      is.null(.annotation_where(ann, resolves))) {\n    flat <- .where_flat(supplement)"),
 
   ## The subset builder drops the carrier, so nothing reaches the ARS.
   list(id = "M7-noemit", file = "R/build_ars_json.R",
