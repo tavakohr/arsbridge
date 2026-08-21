@@ -775,6 +775,13 @@
   ann <- .annotation_less_derivation_note(ann)
   if (!nzchar(trimws(ann))) return(NULL)
 
+  ## Asked BEFORE the filter is read, because the answer does not depend on
+  ## which shape the filter turns out to be: an instruction about excluded
+  ## records is unrepresentable whether the filter is flat, compound or
+  ## absent. Reserving here keeps the check in one place as the carrier
+  ## changes what the readable shapes can do.
+  instruction <- .unrepresented_instruction(ann)
+
   ## The envelope is asked about FIRST, on whichever text is actually the
   ## condition -- never the whole annotation up front.
   ##
@@ -787,6 +794,9 @@
     where <- .annotation_condition(ann, resolves)
     if (.is_unresolved_condition(where)) return(where)
     if (is.null(where)) return(NULL)
+    if (nzchar(instruction)) {
+      return(.stated_instruction_unrepresented(ann, instruction))
+    }
     flat <- .where_flat(where)
     if (!is.null(flat)) return(flat)
     ## A compound this builder cannot carry yet. Reserved, never dropped --
@@ -796,13 +806,56 @@
   }
 
   fs <- flat_data_subset(ann)
-  if (!is.null(fs)) return(fs)
+  if (!is.null(fs)) {
+    if (nzchar(instruction)) {
+      return(.stated_instruction_unrepresented(ann, instruction))
+    }
+    return(fs)
+  }
 
   ## A stated filter that could not be read. Returned as unresolved rather than
   ## NULL, because an analysis with no DataSubset computes over every record.
   unreadable <- parse_where_clause(ann)
   if (.is_unresolved_condition(unreadable)) return(unreadable)
+
+  ## Read, but not as a flat subset -- a compound. It reserves either way
+  ## today, so this changes no outcome; it makes the RECORDED REASON the true
+  ## one, and it is the branch a carrier turns into a computed result, so the
+  ## gate has to be here before that happens rather than added afterwards.
+  if (nzchar(instruction)) {
+    return(.stated_instruction_unrepresented(ann, instruction))
+  }
   .stated_filter_unrepresented(ann)
+}
+
+#' A restriction the grammar read, alongside an authored instruction it cannot
+#' carry out.
+#'
+#' The filter here is not wrong -- it says exactly what it was written to say.
+#' What is missing is a SECOND thing the author wrote: a rule about records the
+#' filter excludes, which no `WHERE` clause can express. Computing the filter
+#' alone produces a plausible number under a different definition than the one
+#' asked for, and nothing on the analysis would say so.
+#'
+#' So the row reserves. It is a RESERVATION, not a refusal: when arsbridge can
+#' represent the instruction, these rows compute, and nothing about the
+#' annotation has to change.
+#' @noRd
+.stated_instruction_unrepresented <- function(ann, instruction) {
+  diag_add(
+    stage = "build_ars", severity = "WARN",
+    problem = sprintf(
+      paste("Filter '%s' was read, but the annotation also states '%s',",
+            "which this version cannot represent"),
+      ann, instruction),
+    location = ann,
+    action = paste("Results are reserved rather than computed under the filter",
+                   "alone. The filter selects records; this instruction",
+                   "concerns records the filter excludes, so applying one",
+                   "without the other would report a different population",
+                   "than the annotation describes.")
+  )
+  .unresolved_condition(ann, instruction)
 }
 
 #' The restriction a built row will actually compute under.

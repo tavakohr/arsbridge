@@ -196,6 +196,33 @@
 ## follow a condition without unmaking it.
 .RE_RESIDUE_SCOPING_PREFIX <- paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR, "\\b")
 
+## The unit of observation, in the words shells actually use for it. Paired
+## with the negation vocabulary above to tell a rule about the DATA from a
+## remark about the DISPLAY: "(no units)" is negated and says nothing about
+## which records count; "(a subject with no visit record is a failure)" is
+## negated and says exactly that.
+##
+## General-language and domain vocabulary, deliberately -- no study's dataset,
+## variable or label appears here, and none may.
+.RE_OBSERVATION_UNIT <- paste0(
+  "(?i)\\b(?:subject|subjects|patient|patients",
+  "|record|records|observation|observations|visit|visits)\\b"
+)
+
+## The aside ASSIGNS those records a treatment, rather than merely mentioning
+## them. This is the clause that separates a rule from a remark: "(except
+## visit 1)" names records and says nothing about what becomes of them, while
+## "(a subject with no visit record is a non-responder)" says what they count
+## as. Only the second is something a computation would have to carry out.
+##
+## Kept behind the negation and unit tests, so these very ordinary words can
+## never flag an aside on their own.
+.RE_INSTRUCTION_ASSIGNS <- paste0(
+  "(?i)\\b(?:is|are|was|were|count|counts|counted|treat|treated|impute",
+  "|imputed|assign|assigned|consider|considered|classif(?:y|ied)",
+  "|set|carried|excluded|included)\\b"
+)
+
 ## ---------------------------------------------------------------------------
 ## Derivation notes
 ## ---------------------------------------------------------------------------
@@ -549,6 +576,71 @@
 
   list(text = txt, spans = spans, open = open, close = close,
        token_pattern = paste0(open, "\\d+", close))
+}
+
+#' An authored instruction that no restriction can carry out.
+#'
+#' A filter says which records SURVIVE. So an aside that speaks about the
+#' records a filter EXCLUDES is, by construction, stating something no filter
+#' can implement -- those records are not there to be acted on. "a subject with
+#' no <visit> record is a non-responder" is a rule about absent records, and a
+#' `WHERE` clause has no way to say it.
+#'
+#' THREE things must hold, and none is sufficient alone. Each one exists
+#' because dropping it lets an ordinary aside reserve a row that computes
+#' perfectly well -- the failure direction that looks safe and is not.
+#'
+#'   NEGATION -- a negation is never decorative; it changes who is counted.
+#'     The same reasoning as `.RE_RESIDUE_NEGATION` in an operand. Without it,
+#'     every aside reserves.
+#'   THE UNIT OF OBSERVATION -- a subject, a record, a visit. This is what
+#'     makes the sentence a claim about the DATA rather than the display.
+#'     Without it, `(no units)` and `(except per protocol)` reserve.
+#'   AN ASSIGNMENT -- the aside says what becomes of those records. Without it,
+#'     `(except visit 1)` reserves: it names records and says nothing about
+#'     what they count as, so there is no computation to be missing.
+#'
+#' Together they read as one sentence: *records that are NOT there ARE treated
+#' as something*. `(a subject with no <visit> record is a non-responder)` says
+#' all three; every descriptive aside in the corpus says at most two.
+#'
+#' Deliberately NOT flagged, because these describe the row rather than
+#' instructing a computation: a unit, a planned N, a protocol reference, a
+#' variable that supplies a label, a comparator inside a quoted value. Literals
+#' are masked before the spans are examined, so a category legitimately called
+#' `'Not Reported'` -- or an age band written `'Adult (18-65)'` -- is a value
+#' and never an aside at all.
+#'
+#' KNOWN LIMIT, recorded rather than papered over: an unrepresented instruction
+#' phrased without a negation ("values are imputed from baseline") is not
+#' detected here. This closes the case where the instruction concerns records
+#' the filter cannot reach, which is the one that turns a filter into a wrong
+#' number rather than an incomplete one.
+#'
+#' @return The aside's text as the author wrote it, or `""` when every aside
+#'   is descriptive.
+#' @noRd
+.unrepresented_instruction <- function(ann) {
+  ann <- as.character(ann %||% "")[1]
+  if (is.na(ann) || !nzchar(trimws(ann))) return("")
+
+  masked <- .mask_literals(ann)
+  if (is.null(masked)) return("")
+  hidden <- .mask_non_structural(masked$text, operand_context = TRUE)
+  if (is.null(hidden)) return("")
+
+  ## `spans` is exactly what the masker set aside as a note. A bracket holding
+  ## an operator or a qualified reference never reaches here -- the masker
+  ## keeps those as structure -- so this asks only about text already judged
+  ## to contribute nothing to the filter.
+  for (span in hidden$spans %||% character(0)) {
+    if (grepl(.RE_RESIDUE_NEGATION, span, perl = TRUE) &&
+        grepl(.RE_OBSERVATION_UNIT, span, perl = TRUE) &&
+        grepl(.RE_INSTRUCTION_ASSIGNS, span, perl = TRUE)) {
+      return(trimws(.unmask_literals(span, masked)))
+    }
+  }
+  ""
 }
 
 #' Is the span opening at `start` sitting where an operand is required?
