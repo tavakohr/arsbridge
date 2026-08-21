@@ -165,6 +165,37 @@
   ")"
 )
 
+## Residue that CHANGES what a recognised leaf means, although it states no
+## condition of its own.
+##
+## `.RE_CONDITION_EVIDENCE` asks whether leftover text states a condition. On
+## its own that is the wrong question, because text can decide what a
+## condition MEANS without stating one. Two kinds do, and POSITION separates
+## them -- the same asymmetry the operand-slot rule already relies on.
+##
+## A NEGATING WORD, wherever it sits, inverts the leaf. "with no ADQX record
+## where QXFL='Y'" is not "QXFL='Y'"; and, as `.where_from_boolean()` sets out
+## below, negating row-wise and negating the per-subject projection are not
+## even the same set. Dropping the word silently selects something close to
+## the complement of the population the author asked for, which is the worst
+## available answer -- so this applies to a prefix and a suffix alike.
+.RE_RESIDUE_NEGATION <-
+  "(?i)\\b(?:no|not|without|never|excluding|except)\\b"
+
+## A QUALIFIED REFERENCE IN A PREFIX scopes the condition that follows it.
+## "ADQX.USUBJID with an ADZZ record where <condition>" asks a per-subject
+## existential question this grammar does not answer; reading the inner
+## condition alone answers a different question and presents it as the same
+## one. Two such clauses joined are worse still -- row-wise AND asks for one
+## record satisfying both, which is not what "a record where A, and a record
+## where B" says.
+##
+## A qualified reference AFTER a fully-read condition is not that. It is an
+## aside about the row -- which variable supplies the display label, which
+## flag the count is once-per-subject on -- and it has always been allowed to
+## follow a condition without unmaking it.
+.RE_RESIDUE_SCOPING_PREFIX <- paste0("\\b", .ADAM_DS, "\\.", .ADAM_VAR, "\\b")
+
 ## ---------------------------------------------------------------------------
 ## Derivation notes
 ## ---------------------------------------------------------------------------
@@ -805,20 +836,42 @@
 #' @noRd
 .unread_residue <- function(part, span) {
   if (is.null(span) || length(span) != 2L) return("")
-  rest <- trimws(paste(substr(part, 1L, span[[1L]] - 1L),
-                       substr(part, span[[2L]] + 1L, nchar(part))))
+  before <- trimws(substr(part, 1L, span[[1L]] - 1L))
+  after  <- trimws(substr(part, span[[2L]] + 1L, nchar(part)))
+  rest   <- trimws(paste(before, after))
   if (!nzchar(rest)) return("")
 
   ## Read exactly as the expression is read: values masked so an operator
   ## inside one is not counted, and asides masked so a note is not. There are
   ## no operand slots in a leftover, so every note-shaped bracket here IS a
   ## note.
-  masked <- .mask_literals(rest)
+  ##
   ## No free delimiter pair means no honest answer from the text, and the safe
   ## direction is to treat it as residue -- the caller reserves.
-  if (is.null(masked)) return(rest)
-  hidden <- .mask_non_structural(masked$text, operand_context = FALSE)
-  text <- if (is.null(hidden)) masked$text else hidden$text
+  readable <- function(txt) {
+    masked <- .mask_literals(txt)
+    if (is.null(masked)) return(NULL)
+    hidden <- .mask_non_structural(masked$text, operand_context = FALSE)
+    if (is.null(hidden)) masked$text else hidden$text
+  }
+
+  text <- readable(rest)
+  if (is.null(text)) return(rest)
+
+  ## Text that alters the leaf's meaning counts as unread even when it states
+  ## no condition itself -- a dropped negation is not a harmless aside.
+  if (grepl(.RE_RESIDUE_NEGATION, text, perl = TRUE)) return(rest)
+
+  ## A semicolon ENDS the head. `ADQX.TERM; ADQX.EVFL='Y'` announces the row's
+  ## variable and then states a filter on another one -- a form this grammar
+  ## has always read, and the reference before the `;` is the row's own
+  ## subject, not a phrase scoping what follows. So only the text after the
+  ## last semicolon can be a scoping prefix. Literals are already masked, so a
+  ## semicolon inside a value does not end anything.
+  head_text <- readable(before)
+  if (is.null(head_text)) return(rest)
+  head_text <- sub("^.*;", "", head_text)
+  if (grepl(.RE_RESIDUE_SCOPING_PREFIX, head_text, perl = TRUE)) return(rest)
 
   if (!grepl(.RE_CONDITION_EVIDENCE, text, perl = TRUE)) return("")
   rest

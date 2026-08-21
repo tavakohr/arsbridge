@@ -1,5 +1,42 @@
 # arsbridge (development version)
 
+* **Leftover text that changes what a restriction MEANS no longer disappears.**
+  The where-clause grammar finds a condition inside an operand and then asks
+  one question about whatever text is left over: does it state a condition of
+  its own? If not, the leftover was prose and was discarded. But text can
+  decide what a condition means without stating one, and two kinds do.
+
+  A **negating word** inverts it. `ADSL.USUBJID with no ADCM record where
+  ADCM.CMATC3CD='D11AH'` was read as `CMATC3CD='D11AH'` -- so a row labelled
+  "did not receive X" selected exactly the subjects who did. That is worse
+  than computing nothing: it computes something, and it looks right.
+
+  A **qualified reference in front of the condition** scopes it. `ADSL.USUBJID
+  with an ADCM record where A, and with an ADCM record where B` asks a
+  per-subject question about two records; read as a row-wise `AND` it asks for
+  one record satisfying both, which is a different set of subjects -- the
+  counterexample the restriction planner is built around.
+
+  Both now mean the operand was not fully read, and an operand that was not
+  fully read reserves. **Position decides**, so the forms this grammar has
+  always read go on reading: a semicolon ends the head, leaving `HEAD;
+  <filter>` intact; a note *after* a complete condition (`; label ADQX.QXCAT`)
+  is still an aside; so is a descriptive suffix (`(per protocol)`); and
+  literals are masked first, so a value legitimately called `'NOT REPORTED'`
+  is a value.
+
+  One conservative false positive is accepted deliberately rather than
+  narrowed away: `count of ADEFF.USUBJID with ADEFF.ANL01FL='Y'` states a
+  *statistic* in front of a genuine filter, and now reserves. Telling it apart
+  from the existential form above needs a positive grammar for head directives
+  rather than an exception carved out of the guard -- and preventing two
+  demonstrably wrong filters is worth one row waiting for that grammar.
+
+* **A committed mutation harness** (`tools/mutation_harness.R`) that refuses
+  verdicts it cannot stand behind: a mutation that does not actually change
+  the file is reported as unapplied rather than undetected, only assertion
+  failures count as detection, and every restore is proven byte-for-byte.
+
 * **An annotation's envelope is split from its head, and a bare variable
   inside it inherits only what the spec confirms.** A shell names what a row
   reports and then says which records it reports on --
