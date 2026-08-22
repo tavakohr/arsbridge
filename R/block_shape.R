@@ -119,7 +119,7 @@
 
   ## The separators a header uses to introduce its form. A bare hyphen inside
   ## a word ("Non-serious") is not one, so the dash must be spaced.
-  seps <- gregexpr("(,|\\s[-‐-―−]\\s)", lab, perl = TRUE)[[1]]
+  seps <- gregexpr("(,|\\s[-\u2010-\u2015\u2212]\\s)", lab, perl = TRUE)[[1]]
   if (seps[[1]] == -1L) return(NULL)
 
   last <- seps[[length(seps)]]
@@ -131,7 +131,7 @@
   ## meets a wider set, because authors mark headers more often than the rows
   ## beneath. Stripped here, inside the bounded fragment, rather than by
   ## widening that grammar for every label in the package.
-  suffix <- trimws(sub("[ª²³¹ºʰ-˿ᴬ-ᵪ⁰-₟]+$", "", suffix, perl = TRUE))
+  suffix <- trimws(sub("[\u00aa\u00b2\u00b3\u00b9\u00ba\u02b0-\u02ff\u1d2c-\u1d6a\u2070-\u209f]+$", "", suffix, perl = TRUE))
   if (!nzchar(suffix)) return(NULL)
 
   ## A long trailing fragment is prose that happens to end the label, not a
@@ -538,7 +538,7 @@
   if (!length(pool)) return("")
 
   candidates <- lab
-  seps <- gregexpr("(,|\\s[-‐-―−]\\s)", lab, perl = TRUE)[[1]]
+  seps <- gregexpr("(,|\\s[-\u2010-\u2015\u2212]\\s)", lab, perl = TRUE)[[1]]
   if (seps[[1]] != -1L) {
     last <- seps[[length(seps)]]
     len  <- attr(seps, "match.length")[[length(seps)]]
