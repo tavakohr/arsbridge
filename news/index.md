@@ -2,6 +2,29 @@
 
 ## arsbridge (development version)
 
+- **A block now claims the rows beneath it on structural evidence, not
+  on the method it was given.** Whether the rows under a header are that
+  header’s levels is a fact about the authored layout, but it was read
+  back from the row’s method – and a population filter could choose the
+  method. So a filter, three steps removed, decided a table’s structure.
+
+  The structural reader now works from the RESOLVED restriction rather
+  than the annotation text, which is the same lesson as the
+  compound-clause work: a restriction may be authored in the shell or
+  supplied as a typed clause by a reviewed supplement, and a reader that
+  sees only the text decides layout on whichever channel the author
+  happened to use. `.row_restriction_view()` reads every row of a
+  section once, through the existing precedence, so the structural stage
+  and the emitted `DataSubset` cannot disagree about what a row is
+  restricted by.
+
+  Ownership can only be WITHHELD by this change, never asserted: with no
+  ADaM spec supplied, structure cannot tell a continuous variable from a
+  discrete one while the section method often can. Nothing about method
+  selection, statistic selection, reservation or rendered output moves.
+  Both real-study corpora produce byte-identical ARS apart from the
+  timestamp, with identical diagnostics.
+
 - **The shell layout’s `kind` field now answers one question instead of
   four.** It held four vocabularies at once: how a row expands
   (`categorical`, `continuous`, `row`, `level`, `label`, `nested_*`),
