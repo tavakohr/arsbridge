@@ -207,89 +207,313 @@
   toupper(refs[[1]])
 }
 
-#' Does this annotation restrict `dataset.variable` to ONE stated value?
+#' What a resolved restriction says about ONE variable.
 #'
-#' Read of a row's NEIGHBOURS, never of the row itself, and that distinction is
-#' the point. "My restriction pins my variable, therefore I report a count" was
-#' an inference about a STATISTIC drawn from a filter, and it is what PR5b
-#' removes. This asks something else: do the authored rows beneath this one
-#' each pin this row's variable to a value? If so, the author drew that
-#' variable's levels out by hand. It is a fact about LAYOUT, and it is the same
-#' fact the builder already acts on when it collapses those rows into the block
-#' above -- read one row earlier, so a block can be recognised before a method
-#' is chosen for it rather than after.
+#' The structural stage reasons about RESTRICTIONS, and a restriction is not a
+#' string. It may have been authored in the annotation, supplied as a typed
+#' supplement clause, or carried by an enrichment; by the time anything asks
+#' what it MEANS, precedence has already been settled once by
+#' `.row_restriction()` and the answer is a clause. Reading the annotation text
+#' again here would be a second reading of a question already answered -- and
+#' it would be blind to every channel that does not go through the text, which
+#' is exactly how a supplement-supplied level run came to look like a run of
+#' unrelated scalars.
 #'
-#' Equality only. A threshold or a range leaves the variable free to vary among
-#' the survivors, which is what keeps a run of cumulative thresholds from
-#' reading as a partition.
+#' Four answers, and each of the last three is load-bearing:
+#'
+#'   unrestricted  the restriction provably says nothing about this variable,
+#'                 so the variable is free to take any of its values;
+#'   enumerated    it confines the variable to a stated, finite set of values;
+#'   narrowed      it speaks about the variable but names no finite set -- a
+#'                 threshold, a range, an inequality. The variable is still
+#'                 free to vary among the survivors, which is what keeps a run
+#'                 of cumulative thresholds from reading as a partition;
+#'   unknown       nothing can be proved. The restriction is unresolved, or it
+#'                 joins its terms with something other than AND, where no term
+#'                 restricts the result on its own. `unknown` must never be
+#'                 treated as `unrestricted` -- that is the permissive
+#'                 direction, and it is wrong.
+#'
+#' @param restriction A resolved restriction record: `list(status, where)` with
+#'   status one of `none` / `clause` / `unresolved`, as `.row_restriction_view()`
+#'   produces.
+#' @return list(status, values)
 #' @noRd
-.row_pins_value_of <- function(ann, dataset, variable) {
-  text <- .shape_text(.annotation_less_derivation_note(.shape_text(ann)))
+.restriction_domain_on <- function(restriction, dataset, variable) {
+  unknown <- list(status = "unknown", values = character())
+  free    <- list(status = "unrestricted", values = character())
+
   var <- toupper(.shape_text(variable))
   ds  <- toupper(.shape_text(dataset))
-  if (!nzchar(text) || !nzchar(var)) return("")
+  if (!nzchar(var)) return(unknown)
 
-  where <- tryCatch(parse_where_clause(text), error = function(e) NULL)
-  if (is.null(where) || .is_unresolved_condition(where)) return("")
-  if (!.where_all_conjunctive(where)) return("")
+  state <- .shape_text((restriction %||% list())$status)
+  if (identical(state, "unresolved")) return(unknown)
+  if (!identical(state, "clause")) return(free)
 
-  for (a in .where_atoms(where)) {
-    if (!identical(toupper(.as_scalar_char(a[["variable"]]) %||% ""), var)) next
-    a_ds <- toupper(.as_scalar_char(a[["dataset"]]) %||% "")
-    if (nzchar(ds) && nzchar(a_ds) && !identical(a_ds, ds)) next
-    comparator <- toupper(.as_scalar_char(a[["comparator"]]) %||% "EQ")
-    if (!comparator %in% c("EQ", "IN")) next
-    values <- a[["value"]] %||% list()
-    if (length(values) != 1L) next
-    return(as.character(values[[1]]))
+  where <- restriction$where
+  if (is.null(where)) return(free)
+  if (!.where_all_conjunctive(where)) return(unknown)
+
+  mine <- Filter(function(a) .atom_speaks_of(a, ds, var), .where_atoms(where))
+  if (length(mine) == 0) return(free)
+  ## Two terms about one variable state a relationship this reader does not
+  ## resolve (they may intersect to one value, or to none). The variable is
+  ## restricted; which values survive is not established.
+  if (length(mine) > 1) return(list(status = "narrowed", values = character()))
+
+  atom <- mine[[1]]
+  comparator <- toupper(.as_scalar_char(atom[["comparator"]]) %||% "EQ")
+  values <- as.character(unlist(atom[["value"]] %||% list(), use.names = FALSE))
+  if (!comparator %in% c("EQ", "IN") || !length(values) || anyNA(values)) {
+    return(list(status = "narrowed", values = character()))
   }
-  ""
+  list(status = "enumerated", values = unique(values))
 }
 
-#' Does this annotation restrict `dataset.variable` AT ALL?
+#' Does this atom speak about `ds.var`?
 #'
-#' The companion to `.row_pins_value_of()`, asking a deliberately different
-#' question. A LEVEL selects one value, so the child test is equality-only. An
-#' AXIS selects nothing: a restriction of any shape -- set membership, a
-#' threshold, a range -- means the author narrowed the variable, and a narrowed
-#' variable is not the axis the rows beneath are levels of. Using the equality
-#' test for both would read `CMATC3CD in ('D07AA','D07AB')` as unrestricted,
-#' because two values are not one.
-#'
-#' Three outcomes, and the last two are why the parse is not simply wrapped in
-#' `tryCatch(..., NULL)`:
-#'
-#'   no clause parsed  the annotation states no condition -- FALSE, the
-#'                     ordinary case for a bare axis reference;
-#'   a clause was read TRUE only if some atom speaks about this variable;
-#'   the parse FAILED  TRUE. Nothing is known about what an unreadable
-#'                     restriction narrows, so the axis reading is unavailable.
-#'                     Collapsing this into the first case would let malformed
-#'                     syntax read as "unrestricted".
+#' Both halves are compared when both are stated: two ADaM datasets may carry a
+#' variable of the same name, and in a table whose rows come from different
+#' domains, matching on the name alone would attribute one domain's restriction
+#' to another's variable.
 #' @noRd
-.row_restricts_variable <- function(ann, dataset, variable) {
-  text <- .shape_text(.annotation_less_derivation_note(.shape_text(ann)))
+.atom_speaks_of <- function(atom, dataset, variable) {
+  if (!identical(toupper(.as_scalar_char(atom[["variable"]]) %||% ""),
+                 variable)) {
+    return(FALSE)
+  }
+  a_ds <- toupper(.as_scalar_char(atom[["dataset"]]) %||% "")
+  !(nzchar(dataset) && nzchar(a_ds) && !identical(a_ds, dataset))
+}
+
+#' Everything a restriction says APART FROM what it says about one variable.
+#'
+#' This is what makes a level collapse safe to perform. When a child row is
+#' folded into the block above it, the child stops being computed on its own
+#' terms: it is displayed from the parent's single computation, restricted to
+#' one level. That is faithful only if the child's restriction was the parent's
+#' restriction plus that level, and nothing else. A term the child states and
+#' the parent does not would simply be discarded; a term the parent states and
+#' the child does not would silently be imposed on it. Comparing the residues
+#' is how both are caught.
+#'
+#' Compared as a SET of canonical atom signatures, so `A AND B` and `B AND A`
+#' are the same restriction -- which they are -- without this becoming a
+#' Boolean prover. Anything the canonical form cannot express is reported as
+#' not known rather than as equal.
+#' @return list(known, signature)
+#' @noRd
+.restriction_residue <- function(restriction, dataset, variable) {
+  unknown <- list(known = FALSE, signature = character())
+  empty   <- list(known = TRUE,  signature = character())
+
+  state <- .shape_text((restriction %||% list())$status)
+  if (identical(state, "unresolved")) return(unknown)
+  if (!identical(state, "clause")) return(empty)
+
+  where <- restriction$where
+  if (is.null(where)) return(empty)
+  if (!.where_all_conjunctive(where)) return(unknown)
+
   var <- toupper(.shape_text(variable))
   ds  <- toupper(.shape_text(dataset))
-  if (!nzchar(text) || !nzchar(var)) return(FALSE)
-
-  failed <- FALSE
-  where <- tryCatch(parse_where_clause(text),
-                    error = function(e) {
-                      failed <<- TRUE
-                      NULL
-                    })
-  if (failed) return(TRUE)
-  if (is.null(where)) return(FALSE)
-  if (.is_unresolved_condition(where)) return(TRUE)
-
-  for (a in .where_atoms(where)) {
-    if (!identical(toupper(.as_scalar_char(a[["variable"]]) %||% ""), var)) next
-    a_ds <- toupper(.as_scalar_char(a[["dataset"]]) %||% "")
-    if (nzchar(ds) && nzchar(a_ds) && !identical(a_ds, ds)) next
-    return(TRUE)
+  sigs <- character()
+  for (atom in .where_atoms(where)) {
+    if (nzchar(var) && .atom_speaks_of(atom, ds, var)) next
+    values <- as.character(unlist(atom[["value"]] %||% list(), use.names = FALSE))
+    sigs <- c(sigs, sprintf(
+      "%s.%s %s [%s]",
+      toupper(.as_scalar_char(atom[["dataset"]]) %||% ""),
+      toupper(.as_scalar_char(atom[["variable"]]) %||% ""),
+      toupper(.as_scalar_char(atom[["comparator"]]) %||% "EQ"),
+      paste(sort(values), collapse = "|")))
   }
-  FALSE
+  list(known = TRUE, signature = sort(unique(sigs)))
+}
+
+#' Does the child select values from the parent's own variable domain?
+#'
+#' The STRUCTURAL half of refinement, and the only half the layout question
+#' needs: does this row name values of the axis the row above it names? It says
+#' nothing about what else either restriction states.
+#'
+#' Conservative by construction, with three outcomes rather than two: `TRUE`
+#' proves the relationship, `FALSE` disproves it, and `NA` means it could not
+#' be established. Only `TRUE` may be acted on. `NA` never becomes evidence of
+#' levels, because an unreadable restriction narrows something unknown, and
+#' folding a row on that basis would compute it under a population nobody
+#' stated.
+#' @noRd
+.restriction_refines_domain <- function(parent, child, dataset, variable) {
+  parent_domain <- .restriction_domain_on(parent, dataset, variable)
+  child_domain  <- .restriction_domain_on(child,  dataset, variable)
+  if (identical(parent_domain$status, "unknown") ||
+        identical(child_domain$status, "unknown")) {
+    return(NA)
+  }
+  ## A parent already narrowed on its own variable is not that variable's
+  ## axis; it is one selection among its values, whatever the rows beneath say.
+  if (identical(parent_domain$status, "narrowed")) return(FALSE)
+  if (!identical(child_domain$status, "enumerated")) return(FALSE)
+
+  if (identical(parent_domain$status, "enumerated") &&
+        !all(child_domain$values %in% parent_domain$values)) {
+    return(FALSE)
+  }
+  TRUE
+}
+
+#' Is the child restriction the parent restriction, refined on one variable --
+#' and NOTHING else?
+#'
+#' The full relation: the structural half above, plus the requirement that the
+#' two restrictions agree on everything they say about every other variable.
+#'
+#' That second half is what makes a level collapse faithful. A collapsed child
+#' stops being computed on its own terms -- it is displayed from the parent's
+#' single computation, restricted to one level -- so the child's declared
+#' restriction must be exactly the parent's plus that level. A term the child
+#' states and the parent does not is silently DISCARDED by the collapse; a term
+#' the parent states and the child does not is silently IMPOSED on it.
+#'
+#' NOT CONSULTED BY PRODUCTION YET. Defect A-23 records that today's collapse
+#' can discard a child's extra restriction, and the correction -- factoring a
+#' residue every child explicitly states up onto the parent -- is a change to
+#' what is computed, not to what is structurally recognised. This function is
+#' the proof obligation that correction will have to discharge; until then it
+#' is exercised in isolation and `.restriction_partition_relation()` reports
+#' its verdict without acting on it.
+#' @noRd
+.restriction_refines <- function(parent, child, dataset, variable) {
+  structural <- .restriction_refines_domain(parent, child, dataset, variable)
+  if (!isTRUE(structural)) return(structural)
+
+  parent_rest <- .restriction_residue(parent, dataset, variable)
+  child_rest  <- .restriction_residue(child,  dataset, variable)
+  if (!parent_rest$known || !child_rest$known) return(NA)
+  if (!identical(parent_rest$signature, child_rest$signature)) return(FALSE)
+  TRUE
+}
+
+#' Do the rows beneath subdivide this row's variable?
+#'
+#' The one structural question the level channel asks. It is a fact about
+#' LAYOUT -- did the author draw a variable's values out by hand? -- and it is
+#' asked of resolved restrictions, so the answer is the same whether the shell
+#' wrote the conditions in its annotations or a reviewed supplement supplied
+#' them as typed clauses.
+#'
+#' Two shapes qualify, and they are not the same claim:
+#'
+#'   the parent leaves the variable FREE. Then the axis is the variable's own
+#'   domain, which this reader cannot enumerate, so nothing about coverage can
+#'   be checked and each child must name exactly ONE value. A multi-value child
+#'   under a free parent may overlap its siblings and could not be shown not to.
+#'
+#'   the parent ENUMERATES the domain (`VAR in (A, B, C)`). Now the author has
+#'   stated what is being subdivided, so a child naming several of those values
+#'   is checkable -- and is checked: the children must be contained in the
+#'   parent's set, must not overlap each other, and must together cover it
+#'   exactly. Partial cover is not a subdivision; it is a selection.
+#'
+#' The walk stops at the first row that is not a refinement, so an unrelated
+#' analysis below the block is never swept into it.
+#'
+#' `status` answers the LAYOUT question and is decided on domains alone --
+#' today's behaviour, unchanged. `residue_match` answers a second, separate
+#' question that nothing acts on yet: would folding these rows into the block
+#' above preserve everything they declared?
+#'
+#'   TRUE   every child states exactly what the parent states, plus its level.
+#'          The collapse is faithful.
+#'   FALSE  the children state something the parent does not, or state
+#'          different things from one another. The collapse discards or
+#'          imposes a restriction, silently. This is defect A-23.
+#'   NA     not established -- some restriction could not be read. "I could not
+#'          check" is not "I checked and it differs", and a later unreadable
+#'          row never erases a mismatch already proved.
+#'
+#' Reported rather than enforced ON PURPOSE. Enforcing it would change which
+#' rows collapse, which changes computed populations -- a semantic correction
+#' owing its own before/after proof, not something a structural handoff should
+#' do on the way past. `common_residue` carries what the children share,
+#' because that is the term the eventual correction lifts onto the parent; it
+#' is `NULL` whenever they share nothing provable, so the answer can never
+#' depend on which row happened to come first.
+#' @return list(status = "proved" | "unproved", levels, n_children,
+#'   residue_match, common_residue)
+#' @noRd
+.restriction_partition_relation <- function(parent, children, dataset,
+                                            variable) {
+  unproved <- list(status = "unproved", levels = character(), n_children = 0L,
+                   residue_match = NA, common_residue = NULL)
+
+  parent_domain <- .restriction_domain_on(parent, dataset, variable)
+  declared <- identical(parent_domain$status, "enumerated")
+  if (!declared && !identical(parent_domain$status, "unrestricted")) {
+    return(unproved)
+  }
+  ## One declared value is a level, not a domain to subdivide.
+  if (declared && length(parent_domain$values) < 2L) return(unproved)
+
+  levels <- character()
+  taken <- 0L
+  ## The residue verdict, accumulated so that it does not depend on the order
+  ## the rows happen to be in: a proved difference stays proved, and anything
+  ## unreadable only ever weakens a TRUE to NA.
+  children_differ <- FALSE
+  unreadable <- FALSE
+  common <- NULL
+  have_common <- FALSE
+
+  for (child in children) {
+    if (!isTRUE(.restriction_refines_domain(parent, child, dataset, variable))) {
+      break
+    }
+    values <- .restriction_domain_on(child, dataset, variable)$values
+    if (!declared && length(values) != 1L) break
+    if (length(intersect(values, levels)) > 0) break
+
+    child_rest <- .restriction_residue(child, dataset, variable)
+    if (!child_rest$known) {
+      unreadable <- TRUE
+    } else if (!have_common) {
+      common <- child_rest$signature
+      have_common <- TRUE
+    } else if (!identical(common, child_rest$signature)) {
+      children_differ <- TRUE
+    }
+
+    levels <- c(levels, values)
+    taken <- taken + 1L
+  }
+  if (taken == 0L) return(unproved)
+  if (declared && !setequal(levels, parent_domain$values)) return(unproved)
+
+  ## No common residue exists to report when the children do not share one, and
+  ## returning the first row's would make the answer row-order dependent.
+  if (children_differ) {
+    common <- NULL
+    have_common <- FALSE
+  }
+  mismatch <- children_differ
+
+  ## The children may agree with each other and still disagree with the parent,
+  ## which is the shape A-23 was found in.
+  parent_rest <- .restriction_residue(parent, dataset, variable)
+  if (!parent_rest$known) {
+    unreadable <- TRUE
+  } else if (have_common) {
+    if (!identical(parent_rest$signature, common)) mismatch <- TRUE
+  } else if (!children_differ) {
+    ## Nothing readable on either side to compare.
+    unreadable <- TRUE
+  }
+
+  list(status = "proved", levels = levels, n_children = taken,
+       residue_match = if (mismatch) FALSE else if (unreadable) NA else TRUE,
+       common_residue = common)
 }
 
 #' Does this label name one exact level of the variable the row binds?
@@ -331,11 +555,12 @@
 #' Three relationships, all read from the authored row sequence and none from
 #' any identifier:
 #'
-#' LEVEL CHILDREN -- rows beneath that pin this row's variable to one value
-#' each. Two conditions: this row must not restrict that variable itself (a row
-#' that already selects a value is a level, not the axis), and the run ends at
-#' the first row that is not such a level, so an unrelated analysis below is
-#' not swept in.
+#' LEVEL CHILDREN -- rows beneath that subdivide this row's variable, read from
+#' RESOLVED restrictions rather than from annotation text, so a supplement that
+#' supplied the leaves as typed clauses proves the same layout the shell would
+#' have proved by writing them out. `.restriction_partition_relation()` states
+#' the rule; the run ends at the first row that is not a refinement, so an
+#' unrelated analysis below is not swept in.
 #'
 #' SUBORDINATE RUN -- authored rows immediately beneath that carry no
 #' annotation. That is exactly the run the RENDERER consumes as a block's
@@ -351,13 +576,18 @@
 #'   again here would disagree with the rest of the pipeline: an axis is often
 #'   written beside its siblings ("ADSL.STRAT1 / STRAT2 / STRAT3") or with an
 #'   ordering clause, and which of those is primary is settled upstream.
+#' @param restrictions The section's RESOLVED restrictions, one per row, as
+#'   `.row_restriction_view()` produces them. The builder holds that view
+#'   already and passes it in; the default is the same constructor, so there is
+#'   one reading of restriction precedence and never a second.
 #' @noRd
 .row_layout_context <- function(rows, index, roles = NULL, indents = NULL,
-                                binding = NULL) {
+                                binding = NULL, restrictions = NULL) {
   n <- length(rows)
   roles <- roles %||% rep(NA_character_, n)
   indents <- as.integer(indents %||% rep(0L, n))
   bind <- binding %||% list()
+  restrictions <- restrictions %||% .row_restriction_view(rows)
 
   is_label_row <- function(k) {
     !isTRUE(rows[[k]]$has_annot) &&
@@ -368,16 +598,19 @@
   own_ds  <- toupper(.shape_text(bind$dataset))
   own_var <- toupper(.shape_text(bind$variable))
   level_children <- character()
-  if (nzchar(own_var) &&
-        !.row_restricts_variable(rows[[index]]$annotation, own_ds, own_var)) {
+  if (nzchar(own_var)) {
+    ## The candidate run: the authored rows immediately beneath that carry a
+    ## restriction of their own. A row with no annotation is a sub-line of this
+    ## block rather than a level of it, and ends the run.
+    candidates <- list()
     k <- index + 1L
-    while (k <= n) {
-      if (!isTRUE(rows[[k]]$has_annot)) break
-      pinned <- .row_pins_value_of(rows[[k]]$annotation, own_ds, own_var)
-      if (!nzchar(pinned)) break
-      level_children <- c(level_children, pinned)
+    while (k <= n && isTRUE(rows[[k]]$has_annot)) {
+      candidates[[length(candidates) + 1L]] <- restrictions[[k]]
       k <- k + 1L
     }
+    relation <- .restriction_partition_relation(restrictions[[index]],
+                                                candidates, own_ds, own_var)
+    if (identical(relation$status, "proved")) level_children <- relation$levels
   }
 
   ## --- the subordinate run -------------------------------------------------

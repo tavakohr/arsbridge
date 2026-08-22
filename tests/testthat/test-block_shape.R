@@ -117,10 +117,11 @@ test_that("the level run stops at the first row that is not a level", {
   expect_equal(ctx$level_children, "IMP")
 })
 
-test_that("a row that restricts its own variable is not that variable's axis", {
-  ## Set membership is a restriction even though it is not ONE value: reading
-  ## it as unrestricted would hand this row the block belonging to the row
-  ## above it.
+test_that("a row that selects among its own variable's values is not its axis", {
+  ## Set membership DECLARES the domain being talked about. That makes the row
+  ## a candidate axis for a subdivision of exactly that set -- and nothing
+  ## more. One child covering one of two declared values is a selection, not a
+  ## subdivision, so this row does not claim the row beneath it.
   rows <- list(
     .bs_row("Any listed category", "ADQX.RESCAT in ('IMP','UNC')"),
     .bs_row("Improved", "ADQX.RESCAT='IMP'"))
@@ -128,9 +129,15 @@ test_that("a row that restricts its own variable is not that variable's axis", {
                              binding = .bs_bind(variable = "RESCAT",
                                                 discrete = TRUE))
   expect_equal(ctx$level_children, character())
-  expect_true(.row_restricts_variable("ADQX.RESCAT in ('IMP','UNC')",
-                                      "ADQX", "RESCAT"))
-  expect_false(.row_restricts_variable("ADQX.RESCAT", "ADQX", "RESCAT"))
+
+  ## The typed reading underneath that verdict: the set is what it declares,
+  ## and a bare reference declares nothing.
+  view <- .row_restriction_view(rows)
+  expect_equal(.restriction_domain_on(view[[1]], "ADQX", "RESCAT"),
+               list(status = "enumerated", values = c("IMP", "UNC")))
+  bare <- .row_restriction_view(list(.bs_row("Category", "ADQX.RESCAT")))
+  expect_equal(.restriction_domain_on(bare[[1]], "ADQX", "RESCAT")$status,
+               "unrestricted")
 })
 
 test_that("cumulative thresholds beneath a row are not its levels", {
