@@ -852,6 +852,65 @@
   list(flat = flat)
 }
 
+#' The resolved restriction for every row of a section, read once.
+#'
+#' A row's restriction can arrive by several routes -- the annotation, a typed
+#' supplement clause, an enrichment -- and `.row_restriction()` is the one
+#' place that decides which of them speaks. Anything that needs the restriction
+#' to MEAN something must consume that decision rather than re-derive it, and
+#' before this existed the structural reader re-derived it from the annotation
+#' string alone. That is not a smaller version of the same reading: it is a
+#' different one, blind to every channel that does not go through text, so a
+#' supplement-supplied run of level rows was invisible to it.
+#'
+#' The view is built with the same reader, on the same fields, in the same
+#' precedence, for every row at once -- including rows the builder has not
+#' reached yet, which is what a structural look-ahead needs and what the row
+#' loop by itself can never supply.
+#'
+#' Diagnostics are deliberately withheld. This is a READING, not the moment a
+#' row is built: the row loop still calls `.row_restriction()` for the row it
+#' owns, and that call is where an unreadable filter is reported once, against
+#' that row, exactly as before. Recording them here too would report every such
+#' annotation twice, and would report them for rows the builder never asks
+#' about.
+#'
+#' @return A list parallel to `rows`, each `list(status, where)` with status:
+#'   `none`        the row states no restriction;
+#'   `clause`      `where` is the restriction, flat or compound;
+#'   `unresolved`  a restriction was stated and could not be read. NOT the same
+#'                 as `none`, and the difference is the point -- reading it as
+#'                 "no restriction" is what makes an unreadable filter present
+#'                 as an unrestricted population.
+#' @noRd
+.row_restriction_view <- function(rows, resolves = NULL) {
+  kept <- length(.diag_env$records)
+  on.exit(.diag_env$records <- .diag_env$records[seq_len(kept)], add = TRUE)
+
+  lapply(rows %||% list(), function(row) {
+    ## A typed supplement clause is asked about on its own account, not via
+    ## `has_annot`. The supplement path does set that flag today, but the
+    ## restriction is carried by `supplement_where`, and a view that could only
+    ## see it through a second field would fail silently if the two ever
+    ## parted -- as the wrong kind of failure, reporting no restriction.
+    if (!isTRUE(row$has_annot) && is.null(row$supplement_where)) {
+      return(list(status = "none", where = NULL))
+    }
+    carry <- tryCatch(
+      .row_restriction(row$annotation, resolves,
+                       supplement = row$supplement_where),
+      error = function(e) list(unresolved = conditionMessage(e)))
+    if (!is.null(carry$unresolved)) {
+      return(list(status = "unresolved", where = NULL))
+    }
+    if (!is.null(carry$compound)) {
+      return(list(status = "clause", where = carry$compound))
+    }
+    if (!is.null(carry$flat)) return(list(status = "clause", where = carry$flat))
+    list(status = "none", where = NULL)
+  })
+}
+
 #' The same restriction in the FLAT `{dataset, variable, comparator, value}`
 #' shape, for callers whose contract is that shape.
 #'
@@ -1077,6 +1136,23 @@ build_ars_json <- function(sections,
     }
     decode_cache[[key]] <<- if (is.null(terms)) "none" else terms
     terms
+  }
+
+  ## Everything the ADaM spec says about one row's primary variable, gathered
+  ## once so the structural stage reasons from the same metadata the rest of
+  ## the builder does. `discrete` and the decode terms are the SPEC's answers
+  ## rather than guesses from a variable's name, which is what lets the
+  ## structural rules work on a study this package has never seen.
+  .shape_binding <- function(dataset, variable) {
+    ds  <- toupper(as.character(dataset %||% ""))
+    var <- toupper(sub("^.*\\.", "", as.character(variable %||% "")))
+    rec <- if (nzchar(ds) && nzchar(var)) spec_lookup[[paste0(ds, ".", var)]]
+           else NULL
+    list(dataset = ds, variable = var,
+         type     = as.character(rec$type %||% NA_character_),
+         codelist = as.character(rec$codelist %||% NA_character_),
+         discrete = .var_is_categorical(ds, var),
+         decodes  = .decode_terms_for(ds, var))
   }
 
   ## `_meta$value_decodes` accumulator: one entry per DATASET.VARIABLE that
@@ -1384,6 +1460,21 @@ build_ars_json <- function(sections,
     } else {
       rep(NA_character_, length(rows_iter))
     }
+    ## Authored indentation for every row, and every row's RESOLVED
+    ## restriction. Both are computed up front for the same reason the nested
+    ## roles above are: they are properties of the row SEQUENCE, and the row
+    ## loop cannot see the rows it has not reached yet. A structural
+    ## look-ahead needs both about the rows BELOW the one being built.
+    row_indents <- vapply(rows_iter, function(r) {
+      raw <- as.character(r$raw_text %||% "")
+      nchar(regmatches(raw, regexpr("^ *", raw))[[1]])
+    }, integer(1))
+    row_restrictions <- if (build_layout) {
+      .row_restriction_view(rows_iter, .spec_resolves)
+    } else {
+      NULL
+    }
+
     ## Set when the nested parent analysis is emitted; the child's layout
     ## row points back at it via parent_order.
     nested_parent_ctx <- NULL
@@ -1798,6 +1889,23 @@ build_ars_json <- function(sections,
         NULL
       }
 
+      ## The row's STRUCTURE, from the authored layout, the spec binding and
+      ## the section's resolved restrictions -- never from the method. PR5b-2
+      ## uses it for exactly one thing: whether this row opens a block whose
+      ## following rows are its levels. The method, the statistic and the
+      ## reservation state are still decided exactly as before, so a structural
+      ## answer that differs from the legacy shape in any other respect stays
+      ## dormant.
+      row_structure <- if (build_layout) {
+        row_binding <- .shape_binding(er$primary_dataset, er$primary_variable)
+        .block_shape(row, row_binding,
+                     .row_layout_context(rows_iter, ridx, nested_roles,
+                                         row_indents, row_binding,
+                                         restrictions = row_restrictions))
+      } else {
+        NULL
+      }
+
       if (build_layout &&
           !nzchar(er$primary_variable %||% "") &&
           !nzchar(er$primary_dataset %||% "")) {
@@ -2012,6 +2120,12 @@ build_ars_json <- function(sections,
       analyses[[length(analyses) + 1L]] <- an_obj
       analysis_ids <- c(analysis_ids, an_obj$id)
       note_value_decode(er$primary_dataset, er$primary_variable, row_method_id)
+      ## Does the authored layout PROVE that the rows beneath this one draw out
+      ## its variable's values? Read from the row sequence, the spec binding
+      ## and the section's resolved restrictions -- never from the method.
+      structural_levels <- build_layout && !is.null(row_structure) &&
+        identical(row_structure$expansion_source, "data_levels")
+
       ## STILL derived from the method, unchanged from before: this PR moves
       ## the vocabulary, not the evidence. Deciding shape from structure
       ## instead is the next change, and nothing downstream has to move again
@@ -2101,8 +2215,26 @@ build_ars_json <- function(sections,
         )
       }
       ## This analysis becomes (or clears) the candidate parent for authored
-      ## level rows that follow.
-      cat_parent <- if (identical(layout_shape, "categorical_block") &&
+      ## level rows that follow -- and PR5b-2 makes STRUCTURE the thing that
+      ## claims them.
+      ##
+      ## Both halves are required, and they answer different questions. The
+      ## layout half is unchanged and keeps the claim coherent with what is
+      ## rendered: a row that a level points back at must be an expandable
+      ## block in the layout, not a scalar line that happens to precede it.
+      ## The structural half is the new one, and it can only WITHHOLD: a block
+      ## claims the rows beneath it when the authored layout proves they are
+      ## its levels, and not merely because the method it was given counts
+      ## things.
+      ##
+      ## That asymmetry is deliberate. Structure alone cannot yet establish a
+      ## block, because it is not always the better-informed reader -- with no
+      ## ADaM spec supplied, it cannot tell a continuous variable from a
+      ## discrete one, while the section's method often can. Letting it
+      ## withhold is safe in a way that letting it assert is not, and the
+      ## assertion direction waits for the statistic and method stages to move.
+      cat_parent <- if (structural_levels &&
+                          identical(layout_shape, "categorical_block") &&
                           nzchar(er$primary_variable %||% "")) {
         list(var = toupper(er$primary_variable),
              ds  = toupper(er$primary_dataset %||% ""),
