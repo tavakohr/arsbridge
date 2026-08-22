@@ -153,8 +153,10 @@
   ## line grammar strips the marker forms it meets on statistic LINES; a header
   ## meets a wider set, because authors mark headers more often than the rows
   ## beneath. Stripped here, inside the bounded fragment, rather than by
-  ## widening that grammar for every label in the package.
-  suffix <- trimws(sub("[\u00aa\u00b2\u00b3\u00b9\u00ba\u02b0-\u02ff\u1d2c-\u1d6a\u2070-\u209f]+$", "", suffix, perl = TRUE))
+  ## widening that grammar for every label in the package. The set itself lives
+  ## in `.FOOTNOTE_MARKER_CLASS`, so that a header and a declaration site
+  ## cannot disagree about what counts as a marker.
+  suffix <- .strip_footnote_markers(suffix)
   if (!nzchar(suffix)) return(NULL)
 
   ## A long trailing fragment is prose that happens to end the label, not a
