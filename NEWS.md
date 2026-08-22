@@ -1,5 +1,33 @@
 # arsbridge (development version)
 
+* **The package can now tell "we cannot compute what you asked for" from "you
+  did not say what you want".** Both look like silence to a reader that only
+  asks whether it got any statistic tokens back, and both were treated as
+  silence -- so a row whose header explicitly declared a form no supported
+  method produces fell through to a coarser channel and was answered with a
+  different statistic. The two call for opposite corrections, so they are now
+  classified apart, along with a third case: a form that reads perfectly well
+  but that the channel carrying it has not been widened to admit.
+
+  A second way of writing a declaration is now read. `.header_suffix_stats()`
+  bounds a header's trailing form at a comma or a spaced dash; authors also
+  write the form on a line of its own beneath the prose. A line break is a
+  stronger boundary than a comma -- the author separated them deliberately --
+  but also the one most damaging to read loosely, since every multi-line
+  caption ends in some line, so the line must be the whole form, shaped like a
+  form rather than prose, and parse to the one token set this boundary admits.
+
+  Footnote markers are now recognised by what they are rather than by which
+  Unicode block they happen to sit in. The set covered modifier letters up to
+  U+1D6A, which put two labels differing only in which footnote they cited on
+  opposite sides of "readable" -- and inside a bracket, where an author has
+  nowhere else to put a citation about an interval, no marker was recognised
+  at all, so `% (95% CI<marker>)` read as a request no method could serve.
+
+  Nothing here decides anything yet: no builder, method resolver or renderer
+  calls these readers, and every ARS document, rendered row, analysis, method
+  and diagnostic is unchanged on all three reference corpora.
+
 * **A block now claims the rows beneath it on structural evidence, not on the
   method it was given.** Whether the rows under a header are that header's
   levels is a fact about the authored layout, but it was read back from the
