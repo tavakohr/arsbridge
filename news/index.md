@@ -2,6 +2,39 @@
 
 ## arsbridge (development version)
 
+- **Three names for three different failures, where there had been
+  one.** A declaration the reader could not turn into tokens, a
+  declaration read from a source not admitted to carry it, and a request
+  no supported method produces are evidence about three different things
+  – the reader, the package’s own policy, and the method catalogue – and
+  each sends an author somewhere else. Only the third is a claim about
+  what this package can compute, and it may be raised only after
+  resolution runs on tokens that are actually known.
+
+  That last restriction is not fastidiousness. The declaration test is a
+  test of SHAPE, and shape cannot tell a rate the reader failed to parse
+  from a quantity carrying a unit: `C (mL/min)`, `T (mg/kg)` and
+  `V (m/s)` are indistinguishable from a genuine unreadable rate.
+  Thirteen such cases are kept as a permanent floor, with the structural
+  assertion that no declaration status can reach the capability claim at
+  all.
+
+  Both terminal states now carry the same two obligations: end the
+  search for evidence, and never reach the legacy filter bridge. The
+  second is the one that would be quietly lost, because falling through
+  to a restriction-derived statistic answers a question the author
+  already answered differently while reporting that they had been read.
+
+  A word-led form set on its own line – `Mean (SD)` beneath a header’s
+  prose – was reported as SILENCE, because the line reader demanded a
+  symbol lead. Silence falls through to the next channel; not-admitted
+  ends the search. On a whole-line form the parse already refuses a mere
+  caption, so the lead test was doing no work there except mislabelling
+  authors who had spoken.
+
+  Still shadow: no builder, method resolver or renderer calls any of it,
+  and all three reference corpora are byte-identical.
+
 - **The package can now tell “we cannot compute what you asked for” from
   “you did not say what you want”.** Both look like silence to a reader
   that only asks whether it got any statistic tokens back, and both were
