@@ -9,7 +9,7 @@ and the executed ARD are the same code. Wraps
 with `method = "clopper-pearson"`; the n / N / estimate rows cardx also
 returns are dropped (a paired count analysis supplies them, and
 duplicate statistic identities would make
-[`cards::bind_ard()`](https://rdrr.io/pkg/cards/man/bind_ard.html)
+[`cards::bind_ard()`](https://pharmaverse.github.io/cards/latest-tag/reference/bind_ard.html)
 error). The `"card"` class is re-asserted after the subset so the result
 binds cleanly across `{cards}` versions.
 

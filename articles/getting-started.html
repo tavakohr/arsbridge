@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">arsbridge</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9165</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0.9166</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -75,7 +75,7 @@
 Word document together with the study’s ADaM specification, and produces
 a CDISC Analysis Results Standard (ARS) v1.0 JSON file. That JSON drives
 the rest of the pipeline: it executes against real ADaM datasets using
-<a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> to produce a tidy ARD, then renders to a formatted
+<a href="https://github.com/pharmaverse/cards" class="external-link">cards</a> to produce a tidy ARD, then renders to a formatted
 GT clinical table with no manual formatting step.</p>
 <p><strong>The core principle:</strong> arsbridge extracts and converts.
 It does not invent. The shell is read by a deterministic regex detector
@@ -219,7 +219,7 @@ validation report.</p>
 </h2>
 <p>With a valid ARS JSON in hand, two more functions close the loop.</p>
 <p><code><a href="../reference/ars_to_ard.html">ars_to_ard()</a></code> executes the ARS against ADaM datasets and
-returns a tidy ARD in <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a> format.
+returns a tidy ARD in <a href="https://github.com/pharmaverse/cards" class="external-link">cards</a> format.
 <code><a href="../reference/ars_render_tlf.html">ars_render_tlf()</a></code> then formats any output from that ARD into
 a publication-ready GT table, with no manual formatting step.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
@@ -242,7 +242,7 @@ a publication-ready GT table, with no manual formatting step.</p>
 <span></span>
 <span><span class="va">gt_table</span></span></code></pre></div>
 <p><code><a href="../reference/ars_render_tlf.html">ars_render_tlf()</a></code> auto-detects the treatment column, row
-groups, and row labels from the ARD; rescales <a href="https://github.com/insightsengineering/cards" class="external-link">cards</a>
+groups, and row labels from the ARD; rescales <a href="https://github.com/pharmaverse/cards" class="external-link">cards</a>
 proportions to percentages; lays continuous summaries out as
 <code>Mean (SD)</code> / <code>Median</code> / <code>(Min, Max)</code>
 rows; and carries ARS footnotes through as GT source notes.</p>

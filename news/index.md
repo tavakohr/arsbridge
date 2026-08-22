@@ -2,6 +2,38 @@
 
 ## arsbridge (development version)
 
+- **The package can now tell “we cannot compute what you asked for” from
+  “you did not say what you want”.** Both look like silence to a reader
+  that only asks whether it got any statistic tokens back, and both were
+  treated as silence – so a row whose header explicitly declared a form
+  no supported method produces fell through to a coarser channel and was
+  answered with a different statistic. The two call for opposite
+  corrections, so they are now classified apart, along with a third
+  case: a form that reads perfectly well but that the channel carrying
+  it has not been widened to admit.
+
+  A second way of writing a declaration is now read.
+  `.header_suffix_stats()` bounds a header’s trailing form at a comma or
+  a spaced dash; authors also write the form on a line of its own
+  beneath the prose. A line break is a stronger boundary than a comma –
+  the author separated them deliberately – but also the one most
+  damaging to read loosely, since every multi-line caption ends in some
+  line, so the line must be the whole form, shaped like a form rather
+  than prose, and parse to the one token set this boundary admits.
+
+  Footnote markers are now recognised by what they are rather than by
+  which Unicode block they happen to sit in. The set covered modifier
+  letters up to U+1D6A, which put two labels differing only in which
+  footnote they cited on opposite sides of “readable” – and inside a
+  bracket, where an author has nowhere else to put a citation about an
+  interval, no marker was recognised at all, so `% (95% CI<marker>)`
+  read as a request no method could serve.
+
+  Nothing here decides anything yet: no builder, method resolver or
+  renderer calls these readers, and every ARS document, rendered row,
+  analysis, method and diagnostic is unchanged on all three reference
+  corpora.
+
 - **A block now claims the rows beneath it on structural evidence, not
   on the method it was given.** Whether the rows under a header are that
   header’s levels is a fact about the authored layout, but it was read
@@ -535,8 +567,8 @@
 
 - **The generated program’s calculations are now pinned against the
   reference engine.** arsbridge computes an output’s ARD by emitting
-  [cards](https://github.com/insightsengineering/cards) blocks and
-  evaluating them in memory; it never reads back the `.R` file
+  [cards](https://github.com/pharmaverse/cards) blocks and evaluating
+  them in memory; it never reads back the `.R` file
   [`ars_to_code()`](https://tavakohr.github.io/arsbridge/reference/ars_to_code.md)
   writes. Those two assemblies of one generator had nothing holding them
   together. A regression test now executes the written file and compares
@@ -1147,7 +1179,7 @@
   every other term as zero. A subject with a headache and a nausea
   counted only towards the headache. The term now joins the
   deduplication, as it always has in the emitted
-  [cards](https://github.com/insightsengineering/cards) block and in the
+  [cards](https://github.com/pharmaverse/cards) block and in the
   neighbouring AE Frequency method, so the two engines agree on an
   occurrence frame and the count is the number of subjects reporting
   each term. The default path was never affected; the equivalence suite
@@ -1783,8 +1815,8 @@
 
 - **A treatment arm with no qualifying subject now reads `0 (0.0)`, not
   a placeholder.** An analysis’s data subset is applied before
-  [cards](https://github.com/insightsengineering/cards) runs, so an arm
-  the filter empties is not in the frame the executor sees –
+  [cards](https://github.com/pharmaverse/cards) runs, so an arm the
+  filter empties is not in the frame the executor sees –
   `ard_categorical()` can only report the `by` levels it is given, and
   the arm ended up with no row in the ARD at all. Everything downstream
   trusts the ARD, so the filled shell left the cell showing `xx (xx.x)`:
@@ -2281,9 +2313,8 @@
   disagreed on whether the `*_level` columns are list columns, and
   binding them aborted with “Can’t combine `<list>` and `<character>`”,
   losing the entire ARD for a perfectly well-formed study. Columns are
-  now aligned to the
-  [cards](https://github.com/insightsengineering/cards) convention
-  before binding.
+  now aligned to the [cards](https://github.com/pharmaverse/cards)
+  convention before binding.
 
 - **New
   [`parse_decision_digest()`](https://tavakohr.github.io/arsbridge/reference/parse_decision_digest.md):
@@ -2808,7 +2839,7 @@
 - **Declared-path execution.** For an output carrying
   `resultGroupPaths`,
   [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)
-  and the emitted [cards](https://github.com/insightsengineering/cards)
+  and the emitted [cards](https://github.com/pharmaverse/cards)
   deliverable scripts compute one pass per declared result column
   instead of crossing the grouping variables: each pass filters both the
   analysis frame and the denominator frame by the path’s composed
@@ -3108,7 +3139,7 @@
   execution engine and the emitted {cards} deliverable derive the coded
   analysis variable as a factor
   (`factor(as.character(VAR), levels = codes, labels = decodes)`) before
-  [`cards::ard_categorical()`](https://rdrr.io/pkg/cards/man/deprecated.html).
+  [`cards::ard_categorical()`](https://pharmaverse.github.io/cards/latest-tag/reference/deprecated.html).
   The ARD therefore shows decoded labels (“DEATH”) instead of raw codes
   (“1”), keeps codelist order, and reports EVERY codelist term –
   unobserved categories appear with n = 0, matching disposition shells
@@ -3172,9 +3203,8 @@
   attribute that bundles every FAIL for the assistant.
 
 - **Native SAS `.sas7bdat` ADaM cuts are now read everywhere.** The
-  per-TLF standalone
-  [cards](https://github.com/insightsengineering/cards) scripts emitted
-  by `write_tlf_code()`, the execution engine
+  per-TLF standalone [cards](https://github.com/pharmaverse/cards)
+  scripts emitted by `write_tlf_code()`, the execution engine
   ([`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)),
   and the listing/figure renderers previously loaded only `.xpt` and
   `.csv`; they now also match and read `.sas7bdat` via
@@ -3243,10 +3273,10 @@
   expressible purely by annotation, with no ADaM change: the engine
   derives the grouping in memory from the conditions, identically in the
   executed ARD and the emitted
-  [cards](https://github.com/insightsengineering/cards) scripts (a
-  `case_when` factor built from the same where-clause predicates). The
-  conditions are carried in the ARS JSON as per-level `groups[]` entries
-  with WhereClauses. Rows matching no column are excluded from the group
+  [cards](https://github.com/pharmaverse/cards) scripts (a `case_when`
+  factor built from the same where-clause predicates). The conditions
+  are carried in the ARS JSON as per-level `groups[]` entries with
+  WhereClauses. Rows matching no column are excluded from the group
   columns and counted in a WARN; a `Total (N=XX) ...` header is
   recognized as the overall column and switches `includeTotal` on. The
   annotation grammar also gains the positive `DATASET.VAR is missing` /
@@ -3569,7 +3599,7 @@
   `value_source`, `derivation_ref`, `derived_by`, `derived_dt`). A
   declared-but-unexecutable method (e.g. `MTH_CMH_TEST` – a statistic
   describable in the ARS but with no
-  [cards](https://github.com/insightsengineering/cards)/[cardx](https://github.com/insightsengineering/cardx)
+  [cards](https://github.com/pharmaverse/cards)/[cardx](https://github.com/insightsengineering/cardx)
   executor) no longer skips or coerces the analysis: it reserves keyed
   `manual_pending` stub ARD rows (`stat = NA`) so the table cell keeps a
   slot tied to its analysis/method/output. A later validated manual
@@ -3628,9 +3658,9 @@
 
 - [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md):
   execute an ARS JSON natively into a tidy Analysis Results Data (ARD)
-  object via [cards](https://github.com/insightsengineering/cards),
-  applying `analysisSets` and `dataSubsets` filters against `.xpt` /
-  `.csv` datasets.
+  object via [cards](https://github.com/pharmaverse/cards), applying
+  `analysisSets` and `dataSubsets` filters against `.xpt` / `.csv`
+  datasets.
 
 - [`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md),
   [`ars_render_all()`](https://tavakohr.github.io/arsbridge/reference/ars_render_all.md),

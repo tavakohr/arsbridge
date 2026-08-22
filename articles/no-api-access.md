@@ -236,11 +236,11 @@ never bound from the supplement: they belong to the analysis row above
 them, and the layout-driven renderer fills them from that parent.
 
 Everything downstream is unchanged — the ARS JSON is built, validated,
-and emitted as per-TLF
-[cards](https://github.com/insightsengineering/cards) scripts the same
-way in every tier. The JSON’s `_meta.extraction_mode` field records
-which tier produced it, and `_meta.requires_human_review` stays `TRUE`:
-whichever tier you used, a qualified programmer must review the draft.
+and emitted as per-TLF [cards](https://github.com/pharmaverse/cards)
+scripts the same way in every tier. The JSON’s `_meta.extraction_mode`
+field records which tier produced it, and `_meta.requires_human_review`
+stays `TRUE`: whichever tier you used, a qualified programmer must
+review the draft.
 
 ## Data governance
 

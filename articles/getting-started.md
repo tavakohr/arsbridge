@@ -6,9 +6,9 @@
 together with the study’s ADaM specification, and produces a CDISC
 Analysis Results Standard (ARS) v1.0 JSON file. That JSON drives the
 rest of the pipeline: it executes against real ADaM datasets using
-[cards](https://github.com/insightsengineering/cards) to produce a tidy
-ARD, then renders to a formatted GT clinical table with no manual
-formatting step.
+[cards](https://github.com/pharmaverse/cards) to produce a tidy ARD,
+then renders to a formatted GT clinical table with no manual formatting
+step.
 
 **The core principle:** arsbridge extracts and converts. It does not
 invent. The shell is read by a deterministic regex detector *and* an LLM
@@ -149,7 +149,7 @@ With a valid ARS JSON in hand, two more functions close the loop.
 
 [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)
 executes the ARS against ADaM datasets and returns a tidy ARD in
-[cards](https://github.com/insightsengineering/cards) format.
+[cards](https://github.com/pharmaverse/cards) format.
 [`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md)
 then formats any output from that ARD into a publication-ready GT table,
 with no manual formatting step.
@@ -178,10 +178,10 @@ gt_table
 
 [`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md)
 auto-detects the treatment column, row groups, and row labels from the
-ARD; rescales [cards](https://github.com/insightsengineering/cards)
-proportions to percentages; lays continuous summaries out as `Mean (SD)`
-/ `Median` / `(Min, Max)` rows; and carries ARS footnotes through as GT
-source notes.
+ARD; rescales [cards](https://github.com/pharmaverse/cards) proportions
+to percentages; lays continuous summaries out as `Mean (SD)` / `Median`
+/ `(Min, Max)` rows; and carries ARS footnotes through as GT source
+notes.
 
 To inspect or customise the underlying
 [tfrmt](https://GSK-Biostatistics.github.io/tfrmt/) spec before

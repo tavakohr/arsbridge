@@ -10,8 +10,8 @@ automates both halves. It reads the annotations directly from the shell
 – a Word `.docx`, or an Excel `.xlsx` with one worksheet per output –
 checks every variable against your ADaM spec, generates a CDISC Analysis
 Results Standard (ARS) JSON, executes it against real ADaM datasets with
-[cards](https://github.com/insightsengineering/cards), and renders a
-formatted GT table ready to ship.
+[cards](https://github.com/pharmaverse/cards), and renders a formatted
+GT table ready to ship.
 
 No manual transcription. No orphan numbers. Every value auditable back
 to its source.
@@ -28,7 +28,7 @@ to its source.
 | **Human-in-the-loop review** | [`edit_ars()`](https://tavakohr.github.io/arsbridge/reference/edit_ars.md) opens the generated ARS in a structured Shiny editor: the shell’s outputs and lines with validation findings badged on, spec-constrained dropdowns, add/remove/reorder for missed lines, undo and crash recovery. Every save is backed up, logged to a QC sidecar, and checked against the official ARS v1.0 schema. |
 | **A guided end-to-end workflow** | `ars_workflow("my_study/")` walks the whole journey in one app, in five steps: set up the project, **build**, optionally correct with a supplement, review, read the results. The build runs in a background process, so the UI stays responsive and shows the run log as it goes; everything it produced — and everything it declined to produce, with the reason — comes back in one payload. Every step’s status is derived from the files on disk, so closing the app never loses progress, and the results survive a restart. |
 | **CDISC ARS JSON output** | The extraction result is a structured, versioned file you can diff, review, and feed to downstream tools like [siera](https://clymbclinical.github.io/siera/). |
-| **Native ARD execution** | Run ARS JSON directly against `.xpt` or `.csv` datasets using [cards](https://github.com/insightsengineering/cards), with no dataset-loading boilerplate. |
+| **Native ARD execution** | Run ARS JSON directly against `.xpt` or `.csv` datasets using [cards](https://github.com/pharmaverse/cards), with no dataset-loading boilerplate. |
 | **Codelist-decoded categories** | A coded categorical variable (e.g. a numeric `DCSREASN`) is decoded through the ADaM spec’s codelist: the ARD and rendered table show `DEATH`, not `1`, in codelist order, with unobserved terms reported as n = 0. Unannotated coded column axes get their column labels from the codelist too. |
 | **Publication-ready tables** | [`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md) builds a formatted GT table: treatment columns detected, percentages rescaled, row groups labelled, ARS footnotes carried through. |
 | **The filled shell, back in Excel** | For an Excel shell, [`ars_fill_shell()`](https://tavakohr.github.io/arsbridge/reference/ars_fill_shell.md) returns the author’s own workbook with the results in it and the red annotations gone. Tables, listings and figures: a listing’s one template row expands into a row per record, with the footnote below it moved down; a figure’s series is computed from the prose the shell states it in. The layout, labels, merges, fonts and footnotes are never rebuilt — only left alone — and each placeholder’s own `xx.x` decides how its number is formatted. A cell whose result does not exist keeps its placeholder and is reported, because a blank cell in a clinical table reads as a zero — while an arm with no qualifying subject reads `0 (0.0)`, since that is a result. Column headers written `Placebo (N=XX)` are answered with the denominator their own percentages use. |
@@ -435,11 +435,10 @@ subset(res$validation, status %in% c("WARN", "FAIL"))
 
 [`ars_to_ard()`](https://tavakohr.github.io/arsbridge/reference/ars_to_ard.md)
 runs the ARS JSON against your ADaM datasets and returns a tidy ARD in
-[cards](https://github.com/insightsengineering/cards) format. It
-auto-loads datasets, applies population and data subset filters
-recursively, and calls the right
-[cards](https://github.com/insightsengineering/cards) function for each
-method.
+[cards](https://github.com/pharmaverse/cards) format. It auto-loads
+datasets, applies population and data subset filters recursively, and
+calls the right [cards](https://github.com/pharmaverse/cards) function
+for each method.
 
 ``` r
 
@@ -488,10 +487,10 @@ gt_table
 [`ars_render_tlf()`](https://tavakohr.github.io/arsbridge/reference/ars_render_tlf.md)
 handles all the formatting automatically: treatment columns and row
 groups are detected from the ARD,
-[cards](https://github.com/insightsengineering/cards) proportions are
-rescaled to display percentages, continuous summaries are laid out as
-`Mean (SD)` / `Median` / `(Min, Max)` rows, and ARS titles and footnotes
-are attached as GT source notes.
+[cards](https://github.com/pharmaverse/cards) proportions are rescaled
+to display percentages, continuous summaries are laid out as `Mean (SD)`
+/ `Median` / `(Min, Max)` rows, and ARS titles and footnotes are
+attached as GT source notes.
 
 To inspect or customise the underlying
 [tfrmt](https://GSK-Biostatistics.github.io/tfrmt/) spec before
@@ -721,10 +720,10 @@ whole table.
 
 | Statistic | Status | Engine |
 |----|----|----|
-| Summary statistics (mean, SD, median, min, max) | Computed | [`cards::ard_continuous()`](https://rdrr.io/pkg/cards/man/deprecated.html) |
-| Counts and percentages | Computed | [`cards::ard_categorical()`](https://rdrr.io/pkg/cards/man/deprecated.html) |
-| AE frequencies (distinct subjects per event) | Computed | dedup then [`cards::ard_categorical()`](https://rdrr.io/pkg/cards/man/deprecated.html) |
-| Subject counts (N) | Computed | [`cards::ard_total_n()`](https://rdrr.io/pkg/cards/man/ard_total_n.html) |
+| Summary statistics (mean, SD, median, min, max) | Computed | [`cards::ard_continuous()`](https://pharmaverse.github.io/cards/latest-tag/reference/deprecated.html) |
+| Counts and percentages | Computed | [`cards::ard_categorical()`](https://pharmaverse.github.io/cards/latest-tag/reference/deprecated.html) |
+| AE frequencies (distinct subjects per event) | Computed | dedup then [`cards::ard_categorical()`](https://pharmaverse.github.io/cards/latest-tag/reference/deprecated.html) |
+| Subject counts (N) | Computed | [`cards::ard_total_n()`](https://pharmaverse.github.io/cards/latest-tag/reference/ard_total_n.html) |
 | Exact Clopper-Pearson CI | Computed (requires [cardx](https://github.com/insightsengineering/cardx)) | [`cardx::ard_categorical_ci()`](https://rdrr.io/pkg/cardx/man/ard_categorical_ci.html) |
 | Cochran-Mantel-Haenszel p-value | Computed | Base R [`mantelhaen.test()`](https://rdrr.io/r/stats/mantelhaen.test.html) |
 | Newcombe difference interval | Reserved: `[‡ manual]` | Manual fill round-trip |
@@ -841,25 +840,24 @@ runs, it:
 4.  Applies data subset filters within the analysis dataset, supporting
     recursive `AND` / `OR` compound expressions.
 5.  Completes the zero-count groups a filter emptied. A subset is
-    applied *before*
-    [cards](https://github.com/insightsengineering/cards) runs, so a
-    treatment arm with no qualifying record is simply absent from its
-    input and gets no row at all. For a counting method that arm’s
+    applied *before* [cards](https://github.com/pharmaverse/cards) runs,
+    so a treatment arm with no qualifying record is simply absent from
+    its input and gets no row at all. For a counting method that arm’s
     answer is 0, not “unknown”, so the ARD is completed with `n = 0`,
     `p = 0` and that arm’s own denominator — once, where every consumer
     sees it. A continuous summary is never completed this way: the mean
     of nothing is nothing.
 
 The ARS method identifier in each analysis maps to a specific
-[cards](https://github.com/insightsengineering/cards) function:
+[cards](https://github.com/pharmaverse/cards) function:
 
 | Method ID | Function called |
 |----|----|
-| `MTH_SUMMARY_STATISTICS_CONTINUOUS` | [`cards::ard_continuous()`](https://rdrr.io/pkg/cards/man/deprecated.html) |
-| `MTH_COUNT_AND_PERCENTAGE` | [`cards::ard_categorical()`](https://rdrr.io/pkg/cards/man/deprecated.html) |
-| `MTH_AE_FREQUENCY_COUNT` | Distinct-subject dedup, then [`cards::ard_categorical()`](https://rdrr.io/pkg/cards/man/deprecated.html) |
-| `MTH_SUBJECT_COUNT` | [`cards::ard_total_n()`](https://rdrr.io/pkg/cards/man/ard_total_n.html) or [`cards::ard_categorical()`](https://rdrr.io/pkg/cards/man/deprecated.html) |
-| `MTH_SUBJECT_COUNT_PCT` | Distinct-subject dedup, then [`cards::ard_categorical()`](https://rdrr.io/pkg/cards/man/deprecated.html) |
+| `MTH_SUMMARY_STATISTICS_CONTINUOUS` | [`cards::ard_continuous()`](https://pharmaverse.github.io/cards/latest-tag/reference/deprecated.html) |
+| `MTH_COUNT_AND_PERCENTAGE` | [`cards::ard_categorical()`](https://pharmaverse.github.io/cards/latest-tag/reference/deprecated.html) |
+| `MTH_AE_FREQUENCY_COUNT` | Distinct-subject dedup, then [`cards::ard_categorical()`](https://pharmaverse.github.io/cards/latest-tag/reference/deprecated.html) |
+| `MTH_SUBJECT_COUNT` | [`cards::ard_total_n()`](https://pharmaverse.github.io/cards/latest-tag/reference/ard_total_n.html) or [`cards::ard_categorical()`](https://pharmaverse.github.io/cards/latest-tag/reference/deprecated.html) |
+| `MTH_SUBJECT_COUNT_PCT` | Distinct-subject dedup, then [`cards::ard_categorical()`](https://pharmaverse.github.io/cards/latest-tag/reference/deprecated.html) |
 | `MTH_PROPORTION_CI_EXACT` | [`arsbridge::ard_proportion_ci_exact()`](https://tavakohr.github.io/arsbridge/reference/ard_proportion_ci_exact.md) |
 | `MTH_CMH_TEST` | [`arsbridge::ard_cmh_test()`](https://tavakohr.github.io/arsbridge/reference/ard_cmh_test.md) |
 
