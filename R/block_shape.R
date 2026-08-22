@@ -1,21 +1,44 @@
 ## arsbridge -- block_shape.R
 ## ---------------------------------------------------------------------------
-## SHADOW STAGE (PR5b-1). Nothing in this file is wired into the builder.
-## `.infer_row_method()` remains the active production path; these functions
-## are pure, individually testable, and exist so their answers can be compared
-## against the legacy decision before either one is given control.
+## These functions separate four questions that the legacy path answers as one:
 ##
-## They separate four questions that the legacy path answers as one:
+##   structure    where and how the row's result is drawn
+##   statistic    what the shell asks to report
+##   method       which supported computation can provide it
+##   restriction  which observations are included
 ##
-##   structure  where and how the row's result is drawn
-##   statistic  what the shell asks to report
-##   method     which supported computation can provide it
-##   filter     which observations are included
+## HOW MUCH OF THIS IS LIVE (PR5b-2). Partly, and deliberately unevenly:
 ##
-## The fourth is absent by construction: no function here reads a filter, and
-## that is the dependency the whole migration exists to remove. A restriction
-## says which records survive. It says nothing about what is reported of them,
-## and nothing at all about how many lines the shell draws.
+##   `.block_shape()`    ACTIVE, for one decision. The builder asks it whether
+##                       a row expands over data levels, and that answer alone
+##                       decides whether the row claims the rows beneath it as
+##                       its levels. Nothing else it returns is acted on.
+##   `.requested_statistic()`, `.resolve_method()`
+##                       DORMANT. `.infer_row_method()` remains the active
+##                       production path for both. These answer in parallel so
+##                       their verdicts can be compared against the legacy
+##                       decision before either is given control, in PR5b-3.
+##
+## WHAT A RESTRICTION MAY AND MAY NOT DECIDE. The fourth question is no longer
+## absent from this file, and the distinction that replaced its absence is the
+## load-bearing one:
+##
+##   restriction  -->  may prove a STRUCTURAL relationship
+##   restriction  -/->  the requested statistic
+##   restriction  -/->  the method
+##
+## Structural reasoning may inspect the canonical resolved restriction -- the
+## one `.row_restriction_view()` produces, whatever channel supplied it -- to
+## prove parent/child, level-refinement and partition relationships between
+## rows. That is reading what the author drew: rows that select values of the
+## variable the row above them names ARE that row's levels, and the conditions
+## saying so are the evidence.
+##
+## What a restriction still may not do is choose what is REPORTED. It says
+## which records survive; it says nothing about what statistic is asked of
+## them, and nothing about which method computes it. "This row's filter pins
+## its own variable, therefore the row reports a count" is the inference this
+## migration exists to remove, and no function here draws it.
 ##
 ## Written after a first attempt replaced the legacy path outright and broke 64
 ## assertions, none of which was an approved change. Five contracts had been

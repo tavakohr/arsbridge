@@ -1,9 +1,14 @@
-## The three shadow helpers: structure, statistic request, method resolution.
+## The three stage helpers: structure, statistic request, method resolution.
 ##
-## Nothing here goes near the builder -- these functions do not control
-## anything yet. What they must earn first is that each answers ONE question
-## and that the five contracts the first PR5b attempt broke are stated as
-## tests rather than as comments.
+## These test the helpers directly, not the builder. One of the three now has
+## a decision in production -- `.block_shape()`'s expansion source is what
+## makes a row claim the rows beneath it as its levels -- and the builder-level
+## consequences of that live in test-structural_ownership.R. The statistic and
+## method stages remain dormant until PR5b-3.
+##
+## What every one of them must earn here is the same: that each answers ONE
+## question, and that the five contracts the first PR5b attempt broke are
+## stated as tests rather than as comments.
 ##
 ## Every identifier below is invented and unrelated to any fixture: ADQX.MEASUR
 ## and its kin exist nowhere in this repo's studies. A rule that keys on a
