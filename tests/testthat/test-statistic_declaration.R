@@ -214,6 +214,98 @@ test_that("renaming every prose word leaves every verdict unchanged", {
 })
 
 ## ---------------------------------------------------------------------------
+## The permanent adversarial floor
+## ---------------------------------------------------------------------------
+
+## A short lead and a bracket naming a ratio. Shape cannot tell a rate the
+## reader failed to parse from a quantity carrying a unit -- half of these are
+## ordinary units. They are kept as a FLOOR, not a ceiling: anything added here
+## stays.
+ADVERSARIAL_NOT_READ <- c(
+  ## plausibly units, not statistic declarations
+  "C (mL/min)", "T (mg/kg)", "V (m/s)", "P (mm/Hg)", "D (mg/m2)",
+  "Q (L/hr)", "A (cm/yr)",
+  ## opaque symbols over an opaque ratio
+  "A (B/C)", "X (Y/Z)", "K (1/2)",
+  ## a percent-bearing qualifier that states no form
+  "N (50%)", "G (>=5%)",
+  ## and one that really is an unreadable rate declaration
+  "E (E/100 PY)"
+)
+
+test_that("shape alone cannot separate a rate from a unit", {
+  ## The measurement that forces `stated_not_read` to mean *unresolved* rather
+  ## than *unsupported*. If this ever stops holding -- if some of these become
+  ## `not_stated` -- the predicate has been sharpened and the naming can be
+  ## revisited. Until then it must not claim to have judged capability.
+  expect_identical(length(ADVERSARIAL_NOT_READ), 13L)
+  st <- vapply(ADVERSARIAL_NOT_READ, status_of, character(1), USE.NAMES = FALSE)
+  expect_identical(sum(st == "stated_not_read"), 13L)
+})
+
+test_that("no adversarial case can produce a capability claim", {
+  ## Case by case, and then structurally, because the case list is a floor and
+  ## the structural assertion is what holds for cases nobody thought of.
+  for (x in ADVERSARIAL_NOT_READ) {
+    d <- .declaration_diagnostic(status_of(x))
+    expect_identical(d, .STATISTIC_DECLARATION_UNRESOLVED, info = x)
+    expect_false(identical(d, .STATISTIC_UNSUPPORTED), info = x)
+  }
+  ## No declaration status maps to the capability claim, for any status at all.
+  expect_false(.STATISTIC_UNSUPPORTED %in% .DECLARATION_DIAGNOSTIC)
+})
+
+## ---------------------------------------------------------------------------
+## The consequence schema
+## ---------------------------------------------------------------------------
+
+test_that("the three consequences are three distinct names", {
+  ids <- c(.STATISTIC_DECLARATION_UNRESOLVED,
+           .STATISTIC_DECLARATION_SOURCE_NOT_ADMITTED,
+           .STATISTIC_UNSUPPORTED)
+  expect_identical(length(unique(ids)), 3L)
+  expect_true(all(nzchar(ids)))
+})
+
+test_that("exactly the two terminal statuses raise a diagnostic", {
+  expect_setequal(.TERMINAL_DECLARATION_STATUSES,
+                  c("stated_not_read", "stated_not_admitted"))
+  expect_identical(.declaration_diagnostic("stated_not_read"),
+                   .STATISTIC_DECLARATION_UNRESOLVED)
+  expect_identical(.declaration_diagnostic("stated_not_admitted"),
+                   .STATISTIC_DECLARATION_SOURCE_NOT_ADMITTED)
+  ## The non-terminal statuses raise nothing and end nothing.
+  for (s in c("stated_and_read", "not_stated")) {
+    expect_false(.declaration_is_terminal(s), info = s)
+    expect_true(is.na(.declaration_diagnostic(s)), info = s)
+  }
+})
+
+test_that("an unknown status answers NA rather than stopping the pipeline", {
+  ## `[` not `[[`: a lookup miss must not error inside the reporting path.
+  expect_true(is.na(.declaration_diagnostic("no_such_status")))
+  expect_false(.declaration_is_terminal("no_such_status"))
+  expect_true(is.na(.declaration_diagnostic(NA_character_)))
+  expect_true(is.na(.declaration_diagnostic(NULL)))
+})
+
+test_that("a word-led whole-line form is not admitted, and says so", {
+  ## Regression: requiring a symbol lead in `.line_states_form()` reported
+  ## `Mean (SD)` on its own line as SILENCE, when the author had spoken and
+  ## only the token set disqualified them. Silence falls through; not-admitted
+  ## is terminal. The difference decides whether that row can still be given a
+  ## statistic by a filter.
+  for (form in c("Mean (SD)", "Median (Q1, Q3)")) {
+    x <- paste0(VOCAB_A[["stub"]], "\n", form)
+    expect_gt(length(.line_states_form(form)), 0L, label = form)
+    expect_identical(status_of(x), "stated_not_admitted", info = form)
+    expect_true(.declaration_is_terminal(status_of(x)), info = form)
+  }
+  ## The whole-line parse, not the lead, is what refuses a mere caption.
+  expect_null(.line_states_form("Cohort (Primary)"))
+})
+
+## ---------------------------------------------------------------------------
 ## Shadow status
 ## ---------------------------------------------------------------------------
 

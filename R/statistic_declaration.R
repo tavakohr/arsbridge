@@ -230,12 +230,22 @@
 #' the boundary is a line break, which is why "the line IS the form" is the
 #' test rather than "the line ends with a form".
 #'
+#' No symbol-lead test here, deliberately. `.lead_is_symbol()` earns its keep
+#' where a form has to be told apart from a caption that merely ends in a
+#' bracket, and there nothing else can do the job. Here the whole line must
+#' parse as a statistic form, and that is a stronger test than the lead: it is
+#' what refuses `Population (Safety)`. Requiring a symbol lead as well would
+#' refuse `Mean (SD)`, a perfectly good form whose only disqualification is its
+#' token set -- and refusing it HERE would report it as silence rather than as
+#' a form this boundary does not admit, which is the distinction this file
+#' exists to keep.
+#'
 #' @return Statistic tokens, or NULL -- with no view on whether they are
 #'   admitted, which is the caller's question.
 #' @noRd
 .line_states_form <- function(line) {
   frag <- .declaration_fragment(line, whole = TRUE)
-  if (!frag$found || !.lead_is_symbol(frag$lead)) return(NULL)
+  if (!frag$found) return(NULL)
   .parse_stat_label(frag$text)
 }
 
@@ -305,4 +315,84 @@
   if (length(toks) > 0) return(out("stated_and_read", toks, trimws(txt)))
 
   out("not_stated")
+}
+
+## ---------------------------------------------------------------------------
+## What each outcome may cause
+## ---------------------------------------------------------------------------
+##
+## Three named consequences, kept apart because they are evidence about three
+## different things and send an author to fix three different places.
+
+#' The reader could not turn a declaration into semantic tokens.
+#'
+#' Evidence about THE READER. The site said something and was not understood.
+#' A later stage may hand these to an interpretation queue, because "we could
+#' not read this" is precisely the question a reading aid exists to answer.
+#' @noRd
+.STATISTIC_DECLARATION_UNRESOLVED <- "STATISTIC_DECLARATION_UNRESOLVED"
+
+#' The declaration was read, from a source not admitted to carry it.
+#'
+#' Evidence about POLICY, not about reading. The form parsed; the boundary it
+#' arrived on has not been widened to admit that form. Nothing is ambiguous and
+#' nothing needs interpreting -- the package simply has not decided that this
+#' source may state this. Handing it to an interpretation queue would ask a
+#' reader to solve a question that was never a reading problem, and would
+#' invite it to answer with the very form the boundary had refused.
+#' @noRd
+.STATISTIC_DECLARATION_SOURCE_NOT_ADMITTED <-
+  "STATISTIC_DECLARATION_SOURCE_NOT_ADMITTED"
+
+#' The tokens are known, and no supported method produces them.
+#'
+#' Evidence about THE CATALOGUE, and the only one of the three that is a claim
+#' about this package's capability. It may be raised only after resolution has
+#' run on known tokens.
+#'
+#' Deliberately unreachable from a declaration status -- see
+#' `.DECLARATION_DIAGNOSTIC`, which maps no status to it. A shape test cannot
+#' tell a rate the reader failed to parse from a quantity carrying a unit
+#' (`C (mL/min)`, `T (mg/kg)`), so shape has no standing to announce that
+#' nothing could compute it.
+#' @noRd
+.STATISTIC_UNSUPPORTED <- "STATISTIC_UNSUPPORTED"
+
+#' Declaration status -> the diagnostic it may raise.
+#'
+#' A status absent from this map raises nothing: `stated_and_read` yields
+#' tokens, and `not_stated` is silence, which the next channel answers.
+#' @noRd
+.DECLARATION_DIAGNOSTIC <- c(
+  stated_not_read     = .STATISTIC_DECLARATION_UNRESOLVED,
+  stated_not_admitted = .STATISTIC_DECLARATION_SOURCE_NOT_ADMITTED
+)
+
+#' The statuses that end the search for evidence.
+#'
+#' Terminal carries TWO obligations, and the second is the one easily lost:
+#'
+#'   1. halt evidence precedence -- no further channel is consulted;
+#'   2. never reach the legacy filter bridge.
+#'
+#' The second matters because falling through to a restriction-derived
+#' statistic would answer a question the author already answered differently,
+#' while reporting that the author had been read. A terminal state that
+#' silently reaches that bridge is worse than having no reader at all.
+#' @noRd
+.TERMINAL_DECLARATION_STATUSES <- names(.DECLARATION_DIAGNOSTIC)
+
+#' Does this status end the search for statistic evidence?
+#' @noRd
+.declaration_is_terminal <- function(status) {
+  .shape_text(status) %in% .TERMINAL_DECLARATION_STATUSES
+}
+
+#' The diagnostic a declaration status may raise, or NA when it raises none.
+#'
+#' Looked up by `[`, which answers NA for a status outside the map, rather than
+#' by `[[`, which would stop the pipeline it is reporting on.
+#' @noRd
+.declaration_diagnostic <- function(status) {
+  unname(.DECLARATION_DIAGNOSTIC[.shape_text(status)])
 }
